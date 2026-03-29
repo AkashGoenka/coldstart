@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coldstart</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;600;800&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #1a1a24;
+    --border: #2a2a3a;
+    --accent: #7c6aff;
+    --accent2: #ff6a9c;
+    --accent3: #6affd4;
+    --hot: #ff9f43;
+    --text: #e8e8f0;
+    --muted: #6b6b8a;
+    --success: #6affd4;
+    --warning: #ff9f43;
+    --danger: #ff6a9c;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    height: 100vh;
+    display: grid;
+    grid-template-rows: 52px 1fr;
+    grid-template-columns: 300px 1fr 320px;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    grid-column: 1 / -1;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 24px;
+  }
+
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 15px;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+
+  .logo span { color: var(--accent2); }
+
+  .header-stats {
+    display: flex;
+    gap: 20px;
+    margin-left: auto;
+  }
+
+  .hstat {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .hstat strong { color: var(--text); font-size: 13px; }
+
+  .upload-btn {
+    margin-left: 12px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    transition: opacity 0.15s;
+  }
+
+  .upload-btn:hover { opacity: 0.85; }
+
+  /* ── Left Panel ── */
+  .left-panel {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .panel-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .search-box {
+    margin: 10px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 10px;
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    width: calc(100% - 24px);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .search-box:focus { border-color: var(--accent); }
+  .search-box::placeholder { color: var(--muted); }
+
+  .domain-list {
+    padding: 6px 0;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .domain-item {
+    padding: 6px 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: background 0.1s;
+    border-left: 2px solid transparent;
+  }
+
+  .domain-item:hover { background: var(--surface2); }
+  .domain-item.active { background: rgba(124,106,255,0.1); border-left-color: var(--accent); }
+
+  .domain-name { font-size: 12px; }
+  .domain-count {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1px 7px;
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .file-list {
+    overflow-y: auto;
+    flex: 1;
+    padding: 4px 0;
+  }
+
+  .file-item {
+    padding: 5px 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.1s;
+    border-left: 2px solid transparent;
+  }
+
+  .file-item:hover { background: var(--surface2); }
+  .file-item.active { background: rgba(124,106,255,0.08); border-left-color: var(--accent); }
+
+  .file-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .file-name {
+    font-size: 11px;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .file-tokens {
+    font-size: 9px;
+    color: var(--muted);
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  /* ── Center Canvas ── */
+  .center {
+    position: relative;
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  canvas {
+    position: absolute;
+    top: 0; left: 0;
+  }
+
+  .empty-state {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    color: var(--muted);
+    text-align: center;
+    padding: 40px;
+  }
+
+  .empty-icon {
+    font-size: 48px;
+    opacity: 0.4;
+  }
+
+  .empty-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+    opacity: 0.5;
+  }
+
+  .empty-sub {
+    font-size: 12px;
+    line-height: 1.6;
+    max-width: 320px;
+    opacity: 0.6;
+  }
+
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 20px 32px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    margin-top: 8px;
+  }
+
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(124,106,255,0.05);
+  }
+
+  .toolbar {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 12px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .tool-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .tool-btn:hover { background: var(--surface2); border-color: var(--accent); color: var(--accent); }
+  .tool-sep { width: 1px; height: 20px; background: var(--border); }
+  .zoom-label { font-size: 11px; color: var(--muted); min-width: 40px; text-align: center; }
+
+  /* ── Right Panel ── */
+  .right-panel {
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .detail-empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 11px;
+    text-align: center;
+    padding: 20px;
+  }
+
+  .detail-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 0 20px;
+  }
+
+  .detail-file-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+
+  .detail-file-id {
+    font-size: 11px;
+    color: var(--accent);
+    word-break: break-all;
+    line-height: 1.4;
+    margin-bottom: 6px;
+  }
+
+  .detail-badges {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+
+  .badge {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 4px;
+  }
+
+  .badge-domain { background: rgba(124,106,255,0.15); color: var(--accent); border: 1px solid rgba(124,106,255,0.3); }
+  .badge-entry { background: rgba(106,255,212,0.1); color: var(--accent3); border: 1px solid rgba(106,255,212,0.3); }
+  .badge-hot { background: rgba(255,159,67,0.1); color: var(--hot); border: 1px solid rgba(255,159,67,0.3); }
+  .badge-ts { background: rgba(49,120,198,0.15); color: #60a8ff; border: 1px solid rgba(49,120,198,0.3); }
+
+  .detail-section {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .detail-section-title {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 3px 0;
+  }
+
+  .stat-key { color: var(--muted); font-size: 11px; }
+  .stat-val { color: var(--text); font-size: 11px; font-weight: 500; }
+
+  .export-tag {
+    display: inline-block;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-size: 10px;
+    color: var(--accent3);
+    margin: 2px;
+    cursor: default;
+  }
+
+  .dep-link {
+    display: block;
+    padding: 3px 0;
+    font-size: 10px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: color 0.1s;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .dep-link:hover { color: var(--accent); }
+  .dep-arrow { color: var(--border); margin-right: 6px; }
+
+  .summary-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  /* Hot nodes panel */
+  .hot-section {
+    padding: 12px 16px;
+  }
+
+  .hot-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    cursor: pointer;
+  }
+
+  .hot-bar-row:hover .hot-file { color: var(--accent); }
+
+  .hot-bar {
+    height: 4px;
+    background: var(--hot);
+    border-radius: 2px;
+    opacity: 0.7;
+    min-width: 4px;
+  }
+
+  .hot-file {
+    font-size: 10px;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    transition: color 0.1s;
+  }
+
+  .hot-count {
+    font-size: 10px;
+    color: var(--hot);
+    flex-shrink: 0;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    padding: 0 8px;
+  }
+
+  .tab {
+    padding: 10px 12px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: all 0.15s;
+  }
+
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab:hover:not(.active) { color: var(--text); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Cold<span>Start</span></div>
+  <div class="header-stats" id="headerStats">
+    <div class="hstat"><strong id="statFiles">—</strong> files</div>
+    <div class="hstat"><strong id="statEdges">—</strong> edges</div>
+    <div class="hstat"><strong id="statTokens">—</strong> tokens</div>
+    <div class="hstat"><strong id="statDomains">—</strong> domains</div>
+  </div>
+  <input type="file" id="fileInput" accept=".json" style="display:none">
+  <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+    📂 Load coldstart_map.json
+  </button>
+</header>
+
+<!-- Left: Domain/File Browser -->
+<div class="left-panel" id="leftPanel">
+  <div class="panel-header">
+    <span class="panel-title" id="leftTitle">Domains</span>
+    <span style="font-size:10px;color:var(--muted);cursor:pointer" id="backBtn" onclick="showDomains()" style="display:none">← Back</span>
+  </div>
+  <input class="search-box" id="searchBox" placeholder="Search files, exports…" oninput="onSearch(this.value)">
+  <div id="listContainer" class="domain-list"></div>
+</div>
+
+<!-- Center: Graph Canvas -->
+<div class="center" id="center">
+  <canvas id="graphCanvas"></canvas>
+  <div class="empty-state" id="emptyState">
+    <div class="empty-icon">🗺️</div>
+    <div class="empty-title">No map loaded</div>
+    <div class="empty-sub">Run the indexer on your codebase, then load the generated <code>coldstart_map.json</code> file.</div>
+    <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+      Drop coldstart_map.json here or click to browse
+    </div>
+  </div>
+  <div class="toolbar" id="toolbar" style="display:none">
+    <button class="tool-btn" onclick="zoom(1.2)">+</button>
+    <span class="zoom-label" id="zoomLabel">100%</span>
+    <button class="tool-btn" onclick="zoom(0.8)">−</button>
+    <div class="tool-sep"></div>
+    <button class="tool-btn" onclick="resetView()">Reset</button>
+    <button class="tool-btn" onclick="toggleView()">⬡ Graph</button>
+  </div>
+</div>
+
+<!-- Right: File Detail -->
+<div class="right-panel">
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('detail',this)">Detail</div>
+    <div class="tab" onclick="switchTab('hot',this)">Hot Nodes</div>
+    <div class="tab" onclick="switchTab('cycles',this)">Cycles</div>
+  </div>
+
+  <div id="tabDetail" style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+    <div class="detail-empty" id="detailEmpty">
+      <span style="font-size:28px;opacity:0.3">📄</span>
+      Click a file to see details
+    </div>
+    <div class="detail-content" id="detailContent" style="display:none"></div>
+  </div>
+
+  <div id="tabHot" style="flex:1;overflow-y:auto;display:none">
+    <div class="hot-section" id="hotContent">
+      <div style="color:var(--muted);font-size:11px;padding:20px 0;text-align:center">Load a map to see hot nodes</div>
+    </div>
+  </div>
+
+  <div id="tabCycles" style="flex:1;overflow-y:auto;padding:12px;display:none">
+    <div id="cyclesContent" style="color:var(--muted);font-size:11px;padding:20px 0;text-align:center">
+      Load a map to check for circular dependencies
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let mapData = null;
+let nodeMap = {};
+let edgeMap = {};  // id -> [targets]
+let revEdgeMap = {}; // id -> [sources]
+let selectedNode = null;
+let currentDomain = null;
+
+// Canvas state
+let canvas, ctx;
+let nodes2d = [];
+let scale = 1, offsetX = 0, offsetY = 0;
+let isDragging = false, dragStart = {x:0, y:0};
+let animFrame = null;
+
+const DOMAIN_COLORS = {
+  auth: '#7c6aff', api: '#ff6a9c', db: '#ff9f43', ui: '#6affd4',
+  utils: '#60a8ff', config: '#a8ff60', test: '#ff60a8', types: '#60ffea',
+  payments: '#ffdc60', queue: '#ff8c60', cache: '#8cff60', email: '#ff60dc',
+  upload: '#60b8ff', search: '#c860ff', misc: '#6b6b8a'
+};
+
+function domainColor(domain) {
+  return DOMAIN_COLORS[domain] || '#6b6b8a';
+}
+
+// ── File Loading ───────────────────────────────────────────────────────────
+document.getElementById('fileInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (file) readMapFile(file);
+});
+
+const dropZone = document.getElementById('dropZone');
+document.getElementById('center').addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+document.getElementById('center').addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+document.getElementById('center').addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) readMapFile(file);
+});
+
+function readMapFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      mapData = JSON.parse(e.target.result);
+      initMap();
+    } catch(err) {
+      alert('Invalid JSON file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function initMap() {
+  // Build node + edge lookup maps
+  nodeMap = {};
+  edgeMap = {};
+  revEdgeMap = {};
+
+  mapData.nodes.forEach(n => { nodeMap[n.id] = n; });
+  mapData.edges.forEach(edge => {
+    if (!edgeMap[edge.from]) edgeMap[edge.from] = [];
+    edgeMap[edge.from].push(edge.to);
+    if (!revEdgeMap[edge.to]) revEdgeMap[edge.to] = [];
+    revEdgeMap[edge.to].push(edge.from);
+  });
+
+  // Update header stats
+  const meta = mapData.meta || {};
+  document.getElementById('statFiles').textContent = (meta.total_files || mapData.nodes.length).toLocaleString();
+  document.getElementById('statEdges').textContent = (meta.total_edges || mapData.edges.length).toLocaleString();
+  document.getElementById('statTokens').textContent = formatTokens(meta.total_tokens || 0);
+  document.getElementById('statDomains').textContent = Object.keys(mapData.clusters || {}).length;
+
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('toolbar').style.display = 'flex';
+
+  showDomains();
+  initCanvas();
+  renderHotNodes();
+  renderCycles();
+}
+
+function formatTokens(n) {
+  if (n >= 1000000) return (n/1000000).toFixed(1)+'M';
+  if (n >= 1000) return (n/1000).toFixed(0)+'K';
+  return n.toString();
+}
+
+// ── Left Panel ─────────────────────────────────────────────────────────────
+function showDomains() {
+  currentDomain = null;
+  document.getElementById('leftTitle').textContent = 'Domains';
+  document.getElementById('backBtn').style.display = 'none';
+  const container = document.getElementById('listContainer');
+  container.className = 'domain-list';
+  if (!mapData) { container.innerHTML = ''; return; }
+
+  const clusters = mapData.clusters || {};
+  const sorted = Object.entries(clusters).sort((a,b) => b[1].length - a[1].length);
+
+  container.innerHTML = sorted.map(([domain, files]) => `
+    <div class="domain-item" onclick="showDomainFiles('${domain}')" data-domain="${domain}">
+      <span class="domain-name">
+        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${domainColor(domain)};margin-right:8px;vertical-align:middle"></span>
+        ${domain}
+      </span>
+      <span class="domain-count">${files.length}</span>
+    </div>
+  `).join('');
+}
+
+function showDomainFiles(domain) {
+  currentDomain = domain;
+  document.getElementById('leftTitle').textContent = domain;
+  document.getElementById('backBtn').style.display = 'block';
+  const files = (mapData.clusters || {})[domain] || [];
+  renderFileList(files.sort());
+}
+
+function renderFileList(files) {
+  const container = document.getElementById('listContainer');
+  container.className = 'file-list';
+  const hotSet = new Set((mapData.hot_nodes || []).map(h => h.id));
+
+  container.innerHTML = files.map(id => {
+    const node = nodeMap[id] || {};
+    const name = id.split('/').pop();
+    const color = domainColor(node.domain || 'misc');
+    const isHot = hotSet.has(id);
+    return `
+      <div class="file-item ${selectedNode?.id === id ? 'active' : ''}" onclick="selectFile('${id}')" data-id="${id}">
+        <div class="file-dot" style="background:${color}${isHot?';box-shadow:0 0 6px '+color:''}"></div>
+        <span class="file-name" title="${id}">${name}</span>
+        <span class="file-tokens">${node.token_estimate || 0}t</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function onSearch(val) {
+  if (!mapData) return;
+  val = val.toLowerCase().trim();
+  if (!val) {
+    if (currentDomain) showDomainFiles(currentDomain);
+    else showDomains();
+    return;
+  }
+  const results = mapData.nodes
+    .filter(n =>
+      n.id.toLowerCase().includes(val) ||
+      (n.exports || []).some(e => e.toLowerCase().includes(val)) ||
+      (n.domain || '').toLowerCase().includes(val)
+    )
+    .map(n => n.id)
+    .slice(0, 100);
+
+  document.getElementById('leftTitle').textContent = `Results (${results.length})`;
+  renderFileList(results);
+}
+
+// ── File Detail ─────────────────────────────────────────────────────────────
+function selectFile(id) {
+  selectedNode = nodeMap[id];
+  if (!selectedNode) return;
+
+  // Highlight in left panel
+  document.querySelectorAll('.file-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.id === id);
+  });
+
+  const deps = edgeMap[id] || [];
+  const dependents = revEdgeMap[id] || [];
+  const hotSet = new Set((mapData.hot_nodes || []).map(h => h.id));
+  const isHot = hotSet.has(id);
+  const node = selectedNode;
+
+  document.getElementById('detailEmpty').style.display = 'none';
+  const dc = document.getElementById('detailContent');
+  dc.style.display = 'block';
+
+  dc.innerHTML = `
+    <div class="detail-file-header">
+      <div class="detail-file-id">${node.id}</div>
+      <div class="detail-badges">
+        <span class="badge badge-ts">${node.language}</span>
+        <span class="badge badge-domain">${node.domain}</span>
+        ${node.is_entry_point ? '<span class="badge badge-entry">entry point</span>' : ''}
+        ${isHot ? '<span class="badge badge-hot">🔥 hot</span>' : ''}
+      </div>
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title">Stats</div>
+      <div class="stat-row"><span class="stat-key">Lines</span><span class="stat-val">${node.line_count?.toLocaleString()}</span></div>
+      <div class="stat-row"><span class="stat-key">Tokens</span><span class="stat-val">~${node.token_estimate?.toLocaleString()}</span></div>
+      <div class="stat-row"><span class="stat-key">Imports</span><span class="stat-val">${(node.imports||[]).length} (${deps.length} resolved)</span></div>
+      <div class="stat-row"><span class="stat-key">Depended on by</span><span class="stat-val">${dependents.length} file(s)</span></div>
+      <div class="stat-row"><span class="stat-key">Hash</span><span class="stat-val" style="font-size:9px;color:var(--muted)">${node.hash?.slice(0,12)}…</span></div>
+    </div>
+
+    ${node.summary ? `
+    <div class="detail-section">
+      <div class="detail-section-title">Summary</div>
+      <div class="summary-box">${node.summary}</div>
+    </div>` : ''}
+
+    ${(node.exports||[]).length ? `
+    <div class="detail-section">
+      <div class="detail-section-title">Exports (${node.exports.length})</div>
+      <div>${node.exports.map(e => `<span class="export-tag">${e}</span>`).join('')}</div>
+    </div>` : ''}
+
+    ${deps.length ? `
+    <div class="detail-section">
+      <div class="detail-section-title">Imports (${deps.length})</div>
+      ${deps.map(d => `<span class="dep-link" onclick="selectFile('${d}')"><span class="dep-arrow">→</span>${d.split('/').pop()}</span>`).join('')}
+    </div>` : ''}
+
+    ${dependents.length ? `
+    <div class="detail-section">
+      <div class="detail-section-title">Depended on by (${dependents.length})</div>
+      ${dependents.slice(0,15).map(d => `<span class="dep-link" onclick="selectFile('${d}')"><span class="dep-arrow">←</span>${d.split('/').pop()}</span>`).join('')}
+      ${dependents.length > 15 ? `<span style="color:var(--muted);font-size:10px">+${dependents.length-15} more</span>` : ''}
+    </div>` : ''}
+  `;
+
+  highlightNodeOnCanvas(id);
+}
+
+// ── Hot Nodes Tab ──────────────────────────────────────────────────────────
+function renderHotNodes() {
+  const hot = mapData?.hot_nodes || [];
+  const container = document.getElementById('hotContent');
+  if (!hot.length) {
+    container.innerHTML = '<div style="color:var(--muted);font-size:11px;padding:20px;text-align:center">No hot nodes found (threshold: 5+ dependents)</div>';
+    return;
+  }
+  const max = hot[0]?.dependents || 1;
+  container.innerHTML = `
+    <div style="padding:8px 0 4px;font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted)">
+      ${hot.length} files imported by 5+ others
+    </div>
+    ${hot.map(h => `
+      <div class="hot-bar-row" onclick="selectFile('${h.id}')">
+        <div class="hot-bar" style="width:${Math.max(8, (h.dependents/max)*80)}px"></div>
+        <span class="hot-file" title="${h.id}">${h.id.split('/').slice(-2).join('/')}</span>
+        <span class="hot-count">${h.dependents}</span>
+      </div>
+    `).join('')}
+  `;
+}
+
+// ── Cycles Tab ─────────────────────────────────────────────────────────────
+function renderCycles() {
+  const cycles = mapData?.cycles || [];
+  const container = document.getElementById('cyclesContent');
+  if (!cycles.length) {
+    container.innerHTML = '<div style="color:var(--accent3);font-size:12px;text-align:center;padding:20px">✅ No circular dependencies detected</div>';
+    return;
+  }
+  container.innerHTML = `
+    <div style="color:var(--danger);font-size:11px;margin-bottom:12px">⚠️ ${cycles.length} circular dependenc${cycles.length===1?'y':'ies'} found</div>
+    ${cycles.map((cycle,i) => `
+      <div style="background:var(--surface2);border:1px solid rgba(255,106,156,0.2);border-radius:6px;padding:10px;margin-bottom:8px;font-size:10px;color:var(--muted);line-height:1.6">
+        <div style="color:var(--danger);font-size:9px;margin-bottom:4px">CYCLE ${i+1}</div>
+        ${cycle.map(f => `<div>→ ${f}</div>`).join('')}
+      </div>
+    `).join('')}
+  `;
+}
+
+// ── Tabs ────────────────────────────────────────────────────────────────────
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['detail','hot','cycles'].forEach(t => {
+    document.getElementById('tab'+t.charAt(0).toUpperCase()+t.slice(1)).style.display = t===name ? 'flex' : 'none';
+  });
+  if (name==='hot') document.getElementById('tabHot').style.display='block';
+  if (name==='cycles') document.getElementById('tabCycles').style.display='block';
+}
+
+// ── Canvas Graph ────────────────────────────────────────────────────────────
+function initCanvas() {
+  canvas = document.getElementById('graphCanvas');
+  ctx = canvas.getContext('2d');
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+
+  layoutNodes();
+  startRenderLoop();
+  setupCanvasEvents();
+}
+
+function resizeCanvas() {
+  if (!canvas) return;
+  const center = document.getElementById('center');
+  canvas.width = center.clientWidth;
+  canvas.height = center.clientHeight;
+}
+
+function layoutNodes() {
+  if (!mapData) return;
+  const clusters = mapData.clusters || {};
+  const allNodes = mapData.nodes;
+  const W = canvas.width, H = canvas.height;
+  const domainList = Object.keys(clusters);
+  const R = Math.min(W, H) * 0.35;
+  const cx = W/2, cy = H/2;
+
+  nodes2d = [];
+  const placed = {};
+
+  domainList.forEach((domain, di) => {
+    const angle = (di / domainList.length) * Math.PI * 2 - Math.PI/2;
+    const dcx = cx + Math.cos(angle) * R;
+    const dcy = cy + Math.sin(angle) * R;
+    const files = clusters[domain] || [];
+    const sr = Math.min(60, files.length * 8 + 20);
+
+    files.forEach((id, fi) => {
+      const sa = (fi / Math.max(files.length,1)) * Math.PI * 2;
+      const node = nodeMap[id];
+      placed[id] = {
+        id,
+        x: dcx + Math.cos(sa) * sr * (0.5 + Math.random()*0.5),
+        y: dcy + Math.sin(sa) * sr * (0.5 + Math.random()*0.5),
+        color: domainColor(domain),
+        r: Math.max(4, Math.min(10, (node?.token_estimate || 100) / 200)),
+        node,
+        domain,
+      };
+      nodes2d.push(placed[id]);
+    });
+  });
+
+  // Center and fit
+  offsetX = 0; offsetY = 0; scale = 1;
+}
+
+let highlightedId = null;
+function highlightNodeOnCanvas(id) { highlightedId = id; }
+
+function startRenderLoop() {
+  if (animFrame) cancelAnimationFrame(animFrame);
+  function draw() {
+    if (!canvas || !ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(offsetX, offsetY);
+    ctx.scale(scale, scale);
+    drawEdges();
+    drawNodes();
+    ctx.restore();
+    animFrame = requestAnimationFrame(draw);
+  }
+  draw();
+}
+
+function drawEdges() {
+  if (!mapData) return;
+  ctx.strokeStyle = 'rgba(42,42,58,0.8)';
+  ctx.lineWidth = 0.5 / scale;
+  const posMap = {};
+  nodes2d.forEach(n => posMap[n.id] = n);
+
+  mapData.edges.forEach(e => {
+    const from = posMap[e.from];
+    const to = posMap[e.to];
+    if (!from || !to) return;
+    const isHighlighted = highlightedId && (e.from === highlightedId || e.to === highlightedId);
+    if (isHighlighted) {
+      ctx.strokeStyle = 'rgba(124,106,255,0.5)';
+      ctx.lineWidth = 1 / scale;
+    } else {
+      ctx.strokeStyle = 'rgba(42,42,58,0.4)';
+      ctx.lineWidth = 0.4 / scale;
+    }
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.stroke();
+  });
+}
+
+function drawNodes() {
+  nodes2d.forEach(n => {
+    const isSelected = n.id === highlightedId;
+    const r = isSelected ? n.r * 1.8 : n.r;
+
+    if (isSelected) {
+      ctx.shadowColor = n.color;
+      ctx.shadowBlur = 16 / scale;
+    }
+
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = isSelected ? n.color : n.color + '99';
+    ctx.fill();
+
+    if (isSelected) {
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = n.color;
+      ctx.lineWidth = 1.5 / scale;
+      ctx.stroke();
+
+      // Label
+      ctx.fillStyle = '#e8e8f0';
+      ctx.font = `${11/scale}px JetBrains Mono`;
+      ctx.fillText(n.id.split('/').pop(), n.x + r + 4/scale, n.y + 4/scale);
+    }
+  });
+}
+
+function setupCanvasEvents() {
+  canvas.addEventListener('mousedown', e => {
+    isDragging = true;
+    dragStart = { x: e.clientX - offsetX, y: e.clientY - offsetY };
+  });
+
+  canvas.addEventListener('mousemove', e => {
+    if (isDragging) {
+      offsetX = e.clientX - dragStart.x;
+      offsetY = e.clientY - dragStart.y;
+    }
+  });
+
+  canvas.addEventListener('mouseup', () => isDragging = false);
+  canvas.addEventListener('mouseleave', () => isDragging = false);
+
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    zoom(delta);
+  });
+
+  canvas.addEventListener('click', e => {
+    if (!mapData) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left - offsetX) / scale;
+    const my = (e.clientY - rect.top - offsetY) / scale;
+
+    let hit = null;
+    let minDist = Infinity;
+    nodes2d.forEach(n => {
+      const d = Math.hypot(n.x - mx, n.y - my);
+      if (d < n.r + 4 && d < minDist) { minDist = d; hit = n; }
+    });
+
+    if (hit) selectFile(hit.id);
+  });
+}
+
+function zoom(factor) {
+  scale = Math.max(0.1, Math.min(8, scale * factor));
+  document.getElementById('zoomLabel').textContent = Math.round(scale * 100) + '%';
+}
+
+function resetView() {
+  scale = 1; offsetX = 0; offsetY = 0;
+  document.getElementById('zoomLabel').textContent = '100%';
+  layoutNodes();
+}
+
+function toggleView() { /* future: switch between force/radial/flat */ }
+</script>
+</body>
+</html>
