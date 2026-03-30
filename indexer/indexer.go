@@ -1,6 +1,7 @@
 package indexer
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +18,7 @@ type Config struct {
 	Extensions map[string]bool // e.g. {".ts": true, ".tsx": true}
 	Exclude    map[string]bool // dir names to skip e.g. {"node_modules": true}
 	Workers    int             // goroutine pool size
+	HasReact   bool            // true if package.json lists react as a dependency
 }
 
 // DefaultConfig returns a sensible default for TS/JS/GQL codebases.
@@ -56,6 +58,8 @@ type Stats struct {
 func Run(cfg *Config) (*graph.Graph, *Stats, error) {
 	g := graph.New()
 	stats := &Stats{}
+
+	cfg.HasReact = detectReact(cfg.RootDir)
 
 	// ── Phase 1: Collect all file paths ──────────────────────────────────────
 	var filePaths []string
@@ -103,7 +107,7 @@ func Run(cfg *Config) (*graph.Graph, *Stats, error) {
 				if ext == ".graphql" || ext == ".gql" {
 					node, err = parser.ParseGQLFile(absPath, relPath)
 				} else {
-					node, err = parser.ParseFile(absPath, relPath)
+					node, err = parser.ParseFile(absPath, relPath, cfg.HasReact)
 				}
 
 				if err != nil {
@@ -148,6 +152,27 @@ func resolveEdges(g *graph.Graph, rootDir string, stats *Stats) {
 			}
 		}
 	}
+}
+
+// detectReact reads {root}/package.json and returns true if react is listed
+// as a dependency, devDependency, or peerDependency.
+func detectReact(root string) bool {
+	data, err := os.ReadFile(filepath.Join(root, "package.json"))
+	if err != nil {
+		return false
+	}
+	var pkg struct {
+		Dependencies    map[string]string `json:"dependencies"`
+		DevDependencies map[string]string `json:"devDependencies"`
+		PeerDependencies map[string]string `json:"peerDependencies"`
+	}
+	if err := json.Unmarshal(data, &pkg); err != nil {
+		return false
+	}
+	_, inDeps := pkg.Dependencies["react"]
+	_, inDev := pkg.DevDependencies["react"]
+	_, inPeer := pkg.PeerDependencies["react"]
+	return inDeps || inDev || inPeer
 }
 
 // resolveRelativeImport tries to find the actual file ID for a relative import.

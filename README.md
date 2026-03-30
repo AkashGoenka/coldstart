@@ -110,43 +110,66 @@ python query.py --search "jwt"
 
 # What breaks if this file changes?
 python query.py --impact src/utils/token.ts
+
+# All GraphQL schema and operation files
+python query.py --gql
+
+# Files that export React hooks (requires React in package.json)
+python query.py --hooks
+
+# Show semantic code pattern distribution
+python query.py --patterns
+
+# Suggest which domain a concept belongs to
+python query.py --suggest-domain "authentication"
 ```
+
+---
+
+## Pattern analysis
+
+`pattern-analyzer.py` classifies every file in your map into a semantic archetype
+(component, hook, configuration, type-definition, utility, entry-point, test) and
+writes `coldstart_patterns.json` alongside your map. This is used by `query.py --patterns`
+and `query.py --search` for grouped results.
+
+```bash
+python pattern-analyzer.py --map coldstart_map.json
+```
+
+No dependencies required — pure Python stdlib.
 
 ---
 
 ## Using with Cursor
 
-Add this to your `.cursorrules` file in the project root:
+Add this to your `.cursorrules` file:
 
 ```
 Before exploring any file, read coldstart_map.json at the project root.
-Use the clusters object to identify which domain contains the relevant files.
-Use hot_nodes to identify high-value shared modules.
-Only open a raw source file when you need implementation details or are
-about to modify it. Do not open files just to understand what they export
-or which domain they belong to — the map already contains that.
+Use clusters to find the relevant domain. Use hot_nodes to find high-value
+shared modules. Only open a source file when you need implementation detail
+or are about to modify it — the map already has exports, imports, and domain.
 ```
 
 ---
 
 ## Using with Claude.ai
 
-Paste the map directly into chat at the start of a session:
+Paste the map at the start of a session:
 
 ```
-Here is my codebase map. Use it to understand structure before answering.
-Only ask to read specific files if the map is insufficient.
+Here is my codebase map. Use it before answering. Only ask to open files if the map is insufficient.
 
 <coldstart_map>
 [paste contents of coldstart_map.json here]
 </coldstart_map>
 ```
 
-For large maps, paste only the relevant cluster:
+For large maps, paste only the relevant slice:
 
 ```bash
 python query.py --domain auth | pbcopy
-# then paste just that section into chat
 ```
 
 ---

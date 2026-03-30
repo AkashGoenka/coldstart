@@ -314,13 +314,3 @@ func stripGQLComments(content string) string {
 	return strings.Join(lines, "\n")
 }
 
-// extractGQLScalars pulls custom scalar definitions (used in summary for schema files).
-func extractGQLScalars(content string) []string {
-	var scalars []string
-	for _, m := range reGQLScalar.FindAllStringSubmatch(content, -1) {
-		if len(m) > 1 {
-			scalars = append(scalars, m[1])
-		}
-	}
-	return scalars
-}

@@ -13,6 +13,9 @@ type Node struct {
 	TokenEstimate int      `json:"token_estimate"` // Rough token count (chars / 4)
 	Hash          string   `json:"hash"`           // MD5 of file content, for change detection
 
+	// React hook exports — only populated when project has React and file exports use* functions
+	HookNames []string `json:"hook_names,omitempty"`
+
 	// GraphQL-specific fields — only populated for .graphql / .gql files
 	GQL *GQLMeta `json:"gql,omitempty"`
 }

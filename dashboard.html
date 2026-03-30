@@ -772,6 +772,12 @@ function selectFile(id) {
       <div class="summary-box">${node.summary}</div>
     </div>` : ''}
 
+    ${(node.hook_names||[]).length ? `
+    <div class="detail-section">
+      <div class="detail-section-title">🪝 Hooks (${node.hook_names.length})</div>
+      <div>${node.hook_names.map(h => `<span class="export-tag" style="color:var(--accent2);border-color:rgba(255,106,156,0.4)">${h}</span>`).join('')}</div>
+    </div>` : ''}
+
     ${(node.exports||[]).length ? `
     <div class="detail-section">
       <div class="detail-section-title">Exports (${node.exports.length})</div>
