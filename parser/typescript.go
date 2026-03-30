@@ -49,7 +49,7 @@ var (
 		"email":              {"email", "mail", "smtp", "sendgrid", "template", "notification"},
 		"upload":             {"upload", "file", "storage", "s3", "bucket", "media"},
 		"search":             {"search", "index", "elastic", "algolia", "filter", "query"},
-		"graphql-operations": {"gql`", "usequery", "usemutation", "usesubscription", "uselazyquery", "apolloclient", "graphql-tag", "usefragment"},
+		"graphql-operations": {"gql`", "apolloclient", "graphql-tag", "@apollo/client", "apollo-client", "@apollo/react-hooks"},
 		"graphql-schema":     {"typedefs", "type_defs", "buildschema", "makeexecutableschema", "apolloserver", "graphqlschema"},
 	}
 )
@@ -65,12 +65,19 @@ var (
 	// ApolloClient instantiation
 	reApolloClient = regexp.MustCompile(`new\s+ApolloClient\s*\(`)
 
-	// @apollo/client imports
-	reApolloImport = regexp.MustCompile(`from\s+['"]@apollo/client['"]`)
+	// @apollo/client imports (and common aliases)
+	reApolloImport = regexp.MustCompile(`from\s+['"](?:@apollo/client|apollo-client|@apollo/react-hooks)['"]`)
+
+	// TanStack Query imports — used to avoid misclassifying as Apollo
+	reTanstackImport = regexp.MustCompile(`from\s+['"](?:@tanstack/react-query|react-query)['"]`)
+
+	// React hook exports: export function/const useXxx or export async function useXxx
+	reHookExport = regexp.MustCompile(`(?m)export\s+(?:default\s+)?(?:async\s+)?(?:function|const)\s+(use[A-Z]\w*)`)
 )
 
 // ParseFile parses a single TS/JS file and returns a populated Node.
-func ParseFile(absPath, relPath string) (*graph.Node, error) {
+// Pass hasReact=true (from package.json detection) to enable hook export detection.
+func ParseFile(absPath, relPath string, hasReact bool) (*graph.Node, error) {
 	raw, err := os.ReadFile(absPath)
 	if err != nil {
 		return nil, err
@@ -89,6 +96,11 @@ func ParseFile(absPath, relPath string) (*graph.Node, error) {
 	node.Imports = extractImports(content)
 	node.Exports = extractExports(content)
 	node.Domain = inferDomain(relPath, content)
+
+	// Detect React hook exports if project uses React
+	if hasReact {
+		node.HookNames = extractHooks(content)
+	}
 
 	// Detect Apollo/GQL usage in TS/JS files and append to summary
 	apolloAnnotations := extractApolloMeta(content)
@@ -212,6 +224,10 @@ func buildSummary(n *graph.Node) string {
 		parts = append(parts, fmt.Sprintf("%d import(s).", len(n.Imports)))
 	}
 
+	if len(n.HookNames) > 0 {
+		parts = append(parts, fmt.Sprintf("Hooks: %s.", strings.Join(n.HookNames, ", ")))
+	}
+
 	parts = append(parts, fmt.Sprintf("Domain: %s.", n.Domain))
 	parts = append(parts, fmt.Sprintf("~%d tokens.", n.TokenEstimate))
 
@@ -234,18 +250,23 @@ func extractApolloMeta(content string) []string {
 		annotations = append(annotations, fmt.Sprintf("gql-tags: %s", strings.Join(names, ", ")))
 	}
 
-	// Detect Apollo hooks
-	hooks := reApolloHook.FindAllStringSubmatch(content, -1)
-	if len(hooks) > 0 {
-		seen := make(map[string]bool)
-		var hookNames []string
-		for _, m := range hooks {
-			if len(m) > 1 && !seen[m[1]] {
-				seen[m[1]] = true
-				hookNames = append(hookNames, m[1])
+	// Detect Apollo hooks — only when the file imports from an Apollo package,
+	// not from TanStack Query (which uses the same hook names).
+	isApolloFile := reApolloImport.MatchString(content)
+	isTanstackFile := reTanstackImport.MatchString(content)
+	if isApolloFile && !isTanstackFile {
+		hooks := reApolloHook.FindAllStringSubmatch(content, -1)
+		if len(hooks) > 0 {
+			seen := make(map[string]bool)
+			var hookNames []string
+			for _, m := range hooks {
+				if len(m) > 1 && !seen[m[1]] {
+					seen[m[1]] = true
+					hookNames = append(hookNames, m[1])
+				}
 			}
+			annotations = append(annotations, fmt.Sprintf("apollo-hooks: %s", strings.Join(hookNames, ", ")))
 		}
-		annotations = append(annotations, fmt.Sprintf("apollo-hooks: %s", strings.Join(hookNames, ", ")))
 	}
 
 	// Detect ApolloClient instantiation
@@ -279,6 +300,47 @@ func isEntryPoint(relPath string) bool {
 		"server": true, "entry": true, "start": true,
 	}
 	return entryNames[base]
+}
+
+// extractHooks finds exported React hook names (use[A-Z]...) in a file.
+func extractHooks(content string) []string {
+	seen := make(map[string]bool)
+	var hooks []string
+
+	add := func(name string) {
+		name = strings.TrimSpace(name)
+		if name != "" && !seen[name] {
+			seen[name] = true
+			hooks = append(hooks, name)
+		}
+	}
+
+	// export function useXxx / export const useXxx / export async function useXxx
+	for _, m := range reHookExport.FindAllStringSubmatch(content, -1) {
+		if len(m) > 1 {
+			add(m[1])
+		}
+	}
+
+	// export { useAuth, useCart, ... }
+	for _, m := range reExportBraces.FindAllStringSubmatch(content, -1) {
+		if len(m) > 1 {
+			for _, sym := range strings.Split(m[1], ",") {
+				parts := strings.Fields(strings.TrimSpace(sym))
+				var name string
+				if len(parts) == 3 && parts[1] == "as" {
+					name = parts[2] // use the alias
+				} else if len(parts) == 1 {
+					name = parts[0]
+				}
+				if len(name) > 3 && strings.HasPrefix(name, "use") && name[3] >= 'A' && name[3] <= 'Z' {
+					add(name)
+				}
+			}
+		}
+	}
+
+	return hooks
 }
 
 func min(a, b int) int {

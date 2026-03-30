@@ -434,6 +434,21 @@ def cmd_gql(data: dict):
             print(f"      {n['id']}  [{n.get('domain', '')}]")
 
 
+def cmd_hooks(data: dict):
+    """List all files that export React hooks, sorted by hook count."""
+    nodes = [n for n in _list(data.get("nodes")) if _list(n.get("hook_names"))]
+    if not nodes:
+        print("No React hook files found.")
+        print("(Hooks are detected when package.json lists react as a dependency.)")
+        return
+    nodes.sort(key=lambda n: -len(n["hook_names"]))
+    print(f"\n🪝  React Hooks  ({len(nodes)} files)\n")
+    for n in nodes:
+        hooks = ", ".join(n["hook_names"])
+        print(f"   {n['id']}  [{n.get('domain', '')}]")
+        print(f"      {hooks}")
+
+
 def cmd_summary(data: dict):
     """Print a compact summary of the entire codebase map."""
     meta = data.get("meta", {})
@@ -509,6 +524,7 @@ def main():
     parser.add_argument("--suggest-domain", help="Suggest domains based on search term")
     parser.add_argument("--impact", help="Show files affected if this file changes")
     parser.add_argument("--gql", action="store_true", help="Show all GraphQL definitions")
+    parser.add_argument("--hooks", action="store_true", help="List files that export React hooks")
     parser.add_argument("--patterns", action="store_true", help="Show code pattern distribution")
     parser.add_argument("--summary", action="store_true", help="Print codebase summary")
     args = parser.parse_args()
@@ -549,6 +565,8 @@ def main():
         cmd_impact(data, args.impact)
     elif args.gql:
         cmd_gql(data)
+    elif args.hooks:
+        cmd_hooks(data)
     else:
         cmd_summary(data)
 
