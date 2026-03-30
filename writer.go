@@ -7,8 +7,8 @@ import (
 	"sort"
 	"time"
 
-	"coldstart/graph"
-	"coldstart/indexer"
+	"github.com/AkashGoenka/coldstart/graph"
+	"github.com/AkashGoenka/coldstart/indexer"
 )
 
 // MapOutput is the final JSON structure written to coldstart_map.json.

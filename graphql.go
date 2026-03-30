@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"coldstart/graph"
+	"github.com/AkashGoenka/coldstart/graph"
 )
 
 // Compiled regexes for GraphQL parsing.

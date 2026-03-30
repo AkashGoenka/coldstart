@@ -7,8 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"coldstart/graph"
-	"coldstart/parser"
+	"github.com/AkashGoenka/coldstart/graph"
+	"github.com/AkashGoenka/coldstart/parser"
 )
 
 // Config holds indexer settings.
