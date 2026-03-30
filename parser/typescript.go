@@ -49,7 +49,7 @@ var (
 		"email":              {"email", "mail", "smtp", "sendgrid", "template", "notification"},
 		"upload":             {"upload", "file", "storage", "s3", "bucket", "media"},
 		"search":             {"search", "index", "elastic", "algolia", "filter", "query"},
-		"graphql-operations": {"gql`", "usequery", "usemutation", "usesubscription", "uselazyquery", "apolloclient", "graphql-tag", "usefragment"},
+		"graphql-operations": {"@apollo/client", "graphql-tag", "gql", "apolloclient"}`
 		"graphql-schema":     {"typedefs", "type_defs", "buildschema", "makeexecutableschema", "apolloserver", "graphqlschema"},
 	}
 )
