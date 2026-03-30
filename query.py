@@ -260,7 +260,7 @@ def cmd_gql(data: dict):
             print(f"      {n['id']}  [{n.get('domain', '')}]")
 
 
-
+def cmd_summary(data: dict):
     """Print a compact summary of the entire codebase map."""
     meta = data.get("meta", {})
     stats = data.get("stats", {})
