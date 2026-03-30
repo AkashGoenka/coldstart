@@ -4,12 +4,14 @@ query.py — Query your coldstart_map.json from the terminal.
 No dependencies required (stdlib only).
 
 Usage:
-    python query.py --map coldstart_map.json --domain auth
-    python query.py --map coldstart_map.json --file src/auth/middleware.ts
-    python query.py --map coldstart_map.json --hot
-    python query.py --map coldstart_map.json --cycles
-    python query.py --map coldstart_map.json --search "jwt"
-    python query.py --map coldstart_map.json --impact src/utils/token.ts
+    python3 query.py --map coldstart_map.json --domain auth
+    python3 query.py --map coldstart_map.json --file src/auth/middleware.ts
+    python3 query.py --map coldstart_map.json --hot-nodes
+    python3 query.py --map coldstart_map.json --cycles
+    python3 query.py --map coldstart_map.json --search "jwt"
+    python3 query.py --map coldstart_map.json --search "jwt" --domain auth
+    python3 query.py --map coldstart_map.json --suggest-domain "authentication"
+    python3 query.py --map coldstart_map.json --impact src/utils/token.ts
 """
 
 import json
@@ -21,6 +23,51 @@ from pathlib import Path
 def load_map(path: str) -> dict:
     with open(path) as f:
         return json.load(f)
+
+
+def load_patterns(map_path: str) -> dict:
+    """Load patterns from separate coldstart_patterns.json file."""
+    patterns_path = Path(map_path).parent / "coldstart_patterns.json"
+    if not patterns_path.is_file():
+        return {}
+    try:
+        with open(patterns_path) as f:
+            data = json.load(f)
+            patterns_data = data.get("patterns", {})
+            # Convert from {pattern: [file_ids]} to {file_id: pattern}
+            result = {}
+            for pattern, file_ids in patterns_data.items():
+                for file_id in file_ids:
+                    result[file_id] = pattern
+            return result
+    except (json.JSONDecodeError, IOError):
+        return {}
+
+
+def _str(v) -> str:
+    """JSON null → treat as empty string."""
+    return v if isinstance(v, str) else ""
+
+
+def _list(v) -> list:
+    """JSON null or missing → empty list (node fields like exports/imports may be null)."""
+    return v if isinstance(v, list) else []
+
+
+def resolve_map_path(explicit: str) -> Path:
+    """Prefer explicit path; if default missing, try common repo layouts."""
+    p = Path(explicit)
+    if p.is_file():
+        return p
+    if explicit != "coldstart_map.json":
+        return p
+    for alt in (
+        Path("tools/coldstart/coldstart_map.json"),
+        Path(__file__).resolve().parent / "coldstart_map.json",
+    ):
+        if alt.is_file():
+            return alt
+    return p
 
 
 def cmd_domain(data: dict, domain: str):
@@ -38,7 +85,7 @@ def cmd_domain(data: dict, domain: str):
 
 def cmd_file(data: dict, file_id: str):
     """Show full metadata for a specific file."""
-    nodes = {n["id"]: n for n in data.get("nodes", [])}
+    nodes = {n["id"]: n for n in _list(data.get("nodes"))}
     node = nodes.get(file_id)
     if not node:
         # Try partial match
@@ -55,7 +102,7 @@ def cmd_file(data: dict, file_id: str):
             return
 
     # Build dependency/dependent lists from edges
-    edges = data.get("edges", [])
+    edges = _list(data.get("edges"))
     deps = [e["to"] for e in edges if e["from"] == node["id"]]
     dependents = [e["from"] for e in edges if e["to"] == node["id"]]
 
@@ -131,19 +178,25 @@ def cmd_cycles(data: dict):
         print(f"   {i}. {' → '.join(cycle)}")
 
 
-def cmd_search(data: dict, term: str):
-    """Search file IDs, exports, and summaries for a keyword."""
+def cmd_search(data: dict, term: str, domain: str = None, patterns: dict = None):
+    """Search file IDs, exports, and summaries for a keyword, optionally scoped to a domain."""
     term_lower = term.lower()
     results = []
-    for node in data.get("nodes", []):
+    nodes = _list(data.get("nodes"))
+    
+    # Filter nodes by domain if specified
+    if domain:
+        nodes = [n for n in nodes if n.get("domain") == domain]
+    
+    for node in nodes:
         score = 0
         if term_lower in node["id"].lower():
             score += 3
-        if any(term_lower in e.lower() for e in node.get("exports", [])):
+        if any(term_lower in e.lower() for e in _list(node.get("exports"))):
             score += 2
-        if term_lower in node.get("domain", "").lower():
+        if term_lower in _str(node.get("domain")).lower():
             score += 1
-        if term_lower in node.get("summary", "").lower():
+        if term_lower in _str(node.get("summary")).lower():
             score += 1
         if score > 0:
             results.append((score, node))
@@ -151,20 +204,141 @@ def cmd_search(data: dict, term: str):
     results.sort(key=lambda x: -x[0])
 
     if not results:
-        print(f"No results for '{term}'.")
+        domain_str = f" in domain '{domain}'" if domain else ""
+        print(f"No results for '{term}'{domain_str}.")
         return
 
-    print(f"\n🔍  Search: '{term}'  ({len(results)} results)\n")
-    for score, node in results[:20]:
-        exports_preview = ", ".join(node.get("exports", [])[:3])
-        print(f"   [{score}★] {node['id']}  [{node['domain']}]")
-        if exports_preview:
-            print(f"         exports: {exports_preview}")
+    domain_str = f" in domain '{domain}'" if domain else ""
+    print(f"\n🔍  Search: '{term}'{domain_str}  ({len(results)} results)\n")
+
+    # Group by pattern if patterns are available
+    if not patterns:
+        # Fallback: no pattern grouping
+        for score, node in results[:20]:
+            exports_preview = ", ".join(_list(node.get("exports"))[:3])
+            print(f"   [{score}★] {node['id']}  [{node['domain']}]")
+            if exports_preview:
+                print(f"         exports: {exports_preview}")
+        return
+
+    pattern_order = [
+        "configuration",
+        "type-definition",
+        "component",
+        "implementation",
+        "utility",
+        "entry-point",
+        "test",
+    ]
+    results_by_pattern = {p: [] for p in pattern_order}
+    results_by_pattern["other"] = []
+
+    for score, node in results:
+        pattern = patterns.get(node["id"], "other")
+        if pattern in results_by_pattern:
+            results_by_pattern[pattern].append((score, node))
+        else:
+            results_by_pattern["other"].append((score, node))
+
+    # Print in pattern order
+    pattern_icons = {
+        "configuration": "⚙️ ",
+        "type-definition": "📝",
+        "component": "🎨",
+        "implementation": "⚙️ ",
+        "utility": "🔧",
+        "entry-point": "📍",
+        "test": "✅",
+    }
+
+    printed = 0
+    for pattern in pattern_order + ["other"]:
+        if not results_by_pattern[pattern]:
+            continue
+        if printed > 0:
+            print()
+        icon = pattern_icons.get(pattern, "📄")
+        print(f"{icon} {pattern.title()}")
+        for score, node in results_by_pattern[pattern]:
+            if printed >= 20:
+                remaining = sum(
+                    len(results_by_pattern[p])
+                    for p in pattern_order + ["other"]
+                    if p != pattern
+                ) - (printed - len(results_by_pattern[pattern]))
+                if remaining > 0:
+                    print(f"   ... and {remaining} more results")
+                return
+            exports_preview = ", ".join(_list(node.get("exports"))[:3])
+            print(f"   [{score}★] {node['id']}  [{node['domain']}]")
+            if exports_preview:
+                print(f"         exports: {exports_preview}")
+            printed += 1
+
+
+def cmd_patterns(data: dict):
+    """Show file patterns and their distribution across the codebase."""
+    # Load patterns from separate file
+    patterns_path = Path(data.get("_map_path", "coldstart_map.json")).parent / "coldstart_patterns.json"
+    
+    if not patterns_path.is_file():
+        print("⚠️   Pattern metadata not found.")
+        print(f"    Expected: {patterns_path}")
+        return
+    
+    try:
+        with open(patterns_path) as f:
+            patterns_data = json.load(f).get("patterns", {})
+    except (json.JSONDecodeError, IOError):
+        print("⚠️   Could not load pattern metadata.")
+        return
+    
+    if not patterns_data:
+        print("⚠️   No patterns found in metadata file.")
+        return
+    
+    pattern_icons = {
+        "configuration": "⚙️ ",
+        "type-definition": "📝",
+        "component": "🎨",
+        "implementation": "⚙️ ",
+        "utility": "🔧",
+        "entry-point": "📍",
+        "test": "✅",
+    }
+    
+    pattern_descriptions = {
+        "configuration": "Options, settings, flags, and configuration objects",
+        "type-definition": "Types, interfaces, enums, constants, and type definitions",
+        "component": "React/Vue components, pages, layouts, and views",
+        "implementation": "Business logic, algorithms, handlers, and services",
+        "utility": "Helpers, adapters, services, formatters, and utilities",
+        "entry-point": "Index files, main entry points, and re-exports",
+        "test": "Test suites, mocks, fixtures, and test helpers",
+    }
+    
+    print("\n📊  Code Patterns Distribution\n")
+    
+    sorted_patterns = sorted(
+        [(p, len(ids)) for p, ids in patterns_data.items()],
+        key=lambda x: -x[1]
+    )
+    
+    max_count = max([count for _, count in sorted_patterns]) if sorted_patterns else 1
+    
+    for pattern, count in sorted_patterns:
+        icon = pattern_icons.get(pattern, "📄")
+        bar = "█" * max(1, min(count // max(1, max_count // 30), 30))
+        description = pattern_descriptions.get(pattern, "")
+        
+        print(f"{icon} {pattern.title():20} {count:5d}  {bar}")
+        if description:
+            print(f"   {description}\n")
 
 
 def cmd_impact(data: dict, file_id: str):
     """Show what breaks if this file changes (reverse traversal)."""
-    edges = data.get("edges", [])
+    edges = _list(data.get("edges"))
 
     # Build reverse adjacency map
     rev = {}
@@ -203,8 +377,8 @@ def cmd_impact(data: dict, file_id: str):
 
 def cmd_gql(data: dict):
     """Show all GraphQL definitions across the codebase."""
-    nodes = [n for n in data.get("nodes", []) if n.get("language") == "graphql"]
-    ts_apollo = [n for n in data.get("nodes", []) if
+    nodes = [n for n in _list(data.get("nodes")) if n.get("language") == "graphql"]
+    ts_apollo = [n for n in _list(data.get("nodes")) if
                  n.get("domain") in ("graphql-operations", "graphql-schema") and
                  n.get("language") != "graphql"]
 
@@ -263,7 +437,6 @@ def cmd_gql(data: dict):
 def cmd_summary(data: dict):
     """Print a compact summary of the entire codebase map."""
     meta = data.get("meta", {})
-    stats = data.get("stats", {})
     clusters = data.get("clusters", {})
 
     print(f"\n🗺️   Codebase Map Summary")
@@ -279,6 +452,48 @@ def cmd_summary(data: dict):
         print(f"      {len(files):4d}  {bar}  {domain}")
 
 
+def cmd_suggest_domain(data: dict, search_term: str):
+    """Suggest domains based on keyword matching in file paths and summaries."""
+    term_lower = search_term.lower()
+    domain_scores = {}
+    
+    for node in _list(data.get("nodes")):
+        domain = node.get("domain", "unknown")
+        score = 0
+        
+        # Match in file path
+        if term_lower in node["id"].lower():
+            score += 2
+        
+        # Match in summary
+        if term_lower in _str(node.get("summary")).lower():
+            score += 1
+        
+        # Match in exports
+        if any(term_lower in e.lower() for e in _list(node.get("exports"))):
+            score += 1
+        
+        if score > 0:
+            domain_scores[domain] = domain_scores.get(domain, 0) + score
+    
+    if not domain_scores:
+        print(f"\nNo domain suggestions for '{search_term}'.")
+        print("Try a different search term or browse domains with --domain <name>")
+        return
+    
+    # Sort by score
+    sorted_domains = sorted(domain_scores.items(), key=lambda x: -x[1])
+    
+    print(f"\n💡  Suggested domains for '{search_term}':\n")
+    for i, (domain, score) in enumerate(sorted_domains[:10], 1):
+        bar = "█" * min(score, 15)
+        file_count = len(data.get("clusters", {}).get(domain, []))
+        print(f"   {i}. {domain:<30} {bar} ({score} matches, {file_count} files)")
+    
+    print(f"\n   Try: python3 query.py --domain {sorted_domains[0][0]}")
+    print(f"   Then: python3 query.py --search '{search_term}' --domain {sorted_domains[0][0]}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Query your coldstart_map.json",
@@ -288,23 +503,39 @@ def main():
     parser.add_argument("--map", default="coldstart_map.json", help="Path to coldstart_map.json")
     parser.add_argument("--domain", help="List files in a domain cluster")
     parser.add_argument("--file", help="Show metadata for a specific file")
-    parser.add_argument("--hot", action="store_true", help="Show hot nodes (most imported)")
+    parser.add_argument("--hot", "--hot-nodes", action="store_true", help="Show hot nodes (most imported)")
     parser.add_argument("--cycles", action="store_true", help="Show circular dependencies")
     parser.add_argument("--search", help="Search file IDs, exports, and summaries")
+    parser.add_argument("--suggest-domain", help="Suggest domains based on search term")
     parser.add_argument("--impact", help="Show files affected if this file changes")
     parser.add_argument("--gql", action="store_true", help="Show all GraphQL definitions")
+    parser.add_argument("--patterns", action="store_true", help="Show code pattern distribution")
     parser.add_argument("--summary", action="store_true", help="Print codebase summary")
     args = parser.parse_args()
 
-    map_path = Path(args.map)
-    if not map_path.exists():
-        print(f"❌  Map file not found: {args.map}")
-        print("    Run the indexer first: ./coldstart --root ./your-project")
+    map_path = resolve_map_path(args.map)
+    if not map_path.is_file():
+        print(f"❌  Map file not found: {args.map}", file=sys.stderr)
+        print("    Tried repo root coldstart_map.json and tools/coldstart/coldstart_map.json", file=sys.stderr)
+        print("    Run the indexer first: ./coldstart --root ./your-project", file=sys.stderr)
         sys.exit(1)
 
     data = load_map(str(map_path))
+    data["_map_path"] = str(map_path)  # Store path for pattern loading
+    
+    # Load patterns (only if needed)
+    patterns = None
+    if args.search or args.patterns:
+        patterns = load_patterns(str(map_path))
 
-    if args.domain:
+    # --summary first: wins over other flags if multiple are passed
+    if args.summary:
+        cmd_summary(data)
+    elif args.suggest_domain:
+        cmd_suggest_domain(data, args.suggest_domain)
+    elif args.patterns:
+        cmd_patterns(data)
+    elif args.domain:
         cmd_domain(data, args.domain)
     elif args.file:
         cmd_file(data, args.file)
@@ -313,7 +544,7 @@ def main():
     elif args.cycles:
         cmd_cycles(data)
     elif args.search:
-        cmd_search(data, args.search)
+        cmd_search(data, args.search, domain=args.domain, patterns=patterns)
     elif args.impact:
         cmd_impact(data, args.impact)
     elif args.gql:
