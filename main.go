@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coldstart/indexer"
-	"github.com/coldstart/output"
+	"coldstart/indexer"
+	"coldstart/output"
 )
 
 const banner = `

@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/coldstart/graph"
+	"coldstart/graph"
 )
 
 // Compiled regexes for TS/JS parsing

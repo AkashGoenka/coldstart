@@ -1,3 +1,3 @@
-module github.com/coldstart
+module coldstart
 
 go 1.22
