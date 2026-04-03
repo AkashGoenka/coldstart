@@ -14,6 +14,8 @@ and writes everything to a single JSON file on disk.
 
 That file sits in your project root. Your AI agent reads it at the start of every
 session and knows where everything lives without opening a single source file.
+By default, the map is optimized for lookup. Entry-point depth and critical-path
+analysis are optional so repeated file-finding tasks stay simpler and cheaper.
 
 ---
 
@@ -59,8 +61,10 @@ That is it. `coldstart_map.json` is written to your current directory.
 --root       Path to your project root            (default: .)
 --output     Where to write the map file          (default: coldstart_map.json)
 --exclude    Extra directories to skip            (default: none)
+--include    Restrict indexing to subpaths        (default: whole repo)
 --workers    Number of parallel goroutines        (default: 16)
 --quiet      Suppress output, just write the file (default: false)
+--with-architecture  Include depth/critical-path analysis (default: false)
 ```
 
 **Examples**
@@ -77,6 +81,9 @@ That is it. `coldstart_map.json` is written to your current directory.
 
 # Silent mode for CI
 ./coldstart --root ./my-project --quiet
+
+# Opt in to entry-point tracing and architecture output
+./coldstart --root ./my-project --with-architecture
 ```
 
 Already excluded by default: `node_modules`, `dist`, `build`, `.git`, `.next`,
@@ -88,6 +95,14 @@ Already excluded by default: `node_modules`, `dist`, `build`, `.git`, `.next`,
 
 Once `coldstart_map.json` exists, use `query.py` to interrogate it from the terminal.
 No dependencies required — pure Python stdlib.
+
+## Optional architecture mode
+
+If you want entry-point tracing, reachability/depth, and critical-path output,
+run the indexer with `--with-architecture`.
+
+Use this for request-flow and layering analysis. Leave it off for repeated
+lookup tasks, where the lean default map is a better fit.
 
 ```bash
 # Overall summary
@@ -107,6 +122,10 @@ python query.py --cycles
 
 # Search by keyword, export name, or domain
 python query.py --search "jwt"
+python query.py --search "jwt middleware" --domain auth
+
+# Resolve a natural-language lookup into likely files to edit
+python query.py --intent "membership page action menu"
 
 # What breaks if this file changes?
 python query.py --impact src/utils/token.ts
@@ -124,6 +143,32 @@ python query.py --patterns
 python query.py --suggest-domain "authentication"
 ```
 
+### Fast lookup workflow
+
+If the goal is "find the file I should open or edit", prefer `--intent` first.
+This is the lowest-noise path for natural-language prompts and usually avoids
+the multi-step `suggest-domain -> domain -> search -> grep` loop.
+
+```bash
+# Best default for file lookup questions
+python query.py --intent "membership page action menu"
+
+# Use domain-scoped search when you already know the area
+python query.py --search "jwt middleware" --domain auth
+
+# Use suggest-domain when the concept is broad or unfamiliar
+python query.py --suggest-domain "authentication"
+```
+
+Recommended order:
+
+1. `--intent` for "which file do I change/open?" requests
+2. `--search --domain ...` when you already know the subsystem
+3. `--suggest-domain` only when the domain is genuinely unclear
+
+`--intent` returns ranked file candidates with short reasons so agents can stop
+after 1 command instead of issuing a chain of broad searches.
+
 ---
 
 ## Pattern analysis
@@ -131,7 +176,7 @@ python query.py --suggest-domain "authentication"
 `pattern-analyzer.py` classifies every file in your map into a semantic archetype
 (component, hook, configuration, type-definition, utility, entry-point, test) and
 writes `coldstart_patterns.json` alongside your map. This is used by `query.py --patterns`
-and `query.py --search` for grouped results.
+and `query.py --search` / `query.py --intent` for grouped results.
 
 ```bash
 python pattern-analyzer.py --map coldstart_map.json
@@ -147,9 +192,12 @@ Add this to your `.cursorrules` file:
 
 ```
 Before exploring any file, read coldstart_map.json at the project root.
-Use clusters to find the relevant domain. Use hot_nodes to find high-value
-shared modules. Only open a source file when you need implementation detail
-or are about to modify it — the map already has exports, imports, and domain.
+For "find the file" or "where should I edit" questions, run:
+python query.py --intent "<user request>"
+Use python query.py --search "<term>" --domain <name> only when the domain
+is already known. Use --suggest-domain only if intent lookup is too broad.
+Only open a source file when intent/search ranking is insufficient or you are
+about to modify it — the map already has exports, imports, and domain.
 ```
 
 ---
@@ -165,6 +213,27 @@ Here is my codebase map. Use it before answering. Only ask to open files if the 
 [paste contents of coldstart_map.json here]
 </coldstart_map>
 ```
+
+If you keep project instructions in a `CLAUDE.md`, use this lookup policy:
+
+```md
+Before browsing the codebase, consult coldstart_map.json.
+
+For requests like "find the file", "where is this implemented", or
+"which file should I edit", run:
+python query.py --intent "<user request>"
+
+If intent results are weak or too broad:
+1. Run python query.py --suggest-domain "<core concept>"
+2. Then run python query.py --search "<core concept>" --domain <best-domain>
+
+Avoid broad grep/find passes until query.py results are insufficient.
+Prefer opening the top-ranked source file from --intent before exploring tests,
+locators, or helper artifacts.
+```
+
+There is also a ready-to-copy template in
+[CLAUDE.md.example](/Users/akashgoenka/coldstart/CLAUDE.md.example).
 
 For large maps, paste only the relevant slice:
 
