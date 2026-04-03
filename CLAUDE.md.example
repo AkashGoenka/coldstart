@@ -1,0 +1,25 @@
+Before exploring files, consult `coldstart_map.json` at the project root.
+
+Use this lookup order:
+
+1. For "find the file", "where is this implemented", "which file should I edit",
+   or similar natural-language lookup requests, run:
+   `python query.py --intent "<user request>"`
+
+2. If the top intent results are weak, ambiguous, or clearly indirect:
+   `python query.py --suggest-domain "<core concept>"`
+   Then:
+   `python query.py --search "<core concept>" --domain <best-domain>`
+
+3. Only fall back to `rg`, `grep`, or `find` when the query output is insufficient.
+
+When evaluating candidates:
+
+- Prefer source files in `/components/`, `/pages/`, or feature directories over
+  tests, locators, pageobjects, enums, types, and index barrels.
+- For edit requests, open the top-ranked source file from `--intent` first.
+- Use `python query.py --file <path>` before reading a file when you want a quick
+  metadata check.
+
+The goal is to minimize tokens spent on repeated lookup tasks by using the map
+to narrow the search before opening files.
