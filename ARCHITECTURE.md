@@ -1,247 +1,229 @@
-# Architecture — coldstart
+# Architecture — coldstart-mcp
 
-This document explains the reasoning behind every significant decision in this
-project. Not what the code does — the README covers that — but why it was built
-this way, what was considered and rejected, and where the boundaries are.
-
----
-
-## The problem
-
-AI agents like Cursor and Claude Code have no memory between sessions. Every new
-conversation starts cold. The agent re-reads the same files repeatedly to answer
-the same routing questions — "where is authentication handled", "what does this
-module export", "which files touch payments" — before it can answer anything useful.
-
-On a codebase with 5,000+ files this cold start costs tens of thousands of tokens
-per session. Multiplied across dozens of sessions per week, it becomes the single
-largest source of unnecessary token consumption.
-
-The insight is simple: these routing questions have stable answers. The answer to
-"where is authentication handled" does not change unless someone moves the auth
-files. So compute it once, store it, and let the agent read the result instead of
-re-discovering it every time.
+This document explains the reasoning behind every significant decision in the
+MCP server rewrite. Not what the code does — the README covers that — but why
+it was built this way, what was considered and rejected, and where the limits are.
 
 ---
 
-## What this project is
+## Why MCP server instead of static JSON map
 
-A static snapshot of your codebase structure, written to disk as a JSON file,
-readable by any AI tool.
+The original `coldstart` produced a `coldstart_map.json` file. Agents were
+instructed to read it at the start of every session and use it for routing.
 
-That is the complete definition. It is not a search engine, not a recommendation
-system, not a vector database, not a RAG pipeline. Every time the scope expanded
-during design, it was pulled back to this definition.
+It didn't work well. The problems:
 
----
+**Agents don't use a JSON blob effectively.** A 3MB JSON file gets pasted into
+context and the agent tries to scan it like a human reading a document. It finds
+what it needs inconsistently. Structured data is not the same as answerable questions.
 
-## Why Go
+**The whole blob is included even when only 5 files are relevant.** A query about
+authentication doesn't need the payments, queue, and upload domains in context.
+The JSON approach has no way to return a slice — it's all-or-nothing.
 
-The indexer needs to walk and parse 5,000+ files. Three languages were considered:
+**Agents need answers, not data.** The right abstraction is: "given a query,
+return the 5 most relevant files". That's a function call, not a file read.
 
-**Python** was rejected on speed. An interpreted language with a GIL processes
-files sequentially in practice. At 5,000 files a Python indexer takes 30–60
-seconds. Acceptable for a one-time run but painful for pre-commit hooks or CI.
-
-**Rust** was rejected on complexity. Rust's performance advantages over Go are
-real but irrelevant for this workload — the bottleneck is filesystem I/O, not
-CPU computation. Rust would take 3x longer to write for no measurable benefit
-in this context.
-
-**Go** was chosen because it is compiled, has first-class concurrency via
-goroutines, ships as a single binary with no runtime dependency, and is simple
-enough to read and modify without deep Go expertise. The indexer runs 16
-goroutines in parallel and processes 5,000 files in 2–4 seconds.
+The MCP server addresses all three issues. Agents call `find-files` with a query
+and get back exactly the files they need. No blob, no manual scanning, no context
+waste. The server runs locally, results return in milliseconds, and no network
+calls leave the machine.
 
 ---
 
-## Why regex and not AST
+## Why regex instead of AST / tree-sitter
 
-AST parsing with tree-sitter was the first instinct. It was rejected for the
-initial version for one reason: it solves a problem we have not confirmed exists.
+AST parsing gives precise results. Regex gives approximate results. We chose
+regex for three reasons:
 
-The cold start problem requires knowing:
-- What files exist
-- What they import and export
-- Which domain they belong to
-- How files depend on each other
+**Coverage.** 12 languages with one pattern file, zero native dependencies.
+Tree-sitter requires compiled native modules per language. Adding Rust, Java,
+Kotlin, Dart to tree-sitter support adds weeks of work and platform-specific
+build complexity. Regex adds 3 patterns per language.
 
-Regex answers all four questions adequately. It does not answer them perfectly —
-dynamic imports are missed, barrel re-exports are sometimes incomplete, multiline
-edge cases occasionally fail — but adequately is sufficient to solve the cold
-start problem.
+**The accuracy bar is lower than it appears.** The tool's job is routing:
+return the right 5 files out of 5,000. For routing, 80–90% import/export
+accuracy is sufficient. If a file has 10 exports and regex captures 8, the
+agent still gets pointed to the right file. The edge cases where regex fails
+(complex barrel re-exports, dynamic import patterns, macro-generated exports in
+Rust) are also the cases where any parser would struggle.
 
-AST parsing adds a day of implementation work, a non-trivial external dependency,
-and significant parser complexity in exchange for precision on edge cases we may
-never encounter in practice.
+**Zero native dependencies.** The binary is `node dist/index.js`. No native
+node modules, no tree-sitter, no platform-specific compilation step. Works on
+every platform Node supports.
 
-The right time to add tree-sitter is after running the regex version on a real
-codebase and identifying specific failures. Not before.
-
-The extension point is clean: `parser/typescript.go` is the only file that would
-change. The rest of the system is parser-agnostic.
-
----
-
-## Why no LLM for summaries
-
-The first natural extension was LLM-generated semantic summaries — running each
-file through an API to produce a human-readable description of what it does.
-
-This was rejected on a fundamental principle: if the goal is to reduce token
-consumption, spending tokens to generate summaries creates a conservation problem.
-The summarisation cost is paid once and amortised over many queries, so the
-economics can work — but only if retrieval is precise enough that the agent
-receives 3–5 summaries per query rather than hundreds.
-
-More importantly, LLM summaries are unnecessary for routing decisions. An agent
-deciding whether to open a file does not need prose. It needs structured signal:
-what does this file export, what does it call, which domain does it belong to.
-That signal is derivable from structure alone — no LLM required, no token cost,
-fully deterministic.
-
-If richer summaries are needed in a future version, AST-derived structured data
-(function signatures, call chains, type definitions) generates them for free
-without any API call.
+The upgrade path to tree-sitter is clean: `src/indexer/parser.ts` is the only
+file that would change. The rest of the system (graph, ranking, MCP server)
+doesn't know or care how imports were extracted. If regex proves insufficient on
+a real codebase, swap the parser — don't redesign the system.
 
 ---
 
-## Why no vector search
+## Why TF-IDF + PageRank instead of embeddings
 
-Vector similarity search was considered and rejected for the initial version for
-the same reason as AST: it solves a scale problem we have not confirmed exists.
+Three search approaches were considered: keyword search, TF-IDF + graph signals,
+and vector embeddings.
 
-Keyword search across 5,000 file summaries is fast enough and precise enough for
-a codebase of that size. The query for "jwt" returns a manageable result set.
-Vector search becomes necessary when:
+**Pure keyword search** was rejected because it doesn't handle vocabulary
+mismatch. A query for "authentication" misses a file called `session-manager.ts`
+that has no `auth` in the name but handles sessions. TF-IDF with camelCase
+splitting partially addresses this by decomposing identifiers into subwords.
 
-1. The codebase grows beyond ~10,000 files and keyword results become noisy
-2. Queries are semantic rather than keyword-based ("how does session management
-   work" rather than "session")
+**Vector embeddings** were rejected for three reasons:
+- They require a local ML model (ollama, sentence-transformers) or an API call
+- They add 300–500MB of model weight and a GPU dependency to a zero-dep tool
+- For code navigation, structural signals (PageRank, path matching, exports) are
+  more precise than semantic similarity for most queries
 
-Neither condition is confirmed until the tool is used on a real codebase.
+**TF-IDF + PageRank + git co-change** gives approximately 80% of the quality of
+embeddings for code routing queries, with zero ML dependencies and fully offline
+operation. The signal sources are complementary:
 
-The embedding model that powers vector search (sentence-transformers/all-MiniLM)
-is lightweight and runs locally — so when the time comes the addition is not
-onerous. But adding it before it is needed adds dependency weight, setup
-complexity, and a local model download to a tool whose current setup is three
-commands.
+- **TF-IDF**: rewards files whose identifiers (basename, exports, directory)
+  match query tokens
+- **PageRank**: rewards files that are imported by many other files — structural
+  importance, not just keyword presence
+- **Git co-change**: rewards files that frequently change alongside the current
+  top result — captures coupling that import edges miss
 
----
+The combined score is:
+```
+score = exactPathMatch(+50)
+      + tfidf(normalized 0-100) × 0.35
+      + pagerank(normalized 0-100) × 0.15
+      + perTokenBasenameMatch × 5
+      + perTokenExportMatch × 4
+      + multiTermIntersectionBonus × 2
+      + domainMatch(+8)
+      + cochangeBoost(top result) × 0.15
+```
 
-## Why no local retrieval server
+Penalties applied after: test files ×0.6, `.d.ts` files ×0.7, generated files ×0.5.
 
-A local HTTP server that Cursor queries instead of reading the full JSON file was
-designed in detail and rejected before implementation.
-
-The argument for it: the full JSON file grows with codebase size, eventually
-becoming too large to read in full. A server returns only relevant slices.
-
-The argument against it: this is an optimisation for a problem that does not exist
-yet. At 5,000 files `coldstart_map.json` is 1–3MB. Cursor reads it in full and
-uses the content it needs. No server required.
-
-The server becomes necessary above ~10,000 files where the map size starts
-defeating the purpose of having a compact context artifact. That threshold is
-documented in the limitations section of the README. When you hit it, the
-retrieval server is the right next step — not before.
-
-The more important reason to reject it early: a server introduces a process that
-must be running for the tool to work. A JSON file always works. Operational
-simplicity is a feature.
-
----
-
-## Why the map is a flat JSON file and not a database
-
-Three storage formats were considered: JSON file, SQLite database, and a
-dedicated vector database (LanceDB, ChromaDB).
-
-SQLite and vector databases were rejected because they cannot be read by an AI
-agent without a query interface. A JSON file can be read by anything — Cursor,
-Claude.ai, a bash script, a CI pipeline, a human. The portability is the point.
-
-A secondary benefit: JSON files can be committed to git. The map becomes a
-versionable artifact. You can diff it to see how your architecture has changed,
-roll it back, and share it across a team without any infrastructure.
+The upgrade path to embeddings is: replace `src/search/ranker.ts` and add a
+local embedding call. The interface (`findFiles(query, index)`) doesn't change.
 
 ---
 
-## The scope that was rejected
+## The routing layer principle
 
-During design the following were proposed and explicitly rejected for the initial
-version. They are documented here so future contributors understand why they are
-not present and can evaluate whether the conditions that would justify them have
-been met.
+The tool returns file pointers. It never returns behavioral summaries or
+implementation descriptions. This is intentional and non-negotiable.
 
-**Confidence scoring on retrieval results** — adds complexity to solve an
-inference accuracy problem that may not exist in practice. Build the simple
-version first.
+Why: behavioral summaries go stale. A summary that says "handles user login by
+checking the database and returning a JWT" is wrong the moment someone refactors
+the function to use Redis sessions instead. Structural metadata (exports, imports,
+domain, centrality) stays accurate as long as the file structure doesn't change.
 
-**Staleness detection with automatic re-indexing** — the hash field on each node
-provides the data needed for this. A file watcher or git hook is sufficient for
-keeping the map fresh without building automatic detection into the indexer itself.
+The agent's job is to read source code. This tool's job is to tell the agent
+which source code is worth reading. Keeping that distinction sharp keeps the tool
+simple and its cache valid longer.
 
-**Multi-language support beyond TypeScript/JavaScript** — the parser is the only
-language-specific component. Adding a language means adding one file. The
-architecture supports it cleanly but the initial version targets the most common
-AI agent codebase language.
+---
 
-**GraphQL support** — GraphQL files have no imports or exports in the traditional
-sense. The useful data (type definitions, query names, mutation names) requires
-a GraphQL-specific parser. Worth adding if your codebase has significant GraphQL
-surface area. The extension point is `parser/graphql.go`.
+## How the indexing pipeline works
 
-**Token budgeting on responses** — the idea of hard-capping what an agent receives
-per query is architecturally sound but requires the retrieval server to enforce.
-Implemented at the `.cursorrules` level as a soft instruction instead.
+```
+1. Walk(rootDir)
+   → WalkedFile[] (path, language)
+   Skip: node_modules, .git, symlinks, files > 1MB
+
+2. Parse(file, language) [parallel, 50 files at a time]
+   → imports[], exports[], hash, lineCount, domain, archRole, isEntryPoint
+   Method: apply language-specific regex patterns from LANGUAGE_CONFIGS
+
+3. ResolveImports(files, rootDir)
+   → Edge[] (from, to, type, specifier)
+   Method: try exact path → try extensions → try index files → apply tsconfig aliases
+   Unresolved imports are collected but not fatal
+
+4. BuildGraph(edges)
+   → outEdges Map, inEdges Map
+
+5. ComputePageRank(graph, damping=0.85, iterations=20)
+   → pagerank Map<fileId, score>
+   Standard PageRank with dangling-node handling
+
+6. ComputeDepth(entryPoints, graph)
+   → depth Map<fileId, number>
+   BFS from entry points (index.ts, main.ts, app.ts, ...)
+
+7. GitCoChange(rootDir, last 100 commits)
+   → cochange Map<fileA, Map<fileB, normalizedScore>>
+   Score = commits_together / max(commits_A, commits_B)
+
+8. BuildTFIDF(files)
+   → tfidf Map<fileId, Map<term, score>>, idf Map<term, score>
+   Document = tokenize(basename)×5 + tokenize(dir)×3 + tokenize(exports)×4 + domain×1
+```
+
+Total time on a 5,000-file TypeScript codebase: ~3–6 seconds.
+
+---
+
+## Cache design
+
+Cache location: `~/.coldstart/indexes/<md5-of-root-path>/`
+
+Files:
+- `meta.json`: gitHead, fileCount, timestamp, version
+- `index.json`: full serialized index (Maps serialized as objects)
+
+Staleness check order:
+1. Schema version mismatch → re-index
+2. git HEAD changed → re-index
+3. Age > 1 hour → re-index
+4. Otherwise → use cache
+
+The git HEAD check catches the common case: after a `git pull` or new commit,
+the index rebuilds automatically on next agent startup. The 1-hour TTL is a
+fallback for projects not using git.
+
+Cache invalidation is intentionally coarse — full re-index, no incremental
+updates. Incremental indexing requires tracking which files changed, resolving
+import chains that might be affected by transitive changes, and invalidating
+partial TF-IDF vectors. The complexity is not justified until re-indexing time
+becomes a real problem (it won't be until ~50,000 files).
+
+---
+
+## What was tried before and why it didn't work
+
+**v1: Go static JSON map.** Produced `coldstart_map.json`. Agents were slow to
+read it effectively, included too much irrelevant context, and couldn't query it
+at different granularities. The map was a data dump, not a service.
+
+**v2: Node.js JSON map with query.py.** Better tooling, same fundamental
+problem. query.py helped human developers but agents still needed to invoke it
+as a subprocess and parse its output. Awkward. Not native to the agent's tool
+use protocol.
+
+**v3 (this): MCP server.** Native to how Claude Code and Cursor call tools.
+Agents call `find-files`, get structured JSON back, stop looking. No subprocess,
+no blob parsing, no context waste.
 
 ---
 
 ## The natural upgrade path
 
-If the regex indexer proves insufficient, the upgrade sequence is:
-
 ```
-1. Regex parser (current)
-   ↓ if: missing exports, incomplete edges, domain tagging is wrong
-2. Tree-sitter AST parser
-   ↓ if: map is too large to read in full (>10k files)
-3. Local retrieval server with keyword search
-   ↓ if: keyword search returns too many results (noisy at scale)
-4. Vector embeddings with local model (cocoindex-code or similar)
+Current: regex parsing + TF-IDF + PageRank (this version)
+   ↓ if: missing exports are causing wrong file routing
+Tree-sitter AST for specific languages (drop-in parser swap)
+   ↓ if: TF-IDF results are noisy / vocabulary mismatch is frequent
+Local embeddings (replace ranker.ts, add ollama/transformers.js call)
+   ↓ if: query latency from embedding generation is unacceptable
+Pre-computed embedding index (build at index time, not query time)
 ```
 
-Each step is justified by a specific observed failure in the previous step, not
-by theoretical possibility of that failure.
+Each step is justified by a specific observed failure. Not theoretical possibility.
 
 ---
 
-## What Cursor already does and why this is still useful
+## What this tool is not
 
-Cursor maintains an internal index of your codebase. It uses embeddings stored
-in a cloud service and retrieves relevant files before sending them to the model.
+Not a knowledge layer. Not a semantic summarizer. Not a code intelligence engine.
 
-This solves a different problem. Cursor's index determines which files to include
-in context. It does not gate how many files are included or compress what gets
-sent. Once Cursor decides a file is relevant it sends the full raw source.
-
-This project sits at a different layer. It gives the agent a compact structural
-map that answers routing questions without opening any file. The agent reads the
-map, identifies the one or two files actually relevant to the question, and opens
-only those.
-
-The two are complementary. Cursor's index helps it find files. This map helps it
-decide which files are worth finding.
-
----
-
-## The principle that constrained every decision
-
-> Solve the problem you have. Not the problem you might have at 10x scale.
-> Not the problem that would exist if the first version worked perfectly.
-> The problem you have, right now, with the codebase you have.
-
-Every rejected feature in this document was rejected by applying that principle.
-The cold start problem is real and present. The retrieval precision problem at
-20,000 files is hypothetical. Build for the real problem first.
+It is a routing layer. It tells agents which files to read. That is the complete
+scope. Every design decision was made to make that scope work well, without
+accumulating complexity for problems that haven't been confirmed.

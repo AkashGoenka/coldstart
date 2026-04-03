@@ -1,0 +1,1 @@
+{"version":3,"file":"git.d.ts","sourceRoot":"","sources":["../../src/indexer/git.ts"],"names":[],"mappings":"AAKA;;;;;;;GAOG;AACH,wBAAsB,kBAAkB,CACtC,OAAO,EAAE,MAAM,EACf,UAAU,SAAM,GACf,OAAO,CAAC,GAAG,CAAC,MAAM,EAAE,GAAG,CAAC,MAAM,EAAE,MAAM,CAAC,CAAC,CAAC,CA0E3C;AAED;;GAEG;AACH,wBAAsB,UAAU,CAAC,OAAO,EAAE,MAAM,GAAG,OAAO,CAAC,MAAM,CAAC,CASjE"}
