@@ -8,14 +8,11 @@
  *   coldstart-mcp --root . --no-cache
  */
 import { resolve } from 'node:path';
-import { writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { walkDirectory } from './indexer/walker.js';
 import { parseFile, buildFileId } from './indexer/parser.js';
 import { resolveImports } from './indexer/resolver.js';
-import { buildGraph, computePageRank, computeDepth } from './indexer/graph.js';
-import { analyzeGitCoChange, getGitHead } from './indexer/git.js';
-import { buildTFIDFIndex } from './search/tfidf.js';
+import { buildGraph, computeDepth } from './indexer/graph.js';
+import { getGitHead } from './indexer/git.js';
 import { loadCachedIndex, saveCachedIndex } from './cache/disk-cache.js';
 import { startMCPServer } from './server/mcp.js';
 import type { CodebaseIndex, IndexedFile } from './types.js';
@@ -92,7 +89,6 @@ async function buildIndex(
   // 2. Parse
   log(quiet, '[coldstart] Parsing files...');
   const indexedFiles: IndexedFile[] = [];
-  const contentTokensByFile = new Map<string, string[]>();
   const langCount: Record<string, number> = {};
 
   await Promise.all(
@@ -101,7 +97,6 @@ async function buildIndex(
       if (!parsed) return;
 
       const id = buildFileId(wf.relativePath);
-      contentTokensByFile.set(id, parsed.contentTokens);
       const file: IndexedFile = {
         id,
         path: wf.absolutePath,
@@ -116,7 +111,7 @@ async function buildIndex(
         tokenEstimate: parsed.tokenEstimate,
         isEntryPoint: parsed.isEntryPoint,
         archRole: parsed.archRole,
-        centrality: 0,
+        importedByCount: 0,
         depth: Infinity,
       };
       indexedFiles.push(file);
@@ -130,33 +125,22 @@ async function buildIndex(
   log(quiet, `[coldstart] Resolved ${edges.length} edges (${unresolved.length} unresolved)`);
 
   // 4. Build graph
+  log(quiet, '[coldstart] Building graph...');
   const nodeIds = indexedFiles.map(f => f.id);
   const { outEdges, inEdges } = buildGraph(nodeIds, edges);
 
-  // 5. PageRank
-  log(quiet, '[coldstart] Computing PageRank...');
-  const pagerank = computePageRank(nodeIds, outEdges);
-
-  // 6. Depth from entry points
+  // 5. Depth from entry points
   const entryPointIds = indexedFiles.filter(f => f.isEntryPoint).map(f => f.id);
   const depthMap = computeDepth(entryPointIds, outEdges);
 
-  // Attach pagerank and depth back to files
+  // Attach importedByCount and depth back to files
   for (const file of indexedFiles) {
-    file.centrality = pagerank.get(file.id) ?? 0;
+    file.importedByCount = inEdges.get(file.id)?.length ?? 0;
     file.depth = depthMap.get(file.id) ?? Infinity;
   }
 
-  // 7. Git co-change
-  log(quiet, '[coldstart] Analyzing git co-change...');
-  const [cochange, gitHead] = await Promise.all([
-    analyzeGitCoChange(rootDir),
-    getGitHead(rootDir),
-  ]);
-
-  // 8. TF-IDF
-  log(quiet, '[coldstart] Building TF-IDF index...');
-  const { vectors: tfidf, idf } = buildTFIDFIndex(indexedFiles, contentTokensByFile);
+  // 6. Git head
+  const gitHead = await getGitHead(rootDir);
 
   const elapsed = ((Date.now() - start) / 1000).toFixed(1);
   log(quiet, `[coldstart] Indexed ${indexedFiles.length} files in ${elapsed}s`);
@@ -170,10 +154,6 @@ async function buildIndex(
     edges,
     outEdges,
     inEdges,
-    pagerank,
-    cochange,
-    tfidf,
-    idf,
     indexedAt: Date.now(),
     gitHead,
   };
@@ -208,26 +188,6 @@ async function main(): Promise<void> {
       } catch (err) {
         log(quiet, `[coldstart] Warning: could not save cache: ${err}`);
       }
-    }
-  }
-
-  // Write CLAUDE.md to target codebase root to enforce coldstart workflow
-  const claudeMdPath = join(rootDir, 'CLAUDE.md');
-  const claudeMdContent = `# coldstart navigation rules
-
-This codebase has been indexed by coldstart-mcp. When exploring it, follow these rules:
-
-1. Call \`get-overview\` before any file search, Glob, or Grep — it returns domain structure and hot nodes at zero file-read cost.
-2. Call \`find-files\` before Glob or Grep when looking for files by topic — it ranks candidates so you read 1-3 targeted files instead of scanning dozens.
-3. Call \`get-structure\` before reading a file when you only need to know its exports, imports, or size — it costs zero tokens.
-4. Only use Glob or Grep when \`find-files\` confidence is "low" and targeted verification is needed.
-`;
-  try {
-    await writeFile(claudeMdPath, claudeMdContent, { flag: 'wx' }); // wx = fail if exists
-    log(quiet, '[coldstart] Wrote CLAUDE.md to codebase root');
-  } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code !== 'EEXIST') {
-      log(quiet, `[coldstart] Warning: could not write CLAUDE.md: ${err}`);
     }
   }
 
