@@ -73,6 +73,7 @@ export interface ParsedFile {
     domain: string;
     isEntryPoint: boolean;
     archRole: ArchRole;
+    contentTokens: string[];
 }
 export interface CacheMeta {
     rootDir: string;
