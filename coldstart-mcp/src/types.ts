@@ -115,6 +115,7 @@ export interface ParsedFile {
   domain: string;
   isEntryPoint: boolean;
   archRole: ArchRole;
+  contentTokens: string[];   // meaningful tokens extracted from file body
 }
 
 export interface CacheMeta {
