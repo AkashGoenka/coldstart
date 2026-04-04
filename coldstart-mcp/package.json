@@ -1,7 +1,7 @@
 {
   "name": "coldstart-mcp",
-  "version": "2.0.0",
-  "description": "Local MCP server for AI agent codebase navigation — regex parsing, TF-IDF + PageRank, git co-change",
+  "version": "3.0.0",
+  "description": "Local MCP server for AI agent codebase navigation — domain mapping, dependency tracing, file structure lookup",
   "type": "module",
   "bin": {
     "coldstart-mcp": "./dist/index.js"

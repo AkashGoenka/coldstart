@@ -50,7 +50,7 @@ export interface IndexedFile {
   tokenEstimate: number;    // content.length / 4
   isEntryPoint: boolean;
   archRole: ArchRole;
-  centrality: number;       // PageRank score (set after graph phase)
+  importedByCount: number;  // number of files that import this file (set after graph phase)
   depth: number;            // BFS depth from entry points (set after graph phase)
 }
 
@@ -61,36 +61,14 @@ export interface Edge {
   specifier: string;        // raw import string
 }
 
-export interface TFIDFVector {
-  fileId: string;
-  terms: Map<string, number>; // term → tf-idf score
-}
-
 export interface CodebaseIndex {
   rootDir: string;
   files: Map<string, IndexedFile>;       // id → IndexedFile
   edges: Edge[];
   outEdges: Map<string, string[]>;       // fileId → [fileId] (imports)
   inEdges: Map<string, string[]>;        // fileId → [fileId] (importers)
-  pagerank: Map<string, number>;         // fileId → score
-  cochange: Map<string, Map<string, number>>; // fileId → fileId → score
-  tfidf: Map<string, Map<string, number>>;    // fileId → term → score
-  idf: Map<string, number>;             // term → idf score
   indexedAt: number;                    // Date.now()
   gitHead: string;                      // HEAD commit hash or ''
-}
-
-export interface QueryResult {
-  path: string;
-  relativePath: string;
-  score: number;
-  domain: string;
-  language: Language;
-  exports: string[];
-  centrality: number;
-  archRole: ArchRole;
-  isEntryPoint: boolean;
-  reasons: string[];        // human-readable scoring breakdown
 }
 
 export interface LanguageConfig {
@@ -115,7 +93,6 @@ export interface ParsedFile {
   domain: string;
   isEntryPoint: boolean;
   archRole: ArchRole;
-  contentTokens: string[];   // meaningful tokens extracted from file body
 }
 
 export interface CacheMeta {
