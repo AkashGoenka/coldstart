@@ -8,8 +8,10 @@ import {
   ARCH_ROLE_PATTERNS,
 } from '../constants.js';
 import type { Language, ParsedFile, ArchRole } from '../types.js';
+import { tokenize } from '../search/tokenizer.js';
 
 const MAX_FILE_SIZE = 1_000_000; // 1 MB
+const MAX_CONTENT_TOKENS = 50;   // cap per file to keep index lean
 
 export async function parseFile(
   filePath: string,
@@ -169,6 +171,11 @@ export async function parseFile(
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Extract content tokens for search
+  // -------------------------------------------------------------------------
+  const contentTokens = extractContentTokens(content, language, new Set(uniqueExports));
+
   return {
     imports: uniqueImports,
     exports: uniqueExports,
@@ -179,7 +186,78 @@ export async function parseFile(
     domain,
     isEntryPoint,
     archRole,
+    contentTokens,
   };
+}
+
+/**
+ * Extract meaningful tokens from file content for search indexing.
+ * Captures JSX element names, identifiers, and comment words that
+ * wouldn't be found from path/export analysis alone.
+ */
+function extractContentTokens(
+  content: string,
+  language: Language,
+  existingExports: Set<string>,
+): string[] {
+  const termCounts = new Map<string, number>();
+
+  function addToken(token: string): void {
+    const lower = token.toLowerCase();
+    if (lower.length < 2) return;
+    termCounts.set(lower, (termCounts.get(lower) ?? 0) + 1);
+  }
+
+  // Limit content to avoid long-tail noise
+  const slice = content.slice(0, 15_000);
+
+  // 1. JSX element names: <Button, <ActionMenu, <Modal.Body
+  if (['typescript', 'javascript'].includes(language)) {
+    const jsxMatches = slice.matchAll(/<([A-Z][a-zA-Z0-9]*(?:\.[A-Z][a-zA-Z0-9]*)?)/g);
+    for (const m of jsxMatches) {
+      for (const tok of tokenize(m[1])) addToken(tok);
+    }
+  }
+
+  // 2. Function/method calls: handleAction(...), openMenu(...)
+  const callMatches = slice.matchAll(/\b([a-zA-Z_]\w{2,})\s*\(/g);
+  for (const m of callMatches) {
+    // Skip import/require/common keywords
+    const name = m[1];
+    if (/^(import|require|from|export|return|if|else|for|while|switch|catch|typeof|instanceof|new|delete|void|throw|await|async|function|class|const|let|var|console|log|warn|error)$/.test(name)) continue;
+    for (const tok of tokenize(name)) addToken(tok);
+  }
+
+  // 3. String literals (short ones only — likely labels, types, roles)
+  const stringMatches = slice.matchAll(/['"`]([a-zA-Z][a-zA-Z0-9 _-]{2,30})['"`]/g);
+  for (const m of stringMatches) {
+    for (const tok of tokenize(m[1])) addToken(tok);
+  }
+
+  // 4. Comments (single-line only, first ~150 lines)
+  const firstLines = content.split('\n').slice(0, 150).join('\n');
+  const commentMatches = firstLines.matchAll(/\/\/\s*(.+)$|#\s*(.+)$/gm);
+  for (const m of commentMatches) {
+    const text = m[1] || m[2];
+    if (text) {
+      for (const tok of tokenize(text)) addToken(tok);
+    }
+  }
+
+  // Remove tokens that already appear in exports (they're weighted higher there)
+  const exportTokens = new Set<string>();
+  for (const exp of existingExports) {
+    for (const tok of tokenize(exp)) exportTokens.add(tok);
+  }
+  for (const tok of exportTokens) termCounts.delete(tok);
+
+  // Sort by frequency descending, take top N
+  const sorted = [...termCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, MAX_CONTENT_TOKENS)
+    .map(([term]) => term);
+
+  return sorted;
 }
 
 export function buildFileId(relativePath: string): string {

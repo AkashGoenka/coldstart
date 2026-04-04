@@ -1,4 +1,5 @@
 import { findFiles } from '../search/ranker.js';
+import { tokenizeQuery } from '../search/tokenizer.js';
 // ============================================================================
 // get-overview
 // ============================================================================
@@ -28,10 +29,6 @@ export function handleGetOverview(index, params) {
         const key = `${fromFile.domain} → ${toFile.domain}`;
         domainEdges.set(key, (domainEdges.get(key) ?? 0) + 1);
     }
-    // Entry points
-    const entryPoints = [...index.files.values()]
-        .filter(f => f.isEntryPoint)
-        .map(f => ({ path: f.relativePath, language: f.language, domain: f.domain }));
     // Top 5 hot nodes by PageRank
     const sorted = [...index.pagerank.entries()]
         .sort((a, b) => b[1] - a[1])
@@ -61,10 +58,11 @@ export function handleGetOverview(index, params) {
             .sort((a, b) => b[1] - a[1])
             .slice(0, 10)
             .map(([key, count]) => [key, count])),
-        entryPoints,
+        entryPointCount: [...index.files.values()].filter(f => f.isEntryPoint).length,
         hotNodes,
         indexedAt: new Date(index.indexedAt).toISOString(),
         gitHead: index.gitHead || '(not a git repo)',
+        nextStep: 'Now call find-files with a domain filter (e.g. domain: "memberships") — do NOT use Glob or Grep yet. find-files ranks candidates by relevance so you read 1-3 targeted files instead of scanning dozens.',
     };
 }
 // ============================================================================
@@ -76,19 +74,64 @@ export function handleFindFiles(index, params) {
         limit: params.limit,
         preferSource: params.prefer_source,
     });
+    const queryTokens = tokenizeQuery(params.query);
+    // Check if a result's domain matches any query token
+    function domainMatchesQuery(domain) {
+        const domainLower = domain.toLowerCase();
+        return queryTokens.some(tok => domainLower.includes(tok) || tok.includes(domainLower));
+    }
+    // Per-result confidence, capped at "medium" if domain doesn't match query
+    function getConfidence(score, domain) {
+        const raw = score >= 30 ? 'high' : score >= 10 ? 'medium' : 'low';
+        // If domain doesn't match any query token, cap at medium
+        if (raw === 'high' && !domainMatchesQuery(domain)) {
+            return 'medium';
+        }
+        return raw;
+    }
+    // Domain spread warning
+    const uniqueDomains = new Set(results.map(r => r.domain));
+    const domainSpreadWarning = uniqueDomains.size >= 3
+        ? `Results span ${uniqueDomains.size} domains (${[...uniqueDomains].join(', ')}). Call get-overview first, then retry find-files with a domain filter for more accurate results.`
+        : undefined;
+    const topScore = results[0]?.score ?? 0;
+    const topConfidence = results.length > 0
+        ? getConfidence(topScore, results[0].domain)
+        : 'low';
+    const overallConfidence = domainSpreadWarning ? (topConfidence === 'high' ? 'medium' : topConfidence) : topConfidence;
+    const overallRecommendation = domainSpreadWarning
+        ? domainSpreadWarning
+        : overallConfidence === 'high'
+            ? 'Read top result(s) directly — strong match.'
+            : overallConfidence === 'medium'
+                ? 'Read top results, then verify with a targeted Grep if needed.'
+                : 'Weak match — use these as hints and supplement with Grep.';
     return {
         query: params.query,
-        results: results.map(r => ({
-            path: r.relativePath,
-            language: r.language,
-            domain: r.domain,
-            archRole: r.archRole,
-            isEntryPoint: r.isEntryPoint,
-            exports: r.exports,
-            centrality: r.centrality,
-            score: r.score,
-            reasons: r.reasons,
-        })),
+        confidence: overallConfidence,
+        recommendation: overallRecommendation,
+        ...(domainSpreadWarning ? { warning: domainSpreadWarning } : {}),
+        results: results.map(r => {
+            const confidence = getConfidence(r.score, r.domain);
+            const recommendation = confidence === 'high'
+                ? 'Read directly.'
+                : confidence === 'medium'
+                    ? 'Read and verify with targeted Grep.'
+                    : 'Low confidence — treat as a hint only.';
+            return {
+                path: r.relativePath,
+                language: r.language,
+                domain: r.domain,
+                archRole: r.archRole,
+                isEntryPoint: r.isEntryPoint,
+                exports: r.exports,
+                centrality: r.centrality,
+                score: r.score,
+                confidence,
+                recommendation,
+                reasons: r.reasons,
+            };
+        }),
         totalResults: results.length,
     };
 }
