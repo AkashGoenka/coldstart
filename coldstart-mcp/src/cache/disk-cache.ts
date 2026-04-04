@@ -118,10 +118,6 @@ interface SerializedIndex {
   edges: unknown[];
   outEdges: Record<string, string[]>;
   inEdges: Record<string, string[]>;
-  pagerank: Record<string, number>;
-  cochange: Record<string, Record<string, number>>;
-  tfidf: Record<string, Record<string, number>>;
-  idf: Record<string, number>;
 }
 
 function serializeIndex(index: CodebaseIndex): SerializedIndex {
@@ -134,26 +130,6 @@ function serializeIndex(index: CodebaseIndex): SerializedIndex {
   const inEdges: Record<string, string[]> = {};
   for (const [k, v] of index.inEdges) inEdges[k] = v;
 
-  const pagerank: Record<string, number> = {};
-  for (const [k, v] of index.pagerank) pagerank[k] = v;
-
-  const cochange: Record<string, Record<string, number>> = {};
-  for (const [k, innerMap] of index.cochange) {
-    const inner: Record<string, number> = {};
-    for (const [ik, iv] of innerMap) inner[ik] = iv;
-    cochange[k] = inner;
-  }
-
-  const tfidf: Record<string, Record<string, number>> = {};
-  for (const [k, innerMap] of index.tfidf) {
-    const inner: Record<string, number> = {};
-    for (const [ik, iv] of innerMap) inner[ik] = iv;
-    tfidf[k] = inner;
-  }
-
-  const idf: Record<string, number> = {};
-  for (const [k, v] of index.idf) idf[k] = v;
-
   return {
     rootDir: index.rootDir,
     indexedAt: index.indexedAt,
@@ -162,10 +138,6 @@ function serializeIndex(index: CodebaseIndex): SerializedIndex {
     edges: index.edges,
     outEdges,
     inEdges,
-    pagerank,
-    cochange,
-    tfidf,
-    idf,
   };
 }
 
@@ -177,19 +149,6 @@ function deserializeIndex(plain: SerializedIndex): CodebaseIndex {
 
   const outEdges = new Map<string, string[]>(Object.entries(plain.outEdges));
   const inEdges = new Map<string, string[]>(Object.entries(plain.inEdges));
-  const pagerank = new Map<string, number>(Object.entries(plain.pagerank));
-
-  const cochange = new Map<string, Map<string, number>>();
-  for (const [k, inner] of Object.entries(plain.cochange)) {
-    cochange.set(k, new Map<string, number>(Object.entries(inner)));
-  }
-
-  const tfidf = new Map<string, Map<string, number>>();
-  for (const [k, inner] of Object.entries(plain.tfidf)) {
-    tfidf.set(k, new Map<string, number>(Object.entries(inner)));
-  }
-
-  const idf = new Map<string, number>(Object.entries(plain.idf));
 
   return {
     rootDir: plain.rootDir,
@@ -199,9 +158,5 @@ function deserializeIndex(plain: SerializedIndex): CodebaseIndex {
     edges: plain.edges as CodebaseIndex['edges'],
     outEdges,
     inEdges,
-    pagerank,
-    cochange,
-    tfidf,
-    idf,
   };
 }
