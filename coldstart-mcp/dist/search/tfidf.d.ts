@@ -8,7 +8,7 @@ export interface TFIDFIndex {
  * TF is raw weighted term count normalized by document length.
  * IDF = log(N / df + 1) (smooth to avoid division by zero).
  */
-export declare function buildTFIDFIndex(files: IndexedFile[]): TFIDFIndex;
+export declare function buildTFIDFIndex(files: IndexedFile[], contentTokensByFile?: Map<string, string[]>): TFIDFIndex;
 /**
  * Query the TF-IDF index. Returns fileId → raw score.
  */

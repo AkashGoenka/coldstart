@@ -26,7 +26,7 @@ export async function startMCPServer(index: CodebaseIndex): Promise<void> {
       {
         name: 'get-overview',
         description:
-          'Get a high-level overview of the codebase: file counts, language breakdown, domains, inter-domain dependencies, entry points, and the most imported files.',
+          'CALL THIS FIRST when entering an unfamiliar codebase — before any file search or Glob. Returns domain structure, entry points, and the most-imported files at zero file-read cost. Use it to understand where code lives so subsequent searches are targeted, not broad.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -40,17 +40,17 @@ export async function startMCPServer(index: CodebaseIndex): Promise<void> {
       {
         name: 'find-files',
         description:
-          'Search for files relevant to a query. Uses TF-IDF + PageRank + git co-change to rank results. Returns file paths with domain, exports, centrality score, and reasons for inclusion.',
+          'Call this BEFORE Glob or Grep when looking for files by topic or functionality. Uses TF-IDF + PageRank + git co-change to rank candidates. Returns a confidence level (high/medium/low) and a recommended next action for each result — so you read only 2-3 targeted files instead of broad-searching dozens. If top result confidence is "high", read it directly. If "low", the response will tell you to supplement with a targeted Grep.',
         inputSchema: {
           type: 'object',
           properties: {
             query: {
               type: 'string',
-              description: 'Natural language or keyword query (e.g. "user authentication", "payment stripe webhook").',
+              description: 'Natural language or keyword query (e.g. "user authentication", "membership action menu").',
             },
             domain: {
               type: 'string',
-              description: 'Filter results to a specific domain.',
+              description: 'Filter results to a specific domain from get-overview.',
             },
             limit: {
               type: 'number',
@@ -67,7 +67,7 @@ export async function startMCPServer(index: CodebaseIndex): Promise<void> {
       {
         name: 'trace-deps',
         description:
-          'Trace the import/export dependencies of a specific file. Shows what the file imports and what imports it, with optional transitive depth.',
+          'Call this INSTEAD OF manually reading import statements across multiple files. Given a file you already know, returns its full dependency graph (what it imports and what imports it) without reading any file contents. Saves tokens when you need to understand how a component connects to the rest of the codebase.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -91,7 +91,7 @@ export async function startMCPServer(index: CodebaseIndex): Promise<void> {
       {
         name: 'get-structure',
         description:
-          'Get full structural metadata for a specific file: language, domain, exports, imports (internal + external), line count, token estimate, architectural role, and centrality.',
+          'Call this INSTEAD OF reading a file just to understand its exports or imports. Returns exports, internal/external imports, line count, token estimate, and architectural role — at zero file-read cost. Use it to decide whether a file is worth reading in full before spending tokens on it.',
         inputSchema: {
           type: 'object',
           properties: {
