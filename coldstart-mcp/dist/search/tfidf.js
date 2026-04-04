@@ -5,10 +5,11 @@ const WEIGHT_BASENAME = 5;
 const WEIGHT_DIR = 3;
 const WEIGHT_EXPORT = 4;
 const WEIGHT_DOMAIN = 1;
+const WEIGHT_CONTENT = 0.5; // low weight — fallback signal from file body
 /**
  * Build a document representation for a file (weighted bag of terms).
  */
-function buildDocument(file) {
+function buildDocument(file, contentTokens) {
     const termFreq = new Map();
     function addTerms(tokens, weight) {
         for (const t of tokens) {
@@ -32,6 +33,8 @@ function buildDocument(file) {
     if (file.domain && file.domain !== 'unknown') {
         addTerms(tokenize(file.domain), WEIGHT_DOMAIN);
     }
+    // Content tokens (lowest weight — body-level signal)
+    addTerms(contentTokens, WEIGHT_CONTENT);
     return termFreq;
 }
 /**
@@ -39,14 +42,15 @@ function buildDocument(file) {
  * TF is raw weighted term count normalized by document length.
  * IDF = log(N / df + 1) (smooth to avoid division by zero).
  */
-export function buildTFIDFIndex(files) {
+export function buildTFIDFIndex(files, contentTokensByFile) {
     const N = files.length;
     if (N === 0)
         return { vectors: new Map(), idf: new Map() };
     // Build raw term-freq docs
     const docs = new Map();
     for (const file of files) {
-        docs.set(file.id, buildDocument(file));
+        const contentTokens = contentTokensByFile?.get(file.id) ?? [];
+        docs.set(file.id, buildDocument(file, contentTokens));
     }
     // Compute document frequency per term
     const df = new Map();
