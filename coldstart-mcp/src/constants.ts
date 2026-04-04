@@ -281,19 +281,6 @@ export const DOMAIN_KEYWORDS: Record<string, string[]> = {
 };
 
 // ---------------------------------------------------------------------------
-// Stop words — filtered from queries
-// ---------------------------------------------------------------------------
-export const STOP_WORDS = new Set([
-  'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-  'of', 'with', 'by', 'from', 'is', 'it', 'its', 'be', 'as', 'this',
-  'that', 'are', 'was', 'were', 'been', 'have', 'has', 'had', 'do',
-  'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might',
-  'can', 'not', 'no', 'any', 'all', 'some', 'more', 'than', 'then',
-  'so', 'if', 'else', 'get', 'set', 'use', 'using', 'used',
-  'file', 'files', 'function', 'class', 'method', 'import', 'export',
-]);
-
-// ---------------------------------------------------------------------------
 // Default excludes for filesystem walker
 // ---------------------------------------------------------------------------
 export const DEFAULT_EXCLUDES = new Set([
@@ -350,4 +337,4 @@ export const ARCH_ROLE_PATTERNS: Array<{ pattern: RegExp; role: string }> = [
 ];
 
 // Cache version — bump when index schema changes to force re-index
-export const CACHE_VERSION = '2.0.0';
+export const CACHE_VERSION = '3.0.0';

@@ -1,6 +1,4 @@
-import type { CodebaseIndex } from '../types.js';
-import { findFiles } from '../search/ranker.js';
-import { tokenizeQuery } from '../search/tokenizer.js';
+import type { CodebaseIndex, ArchRole } from '../types.js';
 
 // ============================================================================
 // get-overview
@@ -17,11 +15,32 @@ export function handleGetOverview(
     langCount.set(file.language, (langCount.get(file.language) ?? 0) + 1);
   }
 
-  // Domain breakdown with file counts
-  const domainCount = new Map<string, number>();
+  // Domain breakdown: { domainName: { count, files: { archRole: [path, ...] } } }
+  const domainMap = new Map<string, { count: number; files: Map<ArchRole, string[]> }>();
   for (const file of index.files.values()) {
     if (domain_filter && file.domain !== domain_filter) continue;
-    domainCount.set(file.domain, (domainCount.get(file.domain) ?? 0) + 1);
+    if (!domainMap.has(file.domain)) {
+      domainMap.set(file.domain, { count: 0, files: new Map() });
+    }
+    const entry = domainMap.get(file.domain)!;
+    entry.count++;
+    if (!entry.files.has(file.archRole)) {
+      entry.files.set(file.archRole, []);
+    }
+    const roleFiles = entry.files.get(file.archRole)!;
+    if (roleFiles.length < 15) {
+      roleFiles.push(file.relativePath);
+    }
+  }
+
+  // Serialize domains
+  const domains: Record<string, { count: number; files: Record<string, string[]> }> = {};
+  for (const [dom, entry] of [...domainMap.entries()].sort((a, b) => b[1].count - a[1].count)) {
+    const files: Record<string, string[]> = {};
+    for (const [role, paths] of entry.files) {
+      files[role] = paths;
+    }
+    domains[dom] = { count: entry.count, files };
   }
 
   // Inter-domain edges
@@ -35,20 +54,6 @@ export function handleGetOverview(
     domainEdges.set(key, (domainEdges.get(key) ?? 0) + 1);
   }
 
-  // Top 5 hot nodes by PageRank
-  const sorted = [...index.pagerank.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5);
-  const hotNodes = sorted.map(([id, score]) => {
-    const f = index.files.get(id);
-    return {
-      path: f?.relativePath ?? id,
-      centrality: Math.round(score * 10000) / 10000,
-      importedBy: index.inEdges.get(id)?.length ?? 0,
-    };
-  });
-
-  // Summary
   const filteredFiles = domain_filter
     ? [...index.files.values()].filter(f => f.domain === domain_filter)
     : [...index.files.values()];
@@ -61,11 +66,7 @@ export function handleGetOverview(
         .sort((a, b) => b[1] - a[1])
         .map(([lang, count]) => [lang, count]),
     ),
-    domains: Object.fromEntries(
-      [...domainCount.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .map(([dom, count]) => [dom, count]),
-    ),
+    domains,
     interDomainEdges: Object.fromEntries(
       [...domainEdges.entries()]
         .sort((a, b) => b[1] - a[1])
@@ -73,99 +74,9 @@ export function handleGetOverview(
         .map(([key, count]) => [key, count]),
     ),
     entryPointCount: [...index.files.values()].filter(f => f.isEntryPoint).length,
-    hotNodes,
     indexedAt: new Date(index.indexedAt).toISOString(),
     gitHead: index.gitHead || '(not a git repo)',
-    nextStep: 'Now call find-files with a domain filter (e.g. domain: "memberships") — do NOT use Glob or Grep yet. find-files ranks candidates by relevance so you read 1-3 targeted files instead of scanning dozens.',
-  };
-}
-
-// ============================================================================
-// find-files
-// ============================================================================
-export function handleFindFiles(
-  index: CodebaseIndex,
-  params: {
-    query: string;
-    domain?: string;
-    limit?: number;
-    prefer_source?: boolean;
-  },
-): object {
-  const results = findFiles(params.query, index, {
-    domain: params.domain,
-    limit: params.limit,
-    preferSource: params.prefer_source,
-  });
-
-  const queryTokens = tokenizeQuery(params.query);
-
-  // Check if a result's domain matches any query token
-  function domainMatchesQuery(domain: string): boolean {
-    const domainLower = domain.toLowerCase();
-    return queryTokens.some(tok => domainLower.includes(tok) || tok.includes(domainLower));
-  }
-
-  // Per-result confidence, capped at "medium" if domain doesn't match query
-  function getConfidence(score: number, domain: string): 'high' | 'medium' | 'low' {
-    const raw: 'high' | 'medium' | 'low' =
-      score >= 30 ? 'high' : score >= 10 ? 'medium' : 'low';
-    // If domain doesn't match any query token, cap at medium
-    if (raw === 'high' && !domainMatchesQuery(domain)) {
-      return 'medium';
-    }
-    return raw;
-  }
-
-  // Domain spread warning
-  const uniqueDomains = new Set(results.map(r => r.domain));
-  const domainSpreadWarning = uniqueDomains.size >= 3
-    ? `Results span ${uniqueDomains.size} domains (${[...uniqueDomains].join(', ')}). Call get-overview first, then retry find-files with a domain filter for more accurate results.`
-    : undefined;
-
-  const topScore = results[0]?.score ?? 0;
-  const topConfidence = results.length > 0
-    ? getConfidence(topScore, results[0].domain)
-    : 'low' as const;
-  const overallConfidence: 'high' | 'medium' | 'low' =
-    domainSpreadWarning ? (topConfidence === 'high' ? 'medium' : topConfidence) : topConfidence;
-  const overallRecommendation =
-    domainSpreadWarning
-      ? domainSpreadWarning
-      : overallConfidence === 'high'
-        ? 'Read top result(s) directly — strong match.'
-        : overallConfidence === 'medium'
-          ? 'Read top results, then verify with a targeted Grep if needed.'
-          : 'Weak match — use these as hints and supplement with Grep.';
-
-  return {
-    query: params.query,
-    confidence: overallConfidence,
-    recommendation: overallRecommendation,
-    ...(domainSpreadWarning ? { warning: domainSpreadWarning } : {}),
-    results: results.map(r => {
-      const confidence = getConfidence(r.score, r.domain);
-      const recommendation =
-        confidence === 'high'
-          ? 'Read directly.'
-          : confidence === 'medium'
-            ? 'Read and verify with targeted Grep.'
-            : 'Low confidence — treat as a hint only.';
-      return {
-        path: r.relativePath,
-        language: r.language,
-        domain: r.domain,
-        archRole: r.archRole,
-        isEntryPoint: r.isEntryPoint,
-        exports: r.exports,
-        centrality: r.centrality,
-        score: r.score,
-        confidence,
-        recommendation,
-        reasons: r.reasons,
-      };
-    }),
-    totalResults: results.length,
+    nextStep: 'Use trace-deps to follow dependency chains from an entry point, or get-structure to inspect a specific file\'s exports and imports without reading it.',
   };
 }
 
@@ -211,7 +122,7 @@ export function handleTraceDeps(
           domain: neighbor.domain,
           archRole: neighbor.archRole,
           exports: neighbor.exports.slice(0, 10),
-          centrality: Math.round((index.pagerank.get(neighborId) ?? 0) * 10000) / 10000,
+          importedByCount: neighbor.importedByCount,
           depth: currentDepth,
         });
         if (currentDepth < depth) {
@@ -294,8 +205,7 @@ export function handleGetStructure(
     lineCount: file.lineCount,
     tokenEstimate: file.tokenEstimate,
     hash: file.hash,
-    centrality: Math.round((index.pagerank.get(fileId) ?? 0) * 10000) / 10000,
-    importedBy: index.inEdges.get(fileId)?.length ?? 0,
+    importedByCount: file.importedByCount,
     imports_count: index.outEdges.get(fileId)?.length ?? 0,
   };
 }

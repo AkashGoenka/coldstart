@@ -7,14 +7,13 @@ import {
 import type { CodebaseIndex } from '../types.js';
 import {
   handleGetOverview,
-  handleFindFiles,
   handleTraceDeps,
   handleGetStructure,
 } from './tools.js';
 
 export async function startMCPServer(index: CodebaseIndex): Promise<void> {
   const server = new Server(
-    { name: 'coldstart-mcp', version: '2.0.0' },
+    { name: 'coldstart-mcp', version: '3.0.0' },
     { capabilities: { tools: {} } },
   );
 
@@ -26,7 +25,7 @@ export async function startMCPServer(index: CodebaseIndex): Promise<void> {
       {
         name: 'get-overview',
         description:
-          'CALL THIS FIRST when entering an unfamiliar codebase — before any file search or Glob. Returns domain structure, entry points, and the most-imported files at zero file-read cost. Use it to understand where code lives so subsequent searches are targeted, not broad.',
+          'CALL THIS FIRST when entering an unfamiliar codebase — before any file search or Glob. Returns domain structure with files grouped by architectural role, entry point count, and inter-domain dependency edges. Use it to understand where code lives so subsequent searches are targeted, not broad.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -35,33 +34,6 @@ export async function startMCPServer(index: CodebaseIndex): Promise<void> {
               description: 'Restrict overview to a specific domain (e.g. "auth", "payments").',
             },
           },
-        },
-      },
-      {
-        name: 'find-files',
-        description:
-          'Call this BEFORE Glob or Grep when looking for files by topic or functionality. Uses TF-IDF + PageRank + git co-change to rank candidates. Returns a confidence level (high/medium/low) and a recommended next action for each result — so you read only 2-3 targeted files instead of broad-searching dozens. If top result confidence is "high", read it directly. If "low", the response will tell you to supplement with a targeted Grep.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            query: {
-              type: 'string',
-              description: 'Natural language or keyword query (e.g. "user authentication", "membership action menu").',
-            },
-            domain: {
-              type: 'string',
-              description: 'Filter results to a specific domain from get-overview.',
-            },
-            limit: {
-              type: 'number',
-              description: 'Max results to return (1-10, default 5).',
-            },
-            prefer_source: {
-              type: 'boolean',
-              description: 'Apply stronger penalty to test files and type definitions.',
-            },
-          },
-          required: ['query'],
         },
       },
       {
@@ -119,15 +91,6 @@ export async function startMCPServer(index: CodebaseIndex): Promise<void> {
       case 'get-overview':
         result = handleGetOverview(index, {
           domain_filter: params['domain_filter'] as string | undefined,
-        });
-        break;
-
-      case 'find-files':
-        result = handleFindFiles(index, {
-          query: params['query'] as string,
-          domain: params['domain'] as string | undefined,
-          limit: params['limit'] as number | undefined,
-          prefer_source: params['prefer_source'] as boolean | undefined,
         });
         break;
 
