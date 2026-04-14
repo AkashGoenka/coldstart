@@ -22,6 +22,29 @@ export type EdgeType =
   | 'mod-decl'      // Rust mod declarations
   | 'include';      // C/C++ #include
 
+// Symbol-level types (TS/JS only, v4)
+export type SymbolKind = 'function' | 'class' | 'interface' | 'type' | 'constant' | 'method';
+
+export type SymbolEdgeType = 'calls' | 'extends' | 'implements' | 'exports';
+
+export interface SymbolNode {
+  id: string;               // fileId + '#' + name, e.g. "src/auth.ts#AuthService"
+  name: string;
+  kind: SymbolKind;
+  startLine: number;
+  endLine: number;
+  isExported: boolean;
+  calls: string[];          // names called within body (identifier-level, intra-file resolved to full IDs)
+  extendsName?: string;     // class only: parent class name
+  implementsNames: string[]; // class only: interface names
+}
+
+export interface SymbolEdge {
+  from: string;         // symbolId or fileId
+  to: string;           // symbolId or fileId
+  type: SymbolEdgeType;
+}
+
 export type ArchRole =
   | 'router'
   | 'service'
@@ -52,6 +75,7 @@ export interface IndexedFile {
   archRole: ArchRole;
   importedByCount: number;  // number of files that import this file (set after graph phase)
   depth: number;            // BFS depth from entry points (set after graph phase)
+  symbols: SymbolNode[];    // symbol-level nodes within this file (TS/JS only)
 }
 
 export interface Edge {
@@ -64,7 +88,8 @@ export interface Edge {
 export interface CodebaseIndex {
   rootDir: string;
   files: Map<string, IndexedFile>;       // id → IndexedFile
-  edges: Edge[];
+  edges: Edge[];                         // file-level import edges
+  symbolEdges: SymbolEdge[];             // symbol-level edges (calls, extends, implements, exports)
   outEdges: Map<string, string[]>;       // fileId → [fileId] (imports)
   inEdges: Map<string, string[]>;        // fileId → [fileId] (importers)
   indexedAt: number;                    // Date.now()
@@ -93,6 +118,7 @@ export interface ParsedFile {
   domain: string;
   isEntryPoint: boolean;
   archRole: ArchRole;
+  symbols: SymbolNode[];    // symbol-level nodes (TS/JS only, empty for other languages)
 }
 
 export interface CacheMeta {
