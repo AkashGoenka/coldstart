@@ -1,0 +1,209 @@
+import { describe, it, expect, beforeAll } from 'vitest';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { parseFile } from '../src/indexer/parser.js';
+import { parseTsContent } from '../src/indexer/ts-parser.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const FIXTURES = join(__dirname, 'fixtures');
+
+describe('parser — TypeScript', () => {
+  it('extracts named exports from auth.ts', async () => {
+    const result = await parseFile(join(FIXTURES, 'typescript/auth.ts'), 'typescript');
+    expect(result).not.toBeNull();
+    expect(result!.exports).toContain('AuthService');
+    expect(result!.exports).toContain('hashPassword');
+    expect(result!.exports).toContain('LoginRequest');
+    expect(result!.exports).toContain('AuthResult');
+  });
+
+  it('extracts imports from auth.ts', async () => {
+    const result = await parseFile(join(FIXTURES, 'typescript/auth.ts'), 'typescript');
+    expect(result).not.toBeNull();
+    const imports = result!.imports;
+    expect(imports.some(i => i.includes('bcrypt'))).toBe(true);
+    expect(imports.some(i => i.includes('./userRepository'))).toBe(true);
+    expect(imports.some(i => i.includes('./tokenService'))).toBe(true);
+  });
+
+  it('detects default export from userRepository.ts', async () => {
+    const result = await parseFile(join(FIXTURES, 'typescript/userRepository.ts'), 'typescript');
+    expect(result).not.toBeNull();
+    expect(result!.hasDefaultExport).toBe(true);
+    expect(result!.exports).toContain('User');
+    expect(result!.exports).toContain('UserRepository');
+  });
+
+  it('produces a hash and line count', async () => {
+    const result = await parseFile(join(FIXTURES, 'typescript/auth.ts'), 'typescript');
+    expect(result!.hash).toMatch(/^[a-f0-9]{32}$/);
+    expect(result!.lineCount).toBeGreaterThan(5);
+  });
+
+  it('infers auth domain for auth.ts', async () => {
+    const result = await parseFile(join(FIXTURES, 'typescript/auth.ts'), 'typescript');
+    expect(result!.domain).toBe('auth');
+  });
+});
+
+describe('parser — Python', () => {
+  it('extracts exports via __all__ from auth.py', async () => {
+    const result = await parseFile(join(FIXTURES, 'python/auth.py'), 'python');
+    expect(result).not.toBeNull();
+    expect(result!.exports).toContain('AuthService');
+    expect(result!.exports).toContain('hash_password');
+    expect(result!.exports).toContain('verify_password');
+  });
+
+  it('does not export private functions (underscore prefix)', async () => {
+    const result = await parseFile(join(FIXTURES, 'python/auth.py'), 'python');
+    expect(result!.exports).not.toContain('_internal_helper');
+  });
+
+  it('extracts from imports', async () => {
+    const result = await parseFile(join(FIXTURES, 'python/auth.py'), 'python');
+    expect(result!.imports.some(i => i.includes('user_repository') || i.includes('hashlib'))).toBe(true);
+  });
+
+  it('extracts class exports from user_repository.py', async () => {
+    const result = await parseFile(join(FIXTURES, 'python/user_repository.py'), 'python');
+    expect(result!.exports).toContain('UserRepository');
+  });
+});
+
+describe('parser — Go', () => {
+  it('extracts uppercase exports from auth.go', async () => {
+    const result = await parseFile(join(FIXTURES, 'go/auth.go'), 'go');
+    expect(result).not.toBeNull();
+    expect(result!.exports).toContain('Login');
+    expect(result!.exports).toContain('HashPassword');
+    expect(result!.exports).toContain('ValidateToken');
+    expect(result!.exports).toContain('AuthService');
+    expect(result!.exports).toContain('LoginRequest');
+    expect(result!.exports).toContain('AuthResult');
+  });
+
+  it('extracts multi-package imports', async () => {
+    const result = await parseFile(join(FIXTURES, 'go/auth.go'), 'go');
+    expect(result!.imports.some(i => i.includes('crypto/sha256') || i.includes('errors'))).toBe(true);
+  });
+});
+
+describe('parser — Rust', () => {
+  it('extracts pub declarations from auth.rs', async () => {
+    const result = await parseFile(join(FIXTURES, 'rust/auth.rs'), 'rust');
+    expect(result).not.toBeNull();
+    expect(result!.exports).toContain('AuthService');
+    expect(result!.exports).toContain('hash_password');
+    expect(result!.exports).toContain('Authenticator');
+    expect(result!.exports).toContain('LoginRequest');
+    expect(result!.exports).toContain('AuthResult');
+  });
+
+  it('extracts mod declarations as imports', async () => {
+    const result = await parseFile(join(FIXTURES, 'rust/auth.rs'), 'rust');
+    expect(result!.imports.some(i => i === 'token' || i === 'hash')).toBe(true);
+  });
+});
+
+// =============================================================================
+// Tree-sitter symbol extraction (TS/JS only, v4)
+// =============================================================================
+
+describe('ts-parser — symbol extraction', () => {
+  const AUTH_FILE_ID = 'tests/fixtures/typescript/auth.ts';
+  const REPO_FILE_ID = 'tests/fixtures/typescript/userRepository.ts';
+
+  it('extracts interface symbols from auth.ts', async () => {
+    const result = await parseFile(join(FIXTURES, 'typescript/auth.ts'), 'typescript', AUTH_FILE_ID);
+    expect(result).not.toBeNull();
+    const names = result!.symbols.map(s => s.name);
+    expect(names).toContain('LoginRequest');
+    expect(names).toContain('AuthResult');
+    const lr = result!.symbols.find(s => s.name === 'LoginRequest')!;
+    expect(lr.kind).toBe('interface');
+    expect(lr.isExported).toBe(true);
+  });
+
+  it('extracts class symbol with method symbols from auth.ts', async () => {
+    const result = await parseFile(join(FIXTURES, 'typescript/auth.ts'), 'typescript', AUTH_FILE_ID);
+    expect(result).not.toBeNull();
+    const cls = result!.symbols.find(s => s.name === 'AuthService')!;
+    expect(cls).toBeDefined();
+    expect(cls.kind).toBe('class');
+    expect(cls.isExported).toBe(true);
+    expect(cls.id).toBe(`${AUTH_FILE_ID}#AuthService`);
+
+    const loginMethod = result!.symbols.find(s => s.name === 'AuthService.login')!;
+    expect(loginMethod).toBeDefined();
+    expect(loginMethod.kind).toBe('method');
+    expect(loginMethod.isExported).toBe(false);
+  });
+
+  it('extracts function symbol from auth.ts', async () => {
+    const result = await parseFile(join(FIXTURES, 'typescript/auth.ts'), 'typescript', AUTH_FILE_ID);
+    const fn = result!.symbols.find(s => s.name === 'hashPassword')!;
+    expect(fn).toBeDefined();
+    expect(fn.kind).toBe('function');
+    expect(fn.isExported).toBe(true);
+    expect(fn.startLine).toBeGreaterThan(0);
+    expect(fn.endLine).toBeGreaterThanOrEqual(fn.startLine);
+  });
+
+  it('tracks intra-file calls in method bodies', async () => {
+    const result = await parseFile(join(FIXTURES, 'typescript/auth.ts'), 'typescript', AUTH_FILE_ID);
+    const loginMethod = result!.symbols.find(s => s.name === 'AuthService.login')!;
+    // login calls findByEmail, compare, sign inside its body
+    expect(loginMethod.calls.length).toBeGreaterThan(0);
+  });
+
+  it('extracts symbols from userRepository.ts', async () => {
+    const result = await parseFile(join(FIXTURES, 'typescript/userRepository.ts'), 'typescript', REPO_FILE_ID);
+    const names = result!.symbols.map(s => s.name);
+    expect(names).toContain('User');
+    expect(names).toContain('UserRepository');
+    expect(names).toContain('UserRepository.findByEmail');
+  });
+
+  it('symbol IDs use fileId prefix', async () => {
+    const result = await parseFile(join(FIXTURES, 'typescript/auth.ts'), 'typescript', AUTH_FILE_ID);
+    for (const sym of result!.symbols) {
+      expect(sym.id.startsWith(AUTH_FILE_ID + '#')).toBe(true);
+    }
+  });
+
+  it('extracts class extends and implements via parseTsContent', () => {
+    const src = `
+      export class Dog extends Animal implements Runnable, Jumpable {
+        run() { this.move(); }
+      }
+    `;
+    const result = parseTsContent(src, 'src/dog.ts');
+    const dog = result.symbols.find(s => s.name === 'Dog')!;
+    expect(dog).toBeDefined();
+    expect(dog.kind).toBe('class');
+    expect(dog.extendsName).toBe('Animal');
+    expect(dog.implementsNames).toContain('Runnable');
+    expect(dog.implementsNames).toContain('Jumpable');
+  });
+
+  it('extracts type alias and constant symbols via parseTsContent', () => {
+    const src = `
+      export type UserId = string;
+      export const MAX_RETRIES = 3;
+    `;
+    const result = parseTsContent(src, 'src/constants.ts');
+    const typeAlias = result.symbols.find(s => s.name === 'UserId')!;
+    expect(typeAlias).toBeDefined();
+    expect(typeAlias.kind).toBe('type');
+    const constant = result.symbols.find(s => s.name === 'MAX_RETRIES')!;
+    expect(constant).toBeDefined();
+    expect(constant.kind).toBe('constant');
+  });
+
+  it('non-TS languages produce empty symbols array', async () => {
+    const result = await parseFile(join(FIXTURES, 'python/auth.py'), 'python');
+    expect(result).not.toBeNull();
+    expect(result!.symbols).toEqual([]);
+  });
+});
