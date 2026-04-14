@@ -101,6 +101,9 @@ export function handleTraceDeps(
     depth?: number;
   },
 ): object {
+  if (!params.file_path) {
+    return { error: 'file_path is required' };
+  }
   const direction = params.direction ?? 'both';
   const maxDepth = Math.min(params.depth ?? 1, 3);
 
@@ -179,6 +182,9 @@ export function handleGetStructure(
   index: CodebaseIndex,
   params: { file_path: string },
 ): object {
+  if (!params.file_path) {
+    return { error: 'file_path is required' };
+  }
   const fileEntry = findFileByPath(index, params.file_path);
   if (!fileEntry) {
     return { error: `File not found: ${params.file_path}` };
@@ -240,8 +246,9 @@ export function handleGetStructure(
 // ============================================================================
 function findFileByPath(
   index: CodebaseIndex,
-  pathQuery: string,
+  pathQuery: string | undefined,
 ): [string, (typeof index.files extends Map<string, infer V> ? V : never)] | null {
+  if (!pathQuery) return null;
   // Normalize
   const normalized = pathQuery.replace(/\\/g, '/');
 
