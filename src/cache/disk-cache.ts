@@ -116,6 +116,7 @@ interface SerializedIndex {
   gitHead: string;
   files: Record<string, unknown>;
   edges: unknown[];
+  symbolEdges: unknown[];
   outEdges: Record<string, string[]>;
   inEdges: Record<string, string[]>;
 }
@@ -136,6 +137,7 @@ function serializeIndex(index: CodebaseIndex): SerializedIndex {
     gitHead: index.gitHead,
     files,
     edges: index.edges,
+    symbolEdges: index.symbolEdges,
     outEdges,
     inEdges,
   };
@@ -144,7 +146,10 @@ function serializeIndex(index: CodebaseIndex): SerializedIndex {
 function deserializeIndex(plain: SerializedIndex): CodebaseIndex {
   const files = new Map<string, CodebaseIndex['files'] extends Map<string, infer V> ? V : never>();
   for (const [k, v] of Object.entries(plain.files)) {
-    files.set(k, v as Parameters<typeof files.set>[1]);
+    // Ensure symbols array exists for files loaded from older cache
+    const file = v as Record<string, unknown>;
+    if (!Array.isArray(file['symbols'])) file['symbols'] = [];
+    files.set(k, file as unknown as Parameters<typeof files.set>[1]);
   }
 
   const outEdges = new Map<string, string[]>(Object.entries(plain.outEdges));
@@ -156,6 +161,7 @@ function deserializeIndex(plain: SerializedIndex): CodebaseIndex {
     gitHead: plain.gitHead,
     files,
     edges: plain.edges as CodebaseIndex['edges'],
+    symbolEdges: (plain.symbolEdges ?? []) as CodebaseIndex['symbolEdges'],
     outEdges,
     inEdges,
   };

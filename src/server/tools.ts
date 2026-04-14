@@ -15,32 +15,42 @@ export function handleGetOverview(
     langCount.set(file.language, (langCount.get(file.language) ?? 0) + 1);
   }
 
-  // Domain breakdown: { domainName: { count, files: { archRole: [path, ...] } } }
-  const domainMap = new Map<string, { count: number; files: Map<ArchRole, string[]> }>();
+  // Domain breakdown: { domainName: { count, archRoles, files? } }
+  // files only included when domain_filter is set (to keep default response small)
+  const FILE_SAMPLE_LIMIT = domain_filter ? 5 : 0;
+  const domainMap = new Map<string, { count: number; archRoles: Map<ArchRole, number>; files: Map<ArchRole, string[]> }>();
   for (const file of index.files.values()) {
     if (domain_filter && file.domain !== domain_filter) continue;
     if (!domainMap.has(file.domain)) {
-      domainMap.set(file.domain, { count: 0, files: new Map() });
+      domainMap.set(file.domain, { count: 0, archRoles: new Map(), files: new Map() });
     }
     const entry = domainMap.get(file.domain)!;
     entry.count++;
-    if (!entry.files.has(file.archRole)) {
-      entry.files.set(file.archRole, []);
-    }
-    const roleFiles = entry.files.get(file.archRole)!;
-    if (roleFiles.length < 15) {
-      roleFiles.push(file.relativePath);
+    entry.archRoles.set(file.archRole, (entry.archRoles.get(file.archRole) ?? 0) + 1);
+    if (FILE_SAMPLE_LIMIT > 0) {
+      if (!entry.files.has(file.archRole)) {
+        entry.files.set(file.archRole, []);
+      }
+      const roleFiles = entry.files.get(file.archRole)!;
+      if (roleFiles.length < FILE_SAMPLE_LIMIT) {
+        roleFiles.push(file.relativePath);
+      }
     }
   }
 
   // Serialize domains
-  const domains: Record<string, { count: number; files: Record<string, string[]> }> = {};
+  const domains: Record<string, object> = {};
   for (const [dom, entry] of [...domainMap.entries()].sort((a, b) => b[1].count - a[1].count)) {
-    const files: Record<string, string[]> = {};
-    for (const [role, paths] of entry.files) {
-      files[role] = paths;
+    const archRoles = Object.fromEntries(entry.archRoles);
+    if (FILE_SAMPLE_LIMIT > 0) {
+      const files: Record<string, string[]> = {};
+      for (const [role, paths] of entry.files) {
+        files[role] = paths;
+      }
+      domains[dom] = { count: entry.count, archRoles, files };
+    } else {
+      domains[dom] = { count: entry.count, archRoles };
     }
-    domains[dom] = { count: entry.count, files };
   }
 
   // Inter-domain edges
@@ -188,6 +198,20 @@ export function handleGetStructure(
   const resolvedSpecifiers = new Set(edges.map(e => e.specifier));
   const externalImports = allImportSpecifiers.filter(s => !resolvedSpecifiers.has(s));
 
+  // Build symbol summary (TS/JS only)
+  const symbolSummary = file.symbols.length > 0
+    ? file.symbols
+        .filter(s => s.isExported || s.kind === 'class' || s.kind === 'function')
+        .map(s => ({
+          name: s.name,
+          kind: s.kind,
+          lines: `${s.startLine}-${s.endLine}`,
+          ...(s.extendsName ? { extends: s.extendsName } : {}),
+          ...(s.implementsNames.length > 0 ? { implements: s.implementsNames } : {}),
+          ...(s.calls.length > 0 ? { calls: s.calls.slice(0, 8) } : {}),
+        }))
+    : undefined;
+
   return {
     path: file.relativePath,
     language: file.language,
@@ -198,6 +222,7 @@ export function handleGetStructure(
       named: file.exports,
       hasDefault: file.hasDefaultExport,
     },
+    ...(symbolSummary ? { symbols: symbolSummary } : {}),
     imports: {
       internal: internalImports,
       external: externalImports,
