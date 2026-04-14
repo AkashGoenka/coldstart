@@ -1,4 +1,4 @@
-# Architecture — coldstart-mcp (v3)
+# Architecture — coldstart-mcp (v4)
 
 This document captures the *current* architecture after the simplification pass.
 
@@ -44,8 +44,9 @@ Removed:
    - Recursively discovers source files by extension.
    - Skips hidden directories, symlinks, and files above size threshold.
 
-2. **Parse** (`indexer/parser.ts`)
-   - Regex-based extraction of imports and exports across supported languages.
+2. **Parse** (`indexer/parser.ts`, `indexer/ts-parser.ts`)
+   - **TypeScript/JavaScript**: Tree-sitter (node-tree-sitter + tree-sitter-typescript) for symbol-level extraction — functions, classes, interfaces, type aliases, constants, methods. Tracks intra-file call relationships, extends/implements chains.
+   - **Other languages**: Regex-based extraction of imports and exports (unchanged).
    - Derives metadata: domain, architectural role, entry-point flag, hash, line count, token estimate.
 
 3. **Resolve** (`indexer/resolver.ts`)
@@ -67,18 +68,19 @@ Removed:
 
 `CodebaseIndex` contains:
 - `files` map (indexed file metadata)
-- `edges` list
-- `outEdges` and `inEdges`
+- `edges` list (file-level import edges)
+- `symbolEdges` list (symbol-level: calls, extends, implements, exports)
+- `outEdges` and `inEdges` (file-level adjacency)
 - `indexedAt`, `gitHead`
 
-Key per-file signals now used by tools:
-- `domain`
-- `archRole`
-- `isEntryPoint`
-- `depth`
-- `importedByCount`
+Key per-file signals used by tools:
+- `domain`, `archRole`, `isEntryPoint`, `depth`, `importedByCount`
+- `symbols: SymbolNode[]` — per-file list of extracted symbols (TS/JS only)
 
-This keeps the model small, inspectable, and stable.
+`SymbolNode` captures:
+- `id` (`fileId#symbolName`), `name`, `kind` (function/class/interface/type/constant/method)
+- `startLine`, `endLine`
+- `isExported`, `calls[]`, `extendsName?`, `implementsNames[]`
 
 ---
 
@@ -101,9 +103,10 @@ Otherwise the index is rebuilt from scratch.
 
 ## Design tradeoffs
 
-1. **Regex over AST**
-   - Pros: broad language coverage, zero native dependencies, fast startup.
-   - Cons: misses some dynamic and advanced syntax patterns.
+1. **Tree-sitter for TS/JS, regex for everything else**
+   - TS/JS get symbol-level accuracy (exact function/class/interface extraction, line numbers, call tracking).
+   - Other languages keep broad coverage with zero native dependencies.
+   - node-tree-sitter chosen over web-tree-sitter for simpler Node.js API (no WASM loading boilerplate).
 
 2. **Full rebuild over incremental indexing**
    - Pros: low complexity, predictable correctness.
