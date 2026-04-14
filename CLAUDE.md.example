@@ -1,25 +1,44 @@
-Before exploring files, consult `coldstart_map.json` at the project root.
+# Codebase navigation — use coldstart MCP tools
 
-Use this lookup order:
+Before searching or opening files in an unfamiliar codebase, use the
+coldstart MCP tools to orient yourself. This saves tokens and avoids
+broad, speculative file reads.
 
-1. For "find the file", "where is this implemented", "which file should I edit",
-   or similar natural-language lookup requests, run:
-   `python query.py --intent "<user request>"`
+## Lookup order
 
-2. If the top intent results are weak, ambiguous, or clearly indirect:
-   `python query.py --suggest-domain "<core concept>"`
-   Then:
-   `python query.py --search "<core concept>" --domain <best-domain>`
+1. Call `get-overview` first — before any Glob, grep, or file read.
+   - Tells you which domains exist, what files live in each, and how
+     domains connect to each other.
+   - Use `domain_filter` to zoom into one area (e.g. `"auth"`, `"payments"`).
 
-3. Only fall back to `rg`, `grep`, or `find` when the query output is insufficient.
+2. Call `get-structure` instead of reading a file just to check its shape.
+   - Returns exports, internal/external imports, line count, token estimate,
+     and architectural role — at zero file-read cost.
+   - Only read the full file if `get-structure` confirms it's relevant.
 
-When evaluating candidates:
+3. Call `trace-deps` instead of manually chasing import statements.
+   - `direction="imports"` — what does this file depend on?
+   - `direction="importers"` — what depends on this file? (impact analysis)
+   - `depth=2` or `depth=3` for transitive chains.
 
-- Prefer source files in `/components/`, `/pages/`, or feature directories over
-  tests, locators, pageobjects, enums, types, and index barrels.
-- For edit requests, open the top-ranked source file from `--intent` first.
-- Use `python query.py --file <path>` before reading a file when you want a quick
-  metadata check.
+## Preferred patterns
 
-The goal is to minimize tokens spent on repeated lookup tasks by using the map
-to narrow the search before opening files.
+```
+# Starting a new task in an unfamiliar area
+get-overview → get-structure → read file (only if needed)
+
+# Understanding how a component connects to the rest of the codebase
+get-overview → trace-deps → read file (only if needed)
+
+# Impact analysis before editing a file
+trace-deps (direction="importers") → decide which callers to update
+```
+
+## When to fall back to grep/rg
+
+Use grep or rg only when coldstart tools don't answer the question:
+- Searching for a specific string or literal value inside file contents
+- Looking for call sites of a function by name across the whole repo
+- Coldstart index is stale and you need up-to-the-second accuracy
+
+In all other cases, prefer coldstart tools first.
