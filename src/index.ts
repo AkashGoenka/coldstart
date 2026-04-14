@@ -15,7 +15,7 @@ import { buildGraph, computeDepth } from './indexer/graph.js';
 import { getGitHead } from './indexer/git.js';
 import { loadCachedIndex, saveCachedIndex } from './cache/disk-cache.js';
 import { startMCPServer } from './server/mcp.js';
-import type { CodebaseIndex, IndexedFile } from './types.js';
+import type { CodebaseIndex, IndexedFile, SymbolEdge } from './types.js';
 
 // ---------------------------------------------------------------------------
 // Argument parsing (no external deps)
@@ -91,31 +91,38 @@ async function buildIndex(
   const indexedFiles: IndexedFile[] = [];
   const langCount: Record<string, number> = {};
 
+  const allSymbolEdges: SymbolEdge[] = [];
+
   await Promise.all(
     walkedFiles.map(async (wf) => {
-      const parsed = await parseFile(wf.absolutePath, wf.language);
-      if (!parsed) return;
+      try {
+        const id = buildFileId(wf.relativePath);
+        const parsed = await parseFile(wf.absolutePath, wf.language, id);
+        if (!parsed) return;
 
-      const id = buildFileId(wf.relativePath);
-      const file: IndexedFile = {
-        id,
-        path: wf.absolutePath,
-        relativePath: wf.relativePath,
-        language: wf.language,
-        domain: parsed.domain,
-        exports: parsed.exports,
-        hasDefaultExport: parsed.hasDefaultExport,
-        imports: parsed.imports,
-        hash: parsed.hash,
-        lineCount: parsed.lineCount,
-        tokenEstimate: parsed.tokenEstimate,
-        isEntryPoint: parsed.isEntryPoint,
-        archRole: parsed.archRole,
-        importedByCount: 0,
-        depth: Infinity,
-      };
-      indexedFiles.push(file);
-      langCount[wf.language] = (langCount[wf.language] ?? 0) + 1;
+        const file: IndexedFile = {
+          id,
+          path: wf.absolutePath,
+          relativePath: wf.relativePath,
+          language: wf.language,
+          domain: parsed.domain,
+          exports: parsed.exports,
+          hasDefaultExport: parsed.hasDefaultExport,
+          imports: parsed.imports,
+          hash: parsed.hash,
+          lineCount: parsed.lineCount,
+          tokenEstimate: parsed.tokenEstimate,
+          isEntryPoint: parsed.isEntryPoint,
+          archRole: parsed.archRole,
+          importedByCount: 0,
+          depth: Infinity,
+          symbols: parsed.symbols,
+        };
+        indexedFiles.push(file);
+        langCount[wf.language] = (langCount[wf.language] ?? 0) + 1;
+      } catch (err) {
+        log(quiet, `[coldstart] Error parsing ${wf.relativePath}: ${err}`);
+      }
     }),
   );
 
@@ -139,6 +146,28 @@ async function buildIndex(
     file.depth = depthMap.get(file.id) ?? Infinity;
   }
 
+  // Build symbol-level edges from all TS/JS files
+  for (const file of indexedFiles) {
+    for (const sym of file.symbols) {
+      // exports: file → symbol
+      if (sym.isExported) {
+        allSymbolEdges.push({ from: file.id, to: sym.id, type: 'exports' });
+      }
+      // calls: symbol → symbol/name
+      for (const callee of sym.calls) {
+        allSymbolEdges.push({ from: sym.id, to: callee, type: 'calls' });
+      }
+      // extends: symbol → name
+      if (sym.extendsName) {
+        allSymbolEdges.push({ from: sym.id, to: sym.extendsName, type: 'extends' });
+      }
+      // implements: symbol → name
+      for (const iface of sym.implementsNames) {
+        allSymbolEdges.push({ from: sym.id, to: iface, type: 'implements' });
+      }
+    }
+  }
+
   // 6. Git head
   const gitHead = await getGitHead(rootDir);
 
@@ -152,6 +181,7 @@ async function buildIndex(
     rootDir,
     files: filesMap,
     edges,
+    symbolEdges: allSymbolEdges,
     outEdges,
     inEdges,
     indexedAt: Date.now(),

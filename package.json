@@ -1,6 +1,6 @@
 {
   "name": "coldstart-mcp",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "description": "Local MCP server for AI agent codebase navigation — domain mapping, dependency tracing, file structure lookup",
   "type": "module",
   "bin": {
@@ -14,12 +14,14 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "latest"
+    "@modelcontextprotocol/sdk": "latest",
+    "tree-sitter": "^0.21.1",
+    "tree-sitter-typescript": "^0.23.2"
   },
   "devDependencies": {
+    "@types/node": "^22",
     "typescript": "^5",
-    "vitest": "^3",
-    "@types/node": "^22"
+    "vitest": "^3"
   },
   "engines": {
     "node": ">=18"
