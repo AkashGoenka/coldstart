@@ -261,26 +261,6 @@ export const LANGUAGE_CONFIGS: Record<Language, LanguageConfig> = {
 };
 
 // ---------------------------------------------------------------------------
-// Domain keywords — infer semantic domain from path segments + content
-// ---------------------------------------------------------------------------
-export const DOMAIN_KEYWORDS: Record<string, string[]> = {
-  auth: ['auth', 'login', 'logout', 'signup', 'signin', 'password', 'token', 'jwt', 'oauth', 'session', 'credential', 'permission', 'role', 'user'],
-  payments: ['payment', 'stripe', 'billing', 'invoice', 'checkout', 'subscription', 'charge', 'refund', 'transaction', 'pricing'],
-  db: ['database', 'db', 'query', 'sql', 'postgres', 'mysql', 'sqlite', 'mongodb', 'redis', 'orm', 'migration', 'schema', 'repository', 'dao'],
-  api: ['api', 'rest', 'graphql', 'endpoint', 'route', 'router', 'handler', 'controller', 'request', 'response', 'http', 'grpc', 'webhook'],
-  ui: ['component', 'view', 'page', 'screen', 'widget', 'button', 'form', 'modal', 'dialog', 'layout', 'style', 'css', 'theme', 'render'],
-  utils: ['util', 'utils', 'helper', 'helpers', 'common', 'shared', 'lib', 'tools', 'misc', 'format', 'parse', 'convert'],
-  config: ['config', 'configuration', 'settings', 'env', 'environment', 'constants', 'defaults', 'options'],
-  test: ['test', 'spec', 'mock', 'fixture', 'fake', 'stub', '__tests__', 'e2e', 'integration', 'unit'],
-  types: ['types', 'interfaces', 'models', 'schemas', 'dtos', 'entities', 'structs', 'typings'],
-  queue: ['queue', 'worker', 'job', 'task', 'background', 'celery', 'bull', 'rabbitmq', 'kafka', 'pubsub', 'event'],
-  cache: ['cache', 'redis', 'memcache', 'ttl', 'invalidate', 'memoize'],
-  email: ['email', 'mail', 'smtp', 'sendgrid', 'mailgun', 'notification', 'template', 'mailer'],
-  upload: ['upload', 'file', 'storage', 's3', 'bucket', 'blob', 'media', 'image', 'asset'],
-  search: ['search', 'index', 'query', 'elastic', 'solr', 'lucene', 'fulltext', 'rank', 'tfidf'],
-};
-
-// ---------------------------------------------------------------------------
 // Default excludes for filesystem walker
 // ---------------------------------------------------------------------------
 export const DEFAULT_EXCLUDES = new Set([

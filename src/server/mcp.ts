@@ -9,6 +9,7 @@ import {
   handleGetOverview,
   handleTraceDeps,
   handleGetStructure,
+  handleTraceImpact,
 } from './tools.js';
 
 export async function startMCPServer(index: CodebaseIndex): Promise<void> {
@@ -75,6 +76,29 @@ export async function startMCPServer(index: CodebaseIndex): Promise<void> {
           required: ['file_path'],
         },
       },
+      {
+        name: 'trace-impact',
+        description:
+          'Call this when you need to understand what code will break if you change a symbol. Given a function, class, interface, or type, returns every symbol that directly or transitively depends on it — with the full dependency chain for each. Use it before refactoring to scope the blast radius without reading all dependent files.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            symbol: {
+              type: 'string',
+              description: 'Symbol name to analyse (e.g. "validateToken", "AuthService", "UserDTO").',
+            },
+            file: {
+              type: 'string',
+              description: 'Optional file path to disambiguate when the symbol name appears in multiple files.',
+            },
+            depth: {
+              type: 'number',
+              description: 'Max traversal depth (1–10, default 3).',
+            },
+          },
+          required: ['symbol'],
+        },
+      },
     ],
   }));
 
@@ -105,6 +129,14 @@ export async function startMCPServer(index: CodebaseIndex): Promise<void> {
       case 'get-structure':
         result = handleGetStructure(index, {
           file_path: params['file_path'] as string,
+        });
+        break;
+
+      case 'trace-impact':
+        result = handleTraceImpact(index, {
+          symbol: params['symbol'] as string,
+          file: params['file'] as string | undefined,
+          depth: params['depth'] as number | undefined,
         });
         break;
 
