@@ -1,4 +1,4 @@
-import type { Edge } from '../types.js';
+import type { Edge, CodebaseIndex } from '../types.js';
 
 export interface GraphData {
   outEdges: Map<string, string[]>;
@@ -22,6 +22,60 @@ export function buildGraph(nodeIds: string[], edges: Edge[]): GraphData {
   }
 
   return { outEdges, inEdges };
+}
+
+// Directory prefixes that don't convey domain meaning on their own
+const GENERIC_TOP_DIRS = new Set(['src', 'lib', 'app', 'apps', 'packages', 'pkg', 'source', 'code']);
+
+/**
+ * Assign domain to every file in the index based on:
+ * 1. First non-generic directory segment in the file path
+ * 2. Majority domain among the file's importers (graph-based fallback)
+ * 3. 'core' as final default
+ *
+ * Must be called after the graph (inEdges) is built.
+ */
+export function assignDomains(index: CodebaseIndex): void {
+  // Pass 1: directory-based
+  for (const file of index.files.values()) {
+    const parts = file.relativePath.replace(/\\/g, '/').split('/');
+    const dirParts = parts.slice(0, -1); // exclude filename
+
+    for (const part of dirParts) {
+      const lower = part.toLowerCase();
+      if (lower && !GENERIC_TOP_DIRS.has(lower)) {
+        file.domain = lower;
+        break;
+      }
+    }
+    // Files at root or under only generic dirs stay 'unknown' for now
+  }
+
+  // Pass 2: graph-based fallback — use majority domain of importers
+  for (const file of index.files.values()) {
+    if (file.domain !== 'unknown') continue;
+
+    const importerIds = index.inEdges.get(file.id) ?? [];
+    const domainCount = new Map<string, number>();
+    for (const importerId of importerIds) {
+      const importer = index.files.get(importerId);
+      if (importer && importer.domain !== 'unknown') {
+        domainCount.set(importer.domain, (domainCount.get(importer.domain) ?? 0) + 1);
+      }
+    }
+
+    if (domainCount.size > 0) {
+      const top = [...domainCount.entries()].sort((a, b) => b[1] - a[1])[0];
+      file.domain = top[0];
+    }
+  }
+
+  // Pass 3: default remaining to 'core'
+  for (const file of index.files.values()) {
+    if (file.domain === 'unknown') {
+      file.domain = 'core';
+    }
+  }
 }
 
 /**
