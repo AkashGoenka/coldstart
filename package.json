@@ -16,6 +16,8 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "latest",
     "tree-sitter": "^0.21.1",
+    "tree-sitter-java": "^0.23.5",
+    "tree-sitter-ruby": "^0.23.1",
     "tree-sitter-typescript": "^0.23.2"
   },
   "devDependencies": {
