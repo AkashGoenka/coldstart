@@ -40,9 +40,9 @@ describe('parser — TypeScript', () => {
     expect(result!.lineCount).toBeGreaterThan(5);
   });
 
-  it('infers auth domain for auth.ts', async () => {
+  it('returns unknown domain (domain is assigned post-graph, not in parser)', async () => {
     const result = await parseFile(join(FIXTURES, 'typescript/auth.ts'), 'typescript');
-    expect(result!.domain).toBe('auth');
+    expect(result!.domain).toBe('unknown');
   });
 });
 
