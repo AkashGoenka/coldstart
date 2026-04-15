@@ -11,11 +11,12 @@ import { resolve } from 'node:path';
 import { walkDirectory } from './indexer/walker.js';
 import { parseFile, buildFileId } from './indexer/parser.js';
 import { resolveImports } from './indexer/resolver.js';
-import { buildGraph, computeDepth } from './indexer/graph.js';
+import { buildGraph, computeDepth, assignDomains } from './indexer/graph.js';
 import { getGitHead } from './indexer/git.js';
 import { loadCachedIndex, saveCachedIndex } from './cache/disk-cache.js';
 import { startMCPServer } from './server/mcp.js';
-import type { CodebaseIndex, IndexedFile, SymbolEdge } from './types.js';
+import { ARCH_ROLE_PATTERNS } from './constants.js';
+import type { CodebaseIndex, IndexedFile, SymbolEdge, ArchRole } from './types.js';
 
 // ---------------------------------------------------------------------------
 // Argument parsing (no external deps)
@@ -146,6 +147,24 @@ async function buildIndex(
     file.depth = depthMap.get(file.id) ?? Infinity;
   }
 
+  // Reclassify entry points: barrel files (index.ts etc.) that are heavily imported
+  // are not real entry points — real entry points have 0 or 1 importers
+  for (const file of indexedFiles) {
+    if (file.isEntryPoint && (inEdges.get(file.id)?.length ?? 0) > 1) {
+      file.isEntryPoint = false;
+      if (file.archRole === 'entry') {
+        const pathLower = file.relativePath.toLowerCase();
+        file.archRole = 'unknown' as ArchRole;
+        for (const { pattern, role } of ARCH_ROLE_PATTERNS) {
+          if (pattern.test(pathLower)) {
+            file.archRole = role as ArchRole;
+            break;
+          }
+        }
+      }
+    }
+  }
+
   // Build symbol-level edges from all TS/JS files
   for (const file of indexedFiles) {
     for (const sym of file.symbols) {
@@ -177,7 +196,7 @@ async function buildIndex(
 
   const filesMap = new Map<string, IndexedFile>(indexedFiles.map(f => [f.id, f]));
 
-  return {
+  const index: CodebaseIndex = {
     rootDir,
     files: filesMap,
     edges,
@@ -187,6 +206,11 @@ async function buildIndex(
     indexedAt: Date.now(),
     gitHead,
   };
+
+  // Assign domains after graph is available (directory-based + graph-based fallback)
+  assignDomains(index);
+
+  return index;
 }
 
 // ---------------------------------------------------------------------------
