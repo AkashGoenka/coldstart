@@ -3,7 +3,6 @@ import { createHash } from 'node:crypto';
 import { basename, extname } from 'node:path';
 import {
   LANGUAGE_CONFIGS,
-  DOMAIN_KEYWORDS,
   ENTRY_POINT_NAMES,
   ARCH_ROLE_PATTERNS,
 } from '../constants.js';
@@ -47,27 +46,17 @@ export async function parseFile(
     const uniqueImports = tsResult.imports;
     const uniqueExports = tsResult.exports;
 
-    const pathLower = filePath.toLowerCase();
-    const snippet = content.slice(0, 2000).toLowerCase();
-    let domain = 'unknown';
-    let bestScore = 0;
-    for (const [dom, keywords] of Object.entries(DOMAIN_KEYWORDS)) {
-      let score = 0;
-      for (const kw of keywords) {
-        if (pathLower.includes(kw)) score += 3;
-        if (snippet.includes(kw)) score += 1;
-      }
-      if (score > bestScore) { bestScore = score; domain = dom; }
-    }
+    const domain = 'unknown';
 
     const base = basename(filePath, extname(filePath)).toLowerCase();
     const isEntryPoint = ENTRY_POINT_NAMES.has(base);
+    const pathLowerTs = filePath.toLowerCase();
     let archRole: ArchRole = 'unknown';
     if (isEntryPoint) {
       archRole = 'entry';
     } else {
       for (const { pattern, role } of ARCH_ROLE_PATTERNS) {
-        if (pattern.test(pathLower)) { archRole = role as ArchRole; break; }
+        if (pattern.test(pathLowerTs)) { archRole = role as ArchRole; break; }
       }
     }
 
@@ -174,24 +163,9 @@ export async function parseFile(
   const uniqueExports = [...new Set(exports)];
 
   // -------------------------------------------------------------------------
-  // Infer domain
+  // Domain is assigned post-graph via assignDomains(); default to 'unknown'
   // -------------------------------------------------------------------------
-  const pathLower = filePath.toLowerCase();
-  const snippet = content.slice(0, 2000).toLowerCase();
-  let domain = 'unknown';
-  let bestScore = 0;
-
-  for (const [dom, keywords] of Object.entries(DOMAIN_KEYWORDS)) {
-    let score = 0;
-    for (const kw of keywords) {
-      if (pathLower.includes(kw)) score += 3;
-      if (snippet.includes(kw)) score += 1;
-    }
-    if (score > bestScore) {
-      bestScore = score;
-      domain = dom;
-    }
-  }
+  const domain = 'unknown';
 
   // -------------------------------------------------------------------------
   // Detect entry point
