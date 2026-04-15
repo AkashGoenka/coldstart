@@ -64,12 +64,8 @@ export function handleGetOverview(
     domainEdges.set(key, (domainEdges.get(key) ?? 0) + 1);
   }
 
-  const filteredFiles = domain_filter
-    ? [...index.files.values()].filter(f => f.domain === domain_filter)
-    : [...index.files.values()];
-
   return {
-    totalFiles: filteredFiles.length,
+    totalFiles: index.files.size,
     totalEdges: index.edges.length,
     languages: Object.fromEntries(
       [...langCount.entries()]
@@ -239,6 +235,229 @@ export function handleGetStructure(
     importedByCount: file.importedByCount,
     imports_count: index.outEdges.get(fileId)?.length ?? 0,
   };
+}
+
+// ============================================================================
+// trace-impact
+// ============================================================================
+export function handleTraceImpact(
+  index: CodebaseIndex,
+  params: {
+    symbol: string;
+    file?: string;
+    depth?: number;
+  },
+): object {
+  const { symbol, file: filePath, depth: requestedDepth } = params;
+
+  if (!symbol) {
+    return { error: 'symbol is required' };
+  }
+
+  const maxDepth = Math.min(requestedDepth ?? 3, 10);
+  const TRUNCATE_AT = 50;
+
+  // -------------------------------------------------------------------------
+  // Step 1: Find target symbol
+  // -------------------------------------------------------------------------
+  const candidates = findSymbolCandidates(index, symbol, filePath);
+
+  if (candidates.length === 0) {
+    return {
+      error: `Symbol not found: ${symbol}`,
+      suggestions: fuzzyMatchSymbols(index, symbol).slice(0, 5),
+    };
+  }
+
+  if (candidates.length > 1) {
+    return {
+      error: `Symbol "${symbol}" is ambiguous (${candidates.length} matches). Provide file to disambiguate.`,
+      candidates: candidates.map(c => ({
+        symbol: c.name,
+        file: c.fileEntry.relativePath,
+        kind: c.kind,
+      })),
+    };
+  }
+
+  const target = candidates[0];
+
+  // -------------------------------------------------------------------------
+  // Step 2: Build symbol-level reverse adjacency map (inEdges)
+  // Exclude 'exports' edges — a file exporting a symbol is not impacted by it
+  // -------------------------------------------------------------------------
+  const symInEdges = new Map<string, Array<{ from: string; type: string }>>();
+
+  for (const edge of index.symbolEdges) {
+    if (edge.type === 'exports') continue;
+    if (!symInEdges.has(edge.to)) symInEdges.set(edge.to, []);
+    symInEdges.get(edge.to)!.push({ from: edge.from, type: edge.type });
+  }
+
+  // -------------------------------------------------------------------------
+  // Step 3: BFS traversal from target
+  // -------------------------------------------------------------------------
+  type ImpactEntry = {
+    symbolId: string;
+    depth: number;
+    path: string[];     // symbolIds from target → this node
+    relationship: string;
+  };
+
+  const visited = new Set<string>([target.id]);
+  const impacted: ImpactEntry[] = [];
+
+  // Queue items: [symbolId, depth, pathSoFar, relationship]
+  const queue: Array<{ id: string; depth: number; path: string[]; rel: string }> = [];
+
+  for (const inc of symInEdges.get(target.id) ?? []) {
+    if (!visited.has(inc.from)) {
+      queue.push({ id: inc.from, depth: 1, path: [target.id, inc.from], rel: inc.type });
+    }
+  }
+
+  while (queue.length > 0) {
+    const { id, depth, path, rel } = queue.shift()!;
+    if (visited.has(id)) continue;
+    visited.add(id);
+
+    impacted.push({ symbolId: id, depth, path, relationship: rel });
+
+    if (depth >= maxDepth) continue;
+
+    for (const inc of symInEdges.get(id) ?? []) {
+      if (!visited.has(inc.from)) {
+        queue.push({ id: inc.from, depth: depth + 1, path: [...path, inc.from], rel: inc.type });
+      }
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Step 4: Resolve symbolIds to human-readable info
+  // -------------------------------------------------------------------------
+  const symInfo = buildSymbolInfoMap(index);
+
+  function resolveId(id: string): { name: string; file: string; kind: string } {
+    const info = symInfo.get(id);
+    if (info) return info;
+    // Fallback: parse the id format "fileId#symbolName"
+    const hash = id.lastIndexOf('#');
+    if (hash !== -1) return { name: id.slice(hash + 1), file: id.slice(0, hash), kind: 'unknown' };
+    return { name: id, file: '', kind: 'unknown' };
+  }
+
+  const truncated = impacted.length > TRUNCATE_AT;
+  const displayImpacted = truncated ? impacted.slice(0, TRUNCATE_AT) : impacted;
+
+  // -------------------------------------------------------------------------
+  // Step 5: Build summary
+  // -------------------------------------------------------------------------
+  const byDepth: Record<number, number> = {};
+  const byRelationship: Record<string, number> = {};
+  const affectedFilesSet = new Set<string>();
+
+  for (const entry of impacted) {
+    byDepth[entry.depth] = (byDepth[entry.depth] ?? 0) + 1;
+    byRelationship[entry.relationship] = (byRelationship[entry.relationship] ?? 0) + 1;
+    const info = symInfo.get(entry.symbolId);
+    if (info) affectedFilesSet.add(info.file);
+  }
+
+  return {
+    target: {
+      symbol: target.name,
+      file: target.fileEntry.relativePath,
+      type: target.kind,
+    },
+    impacted: displayImpacted.map(entry => {
+      const info = resolveId(entry.symbolId);
+      return {
+        symbol: info.name,
+        file: info.file,
+        type: info.kind,
+        relationship: entry.relationship,
+        depth: entry.depth,
+        path: entry.path.map(sid => resolveId(sid).name),
+      };
+    }),
+    summary: {
+      totalImpacted: impacted.length,
+      byDepth,
+      byRelationship,
+      affectedFiles: [...affectedFilesSet].sort(),
+      ...(truncated ? { truncatedAt: TRUNCATE_AT, note: 'Impact set exceeded limit; results truncated' } : {}),
+    },
+  };
+}
+
+// ============================================================================
+// Helper: build a flat map of symbolId → { name, file, kind }
+// ============================================================================
+function buildSymbolInfoMap(index: CodebaseIndex): Map<string, { name: string; file: string; kind: string }> {
+  const map = new Map<string, { name: string; file: string; kind: string }>();
+  for (const file of index.files.values()) {
+    for (const sym of file.symbols) {
+      map.set(sym.id, { name: sym.name, file: file.relativePath, kind: sym.kind });
+    }
+  }
+  return map;
+}
+
+// ============================================================================
+// Helper: find symbol candidates by name (with optional file filter)
+// ============================================================================
+type IndexedFileLike = {
+  relativePath: string;
+  symbols: import('../types.js').SymbolNode[];
+};
+
+function findSymbolCandidates(
+  index: CodebaseIndex,
+  symbolName: string,
+  filePath?: string,
+): Array<{ id: string; name: string; kind: string; fileEntry: IndexedFileLike }> {
+  const results: Array<{ id: string; name: string; kind: string; fileEntry: IndexedFileLike }> = [];
+
+  const searchIn = (file: IndexedFileLike) => {
+    for (const sym of file.symbols) {
+      if (sym.name === symbolName) {
+        results.push({ id: sym.id, name: sym.name, kind: sym.kind, fileEntry: file });
+      }
+    }
+  };
+
+  if (filePath) {
+    const fileEntry = findFileByPath(index, filePath);
+    if (fileEntry) searchIn(fileEntry[1]);
+  } else {
+    for (const file of index.files.values()) {
+      searchIn(file);
+    }
+  }
+
+  return results;
+}
+
+// ============================================================================
+// Helper: fuzzy-match symbol names (for error suggestions)
+// ============================================================================
+function fuzzyMatchSymbols(
+  index: CodebaseIndex,
+  query: string,
+): Array<{ symbol: string; file: string; kind: string }> {
+  const results: Array<{ symbol: string; file: string; kind: string }> = [];
+  const lq = query.toLowerCase();
+
+  for (const file of index.files.values()) {
+    for (const sym of file.symbols) {
+      if (sym.name.toLowerCase().includes(lq) || lq.includes(sym.name.toLowerCase())) {
+        results.push({ symbol: sym.name, file: file.relativePath, kind: sym.kind });
+        if (results.length >= 10) return results;
+      }
+    }
+  }
+
+  return results;
 }
 
 // ============================================================================
