@@ -8,6 +8,8 @@ import {
 } from '../constants.js';
 import type { Language, ParsedFile, ArchRole } from '../types.js';
 import { parseTsContent } from './ts-parser.js';
+import { parseJavaContent } from './extractors/java.js';
+import { parseRubyContent } from './extractors/ruby.js';
 
 const MAX_FILE_SIZE = 1_000_000; // 1 MB
 
@@ -71,6 +73,82 @@ export async function parseFile(
       isEntryPoint,
       archRole,
       symbols: tsResult.symbols,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Java: use Tree-sitter for symbol-level extraction
+  // -------------------------------------------------------------------------
+  if (language === 'java') {
+    let javaResult;
+    try {
+      javaResult = parseJavaContent(content, fileId || filePath);
+    } catch (err) {
+      console.error(`[parser] Tree-sitter error in ${fileId || filePath}: ${err}`);
+      javaResult = { imports: [], exports: [], hasDefaultExport: false as const, symbols: [], packageName: '' };
+    }
+
+    const base = basename(filePath, extname(filePath)).toLowerCase();
+    const isEntryPoint = ENTRY_POINT_NAMES.has(base);
+    const pathLower = filePath.toLowerCase();
+    let archRole: ArchRole = 'unknown';
+    if (isEntryPoint) {
+      archRole = 'entry';
+    } else {
+      for (const { pattern, role } of ARCH_ROLE_PATTERNS) {
+        if (pattern.test(pathLower)) { archRole = role as ArchRole; break; }
+      }
+    }
+
+    return {
+      imports: javaResult.imports,
+      exports: javaResult.exports,
+      hasDefaultExport: false,
+      hash,
+      lineCount,
+      tokenEstimate,
+      domain: 'unknown',
+      isEntryPoint,
+      archRole,
+      symbols: javaResult.symbols,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Ruby: use Tree-sitter for symbol-level extraction
+  // -------------------------------------------------------------------------
+  if (language === 'ruby') {
+    let rubyResult;
+    try {
+      rubyResult = parseRubyContent(content, fileId || filePath);
+    } catch (err) {
+      console.error(`[parser] Tree-sitter error in ${fileId || filePath}: ${err}`);
+      rubyResult = { imports: [], exports: [], hasDefaultExport: false as const, symbols: [] };
+    }
+
+    const base = basename(filePath, extname(filePath)).toLowerCase();
+    const isEntryPoint = ENTRY_POINT_NAMES.has(base);
+    const pathLower = filePath.toLowerCase();
+    let archRole: ArchRole = 'unknown';
+    if (isEntryPoint) {
+      archRole = 'entry';
+    } else {
+      for (const { pattern, role } of ARCH_ROLE_PATTERNS) {
+        if (pattern.test(pathLower)) { archRole = role as ArchRole; break; }
+      }
+    }
+
+    return {
+      imports: rubyResult.imports,
+      exports: rubyResult.exports,
+      hasDefaultExport: false,
+      hash,
+      lineCount,
+      tokenEstimate,
+      domain: 'unknown',
+      isEntryPoint,
+      archRole,
+      symbols: rubyResult.symbols,
     };
   }
 
