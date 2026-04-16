@@ -217,6 +217,13 @@ async function buildIndex(
 // Main
 // ---------------------------------------------------------------------------
 async function main(): Promise<void> {
+  // Check for 'setup' subcommand before normal arg parsing
+  if (process.argv[2] === 'setup') {
+    const { runSetup } = await import('./setup.js');
+    await runSetup(process.argv.slice(3));
+    return;
+  }
+
   const { root, excludes, includes, cacheDir, quiet, noCache } = parseArgs(process.argv);
   const rootDir = resolve(root);
 
@@ -228,7 +235,14 @@ async function main(): Promise<void> {
   if (!noCache) {
     index = await loadCachedIndex(rootDir, cacheDir);
     if (index) {
-      log(quiet, '[coldstart] Loaded from cache');
+      // Invalidate cache if git HEAD has changed (branch switch, new commit)
+      const currentHead = await getGitHead(rootDir);
+      if (currentHead && index.gitHead && currentHead !== index.gitHead) {
+        log(quiet, '[coldstart] Git HEAD changed, rebuilding index...');
+        index = null;
+      } else {
+        log(quiet, '[coldstart] Loaded from cache');
+      }
     }
   }
 
