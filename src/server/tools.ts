@@ -1,6 +1,43 @@
 import type { CodebaseIndex, ArchRole } from '../types.js';
 
 // ============================================================================
+// Helpers for nextStep guidance
+// ============================================================================
+function buildOverviewNextStep(
+  domainMap: Map<string, { count: number; archRoles: Map<ArchRole, number>; files: Map<ArchRole, string[]> }>,
+  domain_filter?: string,
+): string {
+  const domains = [...domainMap.entries()].sort((a, b) => b[1].count - a[1].count);
+
+  if (domain_filter) {
+    const entry = domainMap.get(domain_filter);
+    if (entry) {
+      const roles = [...entry.archRoles.entries()].sort((a, b) => b[1] - a[1]);
+      const topRole = roles[0]?.[0];
+      return `You are zoomed into domain "${domain_filter}" (${entry.count} files). ` +
+        `Dominant role: ${topRole}. ` +
+        `Call get-structure on a specific file path to inspect its exports/imports, or grep within "${domain_filter}/" for string literals.`;
+    }
+  }
+
+  // Build a short domain hint so the agent can pick where to look
+  const domainHint = domains.slice(0, 4)
+    .map(([name, e]) => {
+      const topRoles = [...e.archRoles.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 2)
+        .map(([r]) => r)
+        .join(', ');
+      return `"${name}" (${e.count} files, roles: ${topRoles})`;
+    })
+    .join('; ');
+
+  return `NEXT STEP — call get-overview with domain_filter for each candidate domain to see sample files, ` +
+    `then search within those domains. Domains: ${domainHint}. ` +
+    `If unsure which domain contains the code, zoom into 2-3 domains before searching — do not commit to one domain based on the first grep hit.`;
+}
+
+// ============================================================================
 // get-overview
 // ============================================================================
 export function handleGetOverview(
@@ -82,7 +119,7 @@ export function handleGetOverview(
     entryPointCount: [...index.files.values()].filter(f => f.isEntryPoint).length,
     indexedAt: new Date(index.indexedAt).toISOString(),
     gitHead: index.gitHead || '(not a git repo)',
-    nextStep: 'Use trace-deps to follow dependency chains from an entry point, or get-structure to inspect a specific file\'s exports and imports without reading it.',
+    nextStep: buildOverviewNextStep(domainMap, domain_filter),
   };
 }
 
