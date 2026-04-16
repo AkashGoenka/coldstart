@@ -1,35 +1,35 @@
-import type { Language, LanguageConfig } from './types.js';
+import type { Language, LanguageConfig } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Extension → Language mapping
 // ---------------------------------------------------------------------------
 export const EXTENSION_TO_LANGUAGE: Record<string, Language> = {
-  '.ts': 'typescript',
-  '.tsx': 'typescript',
-  '.mts': 'typescript',
-  '.cts': 'typescript',
-  '.js': 'javascript',
-  '.jsx': 'javascript',
-  '.mjs': 'javascript',
-  '.cjs': 'javascript',
-  '.py': 'python',
-  '.go': 'go',
-  '.rs': 'rust',
-  '.java': 'java',
-  '.cs': 'csharp',
-  '.cpp': 'cpp',
-  '.cc': 'cpp',
-  '.cxx': 'cpp',
-  '.c': 'cpp',
-  '.h': 'cpp',
-  '.hpp': 'cpp',
-  '.hxx': 'cpp',
-  '.rb': 'ruby',
-  '.php': 'php',
-  '.swift': 'swift',
-  '.kt': 'kotlin',
-  '.kts': 'kotlin',
-  '.dart': 'dart',
+  ".ts": "typescript",
+  ".tsx": "typescript",
+  ".mts": "typescript",
+  ".cts": "typescript",
+  ".js": "javascript",
+  ".jsx": "javascript",
+  ".mjs": "javascript",
+  ".cjs": "javascript",
+  ".py": "python",
+  ".go": "go",
+  ".rs": "rust",
+  ".java": "java",
+  ".cs": "csharp",
+  ".cpp": "cpp",
+  ".cc": "cpp",
+  ".cxx": "cpp",
+  ".c": "cpp",
+  ".h": "cpp",
+  ".hpp": "cpp",
+  ".hxx": "cpp",
+  ".rb": "ruby",
+  ".php": "php",
+  ".swift": "swift",
+  ".kt": "kotlin",
+  ".kts": "kotlin",
+  ".dart": "dart",
 };
 
 // ---------------------------------------------------------------------------
@@ -37,7 +37,7 @@ export const EXTENSION_TO_LANGUAGE: Record<string, Language> = {
 // ---------------------------------------------------------------------------
 export const LANGUAGE_CONFIGS: Record<Language, LanguageConfig> = {
   typescript: {
-    extensions: ['.ts', '.tsx', '.mts', '.cts'],
+    extensions: [".ts", ".tsx", ".mts", ".cts"],
     importPatterns: [
       // import X from 'Y'  /  import * as X from 'Y'  /  import { X } from 'Y'
       /(?:^|\n)\s*import\s+(?:[\w*{},\s]+from\s+)?['"]([^'"]+)['"]/g,
@@ -61,7 +61,7 @@ export const LANGUAGE_CONFIGS: Record<Language, LanguageConfig> = {
   },
 
   javascript: {
-    extensions: ['.js', '.jsx', '.mjs', '.cjs'],
+    extensions: [".js", ".jsx", ".mjs", ".cjs"],
     importPatterns: [
       /(?:^|\n)\s*import\s+(?:[\w*{},\s]+from\s+)?['"]([^'"]+)['"]/g,
       /require\(['"]([^'"]+)['"]\)/g,
@@ -77,7 +77,7 @@ export const LANGUAGE_CONFIGS: Record<Language, LanguageConfig> = {
   },
 
   python: {
-    extensions: ['.py'],
+    extensions: [".py"],
     importPatterns: [
       // from X import Y
       /(?:^|\n)\s*from\s+([\w.]+)\s+import/g,
@@ -95,7 +95,7 @@ export const LANGUAGE_CONFIGS: Record<Language, LanguageConfig> = {
   },
 
   go: {
-    extensions: ['.go'],
+    extensions: [".go"],
     importPatterns: [
       // import "X"
       /import\s+"([^"]+)"/g,
@@ -113,7 +113,7 @@ export const LANGUAGE_CONFIGS: Record<Language, LanguageConfig> = {
   },
 
   rust: {
-    extensions: ['.rs'],
+    extensions: [".rs"],
     importPatterns: [
       // use X::Y
       /(?:^|\n)\s*use\s+([\w::{},\s*]+);/g,
@@ -139,7 +139,7 @@ export const LANGUAGE_CONFIGS: Record<Language, LanguageConfig> = {
   },
 
   java: {
-    extensions: ['.java'],
+    extensions: [".java"],
     importPatterns: [
       // import com.foo.Bar
       /(?:^|\n)\s*import\s+(?:static\s+)?([\w.]+);/g,
@@ -153,7 +153,7 @@ export const LANGUAGE_CONFIGS: Record<Language, LanguageConfig> = {
   },
 
   csharp: {
-    extensions: ['.cs'],
+    extensions: [".cs"],
     importPatterns: [
       // using System.Foo
       /(?:^|\n)\s*using\s+([\w.]+);/g,
@@ -167,7 +167,7 @@ export const LANGUAGE_CONFIGS: Record<Language, LanguageConfig> = {
   },
 
   cpp: {
-    extensions: ['.cpp', '.cc', '.cxx', '.c', '.h', '.hpp', '.hxx'],
+    extensions: [".cpp", ".cc", ".cxx", ".c", ".h", ".hpp", ".hxx"],
     importPatterns: [
       // #include "file.h"
       /#include\s+"([^"]+)"/g,
@@ -183,7 +183,7 @@ export const LANGUAGE_CONFIGS: Record<Language, LanguageConfig> = {
   },
 
   ruby: {
-    extensions: ['.rb'],
+    extensions: [".rb"],
     importPatterns: [
       // require 'X'
       /(?:^|\n)\s*require\s+['"]([^'"]+)['"]/g,
@@ -201,7 +201,7 @@ export const LANGUAGE_CONFIGS: Record<Language, LanguageConfig> = {
   },
 
   php: {
-    extensions: ['.php'],
+    extensions: [".php"],
     importPatterns: [
       // use App\Models\X
       /(?:^|\n)\s*use\s+([\w\\]+)(?:\s+as\s+\w+)?;/g,
@@ -217,7 +217,7 @@ export const LANGUAGE_CONFIGS: Record<Language, LanguageConfig> = {
   },
 
   swift: {
-    extensions: ['.swift'],
+    extensions: [".swift"],
     importPatterns: [
       // import Foundation
       /(?:^|\n)\s*import\s+(\w+)/g,
@@ -231,7 +231,7 @@ export const LANGUAGE_CONFIGS: Record<Language, LanguageConfig> = {
   },
 
   kotlin: {
-    extensions: ['.kt', '.kts'],
+    extensions: [".kt", ".kts"],
     importPatterns: [
       // import com.foo.bar
       /(?:^|\n)\s*import\s+([\w.]+)(?:\.\*)?/g,
@@ -244,7 +244,7 @@ export const LANGUAGE_CONFIGS: Record<Language, LanguageConfig> = {
   },
 
   dart: {
-    extensions: ['.dart'],
+    extensions: [".dart"],
     importPatterns: [
       // import 'package:X/Y.dart'
       /(?:^|\n)\s*import\s+['"]([^'"]+)['"]/g,
@@ -264,57 +264,66 @@ export const LANGUAGE_CONFIGS: Record<Language, LanguageConfig> = {
 // Default excludes for filesystem walker
 // ---------------------------------------------------------------------------
 export const DEFAULT_EXCLUDES = new Set([
-  'node_modules',
-  'dist',
-  'build',
-  'out',
-  '.next',
-  '.nuxt',
-  '.svelte-kit',
-  '.git',
-  '.hg',
-  '.svn',
-  '__pycache__',
-  '.mypy_cache',
-  '.ruff_cache',
-  '.pytest_cache',
-  'target',       // Rust/Maven
-  '.gradle',
-  'vendor',       // PHP/Go
-  'Pods',         // iOS CocoaPods
-  '.dart_tool',
-  '.pub-cache',
-  'coverage',
-  '.nyc_output',
-  'tmp',
-  'temp',
-  '.cache',
-  'logs',
+  "node_modules",
+  "dist",
+  "build",
+  "out",
+  ".next",
+  ".nuxt",
+  ".svelte-kit",
+  ".git",
+  ".hg",
+  ".svn",
+  "__pycache__",
+  ".mypy_cache",
+  ".ruff_cache",
+  ".pytest_cache",
+  "target", // Rust/Maven
+  ".gradle",
+  "vendor", // PHP/Go
+  "Pods", // iOS CocoaPods
+  ".dart_tool",
+  ".pub-cache",
+  "coverage",
+  ".nyc_output",
+  "tmp",
+  "temp",
+  ".cache",
+  "logs",
 ]);
 
 // ---------------------------------------------------------------------------
 // Entry point filename patterns
 // ---------------------------------------------------------------------------
 export const ENTRY_POINT_NAMES = new Set([
-  'index', 'main', 'app', 'server', 'entry', 'start',
-  'bootstrap', 'init', 'cmd', 'bin', 'run',
+  "index",
+  "main",
+  "app",
+  "server",
+  "entry",
+  "start",
+  "bootstrap",
+  "init",
+  "cmd",
+  "bin",
+  "run",
 ]);
 
 // ---------------------------------------------------------------------------
 // Architectural role patterns (matched against path segments)
 // ---------------------------------------------------------------------------
 export const ARCH_ROLE_PATTERNS: Array<{ pattern: RegExp; role: string }> = [
-  { pattern: /router|routes?/i, role: 'router' },
-  { pattern: /service/i, role: 'service' },
-  { pattern: /repo(sitory)?|dao/i, role: 'repository' },
-  { pattern: /middleware/i, role: 'middleware' },
-  { pattern: /controller/i, role: 'controller' },
-  { pattern: /model/i, role: 'model' },
-  { pattern: /util|helper/i, role: 'util' },
-  { pattern: /config|settings?/i, role: 'config' },
-  { pattern: /test|spec|__tests__/i, role: 'test' },
-  { pattern: /types?|interfaces?|schemas?|dtos?/i, role: 'types' },
+  { pattern: /router|routes?/i, role: "router" },
+  { pattern: /service/i, role: "service" },
+  { pattern: /repo(sitory)?|dao/i, role: "repository" },
+  { pattern: /middleware/i, role: "middleware" },
+  { pattern: /controller/i, role: "controller" },
+  { pattern: /model/i, role: "model" },
+  { pattern: /util|helper/i, role: "util" },
+  { pattern: /config|settings?/i, role: "config" },
+  { pattern: /test|spec|__tests__/i, role: "test" },
+  { pattern: /types?|interfaces?|schemas?|dtos?/i, role: "types" },
 ];
 
 // Cache version — bump when index schema changes to force re-index
-export const CACHE_VERSION = '4.0.0';
+export const CACHE_VERSION = "4.0.0";
