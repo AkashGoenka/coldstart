@@ -21,11 +21,12 @@ This repo has been intentionally downscoped to be a fast routing layer, not a ra
 
 ## Current scope
 
-The MCP server exposes exactly 3 tools:
+The MCP server exposes exactly 4 tools:
 
 1. `get-overview`
 2. `trace-deps`
 3. `get-structure`
+4. `trace-impact`
 
 `find-files` and all TF-IDF/PageRank/co-change code were removed after real-world testing showed limited benefit versus agent-native grep/rg.
 
@@ -44,6 +45,25 @@ coldstart-mcp --root .
 
 Requirements:
 - Node.js 18+
+
+---
+
+## Interactive Setup
+
+Run the guided setup wizard to configure coldstart with your project and IDE:
+
+```bash
+npx coldstart-mcp setup
+```
+
+The wizard will:
+1. Scan your project for supported languages
+2. Detect your IDE(s) (Claude Code, Cursor, Windsurf, VS Code)
+3. Create MCP configuration files in the right locations
+4. Write agent rules to guide your IDE's AI assistant to use coldstart tools first
+5. Provide options for multi-repo setup
+
+**After setup:** Restart your IDE to pick up the MCP configuration. The AI assistant will automatically call `get-overview` before exploring your code.
 
 ---
 
@@ -209,6 +229,24 @@ Returns per-file metadata:
 - `importedByCount`, direct imports count
 - **For TypeScript/JavaScript files:** symbol summary including function signatures, class definitions, methods, interfaces, and type aliases with line numbers
 
+### `trace-impact`
+
+Required params:
+- `symbol` (string)
+
+Optional params:
+- `file` (string) — disambiguate when symbol appears in multiple files
+- `depth` (1-10, default 3) — max transitive depth to trace
+
+Returns:
+- Target symbol and its file location
+- All symbols that directly or transitively depend on it (with relationship types: `calls`, `extends`, `implements`)
+- Full dependency chain path for each impacted symbol
+- Summary counts grouped by depth and relationship type
+- Affected files list
+
+Use this before refactoring to understand blast radius of changing a symbol, without reading all dependent files.
+
 ---
 
 ## How indexing works
@@ -225,16 +263,18 @@ Returns per-file metadata:
 
 Supported languages: TypeScript, JavaScript, Python, Go, Rust, Java, C#, C/C++, Ruby, PHP, Swift, Kotlin, Dart.
 
+**Symbol extraction (Tree-sitter):** TypeScript, JavaScript, Java, Ruby.
+**Import/export only (Regex):** Python, Go, Rust, C#, C/C++, PHP, Swift, Kotlin, Dart.
+
 ---
 
 ## Parser strategy
 
-**TypeScript and JavaScript** get AST-level precision:
-- Uses **Tree-sitter** (via node-tree-sitter and tree-sitter-typescript) for accurate parsing
-- Extracts symbol-level information: functions, classes, interfaces, type aliases, methods
-- Tracks intra-file call relationships, class inheritance (`extends`), and interface implementations (`implements`)
-- Returns `symbols` array in `get-structure` responses with line numbers and relationship info
-- Handles TSX and JSX correctly
+**TypeScript, JavaScript, Java, and Ruby** get AST-level precision (Tree-sitter):
+- **TypeScript/JavaScript:** Extracts functions, classes, interfaces, type aliases, methods, and call relationships. Handles TSX and JSX.
+- **Java:** Extracts classes, interfaces, enums, records, methods, constructors, and static final fields. Tracks `extends`, `implements`, and method invocations.
+- **Ruby:** Extracts classes, modules, methods, constants, and singleton methods. Handles Rails DSLs (associations, callbacks, includes/extends). Tracks method calls and inheritance chains.
+- All four languages: Returns `symbols` array with line numbers, exported flags, and relationship info (calls, extends, implements).
 
 **All other languages** use regex-based extraction:
 - Fast, zero-dependency fallback for broad language coverage
