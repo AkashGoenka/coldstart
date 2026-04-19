@@ -26,15 +26,24 @@ export async function startMCPServer(index: CodebaseIndex): Promise<void> {
       {
         name: 'get-overview',
         description:
-          'CALL THIS FIRST when entering an unfamiliar codebase — before any file search or Glob. Returns domain structure with files grouped by architectural role, entry point count, and inter-domain dependency edges. Use it to understand where code lives so subsequent searches are targeted, not broad.',
+          'Use this like a search engine — pass keywords from your current task to find relevant files fast. NOT for general codebase summarization or exploration. Only call this when you have a specific concept to look up (e.g. "auth", "payment stripe", "user profile"). domain_filter is required. Returns top-ranked files by IDF-weighted relevance score. Barrel/re-export index files and test files are excluded unless the query contains test-related keywords. Supports synonym groups: "[auth|login|jwt] payment" — files matching any synonym in a group score as if they matched all.',
         inputSchema: {
           type: 'object',
           properties: {
             domain_filter: {
               type: 'string',
-              description: 'Restrict overview to a specific domain (e.g. "auth", "payments").',
+              description: 'One or more keywords relevant to your task. Bare words are independent concepts (AND logic across them). Bracket groups are synonyms (OR logic within): "[auth|login|jwt] payment" means files must match the auth concept AND payment concept, where any of auth/login/jwt satisfies the auth concept. Partial matches work: "grouphub" matches files indexed under "group" and "hub", "authentication" matches files indexed under "auth".',
+            },
+            threshold_pct: {
+              type: 'number',
+              description: 'Relative score threshold (0–1). Files scoring below threshold_pct × top_score are excluded. Default 0.30.',
+            },
+            max_results: {
+              type: 'number',
+              description: 'Maximum number of files to return after threshold filtering. Default 20.',
             },
           },
+          required: ['domain_filter'],
         },
       },
       {
@@ -115,6 +124,8 @@ export async function startMCPServer(index: CodebaseIndex): Promise<void> {
       case 'get-overview':
         result = handleGetOverview(index, {
           domain_filter: params['domain_filter'] as string | undefined,
+          threshold_pct: params['threshold_pct'] as number | undefined,
+          max_results: params['max_results'] as number | undefined,
         });
         break;
 
