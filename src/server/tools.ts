@@ -1,40 +1,31 @@
-import type { CodebaseIndex, ArchRole } from '../types.js';
+import type { CodebaseIndex } from '../types.js';
+import { tokenizeName } from '../indexer/tokenize.js';
 
-// ============================================================================
-// Helpers for nextStep guidance
-// ============================================================================
-function buildOverviewNextStep(
-  domainMap: Map<string, { count: number; archRoles: Map<ArchRole, number>; files: Map<ArchRole, string[]> }>,
-  domain_filter?: string,
-): string {
-  const domains = [...domainMap.entries()].sort((a, b) => b[1].count - a[1].count);
+const TEST_KEYWORDS = new Set(['test', 'spec', 'mock', 'fixture', 'stub']);
+const TEST_PATH_RE = /\.(test|spec)\.[^.]+$|__tests__\/|\/tests?\/|\/e2e[-_]?tests?\/|\/test-framework\//i;
 
-  if (domain_filter) {
-    const entry = domainMap.get(domain_filter);
-    if (entry) {
-      const roles = [...entry.archRoles.entries()].sort((a, b) => b[1] - a[1]);
-      const topRole = roles[0]?.[0];
-      return `You are zoomed into domain "${domain_filter}" (${entry.count} files). ` +
-        `Dominant role: ${topRole}. ` +
-        `Call get-structure on a specific file path to inspect its exports/imports, or grep within "${domain_filter}/" for string literals.`;
+/**
+ * Parse a domain_filter string into concept groups.
+ * - [auth|login|jwt] → one group with synonyms (OR logic)
+ * - bare words → one group per word (AND logic across groups)
+ * - Each group is satisfied if ANY of its tokens match the file's domains.
+ */
+function parseConceptGroups(input: string): string[][] {
+  const groups: string[][] = [];
+  const segmentRe = /\[([^\]]+)\]|(\S+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = segmentRe.exec(input)) !== null) {
+    if (match[1] !== undefined) {
+      // Bracket group: split by | and tokenize each synonym
+      const synonyms = match[1].split('|').flatMap(s => tokenizeName(s.trim())).filter(Boolean);
+      if (synonyms.length > 0) groups.push(synonyms);
+    } else if (match[2] !== undefined) {
+      // Bare segment: tokenize as a single concept group
+      const tokens = tokenizeName(match[2]);
+      if (tokens.length > 0) groups.push(tokens);
     }
   }
-
-  // Build a short domain hint so the agent can pick where to look
-  const domainHint = domains.slice(0, 4)
-    .map(([name, e]) => {
-      const topRoles = [...e.archRoles.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 2)
-        .map(([r]) => r)
-        .join(', ');
-      return `"${name}" (${e.count} files, roles: ${topRoles})`;
-    })
-    .join('; ');
-
-  return `NEXT STEP — call get-overview with domain_filter for each candidate domain to see sample files, ` +
-    `then search within those domains. Domains: ${domainHint}. ` +
-    `If unsure which domain contains the code, zoom into 2-3 domains before searching — do not commit to one domain based on the first grep hit.`;
+  return groups;
 }
 
 // ============================================================================
@@ -42,84 +33,138 @@ function buildOverviewNextStep(
 // ============================================================================
 export function handleGetOverview(
   index: CodebaseIndex,
-  params: { domain_filter?: string },
+  params: {
+    domain_filter?: string;
+    threshold_pct?: number;
+    max_results?: number;
+  },
 ): object {
-  const { domain_filter } = params;
+  const { domain_filter, threshold_pct = 0.30, max_results = 20 } = params;
 
-  // Language breakdown
-  const langCount = new Map<string, number>();
+  if (!domain_filter) {
+    return {
+      error: 'domain_filter is required',
+      hint: 'Provide one or more keywords relevant to your task (e.g. "auth", "payment user"). Use your knowledge of the task to supply keywords. Synonym groups: "[auth|login|jwt] payment".',
+      totalFiles: index.files.size,
+    };
+  }
+
+  const conceptGroups = parseConceptGroups(domain_filter);
+  if (conceptGroups.length === 0) {
+    return { error: 'domain_filter produced no usable tokens after filtering stop words.' };
+  }
+
+  const allTokens = conceptGroups.flat();
+  const isTestQuery = allTokens.some(t => TEST_KEYWORDS.has(t));
+  const totalFiles = index.files.size;
+
+  type ScoredFile = {
+    path: string;
+    score: number;
+    matched_tokens: string[];
+    matched_concepts: number;
+    total_concepts: number;
+    coverage: number;
+    allExact: boolean;
+  };
+
+  const scored: ScoredFile[] = [];
+
   for (const file of index.files.values()) {
-    langCount.set(file.language, (langCount.get(file.language) ?? 0) + 1);
+    // Exclude barrels — they re-export children and pollute results
+    if (file.isBarrel) continue;
+    // Exclude test files for non-test queries
+    if (!isTestQuery && (file.archRole === 'test' || TEST_PATH_RE.test(file.relativePath))) {
+      continue;
+    }
+
+    let idfSum = 0;
+    let matchedGroupCount = 0;
+    const matchedTokens: string[] = [];
+    let allExact = true;
+
+    for (const group of conceptGroups) {
+      // Find best-IDF matching token in this group
+      let bestToken: string | null = null;
+      let bestIdf = -1;
+      let bestIsExact = false;
+      for (const token of group) {
+        // Exact match, or substring match in either direction:
+        // - query contains domain: e.g. query "authentication" contains indexed token "auth"
+        // - domain contains query: only for long domain tokens (>6 chars) to avoid
+        //   short generic tokens matching everything
+        const matchingDomain = file.domains.find(
+          d => d === token
+            || (d.length >= 4 && token.length > d.length && token.includes(d))
+            || (d.length > 6 && d.length > token.length && d.includes(token))
+        );
+        if (matchingDomain) {
+          const isExact = matchingDomain === token;
+          const docFreq = index.tokenDocFreq.get(matchingDomain) ?? 1;
+          const idf = Math.log(totalFiles / docFreq);
+          if (idf > bestIdf) { bestIdf = idf; bestToken = matchingDomain; bestIsExact = isExact; }
+        }
+      }
+      if (bestToken !== null) {
+        matchedGroupCount++;
+        matchedTokens.push(bestToken);
+        idfSum += bestIdf;
+        if (!bestIsExact) allExact = false;
+      }
+    }
+
+    if (matchedGroupCount === 0) continue;
+
+    const coverage = matchedGroupCount / conceptGroups.length;
+    const score = idfSum * coverage * coverage;
+
+    scored.push({
+      path: file.relativePath,
+      score,
+      matched_tokens: matchedTokens,
+      matched_concepts: matchedGroupCount,
+      total_concepts: conceptGroups.length,
+      coverage,
+      allExact,
+    });
   }
 
-  // Domain breakdown: { domainName: { count, archRoles, files? } }
-  // files only included when domain_filter is set (to keep default response small)
-  const FILE_SAMPLE_LIMIT = domain_filter ? 5 : 0;
-  const domainMap = new Map<string, { count: number; archRoles: Map<ArchRole, number>; files: Map<ArchRole, string[]> }>();
-  for (const file of index.files.values()) {
-    if (domain_filter && file.domain !== domain_filter) continue;
-    if (!domainMap.has(file.domain)) {
-      domainMap.set(file.domain, { count: 0, archRoles: new Map(), files: new Map() });
-    }
-    const entry = domainMap.get(file.domain)!;
-    entry.count++;
-    entry.archRoles.set(file.archRole, (entry.archRoles.get(file.archRole) ?? 0) + 1);
-    if (FILE_SAMPLE_LIMIT > 0) {
-      if (!entry.files.has(file.archRole)) {
-        entry.files.set(file.archRole, []);
-      }
-      const roleFiles = entry.files.get(file.archRole)!;
-      if (roleFiles.length < FILE_SAMPLE_LIMIT) {
-        roleFiles.push(file.relativePath);
-      }
-    }
-  }
+  const totalBeforeFiltering = scored.length;
 
-  // Serialize domains
-  const domains: Record<string, object> = {};
-  for (const [dom, entry] of [...domainMap.entries()].sort((a, b) => b[1].count - a[1].count)) {
-    const archRoles = Object.fromEntries(entry.archRoles);
-    if (FILE_SAMPLE_LIMIT > 0) {
-      const files: Record<string, string[]> = {};
-      for (const [role, paths] of entry.files) {
-        files[role] = paths;
-      }
-      domains[dom] = { count: entry.count, archRoles, files };
-    } else {
-      domains[dom] = { count: entry.count, archRoles };
-    }
-  }
+  // Sort by score descending
+  scored.sort((a, b) => b.score - a.score);
 
-  // Inter-domain edges
-  const domainEdges = new Map<string, number>();
-  for (const edge of index.edges) {
-    const fromFile = index.files.get(edge.from);
-    const toFile = index.files.get(edge.to);
-    if (!fromFile || !toFile) continue;
-    if (fromFile.domain === toFile.domain) continue;
-    const key = `${fromFile.domain} → ${toFile.domain}`;
-    domainEdges.set(key, (domainEdges.get(key) ?? 0) + 1);
-  }
+  // Apply relative threshold
+  const topScore = scored[0]?.score ?? 0;
+  const threshold = topScore * threshold_pct;
+  const afterThreshold = scored.filter(f => f.score >= threshold);
+
+  // If any result matched all concepts exactly, drop substring-only results.
+  // This eliminates noise from generic tokens (e.g. "group" matching for "grouphub" query)
+  // while preserving substring matches as a fallback when no exact matches exist.
+  const hasAnyAllExact = afterThreshold.some(f => f.allExact);
+  const filtered = hasAnyAllExact ? afterThreshold.filter(f => f.allExact) : afterThreshold;
+
+  // Hard cap
+  const results = filtered.slice(0, max_results);
+
+  // Score distribution
+  const scores = results.map(f => f.score);
+  const median = scores.length > 0 ? scores[Math.floor(scores.length / 2)] : 0;
 
   return {
-    totalFiles: index.files.size,
-    totalEdges: index.edges.length,
-    languages: Object.fromEntries(
-      [...langCount.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .map(([lang, count]) => [lang, count]),
-    ),
-    domains,
-    interDomainEdges: Object.fromEntries(
-      [...domainEdges.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 10)
-        .map(([key, count]) => [key, count]),
-    ),
-    entryPointCount: [...index.files.values()].filter(f => f.isEntryPoint).length,
+    totalFiles,
+    filter: domain_filter,
+    conceptGroups,
+    total_matches_before_filtering: totalBeforeFiltering,
+    results: results.map(({ allExact: _, ...r }) => r),
+    score_distribution: {
+      top: topScore,
+      median,
+      threshold,
+    },
     indexedAt: new Date(index.indexedAt).toISOString(),
     gitHead: index.gitHead || '(not a git repo)',
-    nextStep: buildOverviewNextStep(domainMap, domain_filter),
   };
 }
 
@@ -165,7 +210,7 @@ export function handleTraceDeps(
         result.push({
           path: neighbor.relativePath,
           language: neighbor.language,
-          domain: neighbor.domain,
+          domains: neighbor.domains,
           archRole: neighbor.archRole,
           exports: neighbor.exports.slice(0, 10),
           importedByCount: neighbor.importedByCount,
@@ -185,7 +230,7 @@ export function handleTraceDeps(
     file: {
       path: file.relativePath,
       language: file.language,
-      domain: file.domain,
+      domains: file.domains,
       archRole: file.archRole,
     },
   };
@@ -254,7 +299,7 @@ export function handleGetStructure(
   return {
     path: file.relativePath,
     language: file.language,
-    domain: file.domain,
+    domains: file.domains,
     archRole: file.archRole,
     isEntryPoint: file.isEntryPoint,
     exports: {

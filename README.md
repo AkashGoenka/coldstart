@@ -48,22 +48,19 @@ Requirements:
 
 ---
 
-## Interactive Setup
+## Setup
 
-Run the guided setup wizard to configure coldstart with your project and IDE:
+Generate MCP config and agent rules for manual setup:
 
 ```bash
-npx coldstart-mcp setup
+npx coldstart-mcp init
 ```
 
-The wizard will:
-1. Scan your project for supported languages
-2. Detect your IDE(s) (Claude Code, Cursor, Windsurf, VS Code)
-3. Create MCP configuration files in the right locations
-4. Write agent rules to guide your IDE's AI assistant to use coldstart tools first
-5. Provide options for multi-repo setup
+This prints:
+1. **MCP config** — Paste into your IDE's MCP configuration file (see "Configure MCP" below)
+2. **Agent rules** — Paste into your IDE's instructions/rules file
 
-**After setup:** Restart your IDE to pick up the MCP configuration. The AI assistant will automatically call `get-overview` before exploring your code.
+For IDE-specific paths and configuration details, see [Configure MCP](#configure-mcp) below or visit https://github.com/AkashGoenka/coldstart.
 
 ---
 
@@ -182,9 +179,6 @@ printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion
 
 ---
 
-## Agent rules
-
-Copy `CLAUDE.md.example` to `CLAUDE.md` (for Claude Code) or `.cursorrules` (for Cursor) in your project to instruct agents to use coldstart tools before reaching for grep or file reads.
 
 ---
 
@@ -192,18 +186,14 @@ Copy `CLAUDE.md.example` to `CLAUDE.md` (for Claude Code) or `.cursorrules` (for
 
 ### `get-overview`
 
-Optional params:
-- `domain_filter` (string)
+Required params:
+- `domain_filter` (string) — One or more keywords relevant to your task. Matched against each file's domain keyword array (derived from path segments, exports, and imports). Example: `"auth login"` or `"payment stripe"`.
 
 Returns:
-- Total files and edges
-- Language breakdown
-- Domains with files grouped by architectural role
-- Inter-domain dependency edges
-- Entry point count
-- Index timestamp and git head
+- Matching files grouped by architectural role
+- Total matched files, matched keywords, entry point count
 
-Use this first to decide where to look before searching or opening files.
+Use this first to decide where to look before searching or opening files. Provide keywords from your task context — feature names, entity names, concepts, abbreviations.
 
 ### `trace-deps`
 
@@ -214,7 +204,7 @@ Optional params:
 - `direction`: `imports` | `importers` | `both` (default `both`)
 - `depth`: `1-3` (default `1`)
 
-Returns transitive dependency relationships and lightweight metadata (domain, role, exports, `importedByCount`).
+Returns transitive dependency relationships and lightweight metadata (domains, role, exports, `importedByCount`).
 
 ### `get-structure`
 
@@ -222,7 +212,7 @@ Required params:
 - `file_path` (string)
 
 Returns per-file metadata:
-- language, domain, role, entry-point flag
+- language, domains (keyword array), role, entry-point flag
 - named exports + default export flag
 - internal imports (resolved) and external imports
 - line count, token estimate, hash
