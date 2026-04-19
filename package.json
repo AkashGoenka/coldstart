@@ -1,12 +1,29 @@
 {
   "name": "coldstart-mcp",
-  "version": "4.0.0",
+  "version": "5.0.0-rc.1",
   "description": "Local MCP server for AI agent codebase navigation — domain mapping, dependency tracing, file structure lookup",
   "type": "module",
   "bin": {
     "coldstart-mcp": "./dist/index.js"
   },
   "main": "./dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "mcp",
+    "ai",
+    "codebase",
+    "navigation",
+    "agent",
+    "dependency",
+    "indexer"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AkashGoenka/coldstart"
+  },
   "scripts": {
     "build": "tsc --noEmit false",
     "dev": "tsc --watch",

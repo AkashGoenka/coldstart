@@ -64,7 +64,7 @@ export interface IndexedFile {
   path: string;             // absolute path
   relativePath: string;     // relative to root
   language: Language;
-  domain: string;           // inferred from path/content (auth, payments, db, …)
+  domains: string[];        // semantic keywords from path segments, exports, imports
   exports: string[];        // named exports extracted by parser
   hasDefaultExport: boolean;
   imports: string[];        // raw import specifiers
@@ -74,6 +74,8 @@ export interface IndexedFile {
   isEntryPoint: boolean;
   archRole: ArchRole;
   importedByCount: number;  // number of files that import this file (set after graph phase)
+  transitiveImportedByCount: number; // importedByCount bubbled through barrel files
+  isBarrel: boolean;        // true if this is an index.ts re-export barrel
   depth: number;            // BFS depth from entry points (set after graph phase)
   symbols: SymbolNode[];    // symbol-level nodes within this file (TS/JS only)
 }
@@ -92,6 +94,7 @@ export interface CodebaseIndex {
   symbolEdges: SymbolEdge[];             // symbol-level edges (calls, extends, implements, exports)
   outEdges: Map<string, string[]>;       // fileId → [fileId] (imports)
   inEdges: Map<string, string[]>;        // fileId → [fileId] (importers)
+  tokenDocFreq: Map<string, number>;     // token → number of files containing that token (for IDF scoring)
   indexedAt: number;                    // Date.now()
   gitHead: string;                      // HEAD commit hash or ''
 }
@@ -115,7 +118,6 @@ export interface ParsedFile {
   hash: string;
   lineCount: number;
   tokenEstimate: number;
-  domain: string;
   isEntryPoint: boolean;
   archRole: ArchRole;
   symbols: SymbolNode[];    // symbol-level nodes (TS/JS only, empty for other languages)

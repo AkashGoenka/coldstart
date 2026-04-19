@@ -47,8 +47,6 @@ export async function parseFile(
     const uniqueImports = tsResult.imports;
     const uniqueExports = tsResult.exports;
 
-    const domain = 'unknown';
-
     const base = basename(filePath, extname(filePath)).toLowerCase();
     const isEntryPoint = ENTRY_POINT_NAMES.has(base);
     const pathLowerTs = filePath.toLowerCase();
@@ -68,7 +66,6 @@ export async function parseFile(
       hash,
       lineCount,
       tokenEstimate,
-      domain,
       isEntryPoint,
       archRole,
       symbols: tsResult.symbols,
@@ -106,7 +103,6 @@ export async function parseFile(
       hash,
       lineCount,
       tokenEstimate,
-      domain: 'unknown',
       isEntryPoint,
       archRole,
       symbols: javaResult.symbols,
@@ -144,7 +140,6 @@ export async function parseFile(
       hash,
       lineCount,
       tokenEstimate,
-      domain: 'unknown',
       isEntryPoint,
       archRole,
       symbols: rubyResult.symbols,
