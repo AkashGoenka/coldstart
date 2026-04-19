@@ -35,16 +35,16 @@ export async function loadCachedIndex(
     return null; // Cache does not exist
   }
 
-  let meta: CacheMeta;
+  let meta: CacheMeta & { version?: string };
   try {
     const raw = await readFile(metaPath, 'utf-8');
-    meta = JSON.parse(raw) as CacheMeta;
+    meta = JSON.parse(raw) as CacheMeta & { version?: string };
   } catch {
     return null;
   }
 
   // Version check
-  if ((meta as unknown as { version?: string }).version !== CACHE_VERSION) {
+  if (meta.version !== CACHE_VERSION) {
     return null;
   }
 
@@ -119,6 +119,9 @@ interface SerializedIndex {
   symbolEdges: unknown[];
   outEdges: Record<string, string[]>;
   inEdges: Record<string, string[]>;
+  tokenDocFreq?: Record<string, number>;
+  // v5.1.0+
+  // isBarrel and transitiveImportedByCount are stored inline in files records
 }
 
 function serializeIndex(index: CodebaseIndex): SerializedIndex {
@@ -131,6 +134,9 @@ function serializeIndex(index: CodebaseIndex): SerializedIndex {
   const inEdges: Record<string, string[]> = {};
   for (const [k, v] of index.inEdges) inEdges[k] = v;
 
+  const tokenDocFreq: Record<string, number> = {};
+  for (const [k, v] of index.tokenDocFreq) tokenDocFreq[k] = v;
+
   return {
     rootDir: index.rootDir,
     indexedAt: index.indexedAt,
@@ -140,20 +146,25 @@ function serializeIndex(index: CodebaseIndex): SerializedIndex {
     symbolEdges: index.symbolEdges,
     outEdges,
     inEdges,
+    tokenDocFreq,
   };
 }
 
 function deserializeIndex(plain: SerializedIndex): CodebaseIndex {
   const files = new Map<string, CodebaseIndex['files'] extends Map<string, infer V> ? V : never>();
   for (const [k, v] of Object.entries(plain.files)) {
-    // Ensure symbols array exists for files loaded from older cache
+    // Ensure symbols and domains arrays exist for files loaded from older cache
     const file = v as Record<string, unknown>;
     if (!Array.isArray(file['symbols'])) file['symbols'] = [];
+    if (!Array.isArray(file['domains'])) file['domains'] = [];
+    if (typeof file['isBarrel'] !== 'boolean') file['isBarrel'] = false;
+    if (typeof file['transitiveImportedByCount'] !== 'number') file['transitiveImportedByCount'] = file['importedByCount'] as number ?? 0;
     files.set(k, file as unknown as Parameters<typeof files.set>[1]);
   }
 
   const outEdges = new Map<string, string[]>(Object.entries(plain.outEdges));
   const inEdges = new Map<string, string[]>(Object.entries(plain.inEdges));
+  const tokenDocFreq = new Map<string, number>(Object.entries(plain.tokenDocFreq ?? {}));
 
   return {
     rootDir: plain.rootDir,
@@ -164,5 +175,6 @@ function deserializeIndex(plain: SerializedIndex): CodebaseIndex {
     symbolEdges: (plain.symbolEdges ?? []) as CodebaseIndex['symbolEdges'],
     outEdges,
     inEdges,
+    tokenDocFreq,
   };
 }

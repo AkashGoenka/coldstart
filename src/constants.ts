@@ -326,4 +326,4 @@ export const ARCH_ROLE_PATTERNS: Array<{ pattern: RegExp; role: string }> = [
 ];
 
 // Cache version — bump when index schema changes to force re-index
-export const CACHE_VERSION = "4.0.0";
+export const CACHE_VERSION = "5.2.0";

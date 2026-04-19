@@ -7,11 +7,12 @@
  *   coldstart-mcp --root . --exclude vendor --quiet
  *   coldstart-mcp --root . --no-cache
  */
-import { resolve } from 'node:path';
+import { resolve, basename, extname } from 'node:path';
 import { walkDirectory } from './indexer/walker.js';
 import { parseFile, buildFileId } from './indexer/parser.js';
 import { resolveImports } from './indexer/resolver.js';
-import { buildGraph, computeDepth, assignDomains } from './indexer/graph.js';
+import { buildGraph, computeDepth } from './indexer/graph.js';
+import { buildFileDomains } from './indexer/tokenize.js';
 import { getGitHead } from './indexer/git.js';
 import { loadCachedIndex, saveCachedIndex } from './cache/disk-cache.js';
 import { startMCPServer } from './server/mcp.js';
@@ -106,7 +107,7 @@ async function buildIndex(
           path: wf.absolutePath,
           relativePath: wf.relativePath,
           language: wf.language,
-          domain: parsed.domain,
+          domains: buildFileDomains(wf.relativePath, parsed.exports),
           exports: parsed.exports,
           hasDefaultExport: parsed.hasDefaultExport,
           imports: parsed.imports,
@@ -116,6 +117,8 @@ async function buildIndex(
           isEntryPoint: parsed.isEntryPoint,
           archRole: parsed.archRole,
           importedByCount: 0,
+          transitiveImportedByCount: 0,
+          isBarrel: false,
           depth: Infinity,
           symbols: parsed.symbols,
         };
@@ -187,7 +190,28 @@ async function buildIndex(
     }
   }
 
-  // 6. Git head
+  // 6. Barrel detection (must run before tokenDocFreq so barrels are excluded)
+  for (const file of indexedFiles) {
+    const fname = basename(file.relativePath, extname(file.relativePath)).toLowerCase();
+    file.isBarrel = (
+      fname === 'index' &&
+      file.importedByCount > 1 &&
+      (outEdges.get(file.id)?.length ?? 0) > 0 &&
+      file.exports.length > 0
+    );
+    file.transitiveImportedByCount = file.importedByCount;
+  }
+
+  // 7. Token document frequency (skip barrels — their re-exported tokens inflate IDF)
+  const tokenDocFreq = new Map<string, number>();
+  for (const file of indexedFiles) {
+    if (file.isBarrel) continue;
+    for (const token of new Set(file.domains)) {
+      tokenDocFreq.set(token, (tokenDocFreq.get(token) ?? 0) + 1);
+    }
+  }
+
+  // 8. Git head
   const gitHead = await getGitHead(rootDir);
 
   const elapsed = ((Date.now() - start) / 1000).toFixed(1);
@@ -196,6 +220,15 @@ async function buildIndex(
 
   const filesMap = new Map<string, IndexedFile>(indexedFiles.map(f => [f.id, f]));
 
+  // Inflate transitiveImportedByCount through barrel files
+  for (const file of indexedFiles) {
+    if (!file.isBarrel) continue;
+    for (const childId of outEdges.get(file.id) ?? []) {
+      const child = filesMap.get(childId);
+      if (child) child.transitiveImportedByCount += file.importedByCount;
+    }
+  }
+
   const index: CodebaseIndex = {
     rootDir,
     files: filesMap,
@@ -203,12 +236,10 @@ async function buildIndex(
     symbolEdges: allSymbolEdges,
     outEdges,
     inEdges,
+    tokenDocFreq,
     indexedAt: Date.now(),
     gitHead,
   };
-
-  // Assign domains after graph is available (directory-based + graph-based fallback)
-  assignDomains(index);
 
   return index;
 }
@@ -217,10 +248,10 @@ async function buildIndex(
 // Main
 // ---------------------------------------------------------------------------
 async function main(): Promise<void> {
-  // Check for 'setup' subcommand before normal arg parsing
-  if (process.argv[2] === 'setup') {
-    const { runSetup } = await import('./setup.js');
-    await runSetup(process.argv.slice(3));
+  // Check for 'init' subcommand — prints MCP config and agent rules for manual setup
+  if (process.argv[2] === 'init') {
+    const { runInit } = await import('./init.js');
+    runInit();
     return;
   }
 
