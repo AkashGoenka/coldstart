@@ -51,14 +51,20 @@ yourself. This saves tokens and avoids broad, speculative file reads.
 ## Lookup order
 
 1. \`get-overview\` — Use like a search engine, not a codebase summarizer.
-   Pass \`domain_filter\` with keywords from your current task to find relevant files fast.
-   Do NOT call this for general exploration or to "understand the codebase" — it only does targeted keyword lookup.
-   Bare words are independent concepts (AND logic): "auth payment" = must match auth AND payment.
-   Bracket groups are synonyms (OR logic within the group): "[auth|login|jwt] payment" = any auth synonym AND payment.
-   Examples: "auth login", "[auth|login|jwt] user", "payment stripe".
+   Pass \`domain_filter\` with specific code tokens from your task to find relevant files fast.
+   Do NOT call this for general exploration — it only does targeted keyword lookup.
+   Bare words are AND logic: "auth payment" = must match auth AND payment.
+   Bracket groups are OR synonyms: "[auth|login|jwt] payment" = any auth synonym AND payment.
+   Pluralization is automatic: "grouphub" also matches "grouphubs".
+   Results include source flags: F=filename, P=path, S=symbol, I=import.
+   Call iteratively — adjust tokens based on what comes back:
+   - Zero results → try synonyms, shorter tokens, or a different spelling
+   - Diagnostic warning → tokens are too common; add a second specific token
+   - Too many results → add another concept token to narrow down
+   Set include_import_only=true only if the file you need imports the concept but doesn't own it.
 
 2. \`get-structure\` — Check a file's shape WITHOUT reading it.
-   Returns exports, imports, symbols, line count, and token estimate.
+   Returns exports, imports, symbols (with line numbers for TS/JS/Java/Ruby), line count, and token estimate.
    Only read the full file if get-structure confirms it's relevant.
    Check \`tokenEstimate\` before reading large files.
 
@@ -68,8 +74,8 @@ yourself. This saves tokens and avoids broad, speculative file reads.
    Use \`depth=2\` or \`depth=3\` for transitive chains.
 
 4. \`trace-impact\` — Understand blast radius of symbol changes.
-   Shows every function/class that depends on a given symbol.
-   Use before refactoring to scope affected code.
+   Shows every function/class that directly or transitively depends on a given symbol.
+   Use before refactoring to scope affected code without reading all dependent files.
 
 ## Preferred patterns
 
@@ -81,15 +87,15 @@ get-overview(domain_filter="[auth|login|jwt]") → get-structure → read file (
 get-structure → trace-deps → read file (only if needed)
 
 # Before refactoring a function or class
-trace-impact → trace-deps (direction="importers") → targeted edits
+trace-impact(symbol="MyFunction") → trace-deps(direction="importers") → targeted edits
 \`\`\`
 
 ## When to fall back to grep/rg
 
 Use grep only when coldstart tools don't answer the question:
 - Searching for a specific string literal inside file contents
-- Looking for call sites of a function by name across the whole repo
-- Need up-to-the-second accuracy (index refreshes on git changes)
+- Looking for all call sites of a function by exact name across the whole repo
+- Searching inside comments or string values
 
 In all other cases, prefer coldstart tools first.
 `;

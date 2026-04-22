@@ -7,17 +7,17 @@
  *   coldstart-mcp --root . --exclude vendor --quiet
  *   coldstart-mcp --root . --no-cache
  */
-import { resolve, basename, extname } from 'node:path';
+import { resolve } from 'node:path';
 import { walkDirectory } from './indexer/walker.js';
 import { parseFile, buildFileId } from './indexer/parser.js';
 import { resolveImports } from './indexer/resolver.js';
 import { buildGraph, computeDepth } from './indexer/graph.js';
-import { buildFileDomains } from './indexer/tokenize.js';
+import { buildFileDomains, tokenizeName } from './indexer/tokenize.js';
 import { getGitHead } from './indexer/git.js';
 import { loadCachedIndex, saveCachedIndex } from './cache/disk-cache.js';
 import { startMCPServer } from './server/mcp.js';
 import { ARCH_ROLE_PATTERNS } from './constants.js';
-import type { CodebaseIndex, IndexedFile, SymbolEdge, ArchRole } from './types.js';
+import type { CodebaseIndex, IndexedFile, SymbolEdge, ArchRole, DomainToken } from './types.js';
 
 // ---------------------------------------------------------------------------
 // Argument parsing (no external deps)
@@ -121,6 +121,7 @@ async function buildIndex(
           isBarrel: false,
           depth: Infinity,
           symbols: parsed.symbols,
+          reexportRatio: parsed.reexportRatio,
         };
         indexedFiles.push(file);
         langCount[wf.language] = (langCount[wf.language] ?? 0) + 1;
@@ -190,24 +191,65 @@ async function buildIndex(
     }
   }
 
-  // 6. Barrel detection (must run before tokenDocFreq so barrels are excluded)
+  // 3.5. Add import tokens from relative import specifiers
   for (const file of indexedFiles) {
-    const fname = basename(file.relativePath, extname(file.relativePath)).toLowerCase();
-    file.isBarrel = (
-      fname === 'index' &&
-      file.importedByCount > 1 &&
-      (outEdges.get(file.id)?.length ?? 0) > 0 &&
-      file.exports.length > 0
-    );
+    const importTokens = new Map<string, true>();
+    for (const spec of file.imports) {
+      if (!spec.startsWith('.')) continue;
+      const segments = spec.replace(/\\/g, '/').split('/');
+      for (const seg of segments) {
+        if (!seg || seg === '.' || seg === '..') continue;
+        const clean = seg.replace(/\.\w+$/, '');
+        for (const tok of tokenizeName(clean)) {
+          importTokens.set(tok, true);
+        }
+      }
+    }
+    const domains = file.domains as DomainToken[];
+    for (const tok of importTokens.keys()) {
+      const existing = domains.find(d => d.token === tok);
+      if (existing) {
+        if (!existing.sources.includes('import')) existing.sources.push('import');
+      } else {
+        domains.push({ token: tok, sources: ['import'] });
+      }
+    }
+    domains.sort((a, b) => a.token.localeCompare(b.token));
+  }
+
+  // 6. Barrel detection: AST-based for TS/JS (reexportRatio), no heuristic for others
+  for (const file of indexedFiles) {
+    if (file.language === 'typescript' || file.language === 'javascript') {
+      file.isBarrel = (
+        (file.reexportRatio ?? 0) > 0.5 &&
+        file.importedByCount > 1 &&
+        file.exports.length > 0
+      );
+    }
     file.transitiveImportedByCount = file.importedByCount;
   }
 
-  // 7. Token document frequency (skip barrels — their re-exported tokens inflate IDF)
+  // Strip symbol-sourced tokens from barrel domains to prevent re-exported symbol pollution
+  for (const file of indexedFiles) {
+    if (!file.isBarrel) continue;
+    const domains = file.domains as DomainToken[];
+    file.domains = domains
+      .map(dt => ({ token: dt.token, sources: dt.sources.filter(s => s !== 'symbol') }))
+      .filter(dt => dt.sources.length > 0);
+  }
+
+  // 7. Token document frequency (skip barrels; skip import-only tokens — they inflate IDF)
   const tokenDocFreq = new Map<string, number>();
   for (const file of indexedFiles) {
     if (file.isBarrel) continue;
-    for (const token of new Set(file.domains)) {
-      tokenDocFreq.set(token, (tokenDocFreq.get(token) ?? 0) + 1);
+    const domains = file.domains as DomainToken[];
+    const seen = new Set<string>();
+    for (const dt of domains) {
+      if (seen.has(dt.token)) continue;
+      if (dt.sources.some(s => s !== 'import')) {
+        seen.add(dt.token);
+        tokenDocFreq.set(dt.token, (tokenDocFreq.get(dt.token) ?? 0) + 1);
+      }
     }
   }
 
