@@ -1,5 +1,12 @@
 // All shared interfaces and types for coldstart-mcp
 
+export type TokenSource = 'filename' | 'path' | 'symbol' | 'import';
+
+export interface DomainToken {
+  token: string;
+  sources: TokenSource[];  // stable sort order: filename, path, symbol, import
+}
+
 export type Language =
   | 'typescript'
   | 'javascript'
@@ -64,7 +71,7 @@ export interface IndexedFile {
   path: string;             // absolute path
   relativePath: string;     // relative to root
   language: Language;
-  domains: string[];        // semantic keywords from path segments, exports, imports
+  domains: DomainToken[];   // semantic keywords with source labels
   exports: string[];        // named exports extracted by parser
   hasDefaultExport: boolean;
   imports: string[];        // raw import specifiers
@@ -78,6 +85,7 @@ export interface IndexedFile {
   isBarrel: boolean;        // true if this is an index.ts re-export barrel
   depth: number;            // BFS depth from entry points (set after graph phase)
   symbols: SymbolNode[];    // symbol-level nodes within this file (TS/JS only)
+  reexportRatio?: number;   // TS/JS only: ratio of re-export statements to total export statements
 }
 
 export interface Edge {
@@ -121,6 +129,7 @@ export interface ParsedFile {
   isEntryPoint: boolean;
   archRole: ArchRole;
   symbols: SymbolNode[];    // symbol-level nodes (TS/JS only, empty for other languages)
+  reexportRatio?: number;   // TS/JS only
 }
 
 export interface CacheMeta {
