@@ -187,13 +187,23 @@ printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion
 ### `get-overview`
 
 Required params:
-- `domain_filter` (string) — One or more keywords relevant to your task. Matched against each file's domain keyword array (derived from path segments, exports, and imports). Example: `"auth login"` or `"payment stripe"`.
+- `domain_filter` (string) — One or more keywords relevant to your task. Matched against each file's indexed tokens (derived from filename, path segments, exports, and imports). Bare words are AND logic; bracket groups are OR synonyms: `"[auth|login|jwt] payment"` = any auth synonym AND payment. Pluralization is automatic: `"grouphub"` also matches `"grouphubs"`.
+
+Optional params:
+- `max_results` (number, default 40) — cap on returned files
+- `include_import_only` (boolean, default false) — include files that only match via their import specifiers, not their own exports/path
 
 Returns:
-- Matching files grouped by architectural role
-- Total matched files, matched keywords, entry point count
+- Compact list of matching files with source flags per file: `F`=filename, `P`=path, `S`=symbol, `I`=import
+- Metadata: `totalFiles`, `total_matches_before_filtering`, `indexedAt`, `gitHead`
+- Optional `diagnostic` if all matched tokens are common (> 5% of files)
+- Optional truncation message if results exceed `max_results`
 
-Use this first to decide where to look before searching or opening files. Provide keywords from your task context — feature names, entity names, concepts, abbreviations.
+Results are filtered by two predicates before returning:
+- **Predicate A** (import-only exclusion): files whose every matched token came solely from import specifiers are excluded by default
+- **Predicate B** (rarity/multi-concept): files must match a rare token (< 5% of files) OR match more than one concept group
+
+Use this first to decide where to look. Provide specific token keywords — feature names, entity names, class/function name fragments. For conceptual terms, reformulate into likely code tokens first.
 
 ### `trace-deps`
 
@@ -204,7 +214,7 @@ Optional params:
 - `direction`: `imports` | `importers` | `both` (default `both`)
 - `depth`: `1-3` (default `1`)
 
-Returns transitive dependency relationships and lightweight metadata (domains, role, exports, `importedByCount`).
+Returns transitive dependency relationships and lightweight metadata (domains with source flags, role, exports, `importedByCount`).
 
 ### `get-structure`
 
@@ -294,11 +304,11 @@ Indexes are stored in:
 
 `~/.coldstart/indexes/<hash-of-root>/`
 
-Current cache reuse checks are:
-- Schema/version match
-- Cache age under 1 hour
+Cache is reused when:
+- Schema/version matches
+- Git HEAD has not changed since the index was built (branch switch or new commit triggers a rebuild)
 
-If either fails, the index is rebuilt.
+If either check fails, the index is rebuilt from scratch.
 
 ---
 

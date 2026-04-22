@@ -26,21 +26,31 @@ export async function startMCPServer(index: CodebaseIndex): Promise<void> {
       {
         name: 'get-overview',
         description:
-          'Use this like a search engine — pass keywords from your current task to find relevant files fast. NOT for general codebase summarization or exploration. Only call this when you have a specific concept to look up (e.g. "auth", "payment stripe", "user profile"). domain_filter is required. Returns top-ranked files by IDF-weighted relevance score. Barrel/re-export index files and test files are excluded unless the query contains test-related keywords. Supports synonym groups: "[auth|login|jwt] payment" — files matching any synonym in a group score as if they matched all.',
+          'Use `get-overview` to locate files by symbol, filename, or path tokens.\n' +
+          'Returns a compact filtered list with source flags (F=filename, P=path, S=symbol, I=import).\n\n' +
+          'ITERATIVE USE: Call this multiple times with progressively different tokens until you find the right files.\n' +
+          '- Zero results → try synonyms, shorter tokens, or a different spelling\n' +
+          '- Diagnostic warning → your tokens are too common; add a second specific token\n' +
+          '- Too many results → add another concept token to narrow down\n\n' +
+          'For conceptual queries (e.g., "authentication"), reformulate into specific\n' +
+          'likely tokens (e.g., "auth", "login", "session") and call `get-overview` for each.\n\n' +
+          'For line-level full-text search or matches inside comments/strings, use grep/ripgrep instead.\n\n' +
+          'For dependency or impact graph queries, use `trace-deps` or `trace-impact`.\n\n' +
+          'Prefer multiple narrow calls over one broad call.',
         inputSchema: {
           type: 'object',
           properties: {
             domain_filter: {
               type: 'string',
-              description: 'One or more keywords relevant to your task. Bare words are independent concepts (AND logic across them). Bracket groups are synonyms (OR logic within): "[auth|login|jwt] payment" means files must match the auth concept AND payment concept, where any of auth/login/jwt satisfies the auth concept. Partial matches work: "grouphub" matches files indexed under "group" and "hub", "authentication" matches files indexed under "auth".',
-            },
-            threshold_pct: {
-              type: 'number',
-              description: 'Relative score threshold (0–1). Files scoring below threshold_pct × top_score are excluded. Default 0.30.',
+              description: 'One or more keywords relevant to your task. Bare words are independent concepts (AND logic across them). Bracket groups are synonyms (OR logic within): "[auth|login|jwt] payment" means files must match the auth concept AND payment concept, where any of auth/login/jwt satisfies the auth concept. Partial matches work: "grouphub" matches files indexed under "group" and "hub".',
             },
             max_results: {
               type: 'number',
-              description: 'Maximum number of files to return after threshold filtering. Default 20.',
+              description: 'Maximum number of files to return. Default 40.',
+            },
+            include_import_only: {
+              type: 'boolean',
+              description: 'Include files that only match via their import specifiers (not their own exports/path). Default false. Set true if the file you need only imports the concept without owning it.',
             },
           },
           required: ['domain_filter'],
@@ -124,8 +134,8 @@ export async function startMCPServer(index: CodebaseIndex): Promise<void> {
       case 'get-overview':
         result = handleGetOverview(index, {
           domain_filter: params['domain_filter'] as string | undefined,
-          threshold_pct: params['threshold_pct'] as number | undefined,
           max_results: params['max_results'] as number | undefined,
+          include_import_only: params['include_import_only'] as boolean | undefined,
         });
         break;
 
@@ -155,6 +165,7 @@ export async function startMCPServer(index: CodebaseIndex): Promise<void> {
         result = { error: `Unknown tool: ${name}` };
     }
 
+    const isError = 'error' in result;
     return {
       content: [
         {
@@ -162,6 +173,7 @@ export async function startMCPServer(index: CodebaseIndex): Promise<void> {
           text: JSON.stringify(result, null, 2),
         },
       ],
+      isError,
     };
   });
 

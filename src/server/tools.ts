@@ -1,5 +1,6 @@
-import type { CodebaseIndex } from '../types.js';
+import type { CodebaseIndex, DomainToken, TokenSource } from '../types.js';
 import { tokenizeName } from '../indexer/tokenize.js';
+import { IDF_RARITY_THRESHOLD } from '../constants.js';
 
 const TEST_KEYWORDS = new Set(['test', 'spec', 'mock', 'fixture', 'stub']);
 const TEST_PATH_RE = /\.(test|spec)\.[^.]+$|__tests__\/|\/tests?\/|\/e2e[-_]?tests?\/|\/test-framework\//i;
@@ -28,6 +29,37 @@ function parseConceptGroups(input: string): string[][] {
   return groups;
 }
 
+// Source flags in stable display order
+const SOURCE_FLAGS: Record<TokenSource, string> = {
+  filename: 'F',
+  path: 'P',
+  symbol: 'S',
+  import: 'I',
+};
+const SOURCE_FLAG_ORDER: TokenSource[] = ['filename', 'path', 'symbol', 'import'];
+
+/**
+ * Expand a query token with additive plural/singular forms (same rules as index time).
+ * Returns the token plus any additional forms.
+ */
+function expandQueryToken(token: string): string[] {
+  const forms = [token];
+  if (token.length >= 5) {
+    if (token.endsWith('es') && token.length > 4) {
+      const singular = token.slice(0, -2);
+      if (singular.length >= 4) forms.push(singular);
+    } else if (token.endsWith('s')) {
+      const singular = token.slice(0, -1);
+      if (singular.length >= 4) forms.push(singular);
+    } else {
+      // Also try adding 's' and 'es' to match plural indexed forms
+      forms.push(token + 's');
+      forms.push(token + 'es');
+    }
+  }
+  return forms;
+}
+
 // ============================================================================
 // get-overview
 // ============================================================================
@@ -35,16 +67,16 @@ export function handleGetOverview(
   index: CodebaseIndex,
   params: {
     domain_filter?: string;
-    threshold_pct?: number;
     max_results?: number;
+    include_import_only?: boolean;
   },
 ): object {
-  const { domain_filter, threshold_pct = 0.30, max_results = 20 } = params;
+  const { domain_filter, max_results = 40, include_import_only = false } = params;
 
   if (!domain_filter) {
     return {
       error: 'domain_filter is required',
-      hint: 'Provide one or more keywords relevant to your task (e.g. "auth", "payment user"). Use your knowledge of the task to supply keywords. Synonym groups: "[auth|login|jwt] payment".',
+      hint: 'Provide one or more keywords relevant to your task (e.g. "auth", "payment user"). Synonym groups: "[auth|login|jwt] payment".',
       totalFiles: index.files.size,
     };
   }
@@ -58,114 +90,132 @@ export function handleGetOverview(
   const isTestQuery = allTokens.some(t => TEST_KEYWORDS.has(t));
   const totalFiles = index.files.size;
 
-  type ScoredFile = {
+  type MatchResult = {
     path: string;
-    score: number;
-    matched_tokens: string[];
-    matched_concepts: number;
-    total_concepts: number;
-    coverage: number;
-    allExact: boolean;
+    matchedDomainTokens: DomainToken[];   // one per matched concept group
+    matchedGroupCount: number;
+    allImportOnly: boolean;
   };
 
-  const scored: ScoredFile[] = [];
+  const matched: MatchResult[] = [];
 
   for (const file of index.files.values()) {
-    // Exclude barrels — they re-export children and pollute results
+    // Exclude barrels — keep path/filename tokens but barrels themselves are noise results
     if (file.isBarrel) continue;
     // Exclude test files for non-test queries
     if (!isTestQuery && (file.archRole === 'test' || TEST_PATH_RE.test(file.relativePath))) {
       continue;
     }
 
-    let idfSum = 0;
+    const domains = file.domains as DomainToken[];
     let matchedGroupCount = 0;
-    const matchedTokens: string[] = [];
-    let allExact = true;
+    const matchedDomainTokens: DomainToken[] = [];
 
     for (const group of conceptGroups) {
-      // Find best-IDF matching token in this group
-      let bestToken: string | null = null;
-      let bestIdf = -1;
-      let bestIsExact = false;
-      for (const token of group) {
-        // Exact match, or substring match in either direction:
-        // - query contains domain: e.g. query "authentication" contains indexed token "auth"
-        // - domain contains query: only for long domain tokens (>6 chars) to avoid
-        //   short generic tokens matching everything
-        const matchingDomain = file.domains.find(
-          d => d === token
-            || (d.length >= 4 && token.length > d.length && token.includes(d))
-            || (d.length > 6 && d.length > token.length && d.includes(token))
-        );
-        if (matchingDomain) {
-          const isExact = matchingDomain === token;
-          const docFreq = index.tokenDocFreq.get(matchingDomain) ?? 1;
-          const idf = Math.log(totalFiles / docFreq);
-          if (idf > bestIdf) { bestIdf = idf; bestToken = matchingDomain; bestIsExact = isExact; }
+      let bestMatch: DomainToken | null = null;
+      outer: for (const queryToken of group) {
+        const expanded = expandQueryToken(queryToken);
+        for (const qt of expanded) {
+          for (const dt of domains) {
+            const isMatch =
+              dt.token === qt
+              || (dt.token.length > 6 && dt.token.length > qt.length && dt.token.includes(qt));
+            if (isMatch) {
+              bestMatch = dt;
+              break outer;
+            }
+          }
         }
       }
-      if (bestToken !== null) {
+      if (bestMatch !== null) {
         matchedGroupCount++;
-        matchedTokens.push(bestToken);
-        idfSum += bestIdf;
-        if (!bestIsExact) allExact = false;
+        matchedDomainTokens.push(bestMatch);
       }
     }
 
     if (matchedGroupCount === 0) continue;
 
-    const coverage = matchedGroupCount / conceptGroups.length;
-    const score = idfSum * coverage * coverage;
+    // allImportOnly: true if EVERY matched token is import-source only
+    const allImportOnly = matchedDomainTokens.every(
+      dt => dt.sources.length === 1 && dt.sources[0] === 'import',
+    );
 
-    scored.push({
-      path: file.relativePath,
-      score,
-      matched_tokens: matchedTokens,
-      matched_concepts: matchedGroupCount,
-      total_concepts: conceptGroups.length,
-      coverage,
-      allExact,
-    });
+    matched.push({ path: file.relativePath, matchedDomainTokens, matchedGroupCount, allImportOnly });
   }
 
-  const totalBeforeFiltering = scored.length;
+  const totalBeforeFiltering = matched.length;
 
-  // Sort by score descending
-  scored.sort((a, b) => b.score - a.score);
+  // Predicate A: import-only exclusion (default on)
+  const afterA = include_import_only
+    ? matched
+    : matched.filter(m => !m.allImportOnly);
 
-  // Apply relative threshold
-  const topScore = scored[0]?.score ?? 0;
-  const threshold = topScore * threshold_pct;
-  const afterThreshold = scored.filter(f => f.score >= threshold);
+  // Predicate B: rarity OR multi-concept
+  const afterB = afterA.filter(m => {
+    const hasRareToken = m.matchedDomainTokens.some(dt => {
+      const docFreq = index.tokenDocFreq.get(dt.token) ?? 1;
+      const idf = Math.log(totalFiles / docFreq);
+      const rare = idf > IDF_RARITY_THRESHOLD;
+      return rare;
+    });
+    const hasMultipleConcepts = m.matchedGroupCount > 1;
+    return hasRareToken || hasMultipleConcepts;
+  });
 
-  // If any result matched all concepts exactly, drop substring-only results.
-  // This eliminates noise from generic tokens (e.g. "group" matching for "grouphub" query)
-  // while preserving substring matches as a fallback when no exact matches exist.
-  const hasAnyAllExact = afterThreshold.some(f => f.allExact);
-  const filtered = hasAnyAllExact ? afterThreshold.filter(f => f.allExact) : afterThreshold;
+  // Sort alphabetically by path
+  afterB.sort((a, b) => a.path.localeCompare(b.path));
 
-  // Hard cap
-  const results = filtered.slice(0, max_results);
+  // Truncation
+  const truncated = afterB.length > max_results;
+  const results = afterB.slice(0, max_results);
 
-  // Score distribution
-  const scores = results.map(f => f.score);
-  const median = scores.length > 0 ? scores[Math.floor(scores.length / 2)] : 0;
+  // Build compact response items with source flags
+  const resultItems = results.map(m => {
+    const allSources = new Set<TokenSource>();
+    for (const dt of m.matchedDomainTokens) {
+      for (const s of dt.sources) allSources.add(s);
+    }
+    const sources = SOURCE_FLAG_ORDER
+      .filter(s => allSources.has(s))
+      .map(s => SOURCE_FLAGS[s])
+      .join(',');
+    return { path: m.path, sources };
+  });
 
-  return {
+  // All-common-token diagnostic
+  let diagnostic: string | undefined;
+  if (results.length > 0) {
+    const allCommon = results.every(m =>
+      m.matchedDomainTokens.every(dt => {
+        const docFreq = index.tokenDocFreq.get(dt.token) ?? 1;
+        return Math.log(totalFiles / docFreq) <= IDF_RARITY_THRESHOLD;
+      }),
+    );
+    if (allCommon) {
+      diagnostic = '[DIAGNOSTIC: all matched tokens are common (frequency > 5%). Results may be unreliable; consider more specific tokens.]';
+    }
+  }
+
+  const response: Record<string, unknown> = {
     totalFiles,
     filter: domain_filter,
-    conceptGroups,
     total_matches_before_filtering: totalBeforeFiltering,
-    results: results.map(({ allExact: _, ...r }) => r),
-    score_distribution: {
-      top: topScore,
-      median,
-      threshold,
-    },
+    results: resultItems,
     indexedAt: new Date(index.indexedAt).toISOString(),
     gitHead: index.gitHead || '(not a git repo)',
   };
+
+  if (truncated) {
+    response.truncated = true;
+    response.total_matched = afterB.length;
+    response.message = `[TRUNCATED: ${afterB.length - max_results} additional matches omitted. Query is too broad. Add specific tokens or use trace-deps for graph queries.]`;
+  }
+
+  if (diagnostic) {
+    response.diagnostic = diagnostic;
+  }
+
+  return response;
 }
 
 // ============================================================================
