@@ -41,7 +41,7 @@ export async function parseFile(
     } catch (err) {
       // Tree-sitter parse error — skip symbol extraction but continue with imports/exports
       console.error(`[parser] Tree-sitter error in ${fileId || filePath}: ${err}`);
-      tsResult = { imports: [], exports: [], hasDefaultExport: false, symbols: [] };
+      tsResult = { imports: [], exports: [], hasDefaultExport: false, symbols: [], reexportRatio: 0 };
     }
 
     const uniqueImports = tsResult.imports;
@@ -49,13 +49,13 @@ export async function parseFile(
 
     const base = basename(filePath, extname(filePath)).toLowerCase();
     const isEntryPoint = ENTRY_POINT_NAMES.has(base);
-    const pathLowerTs = filePath.toLowerCase();
+    const pathForRole = (fileId || filePath).toLowerCase();
     let archRole: ArchRole = 'unknown';
     if (isEntryPoint) {
       archRole = 'entry';
     } else {
       for (const { pattern, role } of ARCH_ROLE_PATTERNS) {
-        if (pattern.test(pathLowerTs)) { archRole = role as ArchRole; break; }
+        if (pattern.test(pathForRole)) { archRole = role as ArchRole; break; }
       }
     }
 
@@ -69,6 +69,7 @@ export async function parseFile(
       isEntryPoint,
       archRole,
       symbols: tsResult.symbols,
+      reexportRatio: tsResult.reexportRatio,
     };
   }
 
@@ -86,13 +87,13 @@ export async function parseFile(
 
     const base = basename(filePath, extname(filePath)).toLowerCase();
     const isEntryPoint = ENTRY_POINT_NAMES.has(base);
-    const pathLower = filePath.toLowerCase();
+    const pathForRole = (fileId || filePath).toLowerCase();
     let archRole: ArchRole = 'unknown';
     if (isEntryPoint) {
       archRole = 'entry';
     } else {
       for (const { pattern, role } of ARCH_ROLE_PATTERNS) {
-        if (pattern.test(pathLower)) { archRole = role as ArchRole; break; }
+        if (pattern.test(pathForRole)) { archRole = role as ArchRole; break; }
       }
     }
 
@@ -123,13 +124,13 @@ export async function parseFile(
 
     const base = basename(filePath, extname(filePath)).toLowerCase();
     const isEntryPoint = ENTRY_POINT_NAMES.has(base);
-    const pathLower = filePath.toLowerCase();
+    const pathForRole = (fileId || filePath).toLowerCase();
     let archRole: ArchRole = 'unknown';
     if (isEntryPoint) {
       archRole = 'entry';
     } else {
       for (const { pattern, role } of ARCH_ROLE_PATTERNS) {
-        if (pattern.test(pathLower)) { archRole = role as ArchRole; break; }
+        if (pattern.test(pathForRole)) { archRole = role as ArchRole; break; }
       }
     }
 
