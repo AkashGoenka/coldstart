@@ -64,6 +64,35 @@ async function buildTestIndex(rootDir: string): Promise<CodebaseIndex> {
     }),
   );
 
+  // Inject synthetic filler files to make the corpus large enough for IDF rarity math.
+  // IDF_RARITY_THRESHOLD = log(20) ≈ 3.0; a token must appear in < 5% of files to be rare.
+  // Without padding, the tiny fixture corpus inflates IDF for all tokens, breaking Predicate B.
+  const FILLER_COUNT = 20;
+  for (let i = 0; i < FILLER_COUNT; i++) {
+    const id = `filler/filler${i}.ts`;
+    indexedFiles.push({
+      id,
+      path: id,
+      relativePath: id,
+      language: 'typescript',
+      domains: [{ token: 'filler', sources: ['filename' as TokenSource] }],
+      exports: ['placeholder'],
+      hasDefaultExport: false,
+      imports: [],
+      hash: `filler${i}`,
+      lineCount: 1,
+      tokenEstimate: 5,
+      isEntryPoint: false,
+      archRole: 'unknown' as ArchRole,
+      importedByCount: 0,
+      transitiveImportedByCount: 0,
+      isBarrel: false,
+      depth: Infinity,
+      symbols: [],
+      reexportRatio: 0,
+    });
+  }
+
   const { edges } = await resolveImports(indexedFiles, rootDir);
   const nodeIds = indexedFiles.map(f => f.id);
   const { outEdges, inEdges } = buildGraph(nodeIds, edges);
