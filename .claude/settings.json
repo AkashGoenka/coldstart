@@ -6,7 +6,8 @@
       "Bash(find /Users/akashgoenka/coldstart -type f -name *.scm)",
       "Bash(find /Users/akashgoenka/coldstart/src/tests -type f -name *.ts)",
       "Read(//Users/akashgoenka/.claude/projects/-Users-akashgoenka-le-lia-maine-aurora/30edf22d-60b2-40ee-b047-5633b2168d57/tool-results/**)",
-      "Bash(npx tsx:*)"
+      "Bash(npx tsx:*)",
+      "Bash(npx vitest:*)"
     ]
   }
 }
