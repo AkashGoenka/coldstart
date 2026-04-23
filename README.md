@@ -227,7 +227,7 @@ Returns per-file metadata:
 - internal imports (resolved) and external imports
 - line count, token estimate, hash
 - `importedByCount`, direct imports count
-- **For TypeScript/JavaScript/Java/Ruby:** symbol summary including function signatures, class definitions, methods, interfaces, and type aliases with line numbers
+- **For all parsed languages:** symbol summary including function signatures, class definitions, methods, interfaces, and type aliases with line numbers
 
 ### `trace-impact`
 
@@ -252,25 +252,31 @@ Use this before refactoring to understand blast radius of changing a symbol, wit
 ## How indexing works
 
 1. Walk source files (skip hidden dirs, symlinks, large files)
-2. Parse files with language-specific AST strategies:
-   - **TypeScript/JavaScript**: Tree-sitter — functions, classes, interfaces, methods, call relationships, re-export ratio
-   - **Java**: Tree-sitter — classes, interfaces, enums, records, methods, constructors, static fields, call tracking
-   - **Ruby**: Tree-sitter — classes, modules, methods, constants, Rails DSLs, inheritance chains
-   - **All other languages**: not yet supported (files are walked but skipped at parse time)
+2. Parse files with language-specific AST strategies (all via Tree-sitter):
+   - **TypeScript/JavaScript**: functions, classes, interfaces, methods, call relationships, re-export ratio
+   - **Java**: classes, interfaces, enums, records, methods, constructors, static fields, call tracking
+   - **Ruby**: classes, modules, methods, constants, Rails DSLs, inheritance chains
+   - **Python**: classes, top-level functions, methods; respects `__all__` for exports; excludes `_private` names
+   - **Go**: structs, interfaces, top-level functions, methods, constants/vars; exports by uppercase-first convention
+   - **Rust**: pub structs/enums, pub traits, pub functions, pub type aliases; impl blocks for implements relationships
+   - **C#**: public classes, interfaces, structs, enums, records, public methods; base-type list for extends/implements
+   - **PHP**: classes, interfaces, traits, public methods; extends/implements clauses; use namespace imports
+   - **Kotlin**: classes, interfaces, object declarations, top-level functions, methods; public by default
 3. Resolve internal imports to graph edges (including tsconfig/jsconfig aliases)
 4. Build graph adjacency maps and compute in-degree (`importedByCount`)
 5. Extract symbol-level relationships (calls, extends, implements, exports)
 6. Detect barrel files via AST re-export ratio (TS/JS only); strip symbol tokens from barrel domains
 7. Start MCP server with in-memory index
 
-**Currently supported languages:** TypeScript, JavaScript, Java, Ruby.
-**Planned:** Python, Go, Rust, C#, PHP, Swift, Kotlin, Dart (AST parsers to be added).
+**Currently supported languages:** TypeScript, JavaScript, Java, Ruby, Python, Go, Rust, C#, PHP, Kotlin.
+
+**Not yet supported:** Swift (native grammar incompatible with tree-sitter@0.21.x), Dart (Rust binding format incompatible with tree-sitter@0.21.x), C++ (no grammar added). Files in these languages are walked but not parsed.
 
 ---
 
 ## Parser strategy
 
-All parsing is AST-based (Tree-sitter). Regex parsing was removed entirely.
+All parsing is AST-based (Tree-sitter). No regex fallback.
 
 **TypeScript/JavaScript:** Extracts functions, classes, interfaces, type aliases, methods, and call relationships. Handles TSX and JSX. Also computes `reexportRatio` for barrel detection.
 
@@ -278,9 +284,19 @@ All parsing is AST-based (Tree-sitter). Regex parsing was removed entirely.
 
 **Ruby:** Extracts classes, modules, methods, constants, and singleton methods. Handles Rails DSLs (associations, callbacks, includes/extends). Tracks method calls and inheritance chains.
 
-All supported languages return a `symbols` array with line numbers, exported flags, and relationship info (calls, extends, implements).
+**Python:** Extracts classes and top-level functions. Methods are extracted as nested symbols inside their class. Respects `__all__` for export list (if present); otherwise all public (non-underscore-prefixed) names are exported. Private functions are present in symbols but not exports.
 
-**Other languages** (Python, Go, Rust, C#, PHP, Swift, Kotlin, Dart) are walked by the filesystem scanner but skipped at parse time. AST parsers for these are planned.
+**Go:** Extracts struct types (as `class` kind), interface types, top-level functions, receiver methods, and exported constants/vars. Exports are determined by uppercase-first identifier convention. Imports captured from both single and block `import(...)` forms.
+
+**Rust:** Extracts `pub struct`, `pub enum` (as `class`), `pub trait` (as `interface`), `pub fn`, `pub type`. `mod X;` declarations are captured as imports. `impl Trait for Struct` relationships are resolved to populate `implementsNames` on the struct symbol.
+
+**C#:** Extracts `public class`, `public interface`, `public struct`, `public enum`, `public record` and their `public` methods. Base-type list is parsed to populate `extendsName` and `implementsNames`. `using` directives are captured as imports.
+
+**PHP:** Extracts `class`, `interface`, `trait` declarations and `public function` methods. `extends`/`implements` clauses are captured. `use` namespace imports are extracted. All classes/interfaces/traits are considered exported (PHP has no file-level visibility).
+
+**Kotlin:** Extracts `class`, `interface` (detected via the `interface` keyword inside `class_declaration`), `object`, and top-level `fun`. Methods are extracted from class bodies. Declarations are public by default unless explicitly `private` or `protected`. Imports are grouped under `import_list` in the Kotlin grammar.
+
+All supported languages return a `symbols` array with line numbers, exported flags, and relationship info (calls, extends, implements).
 
 ---
 
@@ -313,8 +329,8 @@ If either check fails, the index is rebuilt from scratch.
 
 ## Limitations
 
-1. **Only TypeScript, JavaScript, Java, and Ruby** are fully parsed. All other languages are walked but skipped — their files do not appear in index results.
-2. Dynamic/computed import patterns (e.g., `import(variable)`) may not be resolved.
-3. It is a routing layer, not a behavior summarizer — doesn't provide semantic analysis or code summaries.
-4. Hidden directories and files over 1 MB are skipped by default.
-5. Barrel detection (TS/JS only) uses re-export ratio; non-TS/JS barrel-style files are not detected.
+1. Dynamic/computed import patterns (e.g., `import(variable)`) may not be resolved.
+2. It is a routing layer, not a behavior summarizer — doesn't provide semantic analysis or code summaries.
+3. Hidden directories and files over 1 MB are skipped by default.
+4. Barrel detection (TS/JS only) uses re-export ratio; non-TS/JS barrel-style files are not detected.
+5. Swift, Dart, and C++ files are walked but not parsed — no exports/symbols extracted.
