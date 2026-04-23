@@ -11,13 +11,12 @@ import { resolve } from 'node:path';
 import { walkDirectory } from './indexer/walker.js';
 import { parseFile, buildFileId } from './indexer/parser.js';
 import { resolveImports } from './indexer/resolver.js';
-import { buildGraph, computeDepth } from './indexer/graph.js';
-import { buildFileDomains, tokenizeName } from './indexer/tokenize.js';
+import { buildGraph } from './indexer/graph.js';
+import { buildFileDomains } from './indexer/tokenize.js';
 import { getGitHead } from './indexer/git.js';
 import { loadCachedIndex, saveCachedIndex } from './cache/disk-cache.js';
 import { startMCPServer } from './server/mcp.js';
-import { ARCH_ROLE_PATTERNS } from './constants.js';
-import type { CodebaseIndex, IndexedFile, SymbolEdge, ArchRole, DomainToken } from './types.js';
+import type { CodebaseIndex, IndexedFile, SymbolEdge, DomainToken } from './types.js';
 
 // ---------------------------------------------------------------------------
 // Argument parsing (no external deps)
@@ -114,12 +113,9 @@ async function buildIndex(
           hash: parsed.hash,
           lineCount: parsed.lineCount,
           tokenEstimate: parsed.tokenEstimate,
-          isEntryPoint: parsed.isEntryPoint,
-          archRole: parsed.archRole,
           importedByCount: 0,
           transitiveImportedByCount: 0,
           isBarrel: false,
-          depth: Infinity,
           symbols: parsed.symbols,
           reexportRatio: parsed.reexportRatio,
         };
@@ -141,32 +137,9 @@ async function buildIndex(
   const nodeIds = indexedFiles.map(f => f.id);
   const { outEdges, inEdges } = buildGraph(nodeIds, edges);
 
-  // 5. Depth from entry points
-  const entryPointIds = indexedFiles.filter(f => f.isEntryPoint).map(f => f.id);
-  const depthMap = computeDepth(entryPointIds, outEdges);
-
-  // Attach importedByCount and depth back to files
+  // 5. Attach importedByCount back to files
   for (const file of indexedFiles) {
     file.importedByCount = inEdges.get(file.id)?.length ?? 0;
-    file.depth = depthMap.get(file.id) ?? Infinity;
-  }
-
-  // Reclassify entry points: barrel files (index.ts etc.) that are heavily imported
-  // are not real entry points — real entry points have 0 or 1 importers
-  for (const file of indexedFiles) {
-    if (file.isEntryPoint && (inEdges.get(file.id)?.length ?? 0) > 1) {
-      file.isEntryPoint = false;
-      if (file.archRole === 'entry') {
-        const pathLower = file.relativePath.toLowerCase();
-        file.archRole = 'unknown' as ArchRole;
-        for (const { pattern, role } of ARCH_ROLE_PATTERNS) {
-          if (pattern.test(pathLower)) {
-            file.archRole = role as ArchRole;
-            break;
-          }
-        }
-      }
-    }
   }
 
   // Build symbol-level edges from all TS/JS files
@@ -189,32 +162,6 @@ async function buildIndex(
         allSymbolEdges.push({ from: sym.id, to: iface, type: 'implements' });
       }
     }
-  }
-
-  // 3.5. Add import tokens from relative import specifiers
-  for (const file of indexedFiles) {
-    const importTokens = new Map<string, true>();
-    for (const spec of file.imports) {
-      if (!spec.startsWith('.')) continue;
-      const segments = spec.replace(/\\/g, '/').split('/');
-      for (const seg of segments) {
-        if (!seg || seg === '.' || seg === '..') continue;
-        const clean = seg.replace(/\.\w+$/, '');
-        for (const tok of tokenizeName(clean)) {
-          importTokens.set(tok, true);
-        }
-      }
-    }
-    const domains = file.domains as DomainToken[];
-    for (const tok of importTokens.keys()) {
-      const existing = domains.find(d => d.token === tok);
-      if (existing) {
-        if (!existing.sources.includes('import')) existing.sources.push('import');
-      } else {
-        domains.push({ token: tok, sources: ['import'] });
-      }
-    }
-    domains.sort((a, b) => a.token.localeCompare(b.token));
   }
 
   // 6. Barrel detection: AST-based for TS/JS (reexportRatio), no heuristic for others
@@ -246,10 +193,8 @@ async function buildIndex(
     const seen = new Set<string>();
     for (const dt of domains) {
       if (seen.has(dt.token)) continue;
-      if (dt.sources.some(s => s !== 'import')) {
-        seen.add(dt.token);
-        tokenDocFreq.set(dt.token, (tokenDocFreq.get(dt.token) ?? 0) + 1);
-      }
+      seen.add(dt.token);
+      tokenDocFreq.set(dt.token, (tokenDocFreq.get(dt.token) ?? 0) + 1);
     }
   }
 

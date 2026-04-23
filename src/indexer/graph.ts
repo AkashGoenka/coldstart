@@ -24,26 +24,3 @@ export function buildGraph(nodeIds: string[], edges: Edge[]): GraphData {
   return { outEdges, inEdges };
 }
 
-/**
- * BFS from entry points to assign depth to each node.
- * Files not reachable from any entry point get depth = Infinity.
- */
-export function computeDepth(
-  entryPoints: string[],
-  outEdges: Map<string, string[]>,
-): Map<string, number> {
-  const depth = new Map<string, number>();
-  const queue: Array<[string, number]> = entryPoints.map(e => [e, 0]);
-
-  for (const [start, d] of queue) {
-    if (depth.has(start)) continue;
-    depth.set(start, d);
-    for (const neighbor of outEdges.get(start) ?? []) {
-      if (!depth.has(neighbor)) {
-        queue.push([neighbor, d + 1]);
-      }
-    }
-  }
-
-  return depth;
-}

@@ -1,11 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { basename, extname } from 'node:path';
-import {
-  ENTRY_POINT_NAMES,
-  ARCH_ROLE_PATTERNS,
-} from '../constants.js';
-import type { Language, ParsedFile, ArchRole } from '../types.js';
+import type { Language, ParsedFile } from '../types.js';
 import { parseTsContent } from './ts-parser.js';
 import { parseJavaContent } from './extractors/java.js';
 import { parseRubyContent } from './extractors/ruby.js';
@@ -44,30 +39,13 @@ export async function parseFile(
       tsResult = { imports: [], exports: [], hasDefaultExport: false, symbols: [], reexportRatio: 0 };
     }
 
-    const uniqueImports = tsResult.imports;
-    const uniqueExports = tsResult.exports;
-
-    const base = basename(filePath, extname(filePath)).toLowerCase();
-    const isEntryPoint = ENTRY_POINT_NAMES.has(base);
-    const pathForRole = (fileId || filePath).toLowerCase();
-    let archRole: ArchRole = 'unknown';
-    if (isEntryPoint) {
-      archRole = 'entry';
-    } else {
-      for (const { pattern, role } of ARCH_ROLE_PATTERNS) {
-        if (pattern.test(pathForRole)) { archRole = role as ArchRole; break; }
-      }
-    }
-
     return {
-      imports: uniqueImports,
-      exports: uniqueExports,
+      imports: tsResult.imports,
+      exports: tsResult.exports,
       hasDefaultExport: tsResult.hasDefaultExport,
       hash,
       lineCount,
       tokenEstimate,
-      isEntryPoint,
-      archRole,
       symbols: tsResult.symbols,
       reexportRatio: tsResult.reexportRatio,
     };
@@ -85,18 +63,6 @@ export async function parseFile(
       javaResult = { imports: [], exports: [], hasDefaultExport: false as const, symbols: [], packageName: '' };
     }
 
-    const base = basename(filePath, extname(filePath)).toLowerCase();
-    const isEntryPoint = ENTRY_POINT_NAMES.has(base);
-    const pathForRole = (fileId || filePath).toLowerCase();
-    let archRole: ArchRole = 'unknown';
-    if (isEntryPoint) {
-      archRole = 'entry';
-    } else {
-      for (const { pattern, role } of ARCH_ROLE_PATTERNS) {
-        if (pattern.test(pathForRole)) { archRole = role as ArchRole; break; }
-      }
-    }
-
     return {
       imports: javaResult.imports,
       exports: javaResult.exports,
@@ -104,8 +70,6 @@ export async function parseFile(
       hash,
       lineCount,
       tokenEstimate,
-      isEntryPoint,
-      archRole,
       symbols: javaResult.symbols,
     };
   }
@@ -122,18 +86,6 @@ export async function parseFile(
       rubyResult = { imports: [], exports: [], hasDefaultExport: false as const, symbols: [] };
     }
 
-    const base = basename(filePath, extname(filePath)).toLowerCase();
-    const isEntryPoint = ENTRY_POINT_NAMES.has(base);
-    const pathForRole = (fileId || filePath).toLowerCase();
-    let archRole: ArchRole = 'unknown';
-    if (isEntryPoint) {
-      archRole = 'entry';
-    } else {
-      for (const { pattern, role } of ARCH_ROLE_PATTERNS) {
-        if (pattern.test(pathForRole)) { archRole = role as ArchRole; break; }
-      }
-    }
-
     return {
       imports: rubyResult.imports,
       exports: rubyResult.exports,
@@ -141,8 +93,6 @@ export async function parseFile(
       hash,
       lineCount,
       tokenEstimate,
-      isEntryPoint,
-      archRole,
       symbols: rubyResult.symbols,
     };
   }

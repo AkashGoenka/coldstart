@@ -11,11 +11,10 @@ import { fileURLToPath } from 'node:url';
 import { walkDirectory } from '../src/indexer/walker.js';
 import { parseFile, buildFileId } from '../src/indexer/parser.js';
 import { resolveImports } from '../src/indexer/resolver.js';
-import { buildGraph, computeDepth } from '../src/indexer/graph.js';
-import { buildFileDomains, tokenizeName } from '../src/indexer/tokenize.js';
+import { buildGraph } from '../src/indexer/graph.js';
+import { buildFileDomains } from '../src/indexer/tokenize.js';
 import { handleGetOverview } from '../src/server/tools.js';
-import type { CodebaseIndex, IndexedFile, SymbolEdge, ArchRole, DomainToken, TokenSource } from '../src/types.js';
-import { ARCH_ROLE_PATTERNS } from '../src/constants.js';
+import type { CodebaseIndex, IndexedFile, SymbolEdge, DomainToken, TokenSource } from '../src/types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURE_ROOT = join(__dirname, '../fixtures/overview');
@@ -48,12 +47,9 @@ async function buildTestIndex(rootDir: string): Promise<CodebaseIndex> {
           hash: parsed.hash,
           lineCount: parsed.lineCount,
           tokenEstimate: parsed.tokenEstimate,
-          isEntryPoint: parsed.isEntryPoint,
-          archRole: parsed.archRole,
           importedByCount: 0,
           transitiveImportedByCount: 0,
           isBarrel: false,
-          depth: Infinity,
           symbols: parsed.symbols,
           reexportRatio: parsed.reexportRatio,
         };
@@ -82,12 +78,9 @@ async function buildTestIndex(rootDir: string): Promise<CodebaseIndex> {
       hash: `filler${i}`,
       lineCount: 1,
       tokenEstimate: 5,
-      isEntryPoint: false,
-      archRole: 'unknown' as ArchRole,
       importedByCount: 0,
       transitiveImportedByCount: 0,
       isBarrel: false,
-      depth: Infinity,
       symbols: [],
       reexportRatio: 0,
     });
@@ -98,26 +91,8 @@ async function buildTestIndex(rootDir: string): Promise<CodebaseIndex> {
   const { outEdges, inEdges } = buildGraph(nodeIds, edges);
   const filesMap = new Map<string, IndexedFile>(indexedFiles.map(f => [f.id, f]));
 
-  const entryPointIds = indexedFiles.filter(f => f.isEntryPoint).map(f => f.id);
-  const depthMap = computeDepth(entryPointIds, outEdges);
-
   for (const file of indexedFiles) {
     file.importedByCount = inEdges.get(file.id)?.length ?? 0;
-    file.depth = depthMap.get(file.id) ?? Infinity;
-  }
-
-  // Re-classify over-imported entry points
-  for (const file of indexedFiles) {
-    if (file.isEntryPoint && (inEdges.get(file.id)?.length ?? 0) > 1) {
-      file.isEntryPoint = false;
-      if (file.archRole === 'entry') {
-        const pathLower = file.relativePath.toLowerCase();
-        file.archRole = 'unknown' as ArchRole;
-        for (const { pattern, role } of ARCH_ROLE_PATTERNS) {
-          if (pattern.test(pathLower)) { file.archRole = role as ArchRole; break; }
-        }
-      }
-    }
   }
 
   // Symbol edges
@@ -142,30 +117,6 @@ async function buildTestIndex(rootDir: string): Promise<CodebaseIndex> {
     file.transitiveImportedByCount = file.importedByCount;
   }
 
-  // Add import tokens from relative specifiers
-  for (const file of indexedFiles) {
-    const importTokens = new Map<string, true>();
-    for (const spec of file.imports) {
-      if (!spec.startsWith('.')) continue;
-      for (const seg of spec.replace(/\\/g, '/').split('/')) {
-        if (!seg || seg === '.' || seg === '..') continue;
-        for (const tok of tokenizeName(seg.replace(/\.\w+$/, ''))) {
-          importTokens.set(tok, true);
-        }
-      }
-    }
-    const domains = file.domains as DomainToken[];
-    for (const tok of importTokens.keys()) {
-      const existing = domains.find(d => d.token === tok);
-      if (existing) {
-        if (!existing.sources.includes('import')) existing.sources.push('import');
-      } else {
-        domains.push({ token: tok, sources: ['import'] });
-      }
-    }
-    domains.sort((a, b) => a.token.localeCompare(b.token));
-  }
-
   // Strip symbol-sourced tokens from barrel domains
   for (const file of indexedFiles) {
     if (!file.isBarrel) continue;
@@ -174,17 +125,15 @@ async function buildTestIndex(rootDir: string): Promise<CodebaseIndex> {
       .filter(dt => dt.sources.length > 0);
   }
 
-  // tokenDocFreq — skip barrels and import-only tokens to avoid inflating IDF
+  // tokenDocFreq — skip barrels
   const tokenDocFreq = new Map<string, number>();
   for (const file of indexedFiles) {
     if (file.isBarrel) continue;
     const seen = new Set<string>();
     for (const dt of file.domains as DomainToken[]) {
       if (seen.has(dt.token)) continue;
-      if (dt.sources.some(s => s !== 'import')) {
-        seen.add(dt.token);
-        tokenDocFreq.set(dt.token, (tokenDocFreq.get(dt.token) ?? 0) + 1);
-      }
+      seen.add(dt.token);
+      tokenDocFreq.set(dt.token, (tokenDocFreq.get(dt.token) ?? 0) + 1);
     }
   }
 
@@ -221,7 +170,7 @@ beforeAll(async () => {
 });
 
 // Helper: get result paths from handleGetOverview
-function queryPaths(filter: string, opts: { include_import_only?: boolean; max_results?: number } = {}): string[] {
+function queryPaths(filter: string, opts: { max_results?: number } = {}): string[] {
   const result = handleGetOverview(index, { domain_filter: filter, ...opts }) as any;
   return (result.results ?? []).map((r: any) => r.path ?? r.relativePath ?? '');
 }
@@ -253,34 +202,32 @@ describe('Pluralization', () => {
 });
 
 // ============================================================================
-// Test 2: Import-only exclusion (default on)
+// Test 2: No import tokens in domains
 // ============================================================================
-describe('Import-only exclusion', () => {
-  it('query "auth" does NOT return policies/NodePolicyHelper.ts by default (import-only match)', () => {
+describe('No import tokens in domains', () => {
+  it('policies/NodePolicyHelper.ts has no import-source tokens in its domains', () => {
+    const domains = getFileDomains('NodePolicyHelper');
+    const hasImportSource = domains.some(dt => dt.sources.includes('import'));
+    expect(hasImportSource).toBe(false);
+  });
+
+  it('query "auth" does NOT return policies/NodePolicyHelper.ts (no longer indexed via imports)', () => {
     const paths = queryPaths('auth');
     expect(paths.some(p => p.includes('NodePolicyHelper'))).toBe(false);
+  });
+
+  it('query "policy" DOES return policies/NodePolicyHelper.ts (matched via own path/filename)', () => {
+    const paths = queryPaths('policy');
+    expect(paths.some(p => p.includes('NodePolicyHelper'))).toBe(true);
   });
 });
 
 // ============================================================================
-// Test 3: Import-only override
+// Test 3: Compound export name matching
 // ============================================================================
-describe('Import-only override', () => {
-  it('query "auth policy" with include_import_only:true DOES return policies/NodePolicyHelper.ts', () => {
-    // "auth" matches NodePolicyHelper via import only, "policy" matches via path+filename
-    // Multi-concept query passes Predicate B (hasMultipleConcepts=true)
-    const paths = queryPaths('auth policy', { include_import_only: true });
-    expect(paths.some(p => p.includes('NodePolicyHelper'))).toBe(true);
-  });
-
-  it('query "auth policy" WITHOUT include_import_only does NOT return NodePolicyHelper (import-only for auth)', () => {
-    // "auth" is import-only for NodePolicyHelper — if that is the ONLY concept that matched via
-    // import-only, the file should be excluded. But since "policy" also matches with path source,
-    // allImportOnly is false, so this test just verifies the file appears in results.
-    // (This is testing correctness of allImportOnly logic — if policy matches via P, allImportOnly=false)
-    const paths = queryPaths('auth policy');
-    // NodePolicyHelper has "policy" via path/filename — so allImportOnly=false → it IS included
-    // even without include_import_only=true, because not ALL matched tokens are import-only
+describe('Compound export name matching', () => {
+  it('query "NodePolicyHelper" (camelCase) finds policies/NodePolicyHelper.ts', () => {
+    const paths = queryPaths('NodePolicyHelper');
     expect(paths.some(p => p.includes('NodePolicyHelper'))).toBe(true);
   });
 });
