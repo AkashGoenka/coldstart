@@ -13,7 +13,7 @@ function makeFile(id: string, lang: IndexedFile['language'], imports: string[]):
     path: join(FIXTURES, id),
     relativePath: id,
     language: lang,
-    domain: 'unknown',
+    domains: [],
     exports: [],
     hasDefaultExport: false,
     imports,
