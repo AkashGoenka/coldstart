@@ -48,22 +48,19 @@ Requirements:
 
 ---
 
-## Interactive Setup
+## Setup
 
-Run the guided setup wizard to configure coldstart with your project and IDE:
+Generate MCP config and agent rules for manual setup:
 
 ```bash
-npx coldstart-mcp setup
+npx coldstart-mcp init
 ```
 
-The wizard will:
-1. Scan your project for supported languages
-2. Detect your IDE(s) (Claude Code, Cursor, Windsurf, VS Code)
-3. Create MCP configuration files in the right locations
-4. Write agent rules to guide your IDE's AI assistant to use coldstart tools first
-5. Provide options for multi-repo setup
+This prints:
+1. **MCP config** — Paste into your IDE's MCP configuration file (see "Configure MCP" below)
+2. **Agent rules** — Paste into your IDE's instructions/rules file
 
-**After setup:** Restart your IDE to pick up the MCP configuration. The AI assistant will automatically call `get-overview` before exploring your code.
+For IDE-specific paths and configuration details, see [Configure MCP](#configure-mcp) below or visit https://github.com/AkashGoenka/coldstart.
 
 ---
 
@@ -182,9 +179,6 @@ printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion
 
 ---
 
-## Agent rules
-
-Copy `CLAUDE.md.example` to `CLAUDE.md` (for Claude Code) or `.cursorrules` (for Cursor) in your project to instruct agents to use coldstart tools before reaching for grep or file reads.
 
 ---
 
@@ -192,18 +186,24 @@ Copy `CLAUDE.md.example` to `CLAUDE.md` (for Claude Code) or `.cursorrules` (for
 
 ### `get-overview`
 
+Required params:
+- `domain_filter` (string) — One or more keywords relevant to your task. Matched against each file's indexed tokens (derived from filename, path segments, exports, and imports). Bare words are AND logic; bracket groups are OR synonyms: `"[auth|login|jwt] payment"` = any auth synonym AND payment. Pluralization is automatic: `"grouphub"` also matches `"grouphubs"`.
+
 Optional params:
-- `domain_filter` (string)
+- `max_results` (number, default 40) — cap on returned files
+- `include_import_only` (boolean, default false) — include files that only match via their import specifiers, not their own exports/path
 
 Returns:
-- Total files and edges
-- Language breakdown
-- Domains with files grouped by architectural role
-- Inter-domain dependency edges
-- Entry point count
-- Index timestamp and git head
+- Compact list of matching files with source flags per file: `F`=filename, `P`=path, `S`=symbol, `I`=import
+- Metadata: `totalFiles`, `total_matches_before_filtering`, `indexedAt`, `gitHead`
+- Optional `diagnostic` if all matched tokens are common (> 5% of files)
+- Optional truncation message if results exceed `max_results`
 
-Use this first to decide where to look before searching or opening files.
+Results are filtered by two predicates before returning:
+- **Predicate A** (import-only exclusion): files whose every matched token came solely from import specifiers are excluded by default
+- **Predicate B** (rarity/multi-concept): files must match a rare token (< 5% of files) OR match more than one concept group
+
+Use this first to decide where to look. Provide specific token keywords — feature names, entity names, class/function name fragments. For conceptual terms, reformulate into likely code tokens first.
 
 ### `trace-deps`
 
@@ -214,7 +214,7 @@ Optional params:
 - `direction`: `imports` | `importers` | `both` (default `both`)
 - `depth`: `1-3` (default `1`)
 
-Returns transitive dependency relationships and lightweight metadata (domain, role, exports, `importedByCount`).
+Returns transitive dependency relationships and lightweight metadata (domains with source flags, exports, `importedByCount`).
 
 ### `get-structure`
 
@@ -222,12 +222,12 @@ Required params:
 - `file_path` (string)
 
 Returns per-file metadata:
-- language, domain, role, entry-point flag
+- language, domains (with source flags: F=filename, P=path, S=symbol, I=import)
 - named exports + default export flag
 - internal imports (resolved) and external imports
 - line count, token estimate, hash
 - `importedByCount`, direct imports count
-- **For TypeScript/JavaScript files:** symbol summary including function signatures, class definitions, methods, interfaces, and type aliases with line numbers
+- **For TypeScript/JavaScript/Java/Ruby:** symbol summary including function signatures, class definitions, methods, interfaces, and type aliases with line numbers
 
 ### `trace-impact`
 
@@ -252,36 +252,35 @@ Use this before refactoring to understand blast radius of changing a symbol, wit
 ## How indexing works
 
 1. Walk source files (skip hidden dirs, symlinks, large files)
-2. Parse files with language-specific strategies:
-   - **TypeScript/JavaScript**: Tree-sitter AST parser for accurate symbol extraction (functions, classes, interfaces, methods, call relationships)
-   - **Other languages**: Regex-based extraction of imports/exports
+2. Parse files with language-specific AST strategies:
+   - **TypeScript/JavaScript**: Tree-sitter — functions, classes, interfaces, methods, call relationships, re-export ratio
+   - **Java**: Tree-sitter — classes, interfaces, enums, records, methods, constructors, static fields, call tracking
+   - **Ruby**: Tree-sitter — classes, modules, methods, constants, Rails DSLs, inheritance chains
+   - **All other languages**: not yet supported (files are walked but skipped at parse time)
 3. Resolve internal imports to graph edges (including tsconfig/jsconfig aliases)
 4. Build graph adjacency maps and compute in-degree (`importedByCount`)
 5. Extract symbol-level relationships (calls, extends, implements, exports)
-6. Compute BFS depth from entry points
+6. Detect barrel files via AST re-export ratio (TS/JS only); strip symbol tokens from barrel domains
 7. Start MCP server with in-memory index
 
-Supported languages: TypeScript, JavaScript, Python, Go, Rust, Java, C#, C/C++, Ruby, PHP, Swift, Kotlin, Dart.
-
-**Symbol extraction (Tree-sitter):** TypeScript, JavaScript, Java, Ruby.
-**Import/export only (Regex):** Python, Go, Rust, C#, C/C++, PHP, Swift, Kotlin, Dart.
+**Currently supported languages:** TypeScript, JavaScript, Java, Ruby.
+**Planned:** Python, Go, Rust, C#, PHP, Swift, Kotlin, Dart (AST parsers to be added).
 
 ---
 
 ## Parser strategy
 
-**TypeScript, JavaScript, Java, and Ruby** get AST-level precision (Tree-sitter):
-- **TypeScript/JavaScript:** Extracts functions, classes, interfaces, type aliases, methods, and call relationships. Handles TSX and JSX.
-- **Java:** Extracts classes, interfaces, enums, records, methods, constructors, and static final fields. Tracks `extends`, `implements`, and method invocations.
-- **Ruby:** Extracts classes, modules, methods, constants, and singleton methods. Handles Rails DSLs (associations, callbacks, includes/extends). Tracks method calls and inheritance chains.
-- All four languages: Returns `symbols` array with line numbers, exported flags, and relationship info (calls, extends, implements).
+All parsing is AST-based (Tree-sitter). Regex parsing was removed entirely.
 
-**All other languages** use regex-based extraction:
-- Fast, zero-dependency fallback for broad language coverage
-- Extracts top-level imports and exports only
-- No symbol-level details, no call tracking
+**TypeScript/JavaScript:** Extracts functions, classes, interfaces, type aliases, methods, and call relationships. Handles TSX and JSX. Also computes `reexportRatio` for barrel detection.
 
-This hybrid approach balances accuracy (where it matters most) with simplicity and broad language support.
+**Java:** Extracts classes, interfaces, enums, records, methods, constructors, and static final fields. Tracks `extends`, `implements`, and method invocations.
+
+**Ruby:** Extracts classes, modules, methods, constants, and singleton methods. Handles Rails DSLs (associations, callbacks, includes/extends). Tracks method calls and inheritance chains.
+
+All supported languages return a `symbols` array with line numbers, exported flags, and relationship info (calls, extends, implements).
+
+**Other languages** (Python, Go, Rust, C#, PHP, Swift, Kotlin, Dart) are walked by the filesystem scanner but skipped at parse time. AST parsers for these are planned.
 
 ---
 
@@ -304,18 +303,18 @@ Indexes are stored in:
 
 `~/.coldstart/indexes/<hash-of-root>/`
 
-Current cache reuse checks are:
-- Schema/version match
-- Cache age under 1 hour
+Cache is reused when:
+- Schema/version matches
+- Git HEAD has not changed since the index was built (branch switch or new commit triggers a rebuild)
 
-If either fails, the index is rebuilt.
+If either check fails, the index is rebuilt from scratch.
 
 ---
 
 ## Limitations
 
-1. **TypeScript/JavaScript** use AST-based (Tree-sitter) parsing for accuracy. **Other languages** use regex extraction which is approximate and can miss complex import patterns.
+1. **Only TypeScript, JavaScript, Java, and Ruby** are fully parsed. All other languages are walked but skipped — their files do not appear in index results.
 2. Dynamic/computed import patterns (e.g., `import(variable)`) may not be resolved.
 3. It is a routing layer, not a behavior summarizer — doesn't provide semantic analysis or code summaries.
 4. Hidden directories and files over 1 MB are skipped by default.
-5. Symbol extraction is limited to TypeScript/JavaScript; other languages only extract file-level imports/exports.
+5. Barrel detection (TS/JS only) uses re-export ratio; non-TS/JS barrel-style files are not detected.

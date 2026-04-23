@@ -33,7 +33,7 @@ function makeFile(id: string, symbols: SymbolNode[]): IndexedFile {
     path: `/root/${id}`,
     relativePath: id,
     language: 'typescript',
-    domain: 'app',
+    domains: ['app'],
     exports: symbols.map(s => s.name),
     hasDefaultExport: false,
     imports: [],
