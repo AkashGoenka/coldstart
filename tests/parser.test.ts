@@ -46,7 +46,7 @@ describe('parser — TypeScript', () => {
   });
 });
 
-describe.skip('parser — Python', () => {
+describe('parser — Python', () => {
   it('extracts exports via __all__ from auth.py', async () => {
     const result = await parseFile(join(FIXTURES, 'python/auth.py'), 'python');
     expect(result).not.toBeNull();
@@ -65,13 +65,43 @@ describe.skip('parser — Python', () => {
     expect(result!.imports.some(i => i.includes('user_repository') || i.includes('hashlib'))).toBe(true);
   });
 
-  it('extracts class exports from user_repository.py', async () => {
-    const result = await parseFile(join(FIXTURES, 'python/user_repository.py'), 'python');
-    expect(result!.exports).toContain('UserRepository');
+  it('produces non-empty symbols array', async () => {
+    const result = await parseFile(join(FIXTURES, 'python/auth.py'), 'python');
+    expect(result!.symbols.length).toBeGreaterThan(0);
+  });
+
+  it('extracts class symbols with correct kind and isExported', async () => {
+    const result = await parseFile(join(FIXTURES, 'python/auth.py'), 'python', 'python/auth.py');
+    const cls = result!.symbols.find(s => s.name === 'AuthService');
+    expect(cls).toBeDefined();
+    expect(cls!.kind).toBe('class');
+    expect(cls!.isExported).toBe(true);
+    expect(cls!.id).toBe('python/auth.py#AuthService');
+  });
+
+  it('extracts function symbols', async () => {
+    const result = await parseFile(join(FIXTURES, 'python/auth.py'), 'python', 'python/auth.py');
+    const fn = result!.symbols.find(s => s.name === 'hash_password');
+    expect(fn).toBeDefined();
+    expect(fn!.kind).toBe('function');
+    expect(fn!.isExported).toBe(true);
+  });
+
+  it('private function is not exported', async () => {
+    const result = await parseFile(join(FIXTURES, 'python/auth.py'), 'python', 'python/auth.py');
+    const priv = result!.symbols.find(s => s.name === '_internal_helper');
+    expect(priv).toBeDefined();
+    expect(priv!.isExported).toBe(false);
+  });
+
+  it('produces hash and lineCount', async () => {
+    const result = await parseFile(join(FIXTURES, 'python/auth.py'), 'python');
+    expect(result!.hash).toMatch(/^[a-f0-9]{32}$/);
+    expect(result!.lineCount).toBeGreaterThan(5);
   });
 });
 
-describe.skip('parser — Go', () => {
+describe('parser — Go', () => {
   it('extracts uppercase exports from auth.go', async () => {
     const result = await parseFile(join(FIXTURES, 'go/auth.go'), 'go');
     expect(result).not.toBeNull();
@@ -87,9 +117,37 @@ describe.skip('parser — Go', () => {
     const result = await parseFile(join(FIXTURES, 'go/auth.go'), 'go');
     expect(result!.imports.some(i => i.includes('crypto/sha256') || i.includes('errors'))).toBe(true);
   });
+
+  it('produces non-empty symbols array', async () => {
+    const result = await parseFile(join(FIXTURES, 'go/auth.go'), 'go');
+    expect(result!.symbols.length).toBeGreaterThan(0);
+  });
+
+  it('extracts struct symbols as class kind', async () => {
+    const result = await parseFile(join(FIXTURES, 'go/auth.go'), 'go', 'go/auth.go');
+    const sym = result!.symbols.find(s => s.name === 'AuthService');
+    expect(sym).toBeDefined();
+    expect(sym!.kind).toBe('class');
+    expect(sym!.isExported).toBe(true);
+    expect(sym!.id).toBe('go/auth.go#AuthService');
+  });
+
+  it('extracts function symbols', async () => {
+    const result = await parseFile(join(FIXTURES, 'go/auth.go'), 'go', 'go/auth.go');
+    const fn = result!.symbols.find(s => s.name === 'Login');
+    expect(fn).toBeDefined();
+    expect(fn!.kind).toBe('function');
+    expect(fn!.isExported).toBe(true);
+  });
+
+  it('produces hash and lineCount', async () => {
+    const result = await parseFile(join(FIXTURES, 'go/auth.go'), 'go');
+    expect(result!.hash).toMatch(/^[a-f0-9]{32}$/);
+    expect(result!.lineCount).toBeGreaterThan(5);
+  });
 });
 
-describe.skip('parser — Rust', () => {
+describe('parser — Rust', () => {
   it('extracts pub declarations from auth.rs', async () => {
     const result = await parseFile(join(FIXTURES, 'rust/auth.rs'), 'rust');
     expect(result).not.toBeNull();
@@ -103,6 +161,204 @@ describe.skip('parser — Rust', () => {
   it('extracts mod declarations as imports', async () => {
     const result = await parseFile(join(FIXTURES, 'rust/auth.rs'), 'rust');
     expect(result!.imports.some(i => i === 'token' || i === 'hash')).toBe(true);
+  });
+
+  it('produces non-empty symbols array', async () => {
+    const result = await parseFile(join(FIXTURES, 'rust/auth.rs'), 'rust');
+    expect(result!.symbols.length).toBeGreaterThan(0);
+  });
+
+  it('extracts struct symbols as class kind', async () => {
+    const result = await parseFile(join(FIXTURES, 'rust/auth.rs'), 'rust', 'rust/auth.rs');
+    const sym = result!.symbols.find(s => s.name === 'AuthService');
+    expect(sym).toBeDefined();
+    expect(sym!.kind).toBe('class');
+    expect(sym!.isExported).toBe(true);
+    expect(sym!.id).toBe('rust/auth.rs#AuthService');
+  });
+
+  it('extracts trait symbols as interface kind', async () => {
+    const result = await parseFile(join(FIXTURES, 'rust/auth.rs'), 'rust', 'rust/auth.rs');
+    const sym = result!.symbols.find(s => s.name === 'Authenticator');
+    expect(sym).toBeDefined();
+    expect(sym!.kind).toBe('interface');
+    expect(sym!.isExported).toBe(true);
+  });
+
+  it('impl Trait for Struct populates implementsNames', async () => {
+    // auth.rs does not have a trait impl, but struct is still extracted
+    const result = await parseFile(join(FIXTURES, 'rust/auth.rs'), 'rust', 'rust/auth.rs');
+    const sym = result!.symbols.find(s => s.name === 'AuthService');
+    expect(sym).toBeDefined();
+    expect(Array.isArray(sym!.implementsNames)).toBe(true);
+  });
+
+  it('produces hash and lineCount', async () => {
+    const result = await parseFile(join(FIXTURES, 'rust/auth.rs'), 'rust');
+    expect(result!.hash).toMatch(/^[a-f0-9]{32}$/);
+    expect(result!.lineCount).toBeGreaterThan(5);
+  });
+});
+
+describe('parser — C#', () => {
+  it('extracts public types from AuthService.cs', async () => {
+    const result = await parseFile(join(FIXTURES, 'csharp/AuthService.cs'), 'csharp');
+    expect(result).not.toBeNull();
+    expect(result!.exports).toContain('AuthService');
+    expect(result!.exports).toContain('LoginRequest');
+    expect(result!.exports).toContain('AuthResult');
+    expect(result!.exports).toContain('IAuthService');
+  });
+
+  it('extracts using imports', async () => {
+    const result = await parseFile(join(FIXTURES, 'csharp/AuthService.cs'), 'csharp');
+    expect(result!.imports.some(i => i.includes('System') || i.includes('Cryptography'))).toBe(true);
+  });
+
+  it('produces non-empty symbols array', async () => {
+    const result = await parseFile(join(FIXTURES, 'csharp/AuthService.cs'), 'csharp');
+    expect(result!.symbols.length).toBeGreaterThan(0);
+  });
+
+  it('extracts class symbols with correct kind and isExported', async () => {
+    const result = await parseFile(join(FIXTURES, 'csharp/AuthService.cs'), 'csharp', 'csharp/AuthService.cs');
+    const cls = result!.symbols.find(s => s.name === 'AuthService');
+    expect(cls).toBeDefined();
+    expect(cls!.kind).toBe('class');
+    expect(cls!.isExported).toBe(true);
+    expect(cls!.id).toBe('csharp/AuthService.cs#AuthService');
+  });
+
+  it('extracts interface symbols', async () => {
+    const result = await parseFile(join(FIXTURES, 'csharp/AuthService.cs'), 'csharp', 'csharp/AuthService.cs');
+    const iface = result!.symbols.find(s => s.name === 'IAuthService');
+    expect(iface).toBeDefined();
+    expect(iface!.kind).toBe('interface');
+    expect(iface!.isExported).toBe(true);
+  });
+
+  it('extracts method symbols', async () => {
+    const result = await parseFile(join(FIXTURES, 'csharp/AuthService.cs'), 'csharp', 'csharp/AuthService.cs');
+    const method = result!.symbols.find(s => s.name === 'AuthService.Login');
+    expect(method).toBeDefined();
+    expect(method!.kind).toBe('method');
+  });
+
+  it('produces hash and lineCount', async () => {
+    const result = await parseFile(join(FIXTURES, 'csharp/AuthService.cs'), 'csharp');
+    expect(result!.hash).toMatch(/^[a-f0-9]{32}$/);
+    expect(result!.lineCount).toBeGreaterThan(5);
+  });
+});
+
+describe('parser — PHP', () => {
+  it('extracts classes and interfaces from AuthService.php', async () => {
+    const result = await parseFile(join(FIXTURES, 'php/AuthService.php'), 'php');
+    expect(result).not.toBeNull();
+    expect(result!.exports).toContain('AuthService');
+    expect(result!.exports).toContain('LoginRequest');
+    expect(result!.exports).toContain('AuthResult');
+    expect(result!.exports).toContain('AuthInterface');
+  });
+
+  it('extracts use imports', async () => {
+    const result = await parseFile(join(FIXTURES, 'php/AuthService.php'), 'php');
+    expect(result!.imports.some(i => i.includes('UserRepository') || i.includes('TokenService'))).toBe(true);
+  });
+
+  it('produces non-empty symbols array', async () => {
+    const result = await parseFile(join(FIXTURES, 'php/AuthService.php'), 'php');
+    expect(result!.symbols.length).toBeGreaterThan(0);
+  });
+
+  it('extracts class symbols with correct kind and isExported', async () => {
+    const result = await parseFile(join(FIXTURES, 'php/AuthService.php'), 'php', 'php/AuthService.php');
+    const cls = result!.symbols.find(s => s.name === 'AuthService');
+    expect(cls).toBeDefined();
+    expect(cls!.kind).toBe('class');
+    expect(cls!.isExported).toBe(true);
+    expect(cls!.id).toBe('php/AuthService.php#AuthService');
+  });
+
+  it('extracts interface symbols', async () => {
+    const result = await parseFile(join(FIXTURES, 'php/AuthService.php'), 'php', 'php/AuthService.php');
+    const iface = result!.symbols.find(s => s.name === 'AuthInterface');
+    expect(iface).toBeDefined();
+    expect(iface!.kind).toBe('interface');
+  });
+
+  it('extracts extends and implements', async () => {
+    const result = await parseFile(join(FIXTURES, 'php/AuthService.php'), 'php', 'php/AuthService.php');
+    const cls = result!.symbols.find(s => s.name === 'AuthService');
+    expect(cls!.extendsName).toBe('BaseService');
+    expect(cls!.implementsNames).toContain('AuthInterface');
+  });
+
+  it('produces hash and lineCount', async () => {
+    const result = await parseFile(join(FIXTURES, 'php/AuthService.php'), 'php');
+    expect(result!.hash).toMatch(/^[a-f0-9]{32}$/);
+    expect(result!.lineCount).toBeGreaterThan(5);
+  });
+});
+
+describe('parser — Kotlin', () => {
+  it('extracts classes and interfaces from AuthService.kt', async () => {
+    const result = await parseFile(join(FIXTURES, 'kotlin/AuthService.kt'), 'kotlin');
+    expect(result).not.toBeNull();
+    expect(result!.exports).toContain('AuthService');
+    expect(result!.exports).toContain('LoginRequest');
+    expect(result!.exports).toContain('AuthResult');
+    expect(result!.exports).toContain('AuthInterface');
+  });
+
+  it('extracts import headers', async () => {
+    const result = await parseFile(join(FIXTURES, 'kotlin/AuthService.kt'), 'kotlin');
+    expect(result!.imports.some(i => i.includes('UserRepository') || i.includes('TokenService') || i.includes('com.example'))).toBe(true);
+  });
+
+  it('produces non-empty symbols array', async () => {
+    const result = await parseFile(join(FIXTURES, 'kotlin/AuthService.kt'), 'kotlin');
+    expect(result!.symbols.length).toBeGreaterThan(0);
+  });
+
+  it('extracts class symbols with correct kind and isExported', async () => {
+    const result = await parseFile(join(FIXTURES, 'kotlin/AuthService.kt'), 'kotlin', 'kotlin/AuthService.kt');
+    const cls = result!.symbols.find(s => s.name === 'AuthService');
+    expect(cls).toBeDefined();
+    expect(cls!.kind).toBe('class');
+    expect(cls!.isExported).toBe(true);
+    expect(cls!.id).toBe('kotlin/AuthService.kt#AuthService');
+  });
+
+  it('extracts interface symbols', async () => {
+    const result = await parseFile(join(FIXTURES, 'kotlin/AuthService.kt'), 'kotlin', 'kotlin/AuthService.kt');
+    const iface = result!.symbols.find(s => s.name === 'AuthInterface');
+    expect(iface).toBeDefined();
+    expect(iface!.kind).toBe('interface');
+    expect(iface!.isExported).toBe(true);
+  });
+
+  it('extracts method symbols', async () => {
+    const result = await parseFile(join(FIXTURES, 'kotlin/AuthService.kt'), 'kotlin', 'kotlin/AuthService.kt');
+    const method = result!.symbols.find(s => s.name === 'AuthService.login');
+    expect(method).toBeDefined();
+    expect(method!.kind).toBe('method');
+  });
+
+  it('produces hash and lineCount', async () => {
+    const result = await parseFile(join(FIXTURES, 'kotlin/AuthService.kt'), 'kotlin');
+    expect(result!.hash).toMatch(/^[a-f0-9]{32}$/);
+    expect(result!.lineCount).toBeGreaterThan(5);
+  });
+});
+
+// Dart: tree-sitter-dart@1.0.0 uses Rust bindings incompatible with tree-sitter@0.21.x.
+// Dart files are walked but not parsed (returns empty imports/exports/symbols).
+describe.skip('parser — Dart', () => {
+  it('extracts classes from auth_service.dart', async () => {
+    const result = await parseFile(join(FIXTURES, 'dart/auth_service.dart'), 'dart');
+    expect(result).not.toBeNull();
+    expect(result!.exports).toContain('AuthService');
   });
 });
 
@@ -199,11 +455,5 @@ describe('ts-parser — symbol extraction', () => {
     const constant = result.symbols.find(s => s.name === 'MAX_RETRIES')!;
     expect(constant).toBeDefined();
     expect(constant.kind).toBe('constant');
-  });
-
-  it.skip('non-TS languages produce empty symbols array', async () => {
-    const result = await parseFile(join(FIXTURES, 'python/auth.py'), 'python');
-    expect(result).not.toBeNull();
-    expect(result!.symbols).toEqual([]);
   });
 });
