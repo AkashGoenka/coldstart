@@ -27,30 +27,30 @@ export async function startMCPServer(index: CodebaseIndex): Promise<void> {
         name: 'get-overview',
         description:
           'Use `get-overview` to locate files by symbol, filename, or path tokens.\n' +
-          'Returns a compact filtered list with source flags (F=filename, P=path, S=symbol, I=import).\n\n' +
+          'Returns a compact filtered list with source flags (F=filename, P=path, S=symbol).\n\n' +
+          'HOW INDEXING WORKS: Files are indexed by (1) directory path segments, (2) filename, ' +
+          '(3) exported symbol names — both split into tokens AND as the full lowercased compound ' +
+          '(e.g. "UsersPage" → indexed as "users" + "userspage"). ' +
+          'This means you can query by camelCase/PascalCase export name directly.\n\n' +
           'ITERATIVE USE: Call this multiple times with progressively different tokens until you find the right files.\n' +
           '- Zero results → try synonyms, shorter tokens, or a different spelling\n' +
-          '- Diagnostic warning → your tokens are too common; add a second specific token\n' +
+          '- Diagnostic warning → tokens are too common; add a second specific token\n' +
           '- Too many results → add another concept token to narrow down\n\n' +
-          'For conceptual queries (e.g., "authentication"), reformulate into specific\n' +
-          'likely tokens (e.g., "auth", "login", "session") and call `get-overview` for each.\n\n' +
+          'For framework convention files (page.tsx, route.ts, layout.tsx), query by directory name — ' +
+          'the filename is generic, the directory is what uniquely identifies them.\n\n' +
+          'For finding all files that import a given file/symbol, use `trace-deps` instead.\n\n' +
           'For line-level full-text search or matches inside comments/strings, use grep/ripgrep instead.\n\n' +
-          'For dependency or impact graph queries, use `trace-deps` or `trace-impact`.\n\n' +
           'Prefer multiple narrow calls over one broad call.',
         inputSchema: {
           type: 'object',
           properties: {
             domain_filter: {
               type: 'string',
-              description: 'One or more keywords relevant to your task. Bare words are independent concepts (AND logic across them). Bracket groups are synonyms (OR logic within): "[auth|login|jwt] payment" means files must match the auth concept AND payment concept, where any of auth/login/jwt satisfies the auth concept. Partial matches work: "grouphub" matches files indexed under "group" and "hub".',
+              description: 'One or more keywords relevant to your task. Bare words are independent concepts (AND logic across them). Bracket groups are synonyms (OR logic within): "[auth|login|jwt] payment" means files must match the auth concept AND payment concept, where any of auth/login/jwt satisfies the auth concept. You can pass camelCase names directly: "UsersPage" finds files that export UsersPage. Partial matches work: "grouphub" matches files indexed under "grouphubs".',
             },
             max_results: {
               type: 'number',
               description: 'Maximum number of files to return. Default 40.',
-            },
-            include_import_only: {
-              type: 'boolean',
-              description: 'Include files that only match via their import specifiers (not their own exports/path). Default false. Set true if the file you need only imports the concept without owning it.',
             },
           },
           required: ['domain_filter'],
@@ -135,7 +135,6 @@ export async function startMCPServer(index: CodebaseIndex): Promise<void> {
         result = handleGetOverview(index, {
           domain_filter: params['domain_filter'] as string | undefined,
           max_results: params['max_results'] as number | undefined,
-          include_import_only: params['include_import_only'] as boolean | undefined,
         });
         break;
 

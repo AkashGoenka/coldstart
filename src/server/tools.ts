@@ -21,9 +21,13 @@ function parseConceptGroups(input: string): string[][] {
       const synonyms = match[1].split('|').flatMap(s => tokenizeName(s.trim())).filter(Boolean);
       if (synonyms.length > 0) groups.push(synonyms);
     } else if (match[2] !== undefined) {
-      // Bare segment: tokenize as a single concept group
+      // Bare segment: tokenize AND also include the raw lowercased compound form.
+      // This lets camelCase/PascalCase names like "UsersPage" match their compound
+      // indexed form "userspage" even when stop words drop some split tokens.
       const tokens = tokenizeName(match[2]);
-      if (tokens.length > 0) groups.push(tokens);
+      const compound = match[2].toLowerCase();
+      const all = [...new Set([...tokens, compound])].filter(Boolean);
+      if (all.length > 0) groups.push(all);
     }
   }
   return groups;
@@ -34,9 +38,9 @@ const SOURCE_FLAGS: Record<TokenSource, string> = {
   filename: 'F',
   path: 'P',
   symbol: 'S',
-  import: 'I',
+  import: 'I',  // kept for index compatibility; no longer produced at index time
 };
-const SOURCE_FLAG_ORDER: TokenSource[] = ['filename', 'path', 'symbol', 'import'];
+const SOURCE_FLAG_ORDER: TokenSource[] = ['filename', 'path', 'symbol'];
 
 /**
  * Expand a query token with additive plural/singular forms (same rules as index time).
@@ -68,10 +72,9 @@ export function handleGetOverview(
   params: {
     domain_filter?: string;
     max_results?: number;
-    include_import_only?: boolean;
   },
 ): object {
-  const { domain_filter, max_results = 40, include_import_only = false } = params;
+  const { domain_filter, max_results = 40 } = params;
 
   if (!domain_filter) {
     return {
@@ -94,7 +97,6 @@ export function handleGetOverview(
     path: string;
     matchedDomainTokens: DomainToken[];   // one per matched concept group
     matchedGroupCount: number;
-    allImportOnly: boolean;
   };
 
   const matched: MatchResult[] = [];
@@ -103,7 +105,7 @@ export function handleGetOverview(
     // Exclude barrels — keep path/filename tokens but barrels themselves are noise results
     if (file.isBarrel) continue;
     // Exclude test files for non-test queries
-    if (!isTestQuery && (file.archRole === 'test' || TEST_PATH_RE.test(file.relativePath))) {
+    if (!isTestQuery && TEST_PATH_RE.test(file.relativePath)) {
       continue;
     }
 
@@ -135,23 +137,13 @@ export function handleGetOverview(
 
     if (matchedGroupCount === 0) continue;
 
-    // allImportOnly: true if EVERY matched token is import-source only
-    const allImportOnly = matchedDomainTokens.every(
-      dt => dt.sources.length === 1 && dt.sources[0] === 'import',
-    );
-
-    matched.push({ path: file.relativePath, matchedDomainTokens, matchedGroupCount, allImportOnly });
+    matched.push({ path: file.relativePath, matchedDomainTokens, matchedGroupCount });
   }
 
   const totalBeforeFiltering = matched.length;
 
-  // Predicate A: import-only exclusion (default on)
-  const afterA = include_import_only
-    ? matched
-    : matched.filter(m => !m.allImportOnly);
-
   // Predicate B: rarity OR multi-concept
-  const afterB = afterA.filter(m => {
+  const afterB = matched.filter(m => {
     const hasRareToken = m.matchedDomainTokens.some(dt => {
       const docFreq = index.tokenDocFreq.get(dt.token) ?? 1;
       const idf = Math.log(totalFiles / docFreq);
@@ -261,7 +253,6 @@ export function handleTraceDeps(
           path: neighbor.relativePath,
           language: neighbor.language,
           domains: neighbor.domains,
-          archRole: neighbor.archRole,
           exports: neighbor.exports.slice(0, 10),
           importedByCount: neighbor.importedByCount,
           depth: currentDepth,
@@ -281,7 +272,6 @@ export function handleTraceDeps(
       path: file.relativePath,
       language: file.language,
       domains: file.domains,
-      archRole: file.archRole,
     },
   };
 
@@ -350,8 +340,6 @@ export function handleGetStructure(
     path: file.relativePath,
     language: file.language,
     domains: file.domains,
-    archRole: file.archRole,
-    isEntryPoint: file.isEntryPoint,
     exports: {
       named: file.exports,
       hasDefault: file.hasDefaultExport,
