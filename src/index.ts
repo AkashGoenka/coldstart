@@ -11,12 +11,12 @@ import { resolve } from 'node:path';
 import { walkDirectory } from './indexer/walker.js';
 import { parseFile, buildFileId } from './indexer/parser.js';
 import { resolveImports } from './indexer/resolver.js';
-import { buildGraph, computeDepth, assignDomains } from './indexer/graph.js';
+import { buildGraph } from './indexer/graph.js';
+import { buildFileDomains } from './indexer/tokenize.js';
 import { getGitHead } from './indexer/git.js';
 import { loadCachedIndex, saveCachedIndex } from './cache/disk-cache.js';
 import { startMCPServer } from './server/mcp.js';
-import { ARCH_ROLE_PATTERNS } from './constants.js';
-import type { CodebaseIndex, IndexedFile, SymbolEdge, ArchRole } from './types.js';
+import type { CodebaseIndex, IndexedFile, SymbolEdge, DomainToken } from './types.js';
 
 // ---------------------------------------------------------------------------
 // Argument parsing (no external deps)
@@ -106,18 +106,18 @@ async function buildIndex(
           path: wf.absolutePath,
           relativePath: wf.relativePath,
           language: wf.language,
-          domain: parsed.domain,
+          domains: buildFileDomains(wf.relativePath, parsed.exports),
           exports: parsed.exports,
           hasDefaultExport: parsed.hasDefaultExport,
           imports: parsed.imports,
           hash: parsed.hash,
           lineCount: parsed.lineCount,
           tokenEstimate: parsed.tokenEstimate,
-          isEntryPoint: parsed.isEntryPoint,
-          archRole: parsed.archRole,
           importedByCount: 0,
-          depth: Infinity,
+          transitiveImportedByCount: 0,
+          isBarrel: false,
           symbols: parsed.symbols,
+          reexportRatio: parsed.reexportRatio,
         };
         indexedFiles.push(file);
         langCount[wf.language] = (langCount[wf.language] ?? 0) + 1;
@@ -137,32 +137,9 @@ async function buildIndex(
   const nodeIds = indexedFiles.map(f => f.id);
   const { outEdges, inEdges } = buildGraph(nodeIds, edges);
 
-  // 5. Depth from entry points
-  const entryPointIds = indexedFiles.filter(f => f.isEntryPoint).map(f => f.id);
-  const depthMap = computeDepth(entryPointIds, outEdges);
-
-  // Attach importedByCount and depth back to files
+  // 5. Attach importedByCount back to files
   for (const file of indexedFiles) {
     file.importedByCount = inEdges.get(file.id)?.length ?? 0;
-    file.depth = depthMap.get(file.id) ?? Infinity;
-  }
-
-  // Reclassify entry points: barrel files (index.ts etc.) that are heavily imported
-  // are not real entry points — real entry points have 0 or 1 importers
-  for (const file of indexedFiles) {
-    if (file.isEntryPoint && (inEdges.get(file.id)?.length ?? 0) > 1) {
-      file.isEntryPoint = false;
-      if (file.archRole === 'entry') {
-        const pathLower = file.relativePath.toLowerCase();
-        file.archRole = 'unknown' as ArchRole;
-        for (const { pattern, role } of ARCH_ROLE_PATTERNS) {
-          if (pattern.test(pathLower)) {
-            file.archRole = role as ArchRole;
-            break;
-          }
-        }
-      }
-    }
   }
 
   // Build symbol-level edges from all TS/JS files
@@ -187,7 +164,41 @@ async function buildIndex(
     }
   }
 
-  // 6. Git head
+  // 6. Barrel detection: AST-based for TS/JS (reexportRatio), no heuristic for others
+  for (const file of indexedFiles) {
+    if (file.language === 'typescript' || file.language === 'javascript') {
+      file.isBarrel = (
+        (file.reexportRatio ?? 0) > 0.5 &&
+        file.importedByCount > 1 &&
+        file.exports.length > 0
+      );
+    }
+    file.transitiveImportedByCount = file.importedByCount;
+  }
+
+  // Strip symbol-sourced tokens from barrel domains to prevent re-exported symbol pollution
+  for (const file of indexedFiles) {
+    if (!file.isBarrel) continue;
+    const domains = file.domains as DomainToken[];
+    file.domains = domains
+      .map(dt => ({ token: dt.token, sources: dt.sources.filter(s => s !== 'symbol') }))
+      .filter(dt => dt.sources.length > 0);
+  }
+
+  // 7. Token document frequency (skip barrels; skip import-only tokens — they inflate IDF)
+  const tokenDocFreq = new Map<string, number>();
+  for (const file of indexedFiles) {
+    if (file.isBarrel) continue;
+    const domains = file.domains as DomainToken[];
+    const seen = new Set<string>();
+    for (const dt of domains) {
+      if (seen.has(dt.token)) continue;
+      seen.add(dt.token);
+      tokenDocFreq.set(dt.token, (tokenDocFreq.get(dt.token) ?? 0) + 1);
+    }
+  }
+
+  // 8. Git head
   const gitHead = await getGitHead(rootDir);
 
   const elapsed = ((Date.now() - start) / 1000).toFixed(1);
@@ -196,6 +207,15 @@ async function buildIndex(
 
   const filesMap = new Map<string, IndexedFile>(indexedFiles.map(f => [f.id, f]));
 
+  // Inflate transitiveImportedByCount through barrel files
+  for (const file of indexedFiles) {
+    if (!file.isBarrel) continue;
+    for (const childId of outEdges.get(file.id) ?? []) {
+      const child = filesMap.get(childId);
+      if (child) child.transitiveImportedByCount += file.importedByCount;
+    }
+  }
+
   const index: CodebaseIndex = {
     rootDir,
     files: filesMap,
@@ -203,12 +223,10 @@ async function buildIndex(
     symbolEdges: allSymbolEdges,
     outEdges,
     inEdges,
+    tokenDocFreq,
     indexedAt: Date.now(),
     gitHead,
   };
-
-  // Assign domains after graph is available (directory-based + graph-based fallback)
-  assignDomains(index);
 
   return index;
 }
@@ -217,10 +235,10 @@ async function buildIndex(
 // Main
 // ---------------------------------------------------------------------------
 async function main(): Promise<void> {
-  // Check for 'setup' subcommand before normal arg parsing
-  if (process.argv[2] === 'setup') {
-    const { runSetup } = await import('./setup.js');
-    await runSetup(process.argv.slice(3));
+  // Check for 'init' subcommand — prints MCP config and agent rules for manual setup
+  if (process.argv[2] === 'init') {
+    const { runInit } = await import('./init.js');
+    runInit();
     return;
   }
 

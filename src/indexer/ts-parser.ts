@@ -260,6 +260,7 @@ export interface TsParseResult {
   exports: string[];
   hasDefaultExport: boolean;
   symbols: SymbolNode[];
+  reexportRatio: number;  // ratio of re-export statements (with 'from') to total export statements
 }
 
 // Tree-sitter's parse(string) has a 32KB limit — use chunked callback for larger files
@@ -296,6 +297,8 @@ export function parseTsContent(
   const exports: string[] = [];
   let hasDefaultExport = false;
   const rawSymbols: SymbolNode[] = [];
+  let totalExportStatements = 0;
+  let reexportStatements = 0;
 
   // Collect all top-level declaration names first (for call resolution)
   const allSymbolNames = new Set<string>();
@@ -337,11 +340,15 @@ export function parseTsContent(
     // Export statements
     // -----------------------------------------------------------------------
     if (node.type === 'export_statement') {
+      totalExportStatements++;
       // export * from 'Y' or export { X } from 'Y'
       const src = firstChildOfType(node, 'string');
       if (src) {
         const frag = firstChildOfType(src, 'string_fragment');
-        if (frag) imports.push(frag.text);
+        if (frag) {
+          imports.push(frag.text);
+          reexportStatements++;
+        }
       }
 
       // Check for `default` keyword
@@ -404,10 +411,13 @@ export function parseTsContent(
     calls: sym.calls.map(name => symbolIdByName.get(name) ?? name),
   }));
 
+  const reexportRatio = totalExportStatements > 0 ? reexportStatements / totalExportStatements : 0;
+
   return {
     imports: [...new Set(imports)],
     exports: [...new Set(exports)],
     hasDefaultExport,
     symbols: resolvedSymbols,
+    reexportRatio,
   };
 }

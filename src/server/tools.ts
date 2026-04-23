@@ -1,40 +1,67 @@
-import type { CodebaseIndex, ArchRole } from '../types.js';
+import type { CodebaseIndex, DomainToken, TokenSource } from '../types.js';
+import { tokenizeName } from '../indexer/tokenize.js';
+import { IDF_RARITY_THRESHOLD } from '../constants.js';
 
-// ============================================================================
-// Helpers for nextStep guidance
-// ============================================================================
-function buildOverviewNextStep(
-  domainMap: Map<string, { count: number; archRoles: Map<ArchRole, number>; files: Map<ArchRole, string[]> }>,
-  domain_filter?: string,
-): string {
-  const domains = [...domainMap.entries()].sort((a, b) => b[1].count - a[1].count);
+const TEST_KEYWORDS = new Set(['test', 'spec', 'mock', 'fixture', 'stub']);
+const TEST_PATH_RE = /\.(test|spec)\.[^.]+$|__tests__\/|\/tests?\/|\/e2e[-_]?tests?\/|\/test-framework\//i;
 
-  if (domain_filter) {
-    const entry = domainMap.get(domain_filter);
-    if (entry) {
-      const roles = [...entry.archRoles.entries()].sort((a, b) => b[1] - a[1]);
-      const topRole = roles[0]?.[0];
-      return `You are zoomed into domain "${domain_filter}" (${entry.count} files). ` +
-        `Dominant role: ${topRole}. ` +
-        `Call get-structure on a specific file path to inspect its exports/imports, or grep within "${domain_filter}/" for string literals.`;
+/**
+ * Parse a domain_filter string into concept groups.
+ * - [auth|login|jwt] → one group with synonyms (OR logic)
+ * - bare words → one group per word (AND logic across groups)
+ * - Each group is satisfied if ANY of its tokens match the file's domains.
+ */
+function parseConceptGroups(input: string): string[][] {
+  const groups: string[][] = [];
+  const segmentRe = /\[([^\]]+)\]|(\S+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = segmentRe.exec(input)) !== null) {
+    if (match[1] !== undefined) {
+      // Bracket group: split by | and tokenize each synonym
+      const synonyms = match[1].split('|').flatMap(s => tokenizeName(s.trim())).filter(Boolean);
+      if (synonyms.length > 0) groups.push(synonyms);
+    } else if (match[2] !== undefined) {
+      // Bare segment: tokenize AND also include the raw lowercased compound form.
+      // This lets camelCase/PascalCase names like "UsersPage" match their compound
+      // indexed form "userspage" even when stop words drop some split tokens.
+      const tokens = tokenizeName(match[2]);
+      const compound = match[2].toLowerCase();
+      const all = [...new Set([...tokens, compound])].filter(Boolean);
+      if (all.length > 0) groups.push(all);
     }
   }
+  return groups;
+}
 
-  // Build a short domain hint so the agent can pick where to look
-  const domainHint = domains.slice(0, 4)
-    .map(([name, e]) => {
-      const topRoles = [...e.archRoles.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 2)
-        .map(([r]) => r)
-        .join(', ');
-      return `"${name}" (${e.count} files, roles: ${topRoles})`;
-    })
-    .join('; ');
+// Source flags in stable display order
+const SOURCE_FLAGS: Record<TokenSource, string> = {
+  filename: 'F',
+  path: 'P',
+  symbol: 'S',
+  import: 'I',  // kept for index compatibility; no longer produced at index time
+};
+const SOURCE_FLAG_ORDER: TokenSource[] = ['filename', 'path', 'symbol'];
 
-  return `NEXT STEP — call get-overview with domain_filter for each candidate domain to see sample files, ` +
-    `then search within those domains. Domains: ${domainHint}. ` +
-    `If unsure which domain contains the code, zoom into 2-3 domains before searching — do not commit to one domain based on the first grep hit.`;
+/**
+ * Expand a query token with additive plural/singular forms (same rules as index time).
+ * Returns the token plus any additional forms.
+ */
+function expandQueryToken(token: string): string[] {
+  const forms = [token];
+  if (token.length >= 5) {
+    if (token.endsWith('es') && token.length > 4) {
+      const singular = token.slice(0, -2);
+      if (singular.length >= 4) forms.push(singular);
+    } else if (token.endsWith('s')) {
+      const singular = token.slice(0, -1);
+      if (singular.length >= 4) forms.push(singular);
+    } else {
+      // Also try adding 's' and 'es' to match plural indexed forms
+      forms.push(token + 's');
+      forms.push(token + 'es');
+    }
+  }
+  return forms;
 }
 
 // ============================================================================
@@ -42,85 +69,145 @@ function buildOverviewNextStep(
 // ============================================================================
 export function handleGetOverview(
   index: CodebaseIndex,
-  params: { domain_filter?: string },
+  params: {
+    domain_filter?: string;
+    max_results?: number;
+  },
 ): object {
-  const { domain_filter } = params;
+  const { domain_filter, max_results = 40 } = params;
 
-  // Language breakdown
-  const langCount = new Map<string, number>();
+  if (!domain_filter) {
+    return {
+      error: 'domain_filter is required',
+      hint: 'Provide one or more keywords relevant to your task (e.g. "auth", "payment user"). Synonym groups: "[auth|login|jwt] payment".',
+      totalFiles: index.files.size,
+    };
+  }
+
+  const conceptGroups = parseConceptGroups(domain_filter);
+  if (conceptGroups.length === 0) {
+    return { error: 'domain_filter produced no usable tokens after filtering stop words.' };
+  }
+
+  const allTokens = conceptGroups.flat();
+  const isTestQuery = allTokens.some(t => TEST_KEYWORDS.has(t));
+  const totalFiles = index.files.size;
+
+  type MatchResult = {
+    path: string;
+    matchedDomainTokens: DomainToken[];   // one per matched concept group
+    matchedGroupCount: number;
+  };
+
+  const matched: MatchResult[] = [];
+
   for (const file of index.files.values()) {
-    langCount.set(file.language, (langCount.get(file.language) ?? 0) + 1);
-  }
-
-  // Domain breakdown: { domainName: { count, archRoles, files? } }
-  // files only included when domain_filter is set (to keep default response small)
-  const FILE_SAMPLE_LIMIT = domain_filter ? 5 : 0;
-  const domainMap = new Map<string, { count: number; archRoles: Map<ArchRole, number>; files: Map<ArchRole, string[]> }>();
-  for (const file of index.files.values()) {
-    if (domain_filter && file.domain !== domain_filter) continue;
-    if (!domainMap.has(file.domain)) {
-      domainMap.set(file.domain, { count: 0, archRoles: new Map(), files: new Map() });
+    // Exclude barrels — keep path/filename tokens but barrels themselves are noise results
+    if (file.isBarrel) continue;
+    // Exclude test files for non-test queries
+    if (!isTestQuery && TEST_PATH_RE.test(file.relativePath)) {
+      continue;
     }
-    const entry = domainMap.get(file.domain)!;
-    entry.count++;
-    entry.archRoles.set(file.archRole, (entry.archRoles.get(file.archRole) ?? 0) + 1);
-    if (FILE_SAMPLE_LIMIT > 0) {
-      if (!entry.files.has(file.archRole)) {
-        entry.files.set(file.archRole, []);
+
+    const domains = file.domains as DomainToken[];
+    let matchedGroupCount = 0;
+    const matchedDomainTokens: DomainToken[] = [];
+
+    for (const group of conceptGroups) {
+      let bestMatch: DomainToken | null = null;
+      outer: for (const queryToken of group) {
+        const expanded = expandQueryToken(queryToken);
+        for (const qt of expanded) {
+          for (const dt of domains) {
+            const isMatch =
+              dt.token === qt
+              || (dt.token.length > 6 && dt.token.length > qt.length && dt.token.includes(qt));
+            if (isMatch) {
+              bestMatch = dt;
+              break outer;
+            }
+          }
+        }
       }
-      const roleFiles = entry.files.get(file.archRole)!;
-      if (roleFiles.length < FILE_SAMPLE_LIMIT) {
-        roleFiles.push(file.relativePath);
+      if (bestMatch !== null) {
+        matchedGroupCount++;
+        matchedDomainTokens.push(bestMatch);
       }
+    }
+
+    if (matchedGroupCount === 0) continue;
+
+    matched.push({ path: file.relativePath, matchedDomainTokens, matchedGroupCount });
+  }
+
+  const totalBeforeFiltering = matched.length;
+
+  // Predicate B: rarity OR multi-concept
+  const afterB = matched.filter(m => {
+    const hasRareToken = m.matchedDomainTokens.some(dt => {
+      const docFreq = index.tokenDocFreq.get(dt.token) ?? 1;
+      const idf = Math.log(totalFiles / docFreq);
+      const rare = idf > IDF_RARITY_THRESHOLD;
+      return rare;
+    });
+    const hasMultipleConcepts = m.matchedGroupCount > 1;
+    return hasRareToken || hasMultipleConcepts;
+  });
+
+  // Sort alphabetically by path
+  afterB.sort((a, b) => a.path.localeCompare(b.path));
+
+  // Truncation
+  const truncated = afterB.length > max_results;
+  const results = afterB.slice(0, max_results);
+
+  // Build compact response items with source flags
+  const resultItems = results.map(m => {
+    const allSources = new Set<TokenSource>();
+    for (const dt of m.matchedDomainTokens) {
+      for (const s of dt.sources) allSources.add(s);
+    }
+    const sources = SOURCE_FLAG_ORDER
+      .filter(s => allSources.has(s))
+      .map(s => SOURCE_FLAGS[s])
+      .join(',');
+    return { path: m.path, sources };
+  });
+
+  // All-common-token diagnostic
+  let diagnostic: string | undefined;
+  if (results.length > 0) {
+    const allCommon = results.every(m =>
+      m.matchedDomainTokens.every(dt => {
+        const docFreq = index.tokenDocFreq.get(dt.token) ?? 1;
+        return Math.log(totalFiles / docFreq) <= IDF_RARITY_THRESHOLD;
+      }),
+    );
+    if (allCommon) {
+      diagnostic = '[DIAGNOSTIC: all matched tokens are common (frequency > 5%). Results may be unreliable; consider more specific tokens.]';
     }
   }
 
-  // Serialize domains
-  const domains: Record<string, object> = {};
-  for (const [dom, entry] of [...domainMap.entries()].sort((a, b) => b[1].count - a[1].count)) {
-    const archRoles = Object.fromEntries(entry.archRoles);
-    if (FILE_SAMPLE_LIMIT > 0) {
-      const files: Record<string, string[]> = {};
-      for (const [role, paths] of entry.files) {
-        files[role] = paths;
-      }
-      domains[dom] = { count: entry.count, archRoles, files };
-    } else {
-      domains[dom] = { count: entry.count, archRoles };
-    }
-  }
-
-  // Inter-domain edges
-  const domainEdges = new Map<string, number>();
-  for (const edge of index.edges) {
-    const fromFile = index.files.get(edge.from);
-    const toFile = index.files.get(edge.to);
-    if (!fromFile || !toFile) continue;
-    if (fromFile.domain === toFile.domain) continue;
-    const key = `${fromFile.domain} → ${toFile.domain}`;
-    domainEdges.set(key, (domainEdges.get(key) ?? 0) + 1);
-  }
-
-  return {
-    totalFiles: index.files.size,
-    totalEdges: index.edges.length,
-    languages: Object.fromEntries(
-      [...langCount.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .map(([lang, count]) => [lang, count]),
-    ),
-    domains,
-    interDomainEdges: Object.fromEntries(
-      [...domainEdges.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 10)
-        .map(([key, count]) => [key, count]),
-    ),
-    entryPointCount: [...index.files.values()].filter(f => f.isEntryPoint).length,
+  const response: Record<string, unknown> = {
+    totalFiles,
+    filter: domain_filter,
+    total_matches_before_filtering: totalBeforeFiltering,
+    results: resultItems,
     indexedAt: new Date(index.indexedAt).toISOString(),
     gitHead: index.gitHead || '(not a git repo)',
-    nextStep: buildOverviewNextStep(domainMap, domain_filter),
   };
+
+  if (truncated) {
+    response.truncated = true;
+    response.total_matched = afterB.length;
+    response.message = `[TRUNCATED: ${afterB.length - max_results} additional matches omitted. Query is too broad. Add specific tokens or use trace-deps for graph queries.]`;
+  }
+
+  if (diagnostic) {
+    response.diagnostic = diagnostic;
+  }
+
+  return response;
 }
 
 // ============================================================================
@@ -165,8 +252,7 @@ export function handleTraceDeps(
         result.push({
           path: neighbor.relativePath,
           language: neighbor.language,
-          domain: neighbor.domain,
-          archRole: neighbor.archRole,
+          domains: neighbor.domains,
           exports: neighbor.exports.slice(0, 10),
           importedByCount: neighbor.importedByCount,
           depth: currentDepth,
@@ -185,8 +271,7 @@ export function handleTraceDeps(
     file: {
       path: file.relativePath,
       language: file.language,
-      domain: file.domain,
-      archRole: file.archRole,
+      domains: file.domains,
     },
   };
 
@@ -254,9 +339,7 @@ export function handleGetStructure(
   return {
     path: file.relativePath,
     language: file.language,
-    domain: file.domain,
-    archRole: file.archRole,
-    isEntryPoint: file.isEntryPoint,
+    domains: file.domains,
     exports: {
       named: file.exports,
       hasDefault: file.hasDefaultExport,

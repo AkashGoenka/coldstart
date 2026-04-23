@@ -36,9 +36,9 @@ describe('parser — Java (via parseFile)', () => {
     expect(result!.lineCount).toBeGreaterThan(5);
   });
 
-  it('domain defaults to unknown', async () => {
+  it('does not return a domain field (domains are computed in index construction)', async () => {
     const result = await parseFile(join(JAVA_DIR, 'AuthService.java'), 'java');
-    expect(result!.domain).toBe('unknown');
+    expect((result as Record<string, unknown>)['domain']).toBeUndefined();
   });
 
   it('hasDefaultExport is always false for Java', async () => {

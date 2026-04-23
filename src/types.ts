@@ -1,5 +1,12 @@
 // All shared interfaces and types for coldstart-mcp
 
+export type TokenSource = 'filename' | 'path' | 'symbol' | 'import';
+
+export interface DomainToken {
+  token: string;
+  sources: TokenSource[];  // stable sort order: filename, path, symbol, import
+}
+
 export type Language =
   | 'typescript'
   | 'javascript'
@@ -45,37 +52,23 @@ export interface SymbolEdge {
   type: SymbolEdgeType;
 }
 
-export type ArchRole =
-  | 'router'
-  | 'service'
-  | 'repository'
-  | 'middleware'
-  | 'controller'
-  | 'model'
-  | 'util'
-  | 'config'
-  | 'test'
-  | 'types'
-  | 'entry'
-  | 'unknown';
-
 export interface IndexedFile {
   id: string;               // relative path, used as stable key
   path: string;             // absolute path
   relativePath: string;     // relative to root
   language: Language;
-  domain: string;           // inferred from path/content (auth, payments, db, …)
+  domains: DomainToken[];   // semantic keywords with source labels
   exports: string[];        // named exports extracted by parser
   hasDefaultExport: boolean;
   imports: string[];        // raw import specifiers
   hash: string;             // MD5 of content
   lineCount: number;
   tokenEstimate: number;    // content.length / 4
-  isEntryPoint: boolean;
-  archRole: ArchRole;
   importedByCount: number;  // number of files that import this file (set after graph phase)
-  depth: number;            // BFS depth from entry points (set after graph phase)
+  transitiveImportedByCount: number; // importedByCount bubbled through barrel files
+  isBarrel: boolean;        // true if this is an index.ts re-export barrel
   symbols: SymbolNode[];    // symbol-level nodes within this file (TS/JS only)
+  reexportRatio?: number;   // TS/JS only: ratio of re-export statements to total export statements
 }
 
 export interface Edge {
@@ -92,6 +85,7 @@ export interface CodebaseIndex {
   symbolEdges: SymbolEdge[];             // symbol-level edges (calls, extends, implements, exports)
   outEdges: Map<string, string[]>;       // fileId → [fileId] (imports)
   inEdges: Map<string, string[]>;        // fileId → [fileId] (importers)
+  tokenDocFreq: Map<string, number>;     // token → number of files containing that token (for IDF scoring)
   indexedAt: number;                    // Date.now()
   gitHead: string;                      // HEAD commit hash or ''
 }
@@ -115,10 +109,8 @@ export interface ParsedFile {
   hash: string;
   lineCount: number;
   tokenEstimate: number;
-  domain: string;
-  isEntryPoint: boolean;
-  archRole: ArchRole;
   symbols: SymbolNode[];    // symbol-level nodes (TS/JS only, empty for other languages)
+  reexportRatio?: number;   // TS/JS only
 }
 
 export interface CacheMeta {

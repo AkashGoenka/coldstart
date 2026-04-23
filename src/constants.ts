@@ -292,38 +292,8 @@ export const DEFAULT_EXCLUDES = new Set([
   "logs",
 ]);
 
-// ---------------------------------------------------------------------------
-// Entry point filename patterns
-// ---------------------------------------------------------------------------
-export const ENTRY_POINT_NAMES = new Set([
-  "index",
-  "main",
-  "app",
-  "server",
-  "entry",
-  "start",
-  "bootstrap",
-  "init",
-  "cmd",
-  "bin",
-  "run",
-]);
-
-// ---------------------------------------------------------------------------
-// Architectural role patterns (matched against path segments)
-// ---------------------------------------------------------------------------
-export const ARCH_ROLE_PATTERNS: Array<{ pattern: RegExp; role: string }> = [
-  { pattern: /router|routes?/i, role: "router" },
-  { pattern: /service/i, role: "service" },
-  { pattern: /repo(sitory)?|dao/i, role: "repository" },
-  { pattern: /middleware/i, role: "middleware" },
-  { pattern: /controller/i, role: "controller" },
-  { pattern: /model/i, role: "model" },
-  { pattern: /util|helper/i, role: "util" },
-  { pattern: /config|settings?/i, role: "config" },
-  { pattern: /test|spec|__tests__/i, role: "test" },
-  { pattern: /types?|interfaces?|schemas?|dtos?/i, role: "types" },
-];
-
 // Cache version — bump when index schema changes to force re-index
-export const CACHE_VERSION = "4.0.0";
+export const CACHE_VERSION = "5.2.0";
+
+// IDF threshold for "rare" token: log(20) ≈ 3.0 — tokens appearing in < 5% of files
+export const IDF_RARITY_THRESHOLD = Math.log(20);
