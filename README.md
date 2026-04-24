@@ -339,4 +339,4 @@ If either check fails, the index is rebuilt from scratch.
 2. It is a routing layer, not a behavior summarizer — doesn't provide semantic analysis or code summaries.
 3. Hidden directories and files over 1 MB are skipped by default.
 4. Barrel detection (TS/JS only) uses re-export ratio; non-TS/JS barrel-style files are not detected.
-5. Swift, Dart, and C++ files are walked but not parsed — no exports/symbols extracted.
+5. C++ files are walked but not parsed — no exports/symbols extracted.
