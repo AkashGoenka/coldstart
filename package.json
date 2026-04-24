@@ -28,13 +28,22 @@
     "build": "tsc --noEmit false",
     "dev": "tsc --watch",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "postinstall": "node scripts/patch-native-grammars.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "latest",
     "tree-sitter": "^0.21.1",
+    "tree-sitter-c-sharp": "^0.21.3",
+    "tree-sitter-dart": "^1.0.0",
+    "tree-sitter-go": "^0.23.4",
     "tree-sitter-java": "^0.23.5",
+    "tree-sitter-kotlin": "^0.3.8",
+    "tree-sitter-php": "^0.23.12",
+    "tree-sitter-python": "^0.23.4",
     "tree-sitter-ruby": "^0.23.1",
+    "tree-sitter-rust": "^0.23.1",
+    "tree-sitter-swift": "^0.6.0",
     "tree-sitter-typescript": "^0.23.2"
   },
   "devDependencies": {

@@ -1,4 +1,4 @@
-# Architecture — coldstart-mcp (v4)
+# Architecture — coldstart-mcp (v5)
 
 This document captures the *current* architecture after the simplification pass.
 
@@ -46,12 +46,20 @@ Removed:
    - Recursively discovers source files by extension.
    - Skips hidden directories, symlinks, and files above size threshold.
 
-2. **Parse** (`indexer/parser.ts`, `indexer/ts-parser.ts`, `indexer/extractors/java.ts`, `indexer/extractors/ruby.ts`)
-   - **TypeScript/JavaScript**: Tree-sitter (node-tree-sitter + tree-sitter-typescript) for symbol-level extraction — functions, classes, interfaces, type aliases, constants, methods. Tracks intra-file call relationships, extends/implements chains.
-   - **Java**: Tree-sitter (tree-sitter-java) for classes, interfaces, enums, records, methods, constructors. Tracks method invocations, extends, implements chains. Extracts static final constants.
-   - **Ruby**: Tree-sitter (tree-sitter-ruby) for classes, modules, methods, constants, singleton methods. Detects Rails DSLs (associations, callbacks, includes/extends). Tracks method calls, inheritance, and Rails relationships.
-   - **Other languages**: Regex-based extraction of imports and exports.
-   - Derives metadata: domain, architectural role, entry-point flag, hash, line count, token estimate.
+2. **Parse** (`indexer/parser.ts`, `indexer/ts-parser.ts`, `indexer/extractors/`)
+   - **TypeScript/JavaScript**: Tree-sitter (tree-sitter-typescript) — functions, classes, interfaces, type aliases, constants, methods. Tracks intra-file call relationships, extends/implements chains.
+   - **Java**: Tree-sitter (tree-sitter-java) — classes, interfaces, enums, records, methods, constructors. Tracks method invocations, extends, implements chains. Extracts static final constants.
+   - **Ruby**: Tree-sitter (tree-sitter-ruby) — classes, modules, methods, constants, singleton methods. Detects Rails DSLs (associations, callbacks, includes/extends).
+   - **Python**: Tree-sitter (tree-sitter-python) — classes, top-level functions, methods. Respects `__all__` for export list; excludes underscore-prefixed private names.
+   - **Go**: Tree-sitter (tree-sitter-go) — structs (as class), interfaces, top-level functions, methods, constants/vars. Exports determined by uppercase-first identifier convention.
+   - **Rust**: Tree-sitter (tree-sitter-rust) — pub structs/enums (as class), pub traits (as interface), pub functions, pub type aliases. Tracks `impl Trait for Struct` to populate `implementsNames`. Module declarations treated as imports.
+   - **C#**: Tree-sitter (tree-sitter-c-sharp) — public classes, interfaces, structs, enums, records, public methods. Extracts base type list for extends/implements. Captures `using` directives as imports.
+   - **PHP**: Tree-sitter (tree-sitter-php) — classes, interfaces, traits, public methods. Extracts `extends`/`implements` clauses. Captures `use` namespace imports.
+   - **Kotlin**: Tree-sitter (tree-sitter-kotlin) — classes, interfaces (detected via `interface` keyword in `class_declaration`), object declarations, top-level functions, methods. Public by default unless explicitly private/protected.
+   - **Swift**: Tree-sitter (tree-sitter-swift@0.6.0, rebuilt from source) — protocols (as interface), classes/structs/enums (all `class_declaration`), top-level functions, methods. Exported = not explicitly private/fileprivate. Requires postinstall native rebuild to patch binding.gyp (removes tree-sitter-cli generate step, parser.c already ships with the package).
+   - **Dart**: Tree-sitter (tree-sitter-dart@1.0.0, binding patched) — classes (including abstract), enums, top-level functions, methods. Exported = non-`_`-prefixed names. Requires postinstall rebuild after rewriting binding.cc from NAN to NAPI format (needed for tree-sitter@0.21.x compatibility).
+   - **Other languages** (C++): Walked by the filesystem scanner but not parsed — files appear in the index with empty imports/exports/symbols.
+   - Derives metadata: hash, line count, token estimate.
 
 3. **Resolve** (`indexer/resolver.ts`)
    - Resolves internal import specifiers to file IDs.
@@ -80,7 +88,7 @@ Removed:
 
 Key per-file signals used by tools:
 - `domain`, `archRole`, `isEntryPoint`, `depth`, `importedByCount`
-- `symbols: SymbolNode[]` — per-file list of extracted symbols (TS/JS/Java/Ruby)
+- `symbols: SymbolNode[]` — per-file list of extracted symbols (all supported languages)
 
 `SymbolNode` captures:
 - `id` (`fileId#symbolName`), `name`, `kind` (function/class/interface/type/constant/method)
@@ -113,11 +121,10 @@ Otherwise the index is rebuilt from scratch.
 
 ## Design tradeoffs
 
-1. **Tree-sitter for TS/JS/Java/Ruby, regex for everything else**
-   - TS/JS/Java/Ruby get symbol-level accuracy (exact function/class/interface extraction, line numbers, call tracking).
-   - Other languages keep broad coverage with regex-based fallback (no heavy dependencies).
+1. **AST-only parsing across all supported languages**
+   - All indexed languages use Tree-sitter for symbol-level accuracy (exact function/class/interface extraction, line numbers, call tracking).
+   - Swift and Dart grammars required native binding patches (see postinstall script) to work with tree-sitter@0.21.x; no regex fallback used.
    - node-tree-sitter chosen over web-tree-sitter for simpler Node.js API (no WASM loading boilerplate).
-   - Java and Ruby added for common enterprise/Rails codebases where symbol tracking is especially valuable.
 
 2. **Full rebuild over incremental indexing**
    - Pros: low complexity, predictable correctness.
@@ -154,10 +161,9 @@ Otherwise the index is rebuilt from scratch.
 It is:
 - A local MCP indexing + routing service.
 - A fast structural context provider for coding agents.
-- A symbol-level dependency analyzer for TS/JS/Java/Ruby.
+- A symbol-level dependency analyzer for TS/JS/Java/Ruby/Python/Go/Rust/C#/PHP/Kotlin/Swift/Dart.
 
 It is not:
 - A replacement for code reading.
 - A semantic RAG/embedding platform.
 - A behavioral summarization system.
-
