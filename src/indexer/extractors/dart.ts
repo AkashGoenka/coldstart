@@ -30,7 +30,7 @@ function firstChildOfType(node: TSNode, type: string): TSNode | null {
   return node.namedChildren.find((c: TSNode) => c.type === type) ?? null;
 }
 
-/** In Dart, public names do not start with underscore. */
+/** In Dart, names starting with '_' are private to the library. */
 function isPublicName(name: string): boolean {
   return !name.startsWith('_');
 }
@@ -63,6 +63,13 @@ function parseContent(parser: TSNode, content: string): TSNode {
   });
 }
 
+/** Extract function name from a function_signature node.
+ *  AST: [return_type: type_identifier|void_type] [name: identifier] [params: formal_parameter_list]
+ *  The name uses `identifier`, not `type_identifier` (which is the return type). */
+function functionSignatureName(sig: TSNode): string | undefined {
+  return sig.namedChildren.find((c: TSNode) => c.type === 'identifier')?.text;
+}
+
 export function parseDartContent(
   content: string,
   fileId: string,
@@ -84,55 +91,41 @@ export function parseDartContent(
     const startLine = node.startPosition.row + 1;
     const endLine = node.endPosition.row + 1;
 
-    // import 'package:X/Y.dart'
+    // import 'package:x/y.dart' or import 'dart:async'
+    // AST: import_or_export → library_import → import_specification → configurable_uri
     if (node.type === 'import_or_export') {
-      const uriNode = node.namedChildren.find(
-        (c: TSNode) => c.type === 'string_literal' || c.type === 'uri',
-      );
-      if (uriNode) imports.push(uriNode.text.replace(/^['"]|['"]$/g, ''));
-      continue;
-    }
-
-    // export 'file.dart'
-    if (node.type === 'export_directive') {
-      const uriNode = node.namedChildren.find(
-        (c: TSNode) => c.type === 'string_literal' || c.type === 'uri',
-      );
-      if (uriNode) imports.push(uriNode.text.replace(/^['"]|['"]$/g, ''));
+      const libImport = firstChildOfType(node, 'library_import');
+      if (!libImport) continue;
+      const spec = firstChildOfType(libImport, 'import_specification');
+      if (!spec) continue;
+      const uri = firstChildOfType(spec, 'configurable_uri');
+      if (!uri) continue;
+      const raw = uri.text.replace(/^['"]|['"]$/g, '').trim();
+      if (raw) imports.push(raw);
       continue;
     }
 
     // class / abstract class
+    // AST: class_definition → identifier (name), superclass?, interfaces?, class_body
     if (node.type === 'class_definition') {
       const nameNode = firstChildOfType(node, 'identifier');
       if (!nameNode) continue;
       const className = nameNode.text;
-      if (!isPublicName(className)) continue;
+      const pub = isPublicName(className);
 
+      // superclass → type_identifier
       let extendsName: string | undefined;
-      const implementsNames: string[] = [];
-
-      const superclass = firstChildOfType(node, 'superclass');
-      if (superclass) {
-        const typeName = firstChildOfType(superclass, 'type_name') ??
-          firstChildOfType(superclass, 'identifier');
-        if (typeName) {
-          const id = firstChildOfType(typeName, 'identifier');
-          extendsName = id?.text ?? typeName.text;
-        }
+      const superclassNode = firstChildOfType(node, 'superclass');
+      if (superclassNode) {
+        extendsName = firstChildOfType(superclassNode, 'type_identifier')?.text;
       }
 
-      const implementsClause = firstChildOfType(node, 'interfaces');
-      if (implementsClause) {
-        const typeList = firstChildOfType(implementsClause, 'type_list');
-        const types = (typeList ?? implementsClause).namedChildren;
-        for (const t of types) {
-          const id = firstChildOfType(t, 'identifier') ??
-            firstChildOfType(t, 'type_name');
-          if (id) {
-            const name = firstChildOfType(id, 'identifier')?.text ?? id.text;
-            implementsNames.push(name);
-          }
+      // interfaces → type_identifier (multiple)
+      const implementsNames: string[] = [];
+      const interfacesNode = firstChildOfType(node, 'interfaces');
+      if (interfacesNode) {
+        for (const c of interfacesNode.namedChildren) {
+          if (c.type === 'type_identifier') implementsNames.push(c.text);
         }
       }
 
@@ -142,32 +135,30 @@ export function parseDartContent(
         kind: 'class',
         startLine,
         endLine,
-        isExported: true,
+        isExported: pub,
         calls: [],
         extendsName,
         implementsNames,
       });
-      exports.push(className);
+      if (pub) exports.push(className);
 
-      // Extract methods
+      // Methods: class_body namedChildren include method_signature nodes
+      // Each method_signature contains a function_signature → [return_type, name: identifier, params]
       const body = firstChildOfType(node, 'class_body');
       if (body) {
         for (const member of body.namedChildren) {
-          if (
-            member.type === 'method_signature' ||
-            member.type === 'function_signature' ||
-            member.type === 'method_declaration' ||
-            member.type === 'declared_identifier'
-          ) {
-            const mName = firstChildOfType(member, 'identifier');
-            if (!mName || !isPublicName(mName.text)) continue;
+          if (member.type === 'method_signature') {
+            const sig = firstChildOfType(member, 'function_signature');
+            if (!sig) continue;
+            const mName = functionSignatureName(sig);
+            if (!mName || !isPublicName(mName)) continue;
             symbols.push({
-              id: `${fileId}#${className}.${mName.text}`,
-              name: `${className}.${mName.text}`,
+              id: `${fileId}#${className}.${mName}`,
+              name: `${className}.${mName}`,
               kind: 'method',
               startLine: member.startPosition.row + 1,
               endLine: member.endPosition.row + 1,
-              isExported: false,
+              isExported: pub,
               calls: [],
               implementsNames: [],
             });
@@ -177,71 +168,30 @@ export function parseDartContent(
       continue;
     }
 
-    // mixin
-    if (node.type === 'mixin_declaration') {
-      const nameNode = firstChildOfType(node, 'identifier');
-      if (!nameNode || !isPublicName(nameNode.text)) continue;
-      const name = nameNode.text;
-      symbols.push({
-        id: `${fileId}#${name}`,
-        name,
-        kind: 'class',
-        startLine,
-        endLine,
-        isExported: true,
-        calls: [],
-        implementsNames: [],
-      });
-      exports.push(name);
-      continue;
-    }
-
-    // extension
-    if (node.type === 'extension_declaration') {
-      const nameNode = firstChildOfType(node, 'identifier');
-      if (!nameNode || !isPublicName(nameNode.text)) continue;
-      const name = nameNode.text;
-      symbols.push({
-        id: `${fileId}#${name}`,
-        name,
-        kind: 'class',
-        startLine,
-        endLine,
-        isExported: true,
-        calls: [],
-        implementsNames: [],
-      });
-      exports.push(name);
-      continue;
-    }
-
     // enum
     if (node.type === 'enum_declaration') {
       const nameNode = firstChildOfType(node, 'identifier');
-      if (!nameNode || !isPublicName(nameNode.text)) continue;
-      const name = nameNode.text;
+      if (!nameNode) continue;
+      const enumName = nameNode.text;
+      const pub = isPublicName(enumName);
       symbols.push({
-        id: `${fileId}#${name}`,
-        name,
+        id: `${fileId}#${enumName}`,
+        name: enumName,
         kind: 'class',
         startLine,
         endLine,
-        isExported: true,
+        isExported: pub,
         calls: [],
         implementsNames: [],
       });
-      exports.push(name);
+      if (pub) exports.push(enumName);
       continue;
     }
 
-    // top-level function
-    if (
-      node.type === 'function_signature' ||
-      node.type === 'function_declaration'
-    ) {
-      const nameNode = firstChildOfType(node, 'identifier');
-      if (!nameNode || !isPublicName(nameNode.text)) continue;
-      const fnName = nameNode.text;
+    // Top-level function: function_signature at program root (followed by function_body sibling)
+    if (node.type === 'function_signature') {
+      const fnName = functionSignatureName(node);
+      if (!fnName || !isPublicName(fnName)) continue;
       symbols.push({
         id: `${fileId}#${fnName}`,
         name: fnName,
