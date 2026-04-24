@@ -352,13 +352,118 @@ describe('parser — Kotlin', () => {
   });
 });
 
-// Dart: tree-sitter-dart@1.0.0 uses Rust bindings incompatible with tree-sitter@0.21.x.
-// Dart files are walked but not parsed (returns empty imports/exports/symbols).
-describe.skip('parser — Dart', () => {
-  it('extracts classes from auth_service.dart', async () => {
-    const result = await parseFile(join(FIXTURES, 'dart/auth_service.dart'), 'dart');
+describe('parser — Swift', () => {
+  const FILE_ID = 'tests/fixtures/swift/AuthService.swift';
+
+  it('extracts imports from AuthService.swift', async () => {
+    const result = await parseFile(join(FIXTURES, 'swift/AuthService.swift'), 'swift', FILE_ID);
     expect(result).not.toBeNull();
+    expect(result!.imports).toContain('Foundation');
+    expect(result!.imports).toContain('UIKit');
+  });
+
+  it('extracts protocol as interface symbol', async () => {
+    const result = await parseFile(join(FIXTURES, 'swift/AuthService.swift'), 'swift', FILE_ID);
+    const proto = result!.symbols.find(s => s.name === 'AuthInterface')!;
+    expect(proto).toBeDefined();
+    expect(proto.kind).toBe('interface');
+    expect(proto.isExported).toBe(true);
+    expect(result!.exports).toContain('AuthInterface');
+  });
+
+  it('extracts class with extends and implements', async () => {
+    const result = await parseFile(join(FIXTURES, 'swift/AuthService.swift'), 'swift', FILE_ID);
+    const cls = result!.symbols.find(s => s.name === 'AuthService')!;
+    expect(cls).toBeDefined();
+    expect(cls.kind).toBe('class');
+    expect(cls.extendsName).toBe('BaseService');
+    expect(cls.implementsNames).toContain('AuthInterface');
+  });
+
+  it('extracts struct and enum as class symbols', async () => {
+    const result = await parseFile(join(FIXTURES, 'swift/AuthService.swift'), 'swift', FILE_ID);
+    const struct = result!.symbols.find(s => s.name === 'LoginRequest')!;
+    expect(struct).toBeDefined();
+    expect(struct.kind).toBe('class');
+    const enumSym = result!.symbols.find(s => s.name === 'AuthError')!;
+    expect(enumSym).toBeDefined();
+    expect(enumSym.kind).toBe('class');
+  });
+
+  it('extracts methods from class and protocol bodies', async () => {
+    const result = await parseFile(join(FIXTURES, 'swift/AuthService.swift'), 'swift', FILE_ID);
+    const names = result!.symbols.map(s => s.name);
+    expect(names).toContain('AuthService.login');
+    expect(names).toContain('AuthService.logout');
+    expect(names).toContain('AuthInterface.login');
+    expect(names).toContain('AuthInterface.logout');
+  });
+
+  it('extracts top-level function', async () => {
+    const result = await parseFile(join(FIXTURES, 'swift/AuthService.swift'), 'swift', FILE_ID);
+    const fn = result!.symbols.find(s => s.name === 'generateToken')!;
+    expect(fn).toBeDefined();
+    expect(fn.kind).toBe('function');
+    expect(fn.isExported).toBe(true);
+    expect(result!.exports).toContain('generateToken');
+  });
+
+  it('respects private modifier', async () => {
+    const result = await parseFile(join(FIXTURES, 'swift/AuthService.swift'), 'swift', FILE_ID);
+    const loginMethod = result!.symbols.find(s => s.name === 'AuthService.login')!;
+    // login is implicitly internal (public within module)
+    expect(loginMethod.isExported).toBe(true);
+  });
+});
+
+describe('parser — Dart', () => {
+  const FILE_ID = 'tests/fixtures/dart/auth_service.dart';
+
+  it('extracts imports from auth_service.dart', async () => {
+    const result = await parseFile(join(FIXTURES, 'dart/auth_service.dart'), 'dart', FILE_ID);
+    expect(result).not.toBeNull();
+    expect(result!.imports).toContain('package:crypto/crypto.dart');
+    expect(result!.imports).toContain('package:auth/user_repository.dart');
+  });
+
+  it('extracts class symbols', async () => {
+    const result = await parseFile(join(FIXTURES, 'dart/auth_service.dart'), 'dart', FILE_ID);
+    const names = result!.symbols.map(s => s.name);
+    expect(names).toContain('LoginRequest');
+    expect(names).toContain('AuthResult');
+    expect(names).toContain('AuthService');
+    expect(names).toContain('AuthInterface');
+  });
+
+  it('extracts extends and implements on AuthService', async () => {
+    const result = await parseFile(join(FIXTURES, 'dart/auth_service.dart'), 'dart', FILE_ID);
+    const cls = result!.symbols.find(s => s.name === 'AuthService')!;
+    expect(cls).toBeDefined();
+    expect(cls.kind).toBe('class');
+    expect(cls.extendsName).toBe('BaseService');
+    expect(cls.implementsNames).toContain('AuthInterface');
+  });
+
+  it('extracts methods from AuthService', async () => {
+    const result = await parseFile(join(FIXTURES, 'dart/auth_service.dart'), 'dart', FILE_ID);
+    const names = result!.symbols.map(s => s.name);
+    expect(names).toContain('AuthService.login');
+    expect(names).toContain('AuthService.verifyPassword');
+  });
+
+  it('extracts top-level function', async () => {
+    const result = await parseFile(join(FIXTURES, 'dart/auth_service.dart'), 'dart', FILE_ID);
+    const fn = result!.symbols.find(s => s.name === 'generateToken')!;
+    expect(fn).toBeDefined();
+    expect(fn.kind).toBe('function');
+    expect(result!.exports).toContain('generateToken');
+  });
+
+  it('exports all public classes', async () => {
+    const result = await parseFile(join(FIXTURES, 'dart/auth_service.dart'), 'dart', FILE_ID);
     expect(result!.exports).toContain('AuthService');
+    expect(result!.exports).toContain('LoginRequest');
+    expect(result!.exports).toContain('AuthInterface');
   });
 });
 
