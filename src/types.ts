@@ -90,12 +90,6 @@ export interface CodebaseIndex {
   gitHead: string;                      // HEAD commit hash or ''
 }
 
-export interface LanguageConfig {
-  extensions: string[];
-  importPatterns: RegExp[];
-  exportPatterns: RegExp[];
-}
-
 export interface WalkedFile {
   absolutePath: string;
   relativePath: string;
