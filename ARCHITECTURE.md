@@ -56,7 +56,9 @@ Removed:
    - **C#**: Tree-sitter (tree-sitter-c-sharp) — public classes, interfaces, structs, enums, records, public methods. Extracts base type list for extends/implements. Captures `using` directives as imports.
    - **PHP**: Tree-sitter (tree-sitter-php) — classes, interfaces, traits, public methods. Extracts `extends`/`implements` clauses. Captures `use` namespace imports.
    - **Kotlin**: Tree-sitter (tree-sitter-kotlin) — classes, interfaces (detected via `interface` keyword in `class_declaration`), object declarations, top-level functions, methods. Public by default unless explicitly private/protected.
-   - **Other languages** (C++, Swift, Dart): Walked by the filesystem scanner but not parsed — files appear in the index with empty imports/exports/symbols. Dart and Swift grammars are currently incompatible with tree-sitter@0.21.x.
+   - **Swift**: Tree-sitter (tree-sitter-swift@0.6.0, rebuilt from source) — protocols (as interface), classes/structs/enums (all `class_declaration`), top-level functions, methods. Exported = not explicitly private/fileprivate. Requires postinstall native rebuild to patch binding.gyp (removes tree-sitter-cli generate step, parser.c already ships with the package).
+   - **Dart**: Tree-sitter (tree-sitter-dart@1.0.0, binding patched) — classes (including abstract), enums, top-level functions, methods. Exported = non-`_`-prefixed names. Requires postinstall rebuild after rewriting binding.cc from NAN to NAPI format (needed for tree-sitter@0.21.x compatibility).
+   - **Other languages** (C++): Walked by the filesystem scanner but not parsed — files appear in the index with empty imports/exports/symbols.
    - Derives metadata: hash, line count, token estimate.
 
 3. **Resolve** (`indexer/resolver.ts`)
@@ -121,7 +123,7 @@ Otherwise the index is rebuilt from scratch.
 
 1. **AST-only parsing across all supported languages**
    - All indexed languages use Tree-sitter for symbol-level accuracy (exact function/class/interface extraction, line numbers, call tracking).
-   - Languages without a compatible grammar (Swift, Dart) are walked but not parsed — no regex fallback.
+   - Swift and Dart grammars required native binding patches (see postinstall script) to work with tree-sitter@0.21.x; no regex fallback used.
    - node-tree-sitter chosen over web-tree-sitter for simpler Node.js API (no WASM loading boilerplate).
 
 2. **Full rebuild over incremental indexing**
@@ -159,7 +161,7 @@ Otherwise the index is rebuilt from scratch.
 It is:
 - A local MCP indexing + routing service.
 - A fast structural context provider for coding agents.
-- A symbol-level dependency analyzer for TS/JS/Java/Ruby/Python/Go/Rust/C#/PHP/Kotlin.
+- A symbol-level dependency analyzer for TS/JS/Java/Ruby/Python/Go/Rust/C#/PHP/Kotlin/Swift/Dart.
 
 It is not:
 - A replacement for code reading.
