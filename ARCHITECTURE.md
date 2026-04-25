@@ -1,6 +1,6 @@
-# Architecture — coldstart-mcp (v6)
+# Architecture — coldstart-mcp (v8)
 
-This document captures the *current* architecture after the simplification pass.
+This document captures the *current* architecture.
 
 ---
 
@@ -36,11 +36,12 @@ Removed:
 - TF-IDF index
 - PageRank signals
 - Git co-change scoring
-- Tokenizer and stop-word machinery
 
 ---
 
 ## Runtime architecture
+
+### Startup pipeline
 
 1. **Walk** (`indexer/walker.ts`)
    - Recursively discovers source files by extension.
@@ -63,16 +64,43 @@ Removed:
 3. **Resolve** (`indexer/resolver.ts`)
    - Resolves internal import specifiers to file IDs.
    - Supports extension probing, index-file fallback, and tsconfig/jsconfig path aliases.
+   - Exposes `resolveImportsForFiles(files, fileIdSet, rootDir)` for incremental patching against a pre-built fileIdSet.
 
 4. **Graph** (`indexer/graph.ts`)
    - Builds adjacency maps (`outEdges`, `inEdges`).
-   - Computes BFS depth from entry points.
    - Derives `importedByCount` from in-degree.
 
 5. **Serve** (`server/mcp.ts`, `server/tools.ts`)
    - Exposes the 4 MCP tools over stdio.
    - All tool responses come from in-memory index data (no file reads per tool call).
    - `trace-impact` additionally queries symbol-level edges (calls, extends, implements) to compute transitive dependents.
+   - Reads the active index via `IndexManager.getContext()` — always gets the latest live snapshot.
+   - Surfaces `_indexStatus: "rebuilding"` in responses when a full rebuild is in progress.
+
+### Live update loop (post-startup)
+
+After the server starts, the index is kept current in-memory for the entire session:
+
+6. **Watch** (`watcher.ts`)
+   - Starts a recursive `fs.watch` on the project root (native Node.js, no extra deps).
+   - Debounces events over 400 ms, deduplicates by path.
+   - Filters to indexed-language extensions only — SVG, JSON, CSS, images, etc. are ignored.
+
+7. **Manage** (`index-manager.ts`)
+   - Receives debounced batches from the watcher.
+   - Routes to incremental patch or full rebuild based on batch size:
+     - 1–30 files changed → incremental patch
+     - >30 files changed → full rebuild
+     - Git HEAD changed → full rebuild always
+   - Swaps the active index atomically after rebuild completes.
+   - Collects changes that arrive mid-rebuild into a pending set; applies them as a follow-up batch after the rebuild finishes.
+   - Writes the updated index to disk (debounced, 5 s after last change).
+
+8. **Patch** (`indexer/patch.ts`)
+   - Pre-plan phase determines `delete / update / skip` for each file *before* touching the index — parse failures leave old state intact.
+   - For each updated file: strips old edges, re-parses, resolves imports against the full fileIdSet, rebuilds tokenDocFreq and symbolEdges.
+   - For deleted files: removes all flat edges (`from` and `to`), cleans importers' outEdges arrays, removes from all maps.
+   - Recomputes `importedByCount` and `transitiveImportedByCount` for affected files after all patches are applied.
 
 ---
 
@@ -83,6 +111,7 @@ Removed:
 - `edges` list (file-level import edges)
 - `symbolEdges` list (symbol-level: calls, extends, implements, exports)
 - `outEdges` and `inEdges` (file-level adjacency maps)
+- `tokenDocFreq` (IDF scoring map)
 - `indexedAt`, `gitHead`
 
 Key per-file signals used by tools:
@@ -110,11 +139,13 @@ Artifacts:
 - `meta.json`
 - `index.json`
 
-Reuse conditions today:
-- Cache version matches schema version
-- Cache age is within TTL (1 hour)
+**Startup reuse conditions:**
+- Cache version matches schema version (`CACHE_VERSION` in `constants.ts`)
+- Git HEAD has not changed since the index was built (branch switch or new commit forces a rebuild)
 
-Otherwise the index is rebuilt from scratch.
+**TTL:** 24 hours — safety net only. The file watcher is the primary freshness mechanism during a session. The in-memory index is kept current regardless of TTL.
+
+**Cache writes:** Triggered lazily (5 s after last patch or rebuild) to avoid hammering disk during rapid AI-agent write bursts. Disabled when `--no-cache` is set.
 
 ---
 
@@ -124,15 +155,19 @@ Otherwise the index is rebuilt from scratch.
    - All indexed languages use Tree-sitter for symbol-level accuracy (exact function/class/interface extraction, line numbers, call tracking).
    - Unsupported languages (Swift, Dart, C++) are walked but not parsed due to unavailable stable tree-sitter grammar npm packages.
    - node-tree-sitter chosen over web-tree-sitter for simpler Node.js API (no WASM loading boilerplate).
-   - TS/JS parser enhancements: `export default <identifier>` now correctly exports the referenced symbol.
 
-2. **Full rebuild over incremental indexing**
-   - Pros: low complexity, predictable correctness.
-   - Cons: recomputation cost on large codebases.
+2. **Hybrid incremental patch + full rebuild**
+   - Small changes (≤30 files): incremental patch in ~2–5 ms per file. Graph correctness ensured by pre-plan phase, serial edge diffing, and deferred count recomputation.
+   - Large changes (>30 files) or git HEAD changes: full rebuild. Cleaner than attempting large multi-file graph patches; still fast on modern hardware (~5 s for 5k files).
+   - Changes mid-rebuild are queued and applied as a follow-up patch — no silent drops.
 
 3. **Structural answers over semantic summaries**
    - Pros: less drift, clearer contract, easier to validate.
    - Cons: agent still needs to open files for implementation details.
+
+4. **Zero external dependencies for live updates**
+   - File watching uses Node.js native `fs.watch` (FSEvents on macOS, inotify on Linux) — no chokidar or polling.
+   - The 400 ms debounce handles editor atomic-save patterns (temp file + rename).
 
 ---
 
@@ -162,6 +197,7 @@ It is:
 - A local MCP indexing + routing service.
 - A fast structural context provider for coding agents.
 - A symbol-level dependency analyzer for TS/JS/Java/Ruby/Python/Go/Rust/C#/PHP/Kotlin, with accurate export detection via Tree-sitter AST parsing.
+- A live index service — the in-memory graph stays current via file watching and incremental patching throughout the session.
 
 It is not:
 - A replacement for code reading.

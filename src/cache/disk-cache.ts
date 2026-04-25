@@ -3,10 +3,9 @@ import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import type { CodebaseIndex, CacheMeta } from '../types.js';
-import { CACHE_VERSION } from '../constants.js';
+import { CACHE_VERSION, CACHE_TTL_MS } from '../constants.js';
 
 const DEFAULT_CACHE_DIR = join(homedir(), '.coldstart', 'indexes');
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 /**
  * Compute a stable cache key for a root directory path.
