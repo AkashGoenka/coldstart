@@ -26,10 +26,8 @@ export const EXTENSION_TO_LANGUAGE: Record<string, Language> = {
   ".hxx": "cpp",
   ".rb": "ruby",
   ".php": "php",
-  ".swift": "swift",
   ".kt": "kotlin",
   ".kts": "kotlin",
-  ".dart": "dart",
 };
 
 // ---------------------------------------------------------------------------
