@@ -1,6 +1,6 @@
 import { AuthService } from '../auth';
 
-export class NodePolicyHelper {
+export class RoleAccessHelper {
   private auth = new AuthService();
 
   async canAccess(token: string): Promise<boolean> {

@@ -186,18 +186,18 @@ function getFileDomains(pathFragment: string): DomainToken[] {
 }
 
 // ============================================================================
-// Test 1: Pluralization — query "grouphub" matches grouphubs/GroupHubMenu.ts
+// Test 1: Pluralization — query "workspace" matches workspaces/WorkspaceMenu.ts
 // ============================================================================
 describe('Pluralization', () => {
 
-  it('query "grouphub" (singular) matches grouphubs/GroupHubMenu.ts', () => {
-    const paths = queryPaths('grouphub');
-    expect(paths.some(p => p.includes('GroupHubMenu'))).toBe(true);
+  it('query "workspace" (singular) matches workspaces/WorkspaceMenu.ts', () => {
+    const paths = queryPaths('workspace');
+    expect(paths.some(p => p.includes('WorkspaceMenu'))).toBe(true);
   });
 
-  it('query "grouphubs" (plural) also matches grouphubs/GroupHubMenu.ts', () => {
-    const paths = queryPaths('grouphubs');
-    expect(paths.some(p => p.includes('GroupHubMenu'))).toBe(true);
+  it('query "workspaces" (plural) also matches workspaces/WorkspaceMenu.ts', () => {
+    const paths = queryPaths('workspaces');
+    expect(paths.some(p => p.includes('WorkspaceMenu'))).toBe(true);
   });
 });
 
@@ -205,20 +205,20 @@ describe('Pluralization', () => {
 // Test 2: No import tokens in domains
 // ============================================================================
 describe('No import tokens in domains', () => {
-  it('policies/NodePolicyHelper.ts has no import-source tokens in its domains', () => {
-    const domains = getFileDomains('NodePolicyHelper');
+  it('permissions/RoleAccessHelper.ts has no import-source tokens in its domains', () => {
+    const domains = getFileDomains('RoleAccessHelper');
     const hasImportSource = domains.some(dt => dt.sources.includes('import'));
     expect(hasImportSource).toBe(false);
   });
 
-  it('query "auth" does NOT return policies/NodePolicyHelper.ts (no longer indexed via imports)', () => {
+  it('query "auth" does NOT return permissions/RoleAccessHelper.ts (no longer indexed via imports)', () => {
     const paths = queryPaths('auth');
-    expect(paths.some(p => p.includes('NodePolicyHelper'))).toBe(false);
+    expect(paths.some(p => p.includes('RoleAccessHelper'))).toBe(false);
   });
 
-  it('query "policy" DOES return policies/NodePolicyHelper.ts (matched via own path/filename)', () => {
-    const paths = queryPaths('policy');
-    expect(paths.some(p => p.includes('NodePolicyHelper'))).toBe(true);
+  it('query "role" DOES return permissions/RoleAccessHelper.ts (matched via own path/filename)', () => {
+    const paths = queryPaths('role');
+    expect(paths.some(p => p.includes('RoleAccessHelper'))).toBe(true);
   });
 });
 
@@ -226,9 +226,9 @@ describe('No import tokens in domains', () => {
 // Test 3: Compound export name matching
 // ============================================================================
 describe('Compound export name matching', () => {
-  it('query "NodePolicyHelper" (camelCase) finds policies/NodePolicyHelper.ts', () => {
-    const paths = queryPaths('NodePolicyHelper');
-    expect(paths.some(p => p.includes('NodePolicyHelper'))).toBe(true);
+  it('query "RoleAccessHelper" (camelCase) finds permissions/RoleAccessHelper.ts', () => {
+    const paths = queryPaths('RoleAccessHelper');
+    expect(paths.some(p => p.includes('RoleAccessHelper'))).toBe(true);
   });
 });
 
@@ -237,15 +237,15 @@ describe('Compound export name matching', () => {
 // ============================================================================
 describe('All-common-token diagnostic', () => {
   it('returns a diagnostic when all matched tokens are common (high frequency)', () => {
-    // "node" appears in NodePolicyHelper — likely common in fixtures; use a very common token
-    // "policy" appears in exactly one file, so test with a token that spans all fixture files
+    // "role" appears in RoleAccessHelper — likely rare in fixtures; use a very common token
+    // "role" appears in exactly one file, so test with a token that spans all fixture files
     // We use "index" but that's a stop word — instead we'll rely on a path token like "forms"
     // that appears in all fixtures... actually let's just verify the diagnostic field can appear.
     // We test this by querying a token that matches most files (e.g. one that scores low IDF).
     // The diagnostic fires when log(totalFiles / docFreq) <= log(20) for ALL matched tokens.
     // With ~7 non-barrel files and a token matching >5% of them:
     // IDF_RARITY_THRESHOLD = log(20) ≈ 3.0; token in > 1 file of 7 means IDF = log(7/2) ≈ 1.25 which is < 3.
-    // Query "node" to match NodePolicyHelper — "node" will appear in 1 file only.
+    // Query "role" to match RoleAccessHelper — "role" will appear in 1 file only.
     // Let's instead manually verify: if a token appears in every file, diagnostic fires.
     // We skip this as an assertion test since it depends on exact fixture frequency;
     // instead verify diagnostic is present in response object shape.
