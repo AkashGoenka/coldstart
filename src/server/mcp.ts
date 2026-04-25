@@ -31,16 +31,19 @@ export async function startMCPServer(index: CodebaseIndex): Promise<void> {
           'HOW INDEXING WORKS: Files are indexed by (1) directory path segments, (2) filename, ' +
           '(3) exported symbol names — both split into tokens AND as the full lowercased compound ' +
           '(e.g. "UsersPage" → indexed as "users" + "userspage"). ' +
-          'This means you can query by camelCase/PascalCase export name directly.\n\n' +
-          'ITERATIVE USE: Call this multiple times with progressively different tokens until you find the right files.\n' +
+          'This means you can query by camelCase/PascalCase name directly.\n\n' +
+          'FIRST CALL STRATEGY: If you know the component or file name, pass it directly in the first call — ' +
+          'e.g. `domain_filter: "GroupHubActionMenu"`. Do not decompose it yourself; the tool splits it internally. ' +
+          'Only iterate if the first call returns zero results or too many.\n' +
           '- Zero results → try synonyms, shorter tokens, or a different spelling\n' +
-          '- Diagnostic warning → tokens are too common; add a second specific token\n' +
-          '- Too many results → add another concept token to narrow down\n\n' +
+          '- Too many results → add another concept token to narrow down\n' +
+          '- Diagnostic warning → tokens are too common; add a second specific token\n\n' +
+          'TEST FILES: Test and automation files (e.g. e2e tests, locators, page objects) are excluded by default. ' +
+          'If your task involves test or automation code, pass `include_tests: true`.\n\n' +
           'For framework convention files (page.tsx, route.ts, layout.tsx), query by directory name — ' +
           'the filename is generic, the directory is what uniquely identifies them.\n\n' +
           'For finding all files that import a given file/symbol, use `trace-deps` instead.\n\n' +
-          'For line-level full-text search or matches inside comments/strings, use grep/ripgrep instead.\n\n' +
-          'Prefer multiple narrow calls over one broad call.',
+          'For line-level full-text search or matches inside comments/strings, use grep/ripgrep instead.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -50,7 +53,11 @@ export async function startMCPServer(index: CodebaseIndex): Promise<void> {
             },
             max_results: {
               type: 'number',
-              description: 'Maximum number of files to return. Default 40.',
+              description: 'Maximum number of files to return. Default 15.',
+            },
+            include_tests: {
+              type: 'boolean',
+              description: 'Include test and automation files in results. Default false. Pass true when working on test or automation code.',
             },
           },
           required: ['domain_filter'],
@@ -135,6 +142,7 @@ export async function startMCPServer(index: CodebaseIndex): Promise<void> {
         result = handleGetOverview(index, {
           domain_filter: params['domain_filter'] as string | undefined,
           max_results: params['max_results'] as number | undefined,
+          include_tests: params['include_tests'] as boolean | undefined,
         });
         break;
 
