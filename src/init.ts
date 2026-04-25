@@ -98,6 +98,8 @@ Use grep only when coldstart tools don't answer the question:
 - Searching inside comments or string values
 
 In all other cases, prefer coldstart tools first.
+
+# These rules are a starting point — adapt them to your model and project as you see fit.
 `;
 
   process.stdout.write(rules);
