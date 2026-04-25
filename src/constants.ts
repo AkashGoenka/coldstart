@@ -63,7 +63,14 @@ export const DEFAULT_EXCLUDES = new Set([
 ]);
 
 // Cache version — bump when index schema changes to force re-index
-export const CACHE_VERSION = "7.2.0";
+export const CACHE_VERSION = "8.0.0";
 
 // IDF threshold for "rare" token: log(20) ≈ 3.0 — tokens appearing in < 5% of files
 export const IDF_RARITY_THRESHOLD = Math.log(20);
+
+// Incremental patch threshold: if <= this many files changed, patch in place.
+// Above this, trigger a full rebuild (covers large AI agent write bursts, refactors, branch merges).
+export const PATCH_THRESHOLD = 30;
+
+// Cache TTL: 24h safety net. Primary freshness signal is now the file watcher.
+export const CACHE_TTL_MS = 24 * 60 * 60 * 1000;

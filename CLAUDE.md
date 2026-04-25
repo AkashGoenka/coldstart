@@ -2,6 +2,15 @@
 
 MCP server that indexes a codebase and exposes structural intelligence to AI agents via four tools: `get-overview`, `get-structure`, `trace-deps`, `trace-impact`. Agents call these instead of reading files to answer questions about exports, dependencies, and blast radius of changes.
 
-Pipeline: walk → parse (Tree-sitter for TS/JS/Java/Ruby/Python/Go/Rust/C#/PHP/Kotlin; Swift/Dart not supported) → resolve imports → build graph → serve over stdio.
+**Startup pipeline:** walk → parse (Tree-sitter for TS/JS/Java/Ruby/Python/Go/Rust/C#/PHP/Kotlin; Swift/Dart/C++ not parsed) → resolve imports → build graph → serve over stdio.
 
-Key files: `src/index.ts` (entry), `src/indexer/` (walk/parse/resolve/graph), `src/server/` (MCP protocol + tool handlers), `src/cache/disk-cache.ts`, `src/types.ts`, `src/constants.ts`.
+**Live updates:** after startup, a native `fs.watch` listener keeps the in-memory index current for the entire session. File changes are debounced (400 ms), then either patched incrementally (≤30 files, ~2–5 ms/file) or trigger a full background rebuild (>30 files). No restarts required.
+
+Key files:
+- `src/index.ts` — entry point, startup pipeline
+- `src/indexer/` — walk / parse / resolve / graph / patch
+- `src/server/` — MCP protocol + tool handlers
+- `src/watcher.ts` — debounced `fs.watch` wrapper
+- `src/index-manager.ts` — live index state machine (patch vs rebuild routing, atomic swap)
+- `src/cache/disk-cache.ts` — on-disk cache (24 h TTL, safety net only)
+- `src/types.ts`, `src/constants.ts`
