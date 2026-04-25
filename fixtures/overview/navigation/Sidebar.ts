@@ -1,5 +1,5 @@
-import { GroupHubMenu } from '../grouphubs';
+import { WorkspaceMenu } from '../workspaces';
 
 export interface Sidebar {
-  menus: GroupHubMenu[];
+  menus: WorkspaceMenu[];
 }
