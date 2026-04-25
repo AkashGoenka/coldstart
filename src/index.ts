@@ -16,6 +16,7 @@ import { buildFileDomains, isTestPath } from './indexer/tokenize.js';
 import { getGitHead } from './indexer/git.js';
 import { loadCachedIndex, saveCachedIndex } from './cache/disk-cache.js';
 import { startMCPServer } from './server/mcp.js';
+import { IndexManager } from './index-manager.js';
 import type { CodebaseIndex, IndexedFile, SymbolEdge, DomainToken } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -278,9 +279,26 @@ async function main(): Promise<void> {
     }
   }
 
-  // Start MCP server
+  // Start MCP server with live index getter + file watcher
+  const manager = new IndexManager(
+    index,
+    () => buildIndex(rootDir, excludes, includes, quiet),
+    cacheDir,
+    noCache,
+    quiet,
+  );
+
   log(quiet, '[coldstart] MCP server ready');
-  await startMCPServer(index);
+  // Always start the watcher regardless of --no-cache.
+  // --no-cache disables disk reads/writes only; live in-memory updates are always desirable.
+  manager.startWatching();
+
+  // Ensure watcher is stopped on process exit
+  process.on('exit', () => manager.stopWatching());
+  process.on('SIGINT', () => { manager.stopWatching(); process.exit(0); });
+  process.on('SIGTERM', () => { manager.stopWatching(); process.exit(0); });
+
+  await startMCPServer(() => manager.getContext());
 }
 
 main().catch(err => {
