@@ -10,8 +10,6 @@ import { parseRustContent } from './extractors/rust.js';
 import { parseCSharpContent } from './extractors/csharp.js';
 import { parsePhpContent } from './extractors/php.js';
 import { parseKotlinContent } from './extractors/kotlin.js';
-import { parseSwiftContent } from './extractors/swift.js';
-import { parseDartContent } from './extractors/dart.js';
 
 const MAX_FILE_SIZE = 1_000_000; // 1 MB
 
@@ -243,53 +241,7 @@ export async function parseFile(
     };
   }
 
-  // -------------------------------------------------------------------------
-  // Swift: use Tree-sitter for symbol-level extraction
-  // -------------------------------------------------------------------------
-  if (language === 'swift') {
-    let swiftResult;
-    try {
-      swiftResult = parseSwiftContent(content, fileId || filePath);
-    } catch (err) {
-      console.error(`[parser] Tree-sitter error in ${fileId || filePath}: ${err}`);
-      swiftResult = { imports: [], exports: [], hasDefaultExport: false as const, symbols: [] };
-    }
-
-    return {
-      imports: swiftResult.imports,
-      exports: swiftResult.exports,
-      hasDefaultExport: false,
-      hash,
-      lineCount,
-      tokenEstimate,
-      symbols: swiftResult.symbols,
-    };
-  }
-
-  // -------------------------------------------------------------------------
-  // Dart: use Tree-sitter for symbol-level extraction
-  // -------------------------------------------------------------------------
-  if (language === 'dart') {
-    let dartResult;
-    try {
-      dartResult = parseDartContent(content, fileId || filePath);
-    } catch (err) {
-      console.error(`[parser] Tree-sitter error in ${fileId || filePath}: ${err}`);
-      dartResult = { imports: [], exports: [], hasDefaultExport: false as const, symbols: [] };
-    }
-
-    return {
-      imports: dartResult.imports,
-      exports: dartResult.exports,
-      hasDefaultExport: false,
-      hash,
-      lineCount,
-      tokenEstimate,
-      symbols: dartResult.symbols,
-    };
-  }
-
-  // Unsupported language (cpp)
+  // Unsupported language (cpp, swift, dart)
   return {
     imports: [],
     exports: [],
