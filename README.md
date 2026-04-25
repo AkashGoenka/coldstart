@@ -188,14 +188,12 @@ Required params:
 - `domain_filter` (string) — One or more keywords relevant to your task. Matched against each file's indexed tokens (derived from filename, path segments, exports, and imports). Bare words are AND logic; bracket groups are OR synonyms: `"[auth|login|jwt] payment"` = any auth synonym AND payment. Pluralization is automatic: `"workspace"` also matches `"workspaces"`.
 
 Optional params:
-- `max_results` (number, default 40) — cap on returned files
-- `include_import_only` (boolean, default false) — include files that only match via their import specifiers, not their own exports/path
+- `max_results` (number, default 15) — cap on returned files
+- `include_tests` (boolean, default false) — include test files in results
 
 Returns:
-- Compact list of matching files with source flags per file: `F`=filename, `P`=path, `S`=symbol, `I`=import
-- Metadata: `totalFiles`, `total_matches_before_filtering`, `indexedAt`, `gitHead`
-- Optional `diagnostic` if all matched tokens are common (> 5% of files)
-- Optional truncation message if results exceed `max_results`
+- Compact list of matching files with `path` and `sources` (token sources: filename | path | symbol | import)
+- Optional truncation message if results exceed `max_results`, with guidance to call `get-structure` on visible files or refine the query
 
 Results are filtered by two predicates before returning:
 - **Predicate A** (import-only exclusion): files whose every matched token came solely from import specifiers are excluded by default
@@ -268,7 +266,7 @@ Use this before refactoring to understand blast radius of changing a symbol, wit
 
 **Currently supported languages:** TypeScript, JavaScript, Java, Ruby, Python, Go, Rust, C#, PHP, Kotlin.
 
-**Not yet supported:** Swift, Dart, C++ (no grammar added). Files in these languages are walked but not parsed.
+**Not yet supported:** Swift, Dart, C++ (no tree-sitter grammar added). Files in these languages are walked but not parsed.
 
 ---
 
@@ -293,6 +291,9 @@ All parsing is AST-based (Tree-sitter). No regex fallback.
 **PHP:** Extracts `class`, `interface`, `trait` declarations and `public function` methods. `extends`/`implements` clauses are captured. `use` namespace imports are extracted. All classes/interfaces/traits are considered exported (PHP has no file-level visibility).
 
 **Kotlin:** Extracts `class`, `interface` (detected via the `interface` keyword inside `class_declaration`), `object`, and top-level `fun`. Methods are extracted from class bodies. Declarations are public by default unless explicitly `private` or `protected`. Imports are grouped under `import_list` in the Kotlin grammar.
+
+**TypeScript / JavaScript enhancements:**
+- `export default <identifier>` (bare identifier form) now correctly marks the symbol as exported, in addition to re-export ratio computation for barrel detection.
 
 All supported languages return a `symbols` array with line numbers, exported flags, and relationship info (calls, extends, implements).
 
@@ -331,4 +332,4 @@ If either check fails, the index is rebuilt from scratch.
 2. It is a routing layer, not a behavior summarizer — doesn't provide semantic analysis or code summaries.
 3. Hidden directories and files over 1 MB are skipped by default.
 4. Barrel detection (TS/JS only) uses re-export ratio; non-TS/JS barrel-style files are not detected.
-5. Swift, Dart, and C++ files are walked but not parsed — no exports/symbols extracted.
+5. Swift, Dart, and C++ files are walked but not parsed (no stable tree-sitter grammar npm packages) — no exports/symbols extracted.
