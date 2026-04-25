@@ -1,5 +1,5 @@
-import { ProfileMenu } from '../profiles';
+import { WorkspaceMenu } from '../workspaces';
 
 export interface Sidebar {
-  menus: ProfileMenu[];
+  menus: WorkspaceMenu[];
 }
