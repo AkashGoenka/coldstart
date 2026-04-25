@@ -45,50 +45,50 @@ export function runInit(): void {
 
   const rules = `# Codebase navigation — use coldstart MCP tools
 
-Before searching or opening files, use the coldstart MCP tools to orient
-yourself. This saves tokens and avoids broad, speculative file reads.
+Before searching or opening files, use the coldstart MCP tools to orient yourself.
+This saves tokens and avoids broad, speculative file reads.
 
-## Lookup order
+## The 4 tools
 
-1. \`get-overview\` — Use like a search engine, not a codebase summarizer.
-   Pass \`domain_filter\` with specific code tokens from your task to find relevant files fast.
-   Do NOT call this for general exploration — it only does targeted keyword lookup.
-   Bare words are AND logic: "auth payment" = must match auth AND payment.
-   Bracket groups are OR synonyms: "[auth|login|jwt] payment" = any auth synonym AND payment.
-   Pluralization is automatic: "workspace" also matches "workspaces".
-   Results include source flags: F=filename, P=path, S=symbol, I=import.
-   Call iteratively — adjust tokens based on what comes back:
-   - Zero results → try synonyms, shorter tokens, or a different spelling
-   - Diagnostic warning → tokens are too common; add a second specific token
-   - Too many results → add another concept token to narrow down
-   Set include_import_only=true only if the file you need imports the concept but doesn't own it.
+1. **\`get-overview\`** — Find files by domain/token keywords (filename, path, exports, imports).
+   - Pass \`domain_filter\` with specific code tokens from your task.
+   - Bare words = AND logic: "auth payment" matches files with both tokens.
+   - Bracket groups = OR synonyms: "[auth|login|jwt] payment" = any auth term AND payment.
+   - Pluralization is automatic: "workspace" also matches "workspaces".
+   - Results show \`path\` and \`sources\` (which tokens matched).
+   - Call iteratively: if truncated, either call \`get-structure\` on a visible file or narrow the query.
+   - \`max_results\` defaults to 15 (increase sparingly; large result sets waste context).
+   - \`include_tests\` (default false) — set true if searching for test files.
 
-2. \`get-structure\` — Check a file's shape WITHOUT reading it.
-   Returns exports, imports, symbols (with line numbers for TS/JS/Java/Ruby), line count, and token estimate.
-   Only read the full file if get-structure confirms it's relevant.
-   Check \`tokenEstimate\` before reading large files.
+2. **\`get-structure\`** — Inspect a single file's shape WITHOUT reading it.
+   - Returns: exports, imports, symbols with line numbers, language, line count, token estimate.
+   - Fast way to decide if a file is relevant before opening it.
 
-3. \`trace-deps\` — Follow dependency chains WITHOUT opening files.
-   \`direction="imports"\`: what does this file depend on?
-   \`direction="importers"\`: what depends on this file?
-   Use \`depth=2\` or \`depth=3\` for transitive chains.
+3. **\`trace-deps\`** — Follow dependency chains WITHOUT opening files.
+   - \`direction="imports"\`: what does this file depend on?
+   - \`direction="importers"\`: what depends on this file?
+   - Use \`depth=2\` or \`depth=3\` for transitive chains.
 
-4. \`trace-impact\` — Understand blast radius of symbol changes.
-   Shows every function/class that directly or transitively depends on a given symbol.
-   Use before refactoring to scope affected code without reading all dependent files.
+4. **\`trace-impact\`** — Understand blast radius of symbol changes.
+   - Shows every function/class that directly or transitively depends on a symbol.
+   - Use before refactoring to scope affected code without reading dependent files.
 
-## Preferred patterns
+## Workflow examples
 
-\`\`\`
-# Starting a task with a known concept (e.g. "fix the auth flow")
-get-overview(domain_filter="[auth|login|jwt]") → get-structure → read file (only if needed)
+**Starting a task with a known concept (e.g. "fix the auth flow"):**
+1. \`get-overview(domain_filter="[auth|login|jwt]")\`
+2. \`get-structure\` on a promising file
+3. Read the file only if confirmed relevant
 
-# Understanding how a component connects to the rest of the codebase
-get-structure → trace-deps → read file (only if needed)
+**Understanding how a component connects:**
+1. \`get-structure(file_path="path/to/file.ts")\`
+2. \`trace-deps(file_path="path/to/file.ts", direction="importers")\`
+3. Read dependent files if needed
 
-# Before refactoring a function or class
-trace-impact(symbol="MyFunction") → trace-deps(direction="importers") → targeted edits
-\`\`\`
+**Before refactoring a function or class:**
+1. \`trace-impact(symbol="MyFunction")\`
+2. Review affected symbols and dependencies
+3. Make targeted edits
 
 ## When to fall back to grep/rg
 
