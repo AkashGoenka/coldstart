@@ -23,6 +23,43 @@ const DIR_ENTRY_NAMES = new Set(['index', '__init__', 'mod']);
 
 const SOURCE_ORDER: TokenSource[] = ['filename', 'path', 'symbol', 'import'];
 
+// Words that, when found as a token in any path segment, mark a file as test infrastructure.
+// Matched via tokenizeName so word-boundary splitting handles e2e-tests, __tests__, pageObjects etc.
+const TEST_SEGMENT_WORDS = new Set([
+  'test', 'tests', 'spec', 'specs', 'e2e', 'mock', 'mocks', 'fixture', 'fixtures',
+  'stub', 'stubs', 'locator', 'locators', 'pageobject', 'pageobjects',
+  'automation', 'cypress', 'playwright', 'selenium', 'nightwatch', 'webdriver',
+]);
+
+/**
+ * Returns true if any directory segment in the relative path contains a test
+ * infrastructure word (e.g. "e2e-tests/", "locators/", "__tests__/").
+ * Works for any project structure — no hardcoded paths.
+ */
+export function isTestPath(relativePath: string): boolean {
+  const normalized = relativePath.replace(/\\/g, '/');
+  const parts = normalized.split('/');
+  const filename = parts[parts.length - 1];
+
+  // Check filename directly for .test., .spec., .mock. patterns (before extension stripping)
+  // Can't use tokenizeName here — 'test'/'spec'/'mock' are stop words and get filtered out
+  const filenameLower = filename.toLowerCase();
+  if (/\.(test|spec|mock)\.[a-z]+$/.test(filenameLower)) return true;
+
+  // Check all directory segments
+  const dirParts = parts.slice(0, -1);
+  for (const segment of dirParts) {
+    const tokens = tokenizeName(segment);
+    for (const token of tokens) {
+      if (TEST_SEGMENT_WORDS.has(token)) return true;
+    }
+    // Also check the raw lowercased segment for compound words like "e2e" that survive intact
+    const lower = segment.toLowerCase();
+    if (TEST_SEGMENT_WORDS.has(lower)) return true;
+  }
+  return false;
+}
+
 /**
  * Split a name into lowercase tokens by camelCase, PascalCase, snake_case,
  * kebab-case, and dot boundaries. Filters out stop words and single-char tokens.

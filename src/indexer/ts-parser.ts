@@ -357,6 +357,17 @@ export function parseTsContent(
       ) || node.text.startsWith('export default');
       if (isDefault) {
         hasDefaultExport = true;
+        // `export default SomeName` — bare identifier, no declaration to extract from.
+        // Mark the referenced symbol as exported so it appears in exports/symbols.
+        const defaultValue = node.namedChildren.find(
+          (c: TSNode) => c.type === 'identifier',
+        );
+        if (defaultValue && allSymbolNames.has(defaultValue.text)) {
+          exports.push(defaultValue.text);
+          // Mark the symbol as exported in rawSymbols (it was collected as non-exported)
+          const existing = rawSymbols.find(s => s.name === defaultValue.text);
+          if (existing) existing.isExported = true;
+        }
       }
 
       // export { X, Y }
