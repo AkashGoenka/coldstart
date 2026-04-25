@@ -1,15 +1,21 @@
-import type { CodebaseIndex, DomainToken, TokenSource } from '../types.js';
+import type { CodebaseIndex, DomainToken } from '../types.js';
 import { tokenizeName } from '../indexer/tokenize.js';
 import { IDF_RARITY_THRESHOLD } from '../constants.js';
 
-const TEST_KEYWORDS = new Set(['test', 'spec', 'mock', 'fixture', 'stub']);
-const TEST_PATH_RE = /\.(test|spec)\.[^.]+$|__tests__\/|\/tests?\/|\/e2e[-_]?tests?\/|\/test-framework\//i;
+// Query tokens that signal the user is working on test/automation code
+const TEST_QUERY_KEYWORDS = new Set([
+  'test', 'spec', 'mock', 'fixture', 'stub', 'e2e', 'locator', 'automation',
+  'pageobject', 'cypress', 'playwright', 'selenium',
+]);
 
 /**
  * Parse a domain_filter string into concept groups.
  * - [auth|login|jwt] → one group with synonyms (OR logic)
- * - bare words → one group per word (AND logic across groups)
- * - Each group is satisfied if ANY of its tokens match the file's domains.
+ * - bare single token → one group (AND logic across groups)
+ * - bare PascalCase/camelCase like "GroupHubActionMenu" → one group per split token
+ *   (AND across groups, so files matching more tokens rank higher via matchedGroupCount)
+ *   The compound form is added as OR alternative to the first group so compound-indexed
+ *   files still match.
  */
 function parseConceptGroups(input: string): string[][] {
   const groups: string[][] = [];
@@ -17,30 +23,31 @@ function parseConceptGroups(input: string): string[][] {
   let match: RegExpExecArray | null;
   while ((match = segmentRe.exec(input)) !== null) {
     if (match[1] !== undefined) {
-      // Bracket group: split by | and tokenize each synonym
+      // Bracket group: split by | and tokenize each synonym — stays as one OR group
       const synonyms = match[1].split('|').flatMap(s => tokenizeName(s.trim())).filter(Boolean);
       if (synonyms.length > 0) groups.push(synonyms);
     } else if (match[2] !== undefined) {
-      // Bare segment: tokenize AND also include the raw lowercased compound form.
-      // This lets camelCase/PascalCase names like "UsersPage" match their compound
-      // indexed form "userspage" even when stop words drop some split tokens.
+      // Bare segment: split into individual tokens (PascalCase/camelCase → parts).
+      // Each token becomes its own AND group so matchedGroupCount reflects how many
+      // parts of the name the file actually contains.
       const tokens = tokenizeName(match[2]);
       const compound = match[2].toLowerCase();
-      const all = [...new Set([...tokens, compound])].filter(Boolean);
-      if (all.length > 0) groups.push(all);
+      if (tokens.length <= 1) {
+        // Single token (or empty after stop-word filter): one group with compound fallback
+        const all = [...new Set([...tokens, compound])].filter(Boolean);
+        if (all.length > 0) groups.push(all);
+      } else {
+        // Multi-token: one group per token; compound added as OR to first group so
+        // a file indexed under the full compound name still satisfies the entire query
+        groups.push([...new Set([tokens[0], compound])]);
+        for (let i = 1; i < tokens.length; i++) {
+          groups.push([tokens[i]]);
+        }
+      }
     }
   }
   return groups;
 }
-
-// Source flags in stable display order
-const SOURCE_FLAGS: Record<TokenSource, string> = {
-  filename: 'F',
-  path: 'P',
-  symbol: 'S',
-  import: 'I',  // kept for index compatibility; no longer produced at index time
-};
-const SOURCE_FLAG_ORDER: TokenSource[] = ['filename', 'path', 'symbol'];
 
 /**
  * Expand a query token with additive plural/singular forms (same rules as index time).
@@ -72,9 +79,10 @@ export function handleGetOverview(
   params: {
     domain_filter?: string;
     max_results?: number;
+    include_tests?: boolean;
   },
 ): object {
-  const { domain_filter, max_results = 40 } = params;
+  const { domain_filter, max_results = 15, include_tests = false } = params;
 
   if (!domain_filter) {
     return {
@@ -90,7 +98,7 @@ export function handleGetOverview(
   }
 
   const allTokens = conceptGroups.flat();
-  const isTestQuery = allTokens.some(t => TEST_KEYWORDS.has(t));
+  const isTestQuery = include_tests || allTokens.some(t => TEST_QUERY_KEYWORDS.has(t));
   const totalFiles = index.files.size;
 
   type MatchResult = {
@@ -104,8 +112,8 @@ export function handleGetOverview(
   for (const file of index.files.values()) {
     // Exclude barrels — keep path/filename tokens but barrels themselves are noise results
     if (file.isBarrel) continue;
-    // Exclude test files for non-test queries
-    if (!isTestQuery && TEST_PATH_RE.test(file.relativePath)) {
+    // Exclude test/automation files for non-test queries
+    if (!isTestQuery && file.isTestFile) {
       continue;
     }
 
@@ -140,71 +148,36 @@ export function handleGetOverview(
     matched.push({ path: file.relativePath, matchedDomainTokens, matchedGroupCount });
   }
 
-  const totalBeforeFiltering = matched.length;
-
-  // Predicate B: rarity OR multi-concept
+  // Predicate B: rarity OR multi-concept coverage
   const afterB = matched.filter(m => {
     const hasRareToken = m.matchedDomainTokens.some(dt => {
       const docFreq = index.tokenDocFreq.get(dt.token) ?? 1;
       const idf = Math.log(totalFiles / docFreq);
-      const rare = idf > IDF_RARITY_THRESHOLD;
-      return rare;
+      return idf > IDF_RARITY_THRESHOLD;
     });
     const hasMultipleConcepts = m.matchedGroupCount > 1;
     return hasRareToken || hasMultipleConcepts;
   });
 
-  // Sort alphabetically by path
-  afterB.sort((a, b) => a.path.localeCompare(b.path));
+  // Sort by how many concept groups the file matched (descending), alphabetical tiebreaker
+  afterB.sort((a, b) =>
+    b.matchedGroupCount - a.matchedGroupCount || a.path.localeCompare(b.path),
+  );
 
   // Truncation
   const truncated = afterB.length > max_results;
   const results = afterB.slice(0, max_results);
 
-  // Build compact response items with source flags
-  const resultItems = results.map(m => {
-    const allSources = new Set<TokenSource>();
-    for (const dt of m.matchedDomainTokens) {
-      for (const s of dt.sources) allSources.add(s);
-    }
-    const sources = SOURCE_FLAG_ORDER
-      .filter(s => allSources.has(s))
-      .map(s => SOURCE_FLAGS[s])
-      .join(',');
-    return { path: m.path, sources };
-  });
-
-  // All-common-token diagnostic
-  let diagnostic: string | undefined;
-  if (results.length > 0) {
-    const allCommon = results.every(m =>
-      m.matchedDomainTokens.every(dt => {
-        const docFreq = index.tokenDocFreq.get(dt.token) ?? 1;
-        return Math.log(totalFiles / docFreq) <= IDF_RARITY_THRESHOLD;
-      }),
-    );
-    if (allCommon) {
-      diagnostic = '[DIAGNOSTIC: all matched tokens are common (frequency > 5%). Results may be unreliable; consider more specific tokens.]';
-    }
-  }
+  const resultItems = results.map(m => m.path);
 
   const response: Record<string, unknown> = {
-    totalFiles,
     filter: domain_filter,
-    total_matches_before_filtering: totalBeforeFiltering,
     results: resultItems,
-    indexedAt: new Date(index.indexedAt).toISOString(),
-    gitHead: index.gitHead || '(not a git repo)',
   };
 
   if (truncated) {
     response.truncated = true;
-    response.total_matched = afterB.length;
-    response.message = `[TRUNCATED: ${afterB.length - max_results} additional matches omitted. Query is too broad. Add specific tokens or use trace-deps for graph queries.]`;
-  }
-
-  if (diagnostic) {
-    response.diagnostic = diagnostic;
+    response.message = `[TRUNCATED: ${afterB.length - max_results} additional matches omitted. If a filename above looks right, call get-structure on it. Otherwise narrow your query by adding a more specific token.]`;
   }
 
   return response;
@@ -314,7 +287,7 @@ export function handleGetStructure(
   const internalImports = edges
     .map(e => {
       const target = index.files.get(e.to);
-      return target ? { specifier: e.specifier, resolvedPath: target.relativePath, type: e.type } : null;
+      return target ? { specifier: e.specifier, resolvedPath: target.relativePath } : null;
     })
     .filter(Boolean);
 
@@ -338,22 +311,14 @@ export function handleGetStructure(
 
   return {
     path: file.relativePath,
-    language: file.language,
-    domains: file.domains,
-    exports: {
-      named: file.exports,
-      hasDefault: file.hasDefaultExport,
-    },
+    exports: file.exports,
     ...(symbolSummary ? { symbols: symbolSummary } : {}),
     imports: {
       internal: internalImports,
       external: externalImports,
     },
     lineCount: file.lineCount,
-    tokenEstimate: file.tokenEstimate,
-    hash: file.hash,
     importedByCount: file.importedByCount,
-    imports_count: index.outEdges.get(fileId)?.length ?? 0,
   };
 }
 
