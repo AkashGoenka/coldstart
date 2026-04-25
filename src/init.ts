@@ -55,7 +55,7 @@ yourself. This saves tokens and avoids broad, speculative file reads.
    Do NOT call this for general exploration — it only does targeted keyword lookup.
    Bare words are AND logic: "auth payment" = must match auth AND payment.
    Bracket groups are OR synonyms: "[auth|login|jwt] payment" = any auth synonym AND payment.
-   Pluralization is automatic: "grouphub" also matches "grouphubs".
+   Pluralization is automatic: "workspace" also matches "workspaces".
    Results include source flags: F=filename, P=path, S=symbol, I=import.
    Call iteratively — adjust tokens based on what comes back:
    - Zero results → try synonyms, shorter tokens, or a different spelling
