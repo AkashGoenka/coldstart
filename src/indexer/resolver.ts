@@ -159,47 +159,36 @@ export interface ResolveResult {
   unresolved: Array<{ from: string; specifier: string }>;
 }
 
-export async function resolveImports(
+/**
+ * Resolve imports for a subset of files against an explicit fileIdSet.
+ * Used by the incremental patch to resolve only changed files while
+ * still being able to resolve against the full index's known file IDs.
+ */
+export async function resolveImportsForFiles(
   files: IndexedFile[],
+  fileIdSet: Set<string>,
   rootDir: string,
 ): Promise<ResolveResult> {
   const aliasMap = await loadTsConfigPaths(rootDir);
-  const fileIdSet = new Set(files.map(f => f.id));
-  const fileMap = new Map(files.map(f => [f.id, f]));
 
   const edges: Edge[] = [];
   const unresolved: Array<{ from: string; specifier: string }> = [];
 
-  // Process files in parallel batches
   const BATCH = 50;
   for (let i = 0; i < files.length; i += BATCH) {
     const batch = files.slice(i, i + BATCH);
     await Promise.all(batch.map(async (file) => {
       for (const specifier of file.imports) {
-        const absFromFile = file.path;
-
-        let edgeType: EdgeType = 'import';
-        let spec = specifier;
-
-        // Detect re-export
-        // (parser already tagged imports from `export ... from` — treat same as import)
-
         const resolved = await resolveSpecifier(
-          spec,
-          absFromFile,
+          specifier,
+          file.path,
           fileIdSet,
           rootDir,
           aliasMap,
           file.language,
         );
-
         if (resolved && resolved !== file.id) {
-          // Detect if it's a barrel re-export: the resolved file has no logic (all re-exports)
-          const resolvedFile = fileMap.get(resolved);
-          if (resolvedFile) {
-            edgeType = 'import';
-          }
-          edges.push({ from: file.id, to: resolved, type: edgeType, specifier });
+          edges.push({ from: file.id, to: resolved, type: 'import', specifier });
         } else if (!resolved) {
           unresolved.push({ from: file.id, specifier });
         }
@@ -208,4 +197,16 @@ export async function resolveImports(
   }
 
   return { edges, unresolved };
+}
+
+/**
+ * Resolve imports for all files in a project. Builds fileIdSet from the
+ * passed files array. For incremental patching, use resolveImportsForFiles instead.
+ */
+export async function resolveImports(
+  files: IndexedFile[],
+  rootDir: string,
+): Promise<ResolveResult> {
+  const fileIdSet = new Set(files.map(f => f.id));
+  return resolveImportsForFiles(files, fileIdSet, rootDir);
 }
