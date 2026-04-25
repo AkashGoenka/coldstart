@@ -4,7 +4,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import type { CodebaseIndex } from '../types.js';
+import type { IndexContext } from '../index-manager.js';
 import {
   handleGetOverview,
   handleTraceDeps,
@@ -12,7 +12,7 @@ import {
   handleTraceImpact,
 } from './tools.js';
 
-export async function startMCPServer(index: CodebaseIndex): Promise<void> {
+export async function startMCPServer(getContext: () => IndexContext): Promise<void> {
   const server = new Server(
     { name: 'coldstart-mcp', version: '3.0.0' },
     { capabilities: { tools: {} } },
@@ -134,6 +134,7 @@ export async function startMCPServer(index: CodebaseIndex): Promise<void> {
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
     const params = (args ?? {}) as Record<string, unknown>;
+    const { index, isRebuilding } = getContext();
 
     let result: object;
 
@@ -170,6 +171,11 @@ export async function startMCPServer(index: CodebaseIndex): Promise<void> {
 
       default:
         result = { error: `Unknown tool: ${name}` };
+    }
+
+    // Surface rebuilding state so agents know results may be from a prior snapshot
+    if (isRebuilding) {
+      (result as Record<string, unknown>)['_indexStatus'] = 'rebuilding — results from previous snapshot';
     }
 
     const isError = 'error' in result;
