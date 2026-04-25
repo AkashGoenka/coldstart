@@ -12,7 +12,7 @@ import { walkDirectory } from './indexer/walker.js';
 import { parseFile, buildFileId } from './indexer/parser.js';
 import { resolveImports } from './indexer/resolver.js';
 import { buildGraph } from './indexer/graph.js';
-import { buildFileDomains } from './indexer/tokenize.js';
+import { buildFileDomains, isTestPath } from './indexer/tokenize.js';
 import { getGitHead } from './indexer/git.js';
 import { loadCachedIndex, saveCachedIndex } from './cache/disk-cache.js';
 import { startMCPServer } from './server/mcp.js';
@@ -116,6 +116,7 @@ async function buildIndex(
           importedByCount: 0,
           transitiveImportedByCount: 0,
           isBarrel: false,
+          isTestFile: isTestPath(wf.relativePath),
           symbols: parsed.symbols,
           reexportRatio: parsed.reexportRatio,
         };
