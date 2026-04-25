@@ -39,6 +39,6 @@ trace-deps (direction="importers") → decide which callers to update
 Use grep or rg only when coldstart tools don't answer the question:
 - Searching for a specific string or literal value inside file contents
 - Looking for call sites of a function by name across the whole repo
-- Coldstart index is stale and you need up-to-the-second accuracy
+- Searching inside comments or string values
 
 In all other cases, prefer coldstart tools first.
