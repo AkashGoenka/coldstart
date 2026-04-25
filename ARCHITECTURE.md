@@ -1,4 +1,4 @@
-# Architecture — coldstart-mcp (v5)
+# Architecture — coldstart-mcp (v6)
 
 This document captures the *current* architecture after the simplification pass.
 
@@ -56,7 +56,8 @@ Removed:
    - **C#**: Tree-sitter (tree-sitter-c-sharp) — public classes, interfaces, structs, enums, records, public methods. Extracts base type list for extends/implements. Captures `using` directives as imports.
    - **PHP**: Tree-sitter (tree-sitter-php) — classes, interfaces, traits, public methods. Extracts `extends`/`implements` clauses. Captures `use` namespace imports.
    - **Kotlin**: Tree-sitter (tree-sitter-kotlin) — classes, interfaces (detected via `interface` keyword in `class_declaration`), object declarations, top-level functions, methods. Public by default unless explicitly private/protected.
-   - **Other languages** (Swift, Dart, C++): Walked by the filesystem scanner but not parsed — files appear in the index with empty imports/exports/symbols. Swift and Dart grammars were dropped due to native binding incompatibilities with tree-sitter@0.21.x.
+   - **TypeScript/JavaScript enhancements**: `export default <identifier>` (bare identifier form) now correctly marks the referenced symbol as exported in addition to setting `hasDefaultExport = true`.
+   - **Other languages** (Swift, Dart, C++): Walked by the filesystem scanner but not parsed — files appear in the index with empty imports/exports/symbols. No stable tree-sitter grammar npm packages available.
    - Derives metadata: hash, line count, token estimate.
 
 3. **Resolve** (`indexer/resolver.ts`)
@@ -119,10 +120,11 @@ Otherwise the index is rebuilt from scratch.
 
 ## Design tradeoffs
 
-1. **AST-only parsing across all supported languages**
+1. **AST-only parsing via Tree-sitter across all supported languages**
    - All indexed languages use Tree-sitter for symbol-level accuracy (exact function/class/interface extraction, line numbers, call tracking).
-   - No regex fallback; unsupported languages (Swift, Dart, C++) are walked but not parsed.
+   - Unsupported languages (Swift, Dart, C++) are walked but not parsed due to unavailable stable tree-sitter grammar npm packages.
    - node-tree-sitter chosen over web-tree-sitter for simpler Node.js API (no WASM loading boilerplate).
+   - TS/JS parser enhancements: `export default <identifier>` now correctly exports the referenced symbol.
 
 2. **Full rebuild over incremental indexing**
    - Pros: low complexity, predictable correctness.
@@ -159,7 +161,7 @@ Otherwise the index is rebuilt from scratch.
 It is:
 - A local MCP indexing + routing service.
 - A fast structural context provider for coding agents.
-- A symbol-level dependency analyzer for TS/JS/Java/Ruby/Python/Go/Rust/C#/PHP/Kotlin.
+- A symbol-level dependency analyzer for TS/JS/Java/Ruby/Python/Go/Rust/C#/PHP/Kotlin, with accurate export detection via Tree-sitter AST parsing.
 
 It is not:
 - A replacement for code reading.
