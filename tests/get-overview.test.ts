@@ -172,7 +172,7 @@ beforeAll(async () => {
 // Helper: get result paths from handleGetOverview
 function queryPaths(filter: string, opts: { max_results?: number } = {}): string[] {
   const result = handleGetOverview(index, { domain_filter: filter, ...opts }) as any;
-  return (result.results ?? []).map((r: any) => r.path ?? r.relativePath ?? '');
+  return result.results ?? [];
 }
 
 // Helper: get the DomainToken[] for a file (by relative path fragment)
@@ -247,17 +247,16 @@ describe('All-common-token diagnostic', () => {
     // IDF_RARITY_THRESHOLD = log(20) ≈ 3.0; token in > 1 file of 7 means IDF = log(7/2) ≈ 1.25 which is < 3.
     // Query "role" to match RoleAccessHelper — "role" will appear in 1 file only.
     // Let's instead manually verify: if a token appears in every file, diagnostic fires.
-    // We skip this as an assertion test since it depends on exact fixture frequency;
-    // instead verify diagnostic is present in response object shape.
+    // Verify response shape: filter and results are always present
     const result = handleGetOverview(index, { domain_filter: 'auth' }) as any;
-    // Response must have the new fields (not old score/coverage fields)
-    expect(result).toHaveProperty('total_matches_before_filtering');
+    expect(result).toHaveProperty('filter');
+    expect(result).toHaveProperty('results');
+    expect(Array.isArray(result.results)).toBe(true);
+    // Should NOT have old scoring metadata fields
+    expect(result).not.toHaveProperty('total_matches_before_filtering');
     expect(result).not.toHaveProperty('score_distribution');
-    // diagnostic may or may not be present depending on frequency — just verify type if present
-    if (result.diagnostic) {
-      expect(typeof result.diagnostic).toBe('string');
-      expect(result.diagnostic).toContain('DIAGNOSTIC');
-    }
+    expect(result).not.toHaveProperty('score');
+    expect(result).not.toHaveProperty('coverage');
   });
 });
 
@@ -367,26 +366,20 @@ describe('Multi-source correctness', () => {
     expect(authToken!.sources).toContain('symbol');
   });
 
-  it('query "auth login" result for auth/service.ts shows sources flag containing both P and S', () => {
+  it('query "auth login" returns auth/service.ts in results', () => {
     // "login" is rare (single file: auth/service.ts) → passes Predicate B
-    // auth/service.ts has "auth" with path+symbol sources, "login" with symbol source
     const result = handleGetOverview(index, { domain_filter: 'auth login' }) as any;
-    const serviceResult = (result.results ?? []).find((r: any) =>
-      (r.path ?? '').includes('service'),
-    );
-    expect(serviceResult).toBeDefined();
-    // sources flag is union of all matched token sources — should include P and S
-    expect(serviceResult.sources).toContain('P');
-    expect(serviceResult.sources).toContain('S');
+    const results = result.results ?? [];
+    expect(results).toContain('auth/service.ts');
   });
 
-  it('response results have new compact shape: { path, sources } not old { score, coverage }', () => {
+  it('response results are shallow array of file paths (strings)', () => {
     const result = handleGetOverview(index, { domain_filter: 'auth' }) as any;
-    for (const r of result.results ?? []) {
-      expect(r).not.toHaveProperty('score');
-      expect(r).not.toHaveProperty('coverage');
-      expect(r).toHaveProperty('path');
-      expect(r).toHaveProperty('sources');
+    const results = result.results ?? [];
+    expect(Array.isArray(results)).toBe(true);
+    for (const r of results) {
+      expect(typeof r).toBe('string');
+      expect(r).toMatch(/\.(ts|js|tsx|jsx|java|rb)$/);
     }
   });
 });
