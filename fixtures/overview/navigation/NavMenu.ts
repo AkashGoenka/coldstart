@@ -1,5 +1,5 @@
-import { GroupHubMenu, GroupHubMenuItem } from '../grouphubs';
+import { WorkspaceMenu, WorkspaceMenuItem } from '../workspaces';
 
-export function buildNav(menus: GroupHubMenu[]): GroupHubMenuItem[] {
+export function buildNav(menus: WorkspaceMenu[]): WorkspaceMenuItem[] {
   return menus.flatMap(m => m.items);
 }

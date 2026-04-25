@@ -46,7 +46,7 @@ export async function startMCPServer(index: CodebaseIndex): Promise<void> {
           properties: {
             domain_filter: {
               type: 'string',
-              description: 'One or more keywords relevant to your task. Bare words are independent concepts (AND logic across them). Bracket groups are synonyms (OR logic within): "[auth|login|jwt] payment" means files must match the auth concept AND payment concept, where any of auth/login/jwt satisfies the auth concept. You can pass camelCase names directly: "UsersPage" finds files that export UsersPage. Partial matches work: "grouphub" matches files indexed under "grouphubs".',
+              description: 'One or more keywords relevant to your task. Bare words are independent concepts (AND logic across them). Bracket groups are synonyms (OR logic within): "[auth|login|jwt] payment" means files must match the auth concept AND payment concept, where any of auth/login/jwt satisfies the auth concept. You can pass camelCase names directly: "UsersPage" finds files that export UsersPage. Partial matches work: "workspace" matches files indexed under "workspaces".',
             },
             max_results: {
               type: 'number',

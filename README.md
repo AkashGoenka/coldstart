@@ -2,10 +2,11 @@
 
 `coldstart-mcp` is a local MCP server that helps AI agents navigate unfamiliar codebases without reading hundreds of files first.
 
-It focuses on 3 structural jobs:
+It exposes 4 tools:
 - Domain mapping (`get-overview`)
 - Dependency tracing (`trace-deps`)
 - File shape inspection (`get-structure`)
+- Blast radius analysis (`trace-impact`)
 
 No embeddings, no external API calls, no cloud dependency.
 
@@ -179,15 +180,12 @@ printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion
 
 ---
 
-
----
-
 ## Tool reference
 
 ### `get-overview`
 
 Required params:
-- `domain_filter` (string) — One or more keywords relevant to your task. Matched against each file's indexed tokens (derived from filename, path segments, exports, and imports). Bare words are AND logic; bracket groups are OR synonyms: `"[auth|login|jwt] payment"` = any auth synonym AND payment. Pluralization is automatic: `"grouphub"` also matches `"grouphubs"`.
+- `domain_filter` (string) — One or more keywords relevant to your task. Matched against each file's indexed tokens (derived from filename, path segments, exports, and imports). Bare words are AND logic; bracket groups are OR synonyms: `"[auth|login|jwt] payment"` = any auth synonym AND payment. Pluralization is automatic: `"workspace"` also matches `"workspaces"`.
 
 Optional params:
 - `max_results` (number, default 40) — cap on returned files
@@ -262,17 +260,15 @@ Use this before refactoring to understand blast radius of changing a symbol, wit
    - **C#**: public classes, interfaces, structs, enums, records, public methods; base-type list for extends/implements
    - **PHP**: classes, interfaces, traits, public methods; extends/implements clauses; use namespace imports
    - **Kotlin**: classes, interfaces, object declarations, top-level functions, methods; public by default
-   - **Swift**: protocols (as interfaces), classes, structs, enums, top-level functions, methods; exports anything not explicitly `private`/`fileprivate`
-   - **Dart**: classes (including abstract), enums, top-level functions, methods; exports by `_`-prefix convention (non-`_` = public)
 3. Resolve internal imports to graph edges (including tsconfig/jsconfig aliases)
 4. Build graph adjacency maps and compute in-degree (`importedByCount`)
 5. Extract symbol-level relationships (calls, extends, implements, exports)
 6. Detect barrel files via AST re-export ratio (TS/JS only); strip symbol tokens from barrel domains
 7. Start MCP server with in-memory index
 
-**Currently supported languages:** TypeScript, JavaScript, Java, Ruby, Python, Go, Rust, C#, PHP, Kotlin, Swift, Dart.
+**Currently supported languages:** TypeScript, JavaScript, Java, Ruby, Python, Go, Rust, C#, PHP, Kotlin.
 
-**Not yet supported:** C++ (no grammar added). Files in this language are walked but not parsed.
+**Not yet supported:** Swift, Dart, C++ (no grammar added). Files in these languages are walked but not parsed.
 
 ---
 
@@ -297,10 +293,6 @@ All parsing is AST-based (Tree-sitter). No regex fallback.
 **PHP:** Extracts `class`, `interface`, `trait` declarations and `public function` methods. `extends`/`implements` clauses are captured. `use` namespace imports are extracted. All classes/interfaces/traits are considered exported (PHP has no file-level visibility).
 
 **Kotlin:** Extracts `class`, `interface` (detected via the `interface` keyword inside `class_declaration`), `object`, and top-level `fun`. Methods are extracted from class bodies. Declarations are public by default unless explicitly `private` or `protected`. Imports are grouped under `import_list` in the Kotlin grammar.
-
-**Swift:** Extracts `protocol` (as `interface`), `class`, `struct`, `enum` (all use `class_declaration` in tree-sitter-swift), and top-level `func`. Methods extracted from class and protocol bodies. Exported = not explicitly `private` or `fileprivate`. Inheritance via `inheritance_specifier`: first entry = extends, rest = implements. Requires a native build step run by `npm run postinstall`.
-
-**Dart:** Extracts `class` (including abstract), `enum`, and top-level `function_signature`. Methods extracted from `method_signature` nodes in class bodies. Exported = name does not start with `_`. Extends via `superclass`, implements via `interfaces` node. Requires a native binding rebuild run by `npm run postinstall`.
 
 All supported languages return a `symbols` array with line numbers, exported flags, and relationship info (calls, extends, implements).
 
@@ -339,4 +331,4 @@ If either check fails, the index is rebuilt from scratch.
 2. It is a routing layer, not a behavior summarizer — doesn't provide semantic analysis or code summaries.
 3. Hidden directories and files over 1 MB are skipped by default.
 4. Barrel detection (TS/JS only) uses re-export ratio; non-TS/JS barrel-style files are not detected.
-5. C++ files are walked but not parsed — no exports/symbols extracted.
+5. Swift, Dart, and C++ files are walked but not parsed — no exports/symbols extracted.
