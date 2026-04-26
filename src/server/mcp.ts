@@ -3,6 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListRootsResultSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { IndexContext } from '../index-manager.js';
 import {
@@ -12,7 +13,10 @@ import {
   handleTraceImpact,
 } from './tools.js';
 
-export async function startMCPServer(getContext: () => IndexContext): Promise<void> {
+export async function startMCPServer(
+  onReady: (clientRoots: string[]) => Promise<void>,
+  getContext: () => IndexContext
+): Promise<void> {
   const server = new Server(
     { name: 'coldstart-mcp', version: '3.0.0' },
     { capabilities: { tools: {} } },
@@ -195,4 +199,17 @@ export async function startMCPServer(getContext: () => IndexContext): Promise<vo
   // -------------------------------------------------------------------------
   const transport = new StdioServerTransport();
   await server.connect(transport);
+
+  // After connect, ask for roots
+  let clientRoots: string[] = [];
+  try {
+    const result = await server.request({ method: 'roots/list' }, ListRootsResultSchema);
+    if (result && result.roots && result.roots.length > 0) {
+      clientRoots = result.roots.map((r: any) => r.uri);
+    }
+  } catch (err) {
+    // Client might not support roots/list, ignore
+  }
+
+  await onReady(clientRoots);
 }
