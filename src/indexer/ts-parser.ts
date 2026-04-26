@@ -72,6 +72,70 @@ function getNameText(node: TSNode): string | null {
 }
 
 // ---------------------------------------------------------------------------
+// Extract nested function/arrow declarations one level inside a function body.
+// Returns symbols with id "fileId#parentName.innerName".
+// ---------------------------------------------------------------------------
+function extractNestedFunctions(
+  body: TSNode,
+  fileId: string,
+  parentName: string,
+): SymbolNode[] {
+  const nested: SymbolNode[] = [];
+
+  for (const child of body.namedChildren) {
+    // Inner function declarations: function handleError() { ... }
+    if (child.type === 'function_declaration' || child.type === 'generator_function_declaration') {
+      const nameNode = firstChildOfType(child, 'identifier');
+      if (!nameNode) continue;
+      const innerName = nameNode.text;
+      const calls = new Set<string>();
+      const innerBody = firstChildOfType(child, 'statement_block');
+      if (innerBody) collectCalls(innerBody, calls);
+      nested.push({
+        id: `${fileId}#${parentName}.${innerName}`,
+        name: `${parentName}.${innerName}`,
+        kind: 'function',
+        startLine: child.startPosition.row + 1,
+        endLine: child.endPosition.row + 1,
+        isExported: false,
+        calls: [...calls].filter(c => c !== innerName),
+        implementsNames: [],
+      });
+      continue;
+    }
+
+    // Inner arrow/function expressions: const handleError = () => { ... }
+    if (child.type === 'lexical_declaration' || child.type === 'variable_declaration') {
+      const declarators = childrenOfType(child, 'variable_declarator');
+      for (const declarator of declarators) {
+        const nameNode = firstChildOfType(declarator, 'identifier');
+        if (!nameNode) continue;
+        const innerName = nameNode.text;
+        const value = declarator.namedChildren.find(
+          (c: TSNode) => c.type === 'arrow_function' || c.type === 'function_expression',
+        );
+        if (!value) continue;
+        const calls = new Set<string>();
+        const innerBody = firstChildOfType(value, 'statement_block');
+        if (innerBody) collectCalls(innerBody, calls);
+        nested.push({
+          id: `${fileId}#${parentName}.${innerName}`,
+          name: `${parentName}.${innerName}`,
+          kind: 'function',
+          startLine: child.startPosition.row + 1,
+          endLine: child.endPosition.row + 1,
+          isExported: false,
+          calls: [...calls].filter(c => c !== innerName),
+          implementsNames: [],
+        });
+      }
+    }
+  }
+
+  return nested;
+}
+
+// ---------------------------------------------------------------------------
 // Walk a subtree and collect all call_expression callee names
 // ---------------------------------------------------------------------------
 function collectCalls(node: TSNode, results: Set<string>): void {
@@ -111,7 +175,7 @@ function extractFromDeclaration(
       const calls = new Set<string>();
       const body = firstChildOfType(decl, 'statement_block');
       if (body) collectCalls(body, calls);
-      return {
+      const parent: SymbolNode = {
         id: `${fileId}#${name}`,
         name,
         kind: 'function',
@@ -121,6 +185,8 @@ function extractFromDeclaration(
         calls: [...calls].filter(c => c !== name), // exclude self-recursion
         implementsNames: [],
       };
+      const nested = body ? extractNestedFunctions(body, fileId, name) : [];
+      return nested.length > 0 ? [parent, ...nested] : parent;
     }
 
     case 'class_declaration': {
@@ -231,6 +297,11 @@ function extractFromDeclaration(
         const nameNode = firstChildOfType(declarator, 'identifier');
         if (!nameNode) continue;
         const name = nameNode.text;
+        // Detect arrow/function expression to extract nested functions
+        const value = declarator.namedChildren.find(
+          (c: TSNode) => c.type === 'arrow_function' || c.type === 'function_expression',
+        );
+        const body = value ? firstChildOfType(value, 'statement_block') : null;
         // Only track if it looks like a significant export (not just a primitive)
         nodes.push({
           id: `${fileId}#${name}`,
@@ -242,6 +313,9 @@ function extractFromDeclaration(
           calls: [],
           implementsNames: [],
         });
+        if (body) {
+          nodes.push(...extractNestedFunctions(body, fileId, name));
+        }
       }
       return nodes.length === 1 ? nodes[0]! : nodes.length > 1 ? nodes : null;
     }
