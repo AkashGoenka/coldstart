@@ -14,6 +14,7 @@ import { parseFile, buildFileId } from './indexer/parser.js';
 import { resolveImports } from './indexer/resolver.js';
 import { buildGraph } from './indexer/graph.js';
 import { buildFileDomains, isTestPath } from './indexer/tokenize.js';
+import { buildSymbolEdges } from './indexer/symbol-edges.js';
 import { getGitHead } from './indexer/git.js';
 import { loadCachedIndex, saveCachedIndex } from './cache/disk-cache.js';
 import { startMCPServer } from './server/mcp.js';
@@ -145,27 +146,10 @@ async function buildIndex(
     file.importedByCount = inEdges.get(file.id)?.length ?? 0;
   }
 
-  // Build symbol-level edges from all TS/JS files
-  for (const file of indexedFiles) {
-    for (const sym of file.symbols) {
-      // exports: file → symbol
-      if (sym.isExported) {
-        allSymbolEdges.push({ from: file.id, to: sym.id, type: 'exports' });
-      }
-      // calls: symbol → symbol/name
-      for (const callee of sym.calls) {
-        allSymbolEdges.push({ from: sym.id, to: callee, type: 'calls' });
-      }
-      // extends: symbol → name
-      if (sym.extendsName) {
-        allSymbolEdges.push({ from: sym.id, to: sym.extendsName, type: 'extends' });
-      }
-      // implements: symbol → name
-      for (const iface of sym.implementsNames) {
-        allSymbolEdges.push({ from: sym.id, to: iface, type: 'implements' });
-      }
-    }
-  }
+  // Build symbol-level edges (exports, calls with cross-file resolution, extends, implements)
+  const filesMap = new Map<string, IndexedFile>(indexedFiles.map(f => [f.id, f]));
+  const allSymbolEdgesBuilt = buildSymbolEdges(indexedFiles, outEdges, filesMap);
+  allSymbolEdges.push(...allSymbolEdgesBuilt);
 
   // 6. Barrel detection: AST-based for TS/JS (reexportRatio), no heuristic for others
   for (const file of indexedFiles) {
@@ -207,8 +191,6 @@ async function buildIndex(
   const elapsed = ((Date.now() - start) / 1000).toFixed(1);
   log(quiet, `[coldstart] Indexed ${indexedFiles.length} files in ${elapsed}s`);
   log(quiet, `[coldstart] Languages: ${Object.entries(langCount).map(([l, c]) => `${l}(${c})`).join(', ')}`);
-
-  const filesMap = new Map<string, IndexedFile>(indexedFiles.map(f => [f.id, f]));
 
   // Inflate transitiveImportedByCount through barrel files
   for (const file of indexedFiles) {
