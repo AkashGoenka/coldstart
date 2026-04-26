@@ -270,6 +270,12 @@ Returns:
 
 Use this before refactoring to understand blast radius of changing a symbol, without reading all dependent files.
 
+**Confidence notes:**
+- `calls` edges are resolved cross-file for named function/constant calls — if `login` in `auth.ts` calls `hashPassword` exported from `utils.ts`, that edge is fully qualified and will appear in impact results.
+- Member expression calls (`this.method()`, `api.method()`) collapse to the property name only and are not cross-file resolved — they will not appear in impact results unless a same-file symbol matches the name.
+- Nested functions one level deep inside components/functions are indexed (e.g. `UserProfile.handleSubmit`). Deeper closures are not.
+- Inheritance (`extends`/`implements`) chains are fully resolved.
+
 ---
 
 ## How indexing works
@@ -287,7 +293,7 @@ Use this before refactoring to understand blast radius of changing a symbol, wit
    - **Kotlin**: classes, interfaces, object declarations, top-level functions, methods; public by default
 3. Resolve internal imports to graph edges (including tsconfig/jsconfig aliases)
 4. Build graph adjacency maps and compute in-degree (`importedByCount`)
-5. Extract symbol-level relationships (calls, extends, implements, exports)
+5. Extract symbol-level relationships (calls, extends, implements, exports); cross-file call edges are resolved by matching bare call names against the exports of each file's resolved imports
 6. Detect barrel files via AST re-export ratio (TS/JS only); strip symbol tokens from barrel domains
 7. Start MCP server with in-memory index
 
@@ -321,6 +327,8 @@ All parsing is AST-based (Tree-sitter). No regex fallback.
 
 **TypeScript / JavaScript enhancements:**
 - `export default <identifier>` (bare identifier form) now correctly marks the symbol as exported, in addition to re-export ratio computation for barrel detection.
+- Nested functions and arrow functions one level deep inside a top-level function or component body are extracted as symbols (e.g. `UserProfile.handleSubmit`). This makes React component handlers, hooks callbacks, and similar patterns visible to `trace-impact`.
+- Cross-file call edges are resolved at index build time: bare call names are matched against the exports of each file's resolved imports and qualified to `fileId#symbolName`. Member expression calls (`this.x()`, `obj.x()`) are not cross-file resolved.
 
 All supported languages return a `symbols` array with line numbers, exported flags, and relationship info (calls, extends, implements).
 
@@ -389,3 +397,4 @@ If the cache is stale or absent, the index is rebuilt from scratch.
 3. Hidden directories and files over 1 MB are skipped by default.
 4. Barrel detection (TS/JS only) uses re-export ratio; non-TS/JS barrel-style files are not detected.
 5. Swift, Dart, and C++ files are walked but not parsed (no stable tree-sitter grammar npm packages) — no exports/symbols extracted.
+6. `trace-impact` call edges: member expression calls (`this.method()`, `api.method()`) are not cross-file resolved — only the property name is captured, so these callers will not appear in impact results. Named function calls that can be matched to an import are fully resolved.

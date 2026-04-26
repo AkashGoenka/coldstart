@@ -37,7 +37,7 @@ export async function startMCPServer(
           '(e.g. "UsersPage" → indexed as "users" + "userspage"). ' +
           'This means you can query by camelCase/PascalCase name directly.\n\n' +
           'FIRST CALL STRATEGY: If you know the component or file name, pass it directly in the first call — ' +
-          'e.g. `domain_filter: "GroupHubActionMenu"`. Do not decompose it yourself; the tool splits it internally. ' +
+          'e.g. `domain_filter: "PaymentForm"`. Do not decompose it yourself; the tool splits it internally. ' +
           'Only iterate if the first call returns zero results or too many.\n' +
           '- Zero results → try synonyms, shorter tokens, or a different spelling\n' +
           '- Too many results → add another concept token to narrow down\n' +
@@ -109,7 +109,8 @@ export async function startMCPServer(
       {
         name: 'trace-impact',
         description:
-          'Call this when you need to understand what code will break if you change a symbol. Given a function, class, interface, or type, returns every symbol that directly or transitively depends on it — with the full dependency chain for each. Use it before refactoring to scope the blast radius without reading all dependent files.',
+          'Returns the known static dependents of a symbol — every symbol in the indexed graph that directly or transitively calls, extends, or implements it, with the full dependency chain for each. Use it before refactoring to scope blast radius without reading all dependent files.\n\n' +
+          'Confidence notes: (1) Only top-level and one-level-nested symbols are indexed — deeply nested closures will not appear. (2) Calls are resolved intra-file; cross-file call edges are not yet resolved, so the primary signal for cross-file impact is `trace-deps` (file importers). (3) Inheritance (`extends`/`implements`) chains are reliable.',
         inputSchema: {
           type: 'object',
           properties: {

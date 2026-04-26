@@ -5,6 +5,7 @@ import { EXTENSION_TO_LANGUAGE } from '../constants.js';
 import { parseFile, buildFileId } from './parser.js';
 import { buildFileDomains, isTestPath } from './tokenize.js';
 import { resolveImportsForFiles } from './resolver.js';
+import { buildSymbolEdges } from './symbol-edges.js';
 
 /**
  * Incrementally patches the in-memory index for a set of changed files.
@@ -235,19 +236,8 @@ export async function patchIndex(
         }
       }
 
-      for (const sym of file.symbols) {
-        if (sym.isExported) {
-          index.symbolEdges.push({ from: file.id, to: sym.id, type: 'exports' });
-        }
-        for (const callee of sym.calls) {
-          index.symbolEdges.push({ from: sym.id, to: callee, type: 'calls' });
-        }
-        if (sym.extendsName) {
-          index.symbolEdges.push({ from: sym.id, to: sym.extendsName, type: 'extends' });
-        }
-        for (const iface of sym.implementsNames) {
-          index.symbolEdges.push({ from: sym.id, to: iface, type: 'implements' });
-        }
+      for (const edge of buildSymbolEdges([file], index.outEdges, index.files)) {
+        index.symbolEdges.push(edge);
       }
     }
   }
