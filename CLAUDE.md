@@ -2,7 +2,7 @@
 
 MCP server that indexes a codebase and exposes structural intelligence to AI agents via four tools: `get-overview`, `get-structure`, `trace-deps`, `trace-impact`. Agents call these instead of reading files to answer questions about exports, dependencies, and blast radius of changes.
 
-**Startup pipeline:** walk → parse (Tree-sitter for TS/JS/Java/Ruby/Python/Go/Rust/C#/PHP/Kotlin; Swift/Dart/C++ not parsed) → resolve imports → build graph → serve over stdio.
+**Startup pipeline:** walk → parse (Tree-sitter for TS/JS/Java/Ruby/Python/Go/Rust/C#/PHP/Kotlin; Swift/Dart/C++ not parsed) → resolve imports → build graph (including cross-file call edge resolution) → serve over stdio.
 
 **Live updates:** after startup, a native `fs.watch` listener keeps the in-memory index current for the entire session. File changes are debounced (400 ms), then either patched incrementally (≤30 files, ~2–5 ms/file) or trigger a full background rebuild (>30 files). No restarts required.
 
