@@ -24,11 +24,6 @@ This prints two things: an MCP config snippet and a set of agent rules. Copy bot
 
 **Step 2 — Add the MCP config to your IDE:**
 
-<details>
-<summary>Claude Code / Claude Desktop</summary>
-
-Add to `claude_desktop_config.json`:
-
 ```json
 {
   "mcpServers": {
@@ -39,24 +34,8 @@ Add to `claude_desktop_config.json`:
   }
 }
 ```
-</details>
 
-<details>
-<summary>Cursor</summary>
-
-Add to `.cursor/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "coldstart": {
-      "command": "npx",
-      "args": ["coldstart-mcp", "--root", "."]
-    }
-  }
-}
-```
-</details>
+Where to paste it: Claude Code/Desktop → `claude_desktop_config.json`, Cursor → `.cursor/mcp.json`. Most other MCP-compatible IDEs use the same JSON format — check your IDE's MCP documentation for the exact file location.
 
 > **Note on `--root`:** The server auto-detects your project path from the MCP handshake. `--root` is a fallback for older clients or direct CLI use.
 
