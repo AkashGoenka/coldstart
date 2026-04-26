@@ -491,10 +491,23 @@ export function parseTsContent(
 
   // Resolve intra-file calls: replace plain names with full symbol IDs where known
   const symbolIdByName = new Map<string, string>(rawSymbols.map(s => [s.name, s.id]));
-  const resolvedSymbols = rawSymbols.map(sym => ({
-    ...sym,
-    calls: sym.calls.map(name => symbolIdByName.get(name) ?? name),
-  }));
+  const resolvedSymbols = rawSymbols.map(sym => {
+    const dotIdx = sym.name.lastIndexOf('.');
+    const parentPrefix = dotIdx !== -1 ? sym.name.slice(0, dotIdx) : null;
+    return {
+      ...sym,
+      calls: sym.calls.map(name => {
+        if (symbolIdByName.has(name)) return symbolIdByName.get(name)!;
+        // Nested sibling resolution: bare call inside a nested function resolved
+        // against parent-scoped symbol (e.g. "handleError" → "Parent.handleError")
+        if (parentPrefix !== null) {
+          const scoped = `${parentPrefix}.${name}`;
+          if (symbolIdByName.has(scoped)) return symbolIdByName.get(scoped)!;
+        }
+        return name;
+      }),
+    };
+  });
 
   const reexportRatio = totalExportStatements > 0 ? reexportStatements / totalExportStatements : 0;
 

@@ -1,6 +1,6 @@
 // Fixture: React-style component with nested handlers.
 // Used to test that nested functions one level inside a component body
-// are extracted as symbols (e.g. GroupHubActionMenu.handleError).
+// are extracted as symbols (e.g. SettingsMenu.handleError).
 
 export interface ActionItem {
   label: string;
@@ -8,20 +8,20 @@ export interface ActionItem {
 }
 
 // Arrow function component with nested handlers
-export const GroupHubActionMenu = ({ items }: { items: ActionItem[] }) => {
+export const SettingsMenu = ({ items }: { items: ActionItem[] }) => {
   const handleError = (err: Error) => {
     console.error(err);
   };
 
   function handleClose() {
-    // close logic
+    handleError(new Error('closed'));
   }
 
   return null;
 };
 
 // Classic function declaration component with nested handlers
-export function UserActionMenu() {
+export function ProfileMenu() {
   const handleDelete = () => {
     doDelete();
   };
