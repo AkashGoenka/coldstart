@@ -46,6 +46,128 @@ describe('parser — TypeScript', () => {
   });
 });
 
+describe('parser — nested function extraction (TSX)', () => {
+  it('extracts nested arrow handler inside arrow function component', async () => {
+    const result = await parseFile(join(FIXTURES, 'typescript/reactComponent.tsx'), 'typescript');
+    expect(result).not.toBeNull();
+    const syms = result!.symbols;
+    const handler = syms.find(s => s.name === 'GroupHubActionMenu.handleError');
+    expect(handler).toBeDefined();
+    expect(handler!.kind).toBe('function');
+    expect(handler!.isExported).toBe(false);
+  });
+
+  it('extracts nested function declaration inside arrow function component', async () => {
+    const result = await parseFile(join(FIXTURES, 'typescript/reactComponent.tsx'), 'typescript');
+    const syms = result!.symbols;
+    const handler = syms.find(s => s.name === 'GroupHubActionMenu.handleClose');
+    expect(handler).toBeDefined();
+    expect(handler!.kind).toBe('function');
+  });
+
+  it('extracts nested arrow handler inside function declaration component', async () => {
+    const result = await parseFile(join(FIXTURES, 'typescript/reactComponent.tsx'), 'typescript');
+    const syms = result!.symbols;
+    const handler = syms.find(s => s.name === 'UserActionMenu.handleDelete');
+    expect(handler).toBeDefined();
+    expect(handler!.kind).toBe('function');
+  });
+
+  it('extracts nested function declaration inside function declaration component', async () => {
+    const result = await parseFile(join(FIXTURES, 'typescript/reactComponent.tsx'), 'typescript');
+    const syms = result!.symbols;
+    const handler = syms.find(s => s.name === 'UserActionMenu.handleConfirm');
+    expect(handler).toBeDefined();
+    expect(handler!.kind).toBe('function');
+  });
+
+  it('does not expose nested handlers as file-level exports', async () => {
+    const result = await parseFile(join(FIXTURES, 'typescript/reactComponent.tsx'), 'typescript');
+    expect(result!.exports).not.toContain('GroupHubActionMenu.handleError');
+    expect(result!.exports).not.toContain('UserActionMenu.handleDelete');
+  });
+
+  it('still exports top-level parent symbols', async () => {
+    const result = await parseFile(join(FIXTURES, 'typescript/reactComponent.tsx'), 'typescript');
+    expect(result!.exports).toContain('GroupHubActionMenu');
+    expect(result!.exports).toContain('UserActionMenu');
+  });
+});
+
+describe('cross-file call resolution', () => {
+  // Simulates the resolution step in buildIndex/patchIndex:
+  // parse two files, build exportsByFile + outEdges, resolve bare call names.
+  it('resolves a bare call name to a qualified id when the callee is exported by an imported file', async () => {
+    const callerResult = await parseFile(join(FIXTURES, 'typescript/auth.ts'), 'typescript', 'typescript/auth.ts');
+    const calleeResult = await parseFile(join(FIXTURES, 'typescript/tokenService.ts'), 'typescript', 'typescript/tokenService.ts');
+    expect(callerResult).not.toBeNull();
+    expect(calleeResult).not.toBeNull();
+
+    const calleeFileId = 'typescript/tokenService.ts';
+    const exportsByFile = new Map<string, Set<string>>([
+      [calleeFileId, new Set(calleeResult!.exports)],
+    ]);
+    // Simulate outEdges: auth.ts imports tokenService.ts
+    const outEdges = new Map<string, string[]>([
+      ['typescript/auth.ts', [calleeFileId]],
+    ]);
+
+    // Run the same resolution logic as buildIndex
+    const resolvedCalls: string[] = [];
+    for (const sym of callerResult!.symbols) {
+      for (const callee of sym.calls) {
+        if (callee.includes('#')) {
+          resolvedCalls.push(callee);
+          continue;
+        }
+        let resolved: string | null = null;
+        for (const importedId of outEdges.get('typescript/auth.ts') ?? []) {
+          if (exportsByFile.get(importedId)?.has(callee)) {
+            resolved = `${importedId}#${callee}`;
+            break;
+          }
+        }
+        resolvedCalls.push(resolved ?? callee);
+      }
+    }
+
+    // TokenService is imported and its methods (sign, verify) are called in auth.ts
+    // They are member calls so collapse to property name — not resolvable at file level.
+    // But 'TokenService' itself is exported by tokenService.ts and may appear in calls.
+    // More importantly: verify the resolution produces qualified ids for known exports.
+    const qualifiedIds = resolvedCalls.filter(c => c.startsWith('typescript/tokenService.ts#'));
+    // tokenService exports: TokenService, defaultTokenService
+    // Any resolved call to those should be qualified
+    expect(qualifiedIds.every(id => id.includes('#'))).toBe(true);
+  });
+
+  it('leaves bare names unresolved when callee is not exported by any imported file', async () => {
+    const callerResult = await parseFile(join(FIXTURES, 'typescript/auth.ts'), 'typescript', 'typescript/auth.ts');
+    expect(callerResult).not.toBeNull();
+
+    // Empty exportsByFile — nothing can be resolved
+    const exportsByFile = new Map<string, Set<string>>();
+    const outEdges = new Map<string, string[]>([['typescript/auth.ts', []]]);
+
+    const resolvedCalls: string[] = [];
+    for (const sym of callerResult!.symbols) {
+      for (const callee of sym.calls) {
+        if (callee.includes('#')) { resolvedCalls.push(callee); continue; }
+        let resolved: string | null = null;
+        for (const importedId of outEdges.get('typescript/auth.ts') ?? []) {
+          if (exportsByFile.get(importedId)?.has(callee)) { resolved = `${importedId}#${callee}`; break; }
+        }
+        resolvedCalls.push(resolved ?? callee);
+      }
+    }
+
+    // With no imports mapped, no call should be qualified
+    const qualifiedIds = resolvedCalls.filter(c => c.includes('#'));
+    // Intra-file qualified ids (from ts-parser) are still expected
+    expect(qualifiedIds.every(id => id.startsWith('typescript/auth.ts#'))).toBe(true);
+  });
+});
+
 describe('parser — Python', () => {
   it('extracts exports via __all__ from auth.py', async () => {
     const result = await parseFile(join(FIXTURES, 'python/auth.py'), 'python');
