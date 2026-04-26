@@ -1,6 +1,6 @@
 # coldstart-mcp
 
-MCP server that indexes a codebase and exposes structural intelligence to AI agents via four tools: `get-overview`, `get-structure`, `trace-deps`, `trace-impact`. Agents call these instead of reading files to answer questions about exports, dependencies, and blast radius of changes.
+Lightweight navigation layer for AI agents. Answers one question: which files are relevant to this task? Fast static index over file paths, symbol names, and exports — built once, queried instantly via four MCP tools: `get-overview`, `get-structure`, `trace-deps`, `trace-impact`.
 
 **Startup pipeline:** walk → parse (Tree-sitter for TS/JS/Java/Ruby/Python/Go/Rust/C#/PHP/Kotlin; Swift/Dart/C++ not parsed) → resolve imports → build graph (including cross-file call edge resolution) → serve over stdio.
 
