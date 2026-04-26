@@ -70,7 +70,8 @@ This saves tokens and avoids broad, speculative file reads.
    - Use \`depth=2\` or \`depth=3\` for transitive chains.
 
 4. **\`trace-impact\`** — Understand blast radius of symbol changes.
-   - Shows every function/class that directly or transitively depends on a symbol.
+   - Returns known static dependents: symbols that directly or transitively call, extend, or implement the target.
+   - Named function calls are resolved cross-file. Member expression calls (\`this.x()\`, \`obj.x()\`) are not — use \`trace-deps\` to find file-level importers when call graph coverage is uncertain.
    - Use before refactoring to scope affected code without reading dependent files.
 
 ## Workflow examples
