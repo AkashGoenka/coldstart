@@ -28,7 +28,9 @@
     "build": "tsc --noEmit false",
     "dev": "tsc --watch",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "release:patch": "npm run test && npm run build && npm version patch && git push --follow-tags && npm publish",
+    "release:minor": "npm run test && npm run build && npm version minor && git push --follow-tags && npm publish"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "latest",
