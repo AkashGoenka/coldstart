@@ -51,7 +51,7 @@ describe('parser — nested function extraction (TSX)', () => {
     const result = await parseFile(join(FIXTURES, 'typescript/reactComponent.tsx'), 'typescript');
     expect(result).not.toBeNull();
     const syms = result!.symbols;
-    const handler = syms.find(s => s.name === 'GroupHubActionMenu.handleError');
+    const handler = syms.find(s => s.name === 'SettingsMenu.handleError');
     expect(handler).toBeDefined();
     expect(handler!.kind).toBe('function');
     expect(handler!.isExported).toBe(false);
@@ -60,7 +60,7 @@ describe('parser — nested function extraction (TSX)', () => {
   it('extracts nested function declaration inside arrow function component', async () => {
     const result = await parseFile(join(FIXTURES, 'typescript/reactComponent.tsx'), 'typescript');
     const syms = result!.symbols;
-    const handler = syms.find(s => s.name === 'GroupHubActionMenu.handleClose');
+    const handler = syms.find(s => s.name === 'SettingsMenu.handleClose');
     expect(handler).toBeDefined();
     expect(handler!.kind).toBe('function');
   });
@@ -68,7 +68,7 @@ describe('parser — nested function extraction (TSX)', () => {
   it('extracts nested arrow handler inside function declaration component', async () => {
     const result = await parseFile(join(FIXTURES, 'typescript/reactComponent.tsx'), 'typescript');
     const syms = result!.symbols;
-    const handler = syms.find(s => s.name === 'UserActionMenu.handleDelete');
+    const handler = syms.find(s => s.name === 'ProfileMenu.handleDelete');
     expect(handler).toBeDefined();
     expect(handler!.kind).toBe('function');
   });
@@ -76,21 +76,34 @@ describe('parser — nested function extraction (TSX)', () => {
   it('extracts nested function declaration inside function declaration component', async () => {
     const result = await parseFile(join(FIXTURES, 'typescript/reactComponent.tsx'), 'typescript');
     const syms = result!.symbols;
-    const handler = syms.find(s => s.name === 'UserActionMenu.handleConfirm');
+    const handler = syms.find(s => s.name === 'ProfileMenu.handleConfirm');
     expect(handler).toBeDefined();
     expect(handler!.kind).toBe('function');
   });
 
   it('does not expose nested handlers as file-level exports', async () => {
     const result = await parseFile(join(FIXTURES, 'typescript/reactComponent.tsx'), 'typescript');
-    expect(result!.exports).not.toContain('GroupHubActionMenu.handleError');
-    expect(result!.exports).not.toContain('UserActionMenu.handleDelete');
+    expect(result!.exports).not.toContain('SettingsMenu.handleError');
+    expect(result!.exports).not.toContain('ProfileMenu.handleDelete');
   });
 
   it('still exports top-level parent symbols', async () => {
     const result = await parseFile(join(FIXTURES, 'typescript/reactComponent.tsx'), 'typescript');
-    expect(result!.exports).toContain('GroupHubActionMenu');
-    expect(result!.exports).toContain('UserActionMenu');
+    expect(result!.exports).toContain('SettingsMenu');
+    expect(result!.exports).toContain('ProfileMenu');
+  });
+
+  it('resolves a bare sibling call inside a nested function to the parent-scoped symbol id', async () => {
+    // SettingsMenu.handleClose calls handleError (bare name).
+    // After intra-file resolution it should point to the qualified id for handleError
+    // within the same parent: fileId#SettingsMenu.handleError
+    const fileId = 'typescript/reactComponent.tsx';
+    const result = await parseFile(join(FIXTURES, 'typescript/reactComponent.tsx'), 'typescript', fileId);
+    expect(result).not.toBeNull();
+    const handleClose = result!.symbols.find(s => s.name === 'SettingsMenu.handleClose');
+    expect(handleClose).toBeDefined();
+    const expectedTarget = `${fileId}#SettingsMenu.handleError`;
+    expect(handleClose!.calls).toContain(expectedTarget);
   });
 });
 

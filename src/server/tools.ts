@@ -225,7 +225,6 @@ export function handleTraceDeps(
         result.push({
           path: neighbor.relativePath,
           language: neighbor.language,
-          domains: neighbor.domains,
           exports: neighbor.exports.slice(0, 10),
           importedByCount: neighbor.importedByCount,
           depth: currentDepth,
@@ -244,7 +243,6 @@ export function handleTraceDeps(
     file: {
       path: file.relativePath,
       language: file.language,
-      domains: file.domains,
     },
   };
 
