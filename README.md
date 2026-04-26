@@ -35,7 +35,7 @@ This prints two things: an MCP config snippet and a set of agent rules. Copy bot
 }
 ```
 
-Where to paste it: Claude Code/Desktop → `claude_desktop_config.json`, Cursor → `.cursor/mcp.json`. Most other MCP-compatible IDEs use the same JSON format — check your IDE's MCP documentation for the exact file location.
+Paste this into your IDE's MCP configuration file. Most MCP-compatible IDEs use the same JSON format — check your IDE's documentation for the exact file location.
 
 > **Note on `--root`:** The server auto-detects your project path from the MCP handshake. `--root` is a fallback for older clients or direct CLI use.
 
