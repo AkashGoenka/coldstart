@@ -8,6 +8,7 @@
  *   coldstart-mcp --root . --no-cache
  */
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { walkDirectory } from './indexer/walker.js';
 import { parseFile, buildFileId } from './indexer/parser.js';
 import { resolveImports } from './indexer/resolver.js';
@@ -244,61 +245,73 @@ async function main(): Promise<void> {
     return;
   }
 
-  const { root, excludes, includes, cacheDir, quiet, noCache } = parseArgs(process.argv);
-  const rootDir = resolve(root);
+  const { root: cliRoot, excludes, includes, cacheDir, quiet, noCache } = parseArgs(process.argv);
+  
+  let manager: IndexManager | null = null;
 
-  log(quiet, `[coldstart] Starting — root: ${rootDir}`);
-
-  let index: CodebaseIndex | null = null;
-
-  // Try cache first
-  if (!noCache) {
-    index = await loadCachedIndex(rootDir, cacheDir);
-    if (index) {
-      // Invalidate cache if git HEAD has changed (branch switch, new commit)
-      const currentHead = await getGitHead(rootDir);
-      if (currentHead && index.gitHead && currentHead !== index.gitHead) {
-        log(quiet, '[coldstart] Git HEAD changed, rebuilding index...');
-        index = null;
-      } else {
-        log(quiet, '[coldstart] Loaded from cache');
+  await startMCPServer(
+    async (clientRoots: string[]) => {
+      let finalRoot = resolve(cliRoot);
+      if (clientRoots && clientRoots.length > 0) {
+        const uri = clientRoots[0];
+        finalRoot = uri.startsWith('file://') ? fileURLToPath(uri) : resolve(uri);
       }
-    }
-  }
 
-  // Build fresh index if needed
-  if (!index) {
-    index = await buildIndex(rootDir, excludes, includes, quiet);
-    if (!noCache) {
-      try {
-        await saveCachedIndex(index, cacheDir);
-        log(quiet, '[coldstart] Index saved to cache');
-      } catch (err) {
-        log(quiet, `[coldstart] Warning: could not save cache: ${err}`);
+      log(quiet, `[coldstart] Starting — root: ${finalRoot}`);
+
+      let index: CodebaseIndex | null = null;
+
+      // Try cache first
+      if (!noCache) {
+        index = await loadCachedIndex(finalRoot, cacheDir);
+        if (index) {
+          // Invalidate cache if git HEAD has changed
+          const currentHead = await getGitHead(finalRoot);
+          if (currentHead && index.gitHead && currentHead !== index.gitHead) {
+            log(quiet, '[coldstart] Git HEAD changed, rebuilding index...');
+            index = null;
+          } else {
+            log(quiet, '[coldstart] Loaded from cache');
+          }
+        }
       }
-    }
-  }
 
-  // Start MCP server with live index getter + file watcher
-  const manager = new IndexManager(
-    index,
-    () => buildIndex(rootDir, excludes, includes, quiet),
-    cacheDir,
-    noCache,
-    quiet,
+      // Build fresh index if needed
+      if (!index) {
+        index = await buildIndex(finalRoot, excludes, includes, quiet);
+        if (!noCache) {
+          try {
+            await saveCachedIndex(index, cacheDir);
+            log(quiet, '[coldstart] Index saved to cache');
+          } catch (err) {
+            log(quiet, `[coldstart] Warning: could not save cache: ${err}`);
+          }
+        }
+      }
+
+      manager = new IndexManager(
+        index,
+        () => buildIndex(finalRoot, excludes, includes, quiet),
+        cacheDir,
+        noCache,
+        quiet,
+      );
+
+      log(quiet, '[coldstart] MCP server ready');
+      manager.startWatching();
+    },
+    () => {
+      if (!manager) {
+        throw new Error("IndexManager is not yet initialized");
+      }
+      return manager.getContext();
+    }
   );
 
-  log(quiet, '[coldstart] MCP server ready');
-  // Always start the watcher regardless of --no-cache.
-  // --no-cache disables disk reads/writes only; live in-memory updates are always desirable.
-  manager.startWatching();
-
   // Ensure watcher is stopped on process exit
-  process.on('exit', () => manager.stopWatching());
-  process.on('SIGINT', () => { manager.stopWatching(); process.exit(0); });
-  process.on('SIGTERM', () => { manager.stopWatching(); process.exit(0); });
-
-  await startMCPServer(() => manager.getContext());
+  process.on('exit', () => manager?.stopWatching());
+  process.on('SIGINT', () => { manager?.stopWatching(); process.exit(0); });
+  process.on('SIGTERM', () => { manager?.stopWatching(); process.exit(0); });
 }
 
 main().catch(err => {
