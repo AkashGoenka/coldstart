@@ -10,6 +10,9 @@ import type { IndexedFile } from '../src/types.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(__dirname, 'fixtures');
 const ROOT = join(FIXTURES, 'typescript');
+// resolveImports computes ids as relative(rootDir, file) — use FIXTURES so
+// ids come out as "typescript/auth.ts", matching buildFileId("typescript/auth.ts")
+const RESOLVE_ROOT = FIXTURES;
 
 async function buildFixtureFile(filename: string): Promise<IndexedFile> {
   const relPath = `typescript/${filename}`;
@@ -38,24 +41,41 @@ async function buildFixtureFile(filename: string): Promise<IndexedFile> {
 }
 
 describe('buildSymbolEdges — cross-file call resolution', () => {
-  it('qualifies a call to a function exported by an imported file', async () => {
+  it('qualifies a direct named call to an exported function from an imported file', async () => {
+    // passwordUtils.ts imports { hashPassword } from './auth' and calls it directly by name.
+    // changePassword → hashPassword must resolve to authFileId#hashPassword.
+    const authFile = await buildFixtureFile('auth.ts');
+    const passwordUtilsFile = await buildFixtureFile('passwordUtils.ts');
+
+    const files = [authFile, passwordUtilsFile];
+    const { edges } = await resolveImports(files, RESOLVE_ROOT);
+    const { outEdges } = buildGraph(files.map(f => f.id), edges);
+    const allFiles = new Map(files.map(f => [f.id, f]));
+
+    const symbolEdges = buildSymbolEdges(files, outEdges, allFiles);
+    const callEdges = symbolEdges.filter(e => e.type === 'calls');
+
+    const expectedTarget = `${authFile.id}#hashPassword`;
+    const resolvedEdge = callEdges.find(e => e.to === expectedTarget);
+
+    expect(resolvedEdge, `Expected a call edge to "${expectedTarget}" but none found`).toBeDefined();
+    expect(resolvedEdge!.from).toContain('changePassword');
+  });
+
+  it('all qualified call edges reference a known file id', async () => {
     const authFile = await buildFixtureFile('auth.ts');
     const tokenFile = await buildFixtureFile('tokenService.ts');
     const userRepoFile = await buildFixtureFile('userRepository.ts');
     const dbFile = await buildFixtureFile('db.ts');
 
     const files = [authFile, tokenFile, userRepoFile, dbFile];
-
-    // Resolve imports so outEdges reflect what auth.ts actually imports
-    const { edges } = await resolveImports(files, ROOT);
+    const { edges } = await resolveImports(files, RESOLVE_ROOT);
     const { outEdges } = buildGraph(files.map(f => f.id), edges);
     const allFiles = new Map(files.map(f => [f.id, f]));
 
     const symbolEdges = buildSymbolEdges(files, outEdges, allFiles);
-
     const callEdges = symbolEdges.filter(e => e.type === 'calls');
 
-    // All call edges whose target contains '#' must reference a real file id
     const qualifiedCalls = callEdges.filter(e => e.to.includes('#'));
     const knownFileIds = new Set(files.map(f => f.id));
 
@@ -65,18 +85,6 @@ describe('buildSymbolEdges — cross-file call resolution', () => {
         `Qualified call edge "${edge.from}" → "${edge.to}" references unknown file "${targetFileId}"`
       ).toBe(true);
     }
-
-    // auth.ts exports hashPassword — it should have no unresolvable calls to tokenService symbols
-    // tokenService exports: TokenService, defaultTokenService
-    // auth.ts calls member methods (sign, verify) which are NOT resolvable cross-file (member calls)
-    // so we verify that named exports ARE resolved when called directly
-    const tokenFileId = tokenFile.id;
-    const crossFileToToken = callEdges.filter(e => e.to.startsWith(`${tokenFileId}#`));
-
-    // TokenService is imported by auth.ts — if any symbol in auth.ts calls
-    // "TokenService" by name (e.g. constructor usage), it should be qualified
-    // This asserts the mechanism works: any resolved cross-file call is fully qualified
-    expect(crossFileToToken.every(e => e.to.includes('#'))).toBe(true);
   });
 
   it('leaves member expression calls as bare names', async () => {
@@ -84,7 +92,7 @@ describe('buildSymbolEdges — cross-file call resolution', () => {
     const tokenFile = await buildFixtureFile('tokenService.ts');
     const files = [authFile, tokenFile];
 
-    const { edges } = await resolveImports(files, ROOT);
+    const { edges } = await resolveImports(files, RESOLVE_ROOT);
     const { outEdges } = buildGraph(files.map(f => f.id), edges);
     const allFiles = new Map(files.map(f => [f.id, f]));
 
