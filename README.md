@@ -203,6 +203,8 @@ printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion
 }
 ```
 
+> **Note on `--root`:** The server automatically detects your active project path during the MCP handshake. The `--root` argument acts as a fallback for older clients or when running directly from the CLI.
+
 ---
 
 ## Tool reference
@@ -327,7 +329,7 @@ All supported languages return a `symbols` array with line numbers, exported fla
 ## CLI flags
 
 ```txt
---root        Project root directory (default: .)
+--root        Fallback project root directory (default: .). Ignored if the MCP client provides a workspace root.
 --exclude     Additional directory names to skip (repeatable)
 --include     Restrict walk to subdirectory (repeatable)
 --cache-dir   Override cache directory (default: ~/.coldstart/indexes/)
