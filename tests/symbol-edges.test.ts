@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseFile, buildFileId } from '../src/indexer/parser.js';
-import { resolveImports } from '../src/indexer/resolver.js';
+import { resolveImports } from '../src/indexer/resolvers/index.js';
 import { buildGraph } from '../src/indexer/graph.js';
 import { buildSymbolEdges } from '../src/indexer/symbol-edges.js';
 import type { IndexedFile } from '../src/types.js';
