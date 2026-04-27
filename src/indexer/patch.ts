@@ -4,7 +4,7 @@ import type { CodebaseIndex, IndexedFile, ParsedFile, DomainToken, Language } fr
 import { EXTENSION_TO_LANGUAGE } from '../constants.js';
 import { parseFile, buildFileId } from './parser.js';
 import { buildFileDomains, isTestPath } from './tokenize.js';
-import { resolveImportsForFiles } from './resolver.js';
+import { resolveImportsForFiles } from './resolvers/index.js';
 import { buildSymbolEdges } from './symbol-edges.js';
 
 /**
