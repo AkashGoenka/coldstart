@@ -10,7 +10,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { walkDirectory } from '../src/indexer/walker.js';
 import { parseFile, buildFileId } from '../src/indexer/parser.js';
-import { resolveImports } from '../src/indexer/resolver.js';
+import { resolveImports } from '../src/indexer/resolvers/index.js';
 import { buildGraph } from '../src/indexer/graph.js';
 import { buildFileDomains } from '../src/indexer/tokenize.js';
 import { handleGetOverview } from '../src/server/tools.js';
