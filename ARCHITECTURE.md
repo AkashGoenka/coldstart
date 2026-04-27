@@ -49,8 +49,8 @@ Removed:
 
 2. **Parse** (`indexer/parser.ts`, `indexer/ts-parser.ts`, `indexer/extractors/`)
    - **TypeScript/JavaScript**: Tree-sitter (tree-sitter-typescript) — functions, classes, interfaces, type aliases, constants, methods. Tracks intra-file call relationships, extends/implements chains.
-   - **Java**: Tree-sitter (tree-sitter-java) — classes, interfaces, enums, records, methods, constructors. Tracks method invocations, extends, implements chains. Extracts static final constants.
-   - **Ruby**: Tree-sitter (tree-sitter-ruby) — classes, modules, methods, constants, singleton methods. Detects Rails DSLs (associations, callbacks, includes/extends).
+   - **Java**: Tree-sitter (tree-sitter-java) — classes, interfaces, enums, records, methods, constructors. Tracks method invocations, extends, implements chains. Extracts static final constants. Public methods are marked `isExported: true` and included in the exports list for cross-file call edge resolution. Wildcard imports are dropped at parse time.
+   - **Ruby**: Tree-sitter (tree-sitter-ruby) — classes, modules, methods, constants, singleton methods. Detects Rails DSLs (associations, callbacks, includes/extends). `require_relative` paths are normalised with a `./` prefix so the resolver treats them as relative to the importing file rather than as external gem names.
    - **Python**: Tree-sitter (tree-sitter-python) — classes, top-level functions, methods. Respects `__all__` for export list; excludes underscore-prefixed private names.
    - **Go**: Tree-sitter (tree-sitter-go) — structs (as class), interfaces, top-level functions, methods, constants/vars. Exports determined by uppercase-first identifier convention.
    - **Rust**: Tree-sitter (tree-sitter-rust) — pub structs/enums (as class), pub traits (as interface), pub functions, pub type aliases. Tracks `impl Trait for Struct` to populate `implementsNames`. Module declarations treated as imports.
@@ -61,9 +61,14 @@ Removed:
    - **Other languages** (Swift, Dart, C++): Walked by the filesystem scanner but not parsed — files appear in the index with empty imports/exports/symbols. No stable tree-sitter grammar npm packages available.
    - Derives metadata: hash, line count, token estimate.
 
-3. **Resolve** (`indexer/resolver.ts`)
-   - Resolves internal import specifiers to file IDs.
-   - Supports extension probing, index-file fallback, and tsconfig/jsconfig path aliases.
+3. **Resolve** (`indexer/resolvers/`)
+   - Per-language resolver files mirror the `extractors/` structure — one file per language, dispatched by `resolvers/index.ts`.
+   - **TypeScript/JavaScript** (and C#, PHP, Kotlin, etc.): relative path resolution, extension probing, index-file fallback, tsconfig/jsconfig path alias support.
+   - **Java**: converts fully-qualified class names (`com.example.User`) to file paths by trying common source roots in order: `src/main/java/`, `src/java/`, `src/`, `app/src/main/java/`, project root. Wildcard imports (`com.foo.*`) are skipped at extraction time — they cannot resolve to a single file.
+   - **Ruby**: relative paths (normalised to `./` prefix by the extractor for `require_relative`) resolve from the importing file's directory. Non-relative requires try `lib/` and `app/` load roots before giving up — external gems are left unresolved.
+   - **Go**: tries the specifier relative to the project root (covers module-internal paths).
+   - **Rust**: tries `<specifier>.rs` then `<specifier>/mod.rs` relative to the importing file.
+   - **Python**: relative paths only; tries `__init__.py` directory packages.
    - Exposes `resolveImportsForFiles(files, fileIdSet, rootDir)` for incremental patching against a pre-built fileIdSet.
 
 4. **Graph** (`indexer/graph.ts`)
