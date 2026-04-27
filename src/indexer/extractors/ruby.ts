@@ -449,7 +449,8 @@ export function parseRubyContent(
   function collectRequires(node: TSNode): void {
     if (node.type === 'call') {
       const methodNode = node.namedChildren.find((c: TSNode) => c.type === 'identifier');
-      if (methodNode?.text === 'require' || methodNode?.text === 'require_relative') {
+      const isRelative = methodNode?.text === 'require_relative';
+      if (isRelative || methodNode?.text === 'require') {
         const args = firstChildOfType(node, 'argument_list') ?? firstChildOfType(node, 'arguments');
         const strNode = args
           ? firstChildOfTypes(args, ['string', 'string_literal'])
@@ -457,26 +458,33 @@ export function parseRubyContent(
         if (strNode) {
           const content = firstChildOfType(strNode, 'string_content');
           const raw = content?.text ?? strNode.text.replace(/^['"]|['"]$/g, '');
-          if (raw) imports.push(raw);
+          if (raw) imports.push(normalizeRequire(raw, isRelative));
         }
       }
     } else if (node.type === 'command') {
       const methodNode = node.namedChildren[0];
-      if (methodNode?.type === 'identifier' &&
-        (methodNode.text === 'require' || methodNode.text === 'require_relative')) {
+      const isRelative = methodNode?.text === 'require_relative';
+      if (methodNode?.type === 'identifier' && (isRelative || methodNode.text === 'require')) {
         const strNode = node.namedChildren.find(
           (c: TSNode) => c.type === 'string' || c.type === 'string_literal',
         );
         if (strNode) {
           const content = firstChildOfType(strNode, 'string_content');
           const raw = content?.text ?? strNode.text.replace(/^['"]|['"]$/g, '');
-          if (raw) imports.push(raw);
+          if (raw) imports.push(normalizeRequire(raw, isRelative));
         }
       }
     }
     for (const child of node.namedChildren) {
       collectRequires(child);
     }
+  }
+
+  function normalizeRequire(raw: string, isRelative: boolean): string {
+    if (isRelative && !raw.startsWith('.') && !raw.startsWith('/')) {
+      return './' + raw;
+    }
+    return raw;
   }
 
   collectRequires(root);

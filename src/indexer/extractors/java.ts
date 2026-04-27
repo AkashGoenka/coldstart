@@ -129,7 +129,7 @@ function extractClassMembers(
         kind: 'method',
         startLine,
         endLine,
-        isExported: false,
+        isExported: isPublic(child),
         calls: [...calls].filter(c => c !== methodName),
         implementsNames: [],
       });
@@ -146,7 +146,7 @@ function extractClassMembers(
         kind: 'method',
         startLine,
         endLine,
-        isExported: false,
+        isExported: isPublic(child),
         calls: [...calls],
         implementsNames: [],
       });
@@ -295,7 +295,7 @@ function extractTypeDeclaration(
               kind: 'method',
               startLine: child.startPosition.row + 1,
               endLine: child.endPosition.row + 1,
-              isExported: false,
+              isExported: true, // interface methods are implicitly public
               calls: [],
               implementsNames: [],
             });
@@ -408,12 +408,11 @@ export function parseJavaContent(
     if (node.type === 'import_declaration') {
       const scopedId = firstChildOfTypes(node, ['scoped_identifier', 'identifier']);
       if (scopedId) {
-        // Check for wildcard: import com.foo.*;
+        // Wildcard imports (com.foo.*) can't resolve to a single file — skip them
         const isWildcard = node.namedChildren.some(
           (c: TSNode) => c.type === 'asterisk' || c.text === '*',
         );
-        const importStr = isWildcard ? scopedId.text + '.*' : scopedId.text;
-        imports.push(importStr);
+        if (!isWildcard) imports.push(scopedId.text);
       }
       continue;
     }
@@ -433,7 +432,7 @@ export function parseJavaContent(
       const nodes = Array.isArray(result) ? result : [result];
       for (const sym of nodes) {
         rawSymbols.push(sym);
-        if (sym.isExported && sym.kind !== 'method' && sym.kind !== 'constant') {
+        if (sym.isExported && sym.kind !== 'constant') {
           exports.push(sym.name);
         }
       }

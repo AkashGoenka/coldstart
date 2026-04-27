@@ -11,7 +11,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { walkDirectory } from './indexer/walker.js';
 import { parseFile, buildFileId } from './indexer/parser.js';
-import { resolveImports } from './indexer/resolver.js';
+import { resolveImports } from './indexer/resolvers/index.js';
 import { buildGraph } from './indexer/graph.js';
 import { buildFileDomains, isTestPath } from './indexer/tokenize.js';
 import { buildSymbolEdges } from './indexer/symbol-edges.js';

@@ -146,15 +146,44 @@ describe('java-parser — symbol extraction (direct)', () => {
     expect(result.packageName).toBe('com.example.auth');
   });
 
-  it('extracts wildcard imports', () => {
+  it('excludes wildcard imports since they cannot resolve to a single file', () => {
     const src = `
       import com.example.auth.*;
       import java.util.List;
       public class Foo {}
     `;
     const result = parseJavaContent(src, 'src/Foo.java');
-    expect(result.imports.some(i => i.includes('com.example.auth'))).toBe(true);
+    expect(result.imports.some(i => i.includes('.*'))).toBe(false);
     expect(result.imports).toContain('java.util.List');
+  });
+
+  it('marks public methods as isExported: true', () => {
+    const src = `
+      public class AuthService {
+        public AuthResult login(String email, String password) { return null; }
+        private boolean verify(String raw, String hash) { return false; }
+        public static String hashPassword(String p) { return p; }
+      }
+    `;
+    const result = parseJavaContent(src, 'src/AuthService.java');
+    const login = result.symbols.find(s => s.name === 'AuthService.login');
+    expect(login?.isExported).toBe(true);
+    const verify = result.symbols.find(s => s.name === 'AuthService.verify');
+    expect(verify?.isExported).toBe(false);
+    const hash = result.symbols.find(s => s.name === 'AuthService.hashPassword');
+    expect(hash?.isExported).toBe(true);
+  });
+
+  it('includes exported method names in exports array', () => {
+    const src = `
+      public class AuthService {
+        public AuthResult login(String email) { return null; }
+        private void internalHelper() {}
+      }
+    `;
+    const result = parseJavaContent(src, 'src/AuthService.java');
+    expect(result.exports).toContain('AuthService.login');
+    expect(result.exports).not.toContain('AuthService.internalHelper');
   });
 
   it('extracts interface with extends_interfaces', () => {
@@ -367,6 +396,29 @@ describe('ruby-parser — symbol extraction (direct)', () => {
     const result = parseRubyContent(src, AUTH_FILE_ID);
     expect(result.imports).toContain('json');
     expect(result.imports.some(i => i.includes('user_repository'))).toBe(true);
+  });
+
+  it('prefixes require_relative paths with ./ so the resolver treats them as relative', () => {
+    const src = `
+      require_relative 'user_repository'
+      require_relative 'concerns/validatable'
+      require_relative './token_service'
+    `;
+    const result = parseRubyContent(src, AUTH_FILE_ID);
+    expect(result.imports).toContain('./user_repository');
+    expect(result.imports).toContain('./concerns/validatable');
+    expect(result.imports).toContain('./token_service');
+  });
+
+  it('does not prefix bare require paths with ./', () => {
+    const src = `
+      require 'bcrypt'
+      require 'rails'
+    `;
+    const result = parseRubyContent(src, AUTH_FILE_ID);
+    expect(result.imports).toContain('bcrypt');
+    expect(result.imports).toContain('rails');
+    expect(result.imports.some(i => i.startsWith('./'))).toBe(false);
   });
 
   it('extracts nested class within module', () => {
