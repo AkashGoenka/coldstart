@@ -51,11 +51,13 @@ The rules are a starting point — every codebase is different and every model r
 
 There is no separate indexing step. On first run coldstart automatically:
 
-1. Walks the filesystem and parses all source files
+1. Walks the filesystem and parses all source files in batches of 100 — progress is logged to stderr every 500 files so you can see it's alive on large repos
 2. Resolves imports and builds a dependency graph
 3. Caches the index to `~/.coldstart/indexes/<hash-of-root>/`
 4. Starts the MCP server over stdio
 5. Starts a file watcher — index stays live for the entire session, no restarts needed
+
+On a repo like Apache Kafka (~6k Java files) expect ~22s and ~42k edges on first run; subsequent starts load from cache instantly.
 
 ---
 
@@ -165,7 +167,7 @@ Use this before refactoring to understand blast radius without reading all depen
 --exclude     Additional directory names to skip (repeatable)
 --include     Restrict walk to subdirectory (repeatable)
 --cache-dir   Override cache directory (default: ~/.coldstart/indexes/)
---quiet       Suppress stderr logging
+--quiet       Suppress stderr logging (including parse progress output)
 --no-cache    Skip reading/writing the disk cache and always build a fresh index.
               The live file watcher still runs — only disk persistence is disabled.
 ```
