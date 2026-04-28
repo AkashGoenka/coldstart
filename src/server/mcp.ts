@@ -201,15 +201,19 @@ export async function startMCPServer(
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  // After connect, ask for roots
+  // After connect, ask for roots — cap at 2s so standalone runs don't stall
   let clientRoots: string[] = [];
   try {
-    const result = await server.request({ method: 'roots/list' }, ListRootsResultSchema);
+    const result = await server.request(
+      { method: 'roots/list' },
+      ListRootsResultSchema,
+      { timeout: 1000 },
+    );
     if (result && result.roots && result.roots.length > 0) {
       clientRoots = result.roots.map((r: any) => r.uri);
     }
   } catch (err) {
-    // Client might not support roots/list, ignore
+    // Client might not support roots/list, or timed out — proceed with CLI root
   }
 
   await onReady(clientRoots);
