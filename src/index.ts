@@ -77,7 +77,7 @@ function log(quiet: boolean, ...args: unknown[]): void {
 // ---------------------------------------------------------------------------
 // Full indexing pipeline
 // ---------------------------------------------------------------------------
-async function buildIndex(
+export async function buildIndex(
   rootDir: string,
   excludes: string[],
   includes: string[],
@@ -90,46 +90,64 @@ async function buildIndex(
   const walkedFiles = await walkDirectory({ rootDir, excludes, includes });
   log(quiet, `[coldstart] Found ${walkedFiles.length} source files`);
 
-  // 2. Parse
+  // 2. Parse — process in batches to cap peak memory and emit progress
   log(quiet, '[coldstart] Parsing files...');
   const indexedFiles: IndexedFile[] = [];
   const langCount: Record<string, number> = {};
 
   const allSymbolEdges: SymbolEdge[] = [];
 
-  await Promise.all(
-    walkedFiles.map(async (wf) => {
-      try {
-        const id = buildFileId(wf.relativePath);
-        const parsed = await parseFile(wf.absolutePath, wf.language, id);
-        if (!parsed) return;
+  const BATCH_SIZE = 100;
+  const PROGRESS_INTERVAL = 500;
+  let parsed_count = 0;
 
-        const file: IndexedFile = {
-          id,
-          path: wf.absolutePath,
-          relativePath: wf.relativePath,
-          language: wf.language,
-          domains: buildFileDomains(wf.relativePath, parsed.exports),
-          exports: parsed.exports,
-          hasDefaultExport: parsed.hasDefaultExport,
-          imports: parsed.imports,
-          hash: parsed.hash,
-          lineCount: parsed.lineCount,
-          tokenEstimate: parsed.tokenEstimate,
-          importedByCount: 0,
-          transitiveImportedByCount: 0,
-          isBarrel: false,
-          isTestFile: isTestPath(wf.relativePath),
-          symbols: parsed.symbols,
-          reexportRatio: parsed.reexportRatio,
-        };
-        indexedFiles.push(file);
-        langCount[wf.language] = (langCount[wf.language] ?? 0) + 1;
-      } catch (err) {
-        log(quiet, `[coldstart] Error parsing ${wf.relativePath}: ${err}`);
-      }
-    }),
-  );
+  for (let i = 0; i < walkedFiles.length; i += BATCH_SIZE) {
+    const batch = walkedFiles.slice(i, i + BATCH_SIZE);
+    await Promise.all(
+      batch.map(async (wf) => {
+        try {
+          const id = buildFileId(wf.relativePath);
+          const parsed = await parseFile(wf.absolutePath, wf.language, id);
+          if (!parsed) return;
+
+          const file: IndexedFile = {
+            id,
+            path: wf.absolutePath,
+            relativePath: wf.relativePath,
+            language: wf.language,
+            domains: buildFileDomains(wf.relativePath, parsed.exports),
+            exports: parsed.exports,
+            hasDefaultExport: parsed.hasDefaultExport,
+            imports: parsed.imports,
+            hash: parsed.hash,
+            lineCount: parsed.lineCount,
+            tokenEstimate: parsed.tokenEstimate,
+            importedByCount: 0,
+            transitiveImportedByCount: 0,
+            isBarrel: false,
+            isTestFile: isTestPath(wf.relativePath),
+            symbols: parsed.symbols,
+            reexportRatio: parsed.reexportRatio,
+          };
+          indexedFiles.push(file);
+          langCount[wf.language] = (langCount[wf.language] ?? 0) + 1;
+        } catch (err) {
+          log(quiet, `[coldstart] Error parsing ${wf.relativePath}: ${err}`);
+        } finally {
+          parsed_count++;
+        }
+      }),
+    );
+
+    // Emit progress at each PROGRESS_INTERVAL boundary crossed in this batch, and always at 100%
+    const prevMilestone = Math.floor((parsed_count - batch.length) / PROGRESS_INTERVAL);
+    const currMilestone = Math.floor(parsed_count / PROGRESS_INTERVAL);
+    const isLast = parsed_count === walkedFiles.length;
+    if (currMilestone > prevMilestone || isLast) {
+      const pct = Math.round((parsed_count / walkedFiles.length) * 100);
+      log(quiet, `[coldstart] ${parsed_count} / ${walkedFiles.length} parsed (${pct}%)`);
+    }
+  }
 
   // 3. Resolve imports → edges
   log(quiet, '[coldstart] Resolving imports...');
@@ -149,7 +167,7 @@ async function buildIndex(
   // Build symbol-level edges (exports, calls with cross-file resolution, extends, implements)
   const filesMap = new Map<string, IndexedFile>(indexedFiles.map(f => [f.id, f]));
   const allSymbolEdgesBuilt = buildSymbolEdges(indexedFiles, outEdges, filesMap);
-  allSymbolEdges.push(...allSymbolEdgesBuilt);
+  for (const e of allSymbolEdgesBuilt) allSymbolEdges.push(e);
 
   // 6. Barrel detection: AST-based for TS/JS (reexportRatio), no heuristic for others
   for (const file of indexedFiles) {
