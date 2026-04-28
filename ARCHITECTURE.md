@@ -1,4 +1,4 @@
-# Architecture — coldstart-mcp (v8)
+# Architecture — coldstart-mcp (v0.2)
 
 This document captures the *current* architecture.
 
@@ -48,6 +48,7 @@ Removed:
    - Skips hidden directories, symlinks, and files above size threshold.
 
 2. **Parse** (`indexer/parser.ts`, `indexer/ts-parser.ts`, `indexer/extractors/`)
+   - Files are processed in batches of 100 (via `Promise.all` per batch, sequential across batches). This keeps peak memory at O(batch_size) instead of O(total_files) — relevant when running alongside a large local LLM. Parse progress is logged to stderr every 500 files and always at 100%.
    - **TypeScript/JavaScript**: Tree-sitter (tree-sitter-typescript) — functions, classes, interfaces, type aliases, constants, methods. Tracks intra-file call relationships, extends/implements chains.
    - **Java**: Tree-sitter (tree-sitter-java) — classes, interfaces, enums, records, methods, constructors. Tracks method invocations, extends, implements chains. Extracts static final constants. Public methods are marked `isExported: true` and included in the exports list for cross-file call edge resolution. Wildcard imports are dropped at parse time.
    - **Ruby**: Tree-sitter (tree-sitter-ruby) — classes, modules, methods, constants, singleton methods. Detects Rails DSLs (associations, callbacks, includes/extends). `require_relative` paths are normalised with a `./` prefix so the resolver treats them as relative to the importing file rather than as external gem names.
@@ -64,11 +65,11 @@ Removed:
 3. **Resolve** (`indexer/resolvers/`)
    - Per-language resolver files mirror the `extractors/` structure — one file per language, dispatched by `resolvers/index.ts`.
    - **TypeScript/JavaScript** (and C#, PHP, Kotlin, etc.): relative path resolution, extension probing, index-file fallback, tsconfig/jsconfig path alias support.
-   - **Java**: converts fully-qualified class names (`com.example.User`) to file paths by trying common source roots in order: `src/main/java/`, `src/java/`, `src/`, `app/src/main/java/`, project root. Wildcard imports (`com.foo.*`) are skipped at extraction time — they cannot resolve to a single file.
+   - **Java**: converts fully-qualified class names (`com.example.User`) to file paths. Source roots are discovered at startup by scanning file IDs for well-known markers (`/src/main/java/`, `/src/test/java/`, `/src/java/`, `/target/generated-sources/`, `/build/generated-sources/`, `/src/`) — checked both with and without a leading slash to handle Maven projects whose file IDs start at `src/main/java/` directly. Also strips the last FQN segment to resolve static imports and inner class references (`org.foo.Outer.Inner` → `Outer.java`). Wildcard imports (`com.foo.*`) are skipped at extraction time — they cannot resolve to a single file.
    - **Ruby**: relative paths (normalised to `./` prefix by the extractor for `require_relative`) resolve from the importing file's directory. Non-relative requires try `lib/` and `app/` load roots before giving up — external gems are left unresolved.
-   - **Go**: tries the specifier relative to the project root (covers module-internal paths).
+   - **Go**: strips the module path prefix (read from `go.mod`), handles `vendor/` paths, skips `_test.go` file self-imports, and falls back to relative-to-project-root resolution for multi-module layouts.
    - **Rust**: tries `<specifier>.rs` then `<specifier>/mod.rs` relative to the importing file.
-   - **Python**: relative paths only; tries `__init__.py` directory packages.
+   - **Python**: handles relative imports (counts leading dots to walk up directories), absolute imports mapped to project-relative paths, and `__init__.py` directory packages.
    - Exposes `resolveImportsForFiles(files, fileIdSet, rootDir)` for incremental patching against a pre-built fileIdSet.
 
 4. **Graph** (`indexer/graph.ts`)
