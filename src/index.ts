@@ -139,10 +139,11 @@ export async function buildIndex(
       }),
     );
 
-    // Emit progress at each PROGRESS_INTERVAL boundary crossed in this batch
+    // Emit progress at each PROGRESS_INTERVAL boundary crossed in this batch, and always at 100%
     const prevMilestone = Math.floor((parsed_count - batch.length) / PROGRESS_INTERVAL);
     const currMilestone = Math.floor(parsed_count / PROGRESS_INTERVAL);
-    if (currMilestone > prevMilestone && parsed_count < walkedFiles.length) {
+    const isLast = parsed_count === walkedFiles.length;
+    if (currMilestone > prevMilestone || isLast) {
       const pct = Math.round((parsed_count / walkedFiles.length) * 100);
       log(quiet, `[coldstart] ${parsed_count} / ${walkedFiles.length} parsed (${pct}%)`);
     }
