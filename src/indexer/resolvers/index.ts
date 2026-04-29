@@ -124,7 +124,6 @@ function getResolver(language: Language): ResolverFn {
 export interface ResolveResult {
   edges: Edge[];
   unresolved: Array<{ from: string; specifier: string }>;
-  aliasMap: Map<string, string[]>;
 }
 
 /**
@@ -158,7 +157,7 @@ export async function resolveImportsForFiles(
     }));
   }
 
-  return { edges, unresolved, aliasMap };
+  return { edges, unresolved };
 }
 
 /**
