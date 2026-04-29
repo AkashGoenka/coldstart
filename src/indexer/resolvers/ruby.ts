@@ -18,7 +18,7 @@ export async function resolveRuby(
   fromFile: string,
   fileIdSet: Set<string>,
   rootDir: string,
-  _aliasMap: Map<string, string>,
+  _aliasMap: Map<string, string[]>,
 ): Promise<string | null> {
   const isRelative = specifier.startsWith('.') || specifier.startsWith('/');
 

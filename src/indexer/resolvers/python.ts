@@ -21,7 +21,7 @@ export async function resolvePython(
   fromFile: string,
   fileIdSet: Set<string>,
   rootDir: string,
-  _aliasMap: Map<string, string>,
+  _aliasMap: Map<string, string[]>,
 ): Promise<string | null> {
   if (specifier.startsWith('.')) {
     // Count leading dots: '.' = 1, '..' = 2, '.models' = 1, '..utils' = 2

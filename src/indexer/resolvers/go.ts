@@ -54,7 +54,7 @@ export async function resolveGo(
   _fromFile: string,
   fileIdSet: Set<string>,
   rootDir: string,
-  _aliasMap: Map<string, string>,
+  _aliasMap: Map<string, string[]>,
 ): Promise<string | null> {
   const moduleName = await getGoModuleName(rootDir);
   if (!moduleName) return null;

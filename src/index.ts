@@ -13,7 +13,7 @@ import { walkDirectory } from './indexer/walker.js';
 import { parseFile, buildFileId } from './indexer/parser.js';
 import { resolveImports } from './indexer/resolvers/index.js';
 import { buildGraph } from './indexer/graph.js';
-import { buildFileDomains, isTestPath } from './indexer/tokenize.js';
+import { buildFileDomains, isTestPath, tokenizeName } from './indexer/tokenize.js';
 import { buildSymbolEdges } from './indexer/symbol-edges.js';
 import { getGitHead } from './indexer/git.js';
 import { loadCachedIndex, saveCachedIndex } from './cache/disk-cache.js';
@@ -151,7 +151,7 @@ export async function buildIndex(
 
   // 3. Resolve imports → edges
   log(quiet, '[coldstart] Resolving imports...');
-  const { edges, unresolved } = await resolveImports(indexedFiles, rootDir);
+  const { edges, unresolved, aliasMap } = await resolveImports(indexedFiles, rootDir);
   log(quiet, `[coldstart] Resolved ${edges.length} edges (${unresolved.length} unresolved)`);
 
   // 4. Build graph
@@ -168,6 +168,33 @@ export async function buildIndex(
   const filesMap = new Map<string, IndexedFile>(indexedFiles.map(f => [f.id, f]));
   const allSymbolEdgesBuilt = buildSymbolEdges(indexedFiles, outEdges, filesMap);
   for (const e of allSymbolEdgesBuilt) allSymbolEdges.push(e);
+
+  // 5.5 Populate import-source domain tokens from resolved non-relative specifiers.
+  // Build per-file token maps once so each edge lookup is O(1).
+  {
+    const fileDomainMaps = new Map<string, Map<string, DomainToken>>();
+    for (const file of indexedFiles) {
+      const m = new Map<string, DomainToken>();
+      for (const dt of file.domains) m.set(dt.token, dt);
+      fileDomainMaps.set(file.id, m);
+    }
+    for (const edge of edges) {
+      if (edge.specifier.startsWith('.') || edge.specifier.startsWith('/')) continue;
+      const file = filesMap.get(edge.from);
+      if (!file) continue;
+      const domainMap = fileDomainMaps.get(file.id)!;
+      for (const token of tokenizeName(edge.specifier)) {
+        const existing = domainMap.get(token);
+        if (existing) {
+          if (!existing.sources.includes('import')) existing.sources.push('import');
+        } else {
+          const newDt: DomainToken = { token, sources: ['import'] };
+          domainMap.set(token, newDt);
+          file.domains.push(newDt);
+        }
+      }
+    }
+  }
 
   // 6. Barrel detection: AST-based for TS/JS (reexportRatio), no heuristic for others
   for (const file of indexedFiles) {

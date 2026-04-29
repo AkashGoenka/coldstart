@@ -10,7 +10,7 @@ export async function resolveRust(
   fromFile: string,
   fileIdSet: Set<string>,
   rootDir: string,
-  _aliasMap: Map<string, string>,
+  _aliasMap: Map<string, string[]>,
 ): Promise<string | null> {
   const base = resolve(dirname(fromFile), specifier);
 

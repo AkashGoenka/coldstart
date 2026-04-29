@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
 import type { IndexedFile, Edge, Language } from '../../types.js';
 import { resolveGeneric } from './generic.js';
 import { resolveJava } from './java.js';
@@ -9,7 +9,7 @@ import { resolveRust } from './rust.js';
 import { resolvePython } from './python.js';
 
 // ---------------------------------------------------------------------------
-// tsconfig path alias loader (shared across all resolvers)
+// tsconfig path alias loader — follows `extends` chains, collects all targets
 // ---------------------------------------------------------------------------
 
 interface TsConfig {
@@ -17,27 +17,81 @@ interface TsConfig {
   baseUrl?: string;
 }
 
-async function loadTsConfigPaths(rootDir: string): Promise<Map<string, string>> {
-  const paths = new Map<string, string>();
+interface ResolvedTsConfig {
+  paths: Record<string, string[]>;
+  baseUrl?: string; // absolute path
+}
+
+async function loadTsConfigFile(
+  configPath: string,
+  visited: Set<string>,
+): Promise<ResolvedTsConfig> {
+  const result: ResolvedTsConfig = { paths: {} };
+  if (visited.has(configPath)) return result;
+  visited.add(configPath);
+
+  try {
+    const raw = await readFile(configPath, 'utf-8');
+    const stripped = raw.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    const cfg = JSON.parse(stripped) as {
+      compilerOptions?: TsConfig;
+      extends?: string | string[];
+    };
+    const configDir = dirname(configPath);
+
+    // Follow extends chain first — child config overrides parent
+    const extendsField = cfg.extends;
+    if (extendsField) {
+      const extendsList = Array.isArray(extendsField) ? extendsField : [extendsField];
+      for (const ext of extendsList) {
+        const withJson = ext.endsWith('.json') ? ext : ext + '.json';
+        const extPath = resolve(configDir, withJson);
+        try {
+          const parent = await loadTsConfigFile(extPath, visited);
+          for (const [k, v] of Object.entries(parent.paths)) result.paths[k] = v;
+          if (parent.baseUrl) result.baseUrl = parent.baseUrl;
+        } catch {
+          // ignore missing or malformed extended config
+        }
+      }
+    }
+
+    // Child overrides parent
+    const compOpts = cfg.compilerOptions;
+    if (compOpts?.baseUrl) result.baseUrl = resolve(configDir, compOpts.baseUrl);
+    if (compOpts?.paths) {
+      for (const [alias, targets] of Object.entries(compOpts.paths)) {
+        result.paths[alias] = targets;
+      }
+    }
+  } catch {
+    // ignore missing or malformed tsconfig
+  }
+
+  return result;
+}
+
+async function loadTsConfigPaths(rootDir: string): Promise<Map<string, string[]>> {
+  const aliasMap = new Map<string, string[]>();
+
   for (const name of ['tsconfig.json', 'jsconfig.json']) {
     const tscPath = join(rootDir, name);
     try {
-      const raw = await readFile(tscPath, 'utf-8');
-      const stripped = raw.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
-      const cfg = JSON.parse(stripped) as { compilerOptions?: TsConfig };
-      const compOpts = cfg.compilerOptions;
-      if (!compOpts?.paths) continue;
-      const baseUrl = compOpts.baseUrl ?? '.';
-      for (const [alias, targets] of Object.entries(compOpts.paths)) {
+      const resolved = await loadTsConfigFile(tscPath, new Set());
+      if (!Object.keys(resolved.paths).length) continue;
+      const baseDir = resolved.baseUrl ?? rootDir;
+
+      for (const [alias, targets] of Object.entries(resolved.paths)) {
         const aliasKey = alias.replace(/\/\*$/, '');
-        const target = targets[0]?.replace(/\/\*$/, '') ?? '';
-        paths.set(aliasKey, resolve(rootDir, baseUrl, target));
+        const resolvedTargets = targets.map(t => resolve(baseDir, t.replace(/\/\*$/, '')));
+        aliasMap.set(aliasKey, resolvedTargets);
       }
     } catch {
-      // ignore missing or malformed tsconfig
+      // ignore
     }
   }
-  return paths;
+
+  return aliasMap;
 }
 
 // ---------------------------------------------------------------------------
@@ -49,7 +103,7 @@ type ResolverFn = (
   fromFile: string,
   fileIdSet: Set<string>,
   rootDir: string,
-  aliasMap: Map<string, string>,
+  aliasMap: Map<string, string[]>,
 ) => Promise<string | null>;
 
 function getResolver(language: Language): ResolverFn {
@@ -64,12 +118,13 @@ function getResolver(language: Language): ResolverFn {
 }
 
 // ---------------------------------------------------------------------------
-// Public API (same contract as the old resolver.ts)
+// Public API
 // ---------------------------------------------------------------------------
 
 export interface ResolveResult {
   edges: Edge[];
   unresolved: Array<{ from: string; specifier: string }>;
+  aliasMap: Map<string, string[]>;
 }
 
 /**
@@ -103,7 +158,7 @@ export async function resolveImportsForFiles(
     }));
   }
 
-  return { edges, unresolved };
+  return { edges, unresolved, aliasMap };
 }
 
 /**

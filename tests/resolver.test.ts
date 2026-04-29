@@ -8,6 +8,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(__dirname, 'fixtures');
 const JAVA_FIXTURES = join(FIXTURES, 'java');
 const RUBY_FIXTURES = join(FIXTURES, 'ruby');
+const TS_ALIASES_FIXTURES = join(FIXTURES, 'ts-aliases');
+const TS_MULTI_TARGET_FIXTURES = join(FIXTURES, 'ts-multi-target');
+const TS_LONGEST_PREFIX_FIXTURES = join(FIXTURES, 'ts-longest-prefix');
 
 function makeFile(id: string, lang: IndexedFile['language'], imports: string[]): IndexedFile {
   return {
@@ -194,5 +197,86 @@ describe('resolver — Rust mod declarations', () => {
     const { edges, unresolved } = await resolveImports(files, FIXTURES);
     expect(Array.isArray(edges)).toBe(true);
     expect(Array.isArray(unresolved)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// tsconfig path alias tests (P0 fixes)
+// ---------------------------------------------------------------------------
+
+function makeFileIn(rootDir: string, id: string, lang: IndexedFile['language'], imports: string[]): IndexedFile {
+  return {
+    id,
+    path: join(rootDir, id),
+    relativePath: id,
+    language: lang,
+    domains: [],
+    exports: [],
+    hasDefaultExport: false,
+    imports,
+    hash: 'abc',
+    lineCount: 1,
+    tokenEstimate: 10,
+  } as unknown as IndexedFile;
+}
+
+describe('resolver — tsconfig extends chain', () => {
+  it('resolves @/* aliases defined in an extended tsconfig', async () => {
+    const files: IndexedFile[] = [
+      makeFileIn(TS_ALIASES_FIXTURES, 'main.ts', 'typescript', ['@/components/Button']),
+      makeFileIn(TS_ALIASES_FIXTURES, 'src/components/Button.ts', 'typescript', []),
+    ];
+
+    const { edges } = await resolveImports(files, TS_ALIASES_FIXTURES);
+    expect(edges.some(e => e.from === 'main.ts' && e.to === 'src/components/Button.ts')).toBe(true);
+  });
+
+  it('reports unresolved when extended config paths do not match any file', async () => {
+    const files: IndexedFile[] = [
+      makeFileIn(TS_ALIASES_FIXTURES, 'main.ts', 'typescript', ['@/missing/Thing']),
+    ];
+
+    const { unresolved } = await resolveImports(files, TS_ALIASES_FIXTURES);
+    expect(unresolved.some(u => u.specifier === '@/missing/Thing')).toBe(true);
+  });
+});
+
+describe('resolver — multi-target path aliases', () => {
+  it('falls back to the second target when the first does not exist', async () => {
+    // tsconfig.json has @app/* → ["src/app/*", "fallback/*"]
+    // src/app/utils.ts does NOT exist; fallback/utils.ts does.
+    const files: IndexedFile[] = [
+      makeFileIn(TS_MULTI_TARGET_FIXTURES, 'main.ts', 'typescript', ['@app/utils']),
+      makeFileIn(TS_MULTI_TARGET_FIXTURES, 'fallback/utils.ts', 'typescript', []),
+    ];
+
+    const { edges } = await resolveImports(files, TS_MULTI_TARGET_FIXTURES);
+    expect(edges.some(e => e.from === 'main.ts' && e.to === 'fallback/utils.ts')).toBe(true);
+  });
+});
+
+describe('resolver — longest-prefix alias matching', () => {
+  it('prefers a more specific alias over a shorter matching prefix', async () => {
+    // tsconfig has both "@/*" → "src/*" and "@/ui/*" → "ui/*"
+    // For the import "@/ui/Button": @/ui/* is longer and should win,
+    // resolving to ui/Button.ts. src/ui/Button.ts does NOT exist.
+    const files: IndexedFile[] = [
+      makeFileIn(TS_LONGEST_PREFIX_FIXTURES, 'main.ts', 'typescript', ['@/ui/Button']),
+      makeFileIn(TS_LONGEST_PREFIX_FIXTURES, 'ui/Button.ts', 'typescript', []),
+    ];
+
+    const { edges } = await resolveImports(files, TS_LONGEST_PREFIX_FIXTURES);
+    expect(edges.some(e => e.from === 'main.ts' && e.to === 'ui/Button.ts')).toBe(true);
+  });
+
+  it('falls back to the shorter prefix alias when no longer alias matches', async () => {
+    // "@/components/Card" — no "@/components/*" alias, but "@/*" → "src/*" matches
+    const files: IndexedFile[] = [
+      makeFileIn(TS_LONGEST_PREFIX_FIXTURES, 'main.ts', 'typescript', ['@/components/Card']),
+      makeFileIn(TS_LONGEST_PREFIX_FIXTURES, 'src/components/Card.ts', 'typescript', []),
+    ];
+
+    const { edges } = await resolveImports(files, TS_LONGEST_PREFIX_FIXTURES);
+    expect(edges.some(e => e.from === 'main.ts' && e.to === 'src/components/Card.ts')).toBe(true);
   });
 });
