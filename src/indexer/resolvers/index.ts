@@ -7,6 +7,8 @@ import { resolveRuby } from './ruby.js';
 import { resolveGo } from './go.js';
 import { resolveRust } from './rust.js';
 import { resolvePython } from './python.js';
+import { resolvePHP } from './php.js';
+import { resolveCpp } from './cpp.js';
 
 // ---------------------------------------------------------------------------
 // tsconfig path alias loader — follows `extends` chains, collects all targets
@@ -113,6 +115,8 @@ function getResolver(language: Language): ResolverFn {
     case 'go':     return resolveGo;
     case 'rust':   return resolveRust;
     case 'python': return resolvePython;
+    case 'php':    return resolvePHP;
+    case 'cpp':    return resolveCpp;
     default:       return resolveGeneric;
   }
 }

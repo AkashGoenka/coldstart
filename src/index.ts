@@ -153,6 +153,17 @@ export async function buildIndex(
   log(quiet, '[coldstart] Resolving imports...');
   const { edges, unresolved } = await resolveImports(indexedFiles, rootDir);
   log(quiet, `[coldstart] Resolved ${edges.length} edges (${unresolved.length} unresolved)`);
+  if (!quiet) {
+    const langById = new Map(indexedFiles.map(f => [f.id, f.language]));
+    const stats: Record<string, { r: number; u: number }> = {};
+    for (const e of edges)  { const l = langById.get(e.from)!; (stats[l] ??= { r: 0, u: 0 }).r++; }
+    for (const u of unresolved) { const l = langById.get(u.from)!; (stats[l] ??= { r: 0, u: 0 }).u++; }
+    const breakdown = Object.entries(stats)
+      .sort((a, b) => (b[1].r + b[1].u) - (a[1].r + a[1].u))
+      .map(([l, s]) => `${l}(${s.r}/${s.r + s.u})`)
+      .join(', ');
+    if (breakdown) process.stderr.write(`[coldstart] Resolution by language: ${breakdown}\n`);
+  }
 
   // 4. Build graph
   log(quiet, '[coldstart] Building graph...');

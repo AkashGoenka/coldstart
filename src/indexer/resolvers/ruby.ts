@@ -11,7 +11,7 @@ import { tryResolveBase } from './shared.js';
  * load path roots before giving up — external gems will simply not resolve.
  */
 
-const RUBY_LOAD_ROOTS = ['lib', 'app'];
+const RUBY_LOAD_ROOTS = ['lib', 'app', 'spec', 'test'];
 
 export async function resolveRuby(
   specifier: string,
