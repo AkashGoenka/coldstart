@@ -84,12 +84,11 @@ export function parseRustContent(
     const startLine = node.startPosition.row + 1;
     const endLine = node.endPosition.row + 1;
 
-    // use X::Y
+    // use X::Y — these are namespace paths, not file boundaries.
+    // Pushing them through the path resolver produces garbage candidate paths
+    // (e.g. crate::auth::handlers → ./crate/auth/handlers.rs which never exists).
+    // Only mod declarations represent actual file boundaries and belong in imports[].
     if (node.type === 'use_declaration') {
-      const arg = node.namedChildren.find(
-        (c: TSNode) => c.type !== 'visibility_modifier',
-      );
-      if (arg) imports.push(arg.text);
       return;
     }
 
