@@ -21,7 +21,7 @@ export async function resolvePython(
   fromFile: string,
   fileIdSet: Set<string>,
   rootDir: string,
-  _aliasMap: Map<string, string>,
+  _aliasMap: Map<string, string[]>,
 ): Promise<string | null> {
   if (specifier.startsWith('.')) {
     // Count leading dots: '.' = 1, '..' = 2, '.models' = 1, '..utils' = 2
@@ -50,6 +50,10 @@ export async function resolvePython(
     return tryResolveBase(join(base, module.replace(/\./g, '/')), fileIdSet, rootDir);
   }
 
-  // Absolute import: 'django.db.models' → try {rootDir}/django/db/models.py|/__init__.py
-  return tryResolveBase(join(rootDir, specifier.replace(/\./g, '/')), fileIdSet, rootDir);
+  // Absolute import: 'django.db.models' → try rootDir then rootDir/src (common src layout)
+  const relPath = specifier.replace(/\./g, '/');
+  return (
+    await tryResolveBase(join(rootDir, relPath), fileIdSet, rootDir) ??
+    await tryResolveBase(join(rootDir, 'src', relPath), fileIdSet, rootDir)
+  );
 }

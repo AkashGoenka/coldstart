@@ -10,6 +10,7 @@ import { parseRustContent } from './extractors/rust.js';
 import { parseCSharpContent } from './extractors/csharp.js';
 import { parsePhpContent } from './extractors/php.js';
 import { parseKotlinContent } from './extractors/kotlin.js';
+import { parseCppContent } from './extractors/cpp.js';
 
 const MAX_FILE_SIZE = 1_000_000; // 1 MB
 
@@ -241,7 +242,30 @@ export async function parseFile(
     };
   }
 
-  // Unsupported language (cpp, swift, dart)
+  // -------------------------------------------------------------------------
+  // C++: use Tree-sitter for symbol-level extraction
+  // -------------------------------------------------------------------------
+  if (language === 'cpp') {
+    let cppResult;
+    try {
+      cppResult = parseCppContent(content, fileId || filePath);
+    } catch (err) {
+      console.error(`[parser] Tree-sitter error in ${fileId || filePath}: ${err}`);
+      cppResult = { imports: [], exports: [], hasDefaultExport: false as const, symbols: [] };
+    }
+
+    return {
+      imports: cppResult.imports,
+      exports: cppResult.exports,
+      hasDefaultExport: false,
+      hash,
+      lineCount,
+      tokenEstimate,
+      symbols: cppResult.symbols,
+    };
+  }
+
+  // Unsupported language (swift, dart)
   return {
     imports: [],
     exports: [],

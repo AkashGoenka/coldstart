@@ -65,7 +65,7 @@ export interface IndexedFile {
   lineCount: number;
   tokenEstimate: number;    // content.length / 4
   importedByCount: number;  // number of files that import this file (set after graph phase)
-  transitiveImportedByCount: number; // importedByCount bubbled through barrel files
+  transitiveImportedByCount: number; // importedByCount + one barrel hop (not a full transitive closure)
   isBarrel: boolean;        // true if this is an index.ts re-export barrel
   isTestFile: boolean;      // true if any path segment is a test/automation directory
   symbols: SymbolNode[];    // symbol-level nodes within this file (TS/JS only)
