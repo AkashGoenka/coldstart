@@ -582,3 +582,42 @@ describe('ts-parser — symbol extraction', () => {
     expect(constant.kind).toBe('constant');
   });
 });
+
+describe('parser — C++', () => {
+  it('extracts class and struct symbols from auth.cpp', async () => {
+    const result = await parseFile(join(FIXTURES, 'cpp/auth.cpp'), 'cpp');
+    expect(result).not.toBeNull();
+    expect(result!.exports).toContain('AuthService');
+    expect(result!.exports).toContain('LoginRequest');
+  });
+
+  it('extracts namespace-scoped symbols', async () => {
+    const result = await parseFile(join(FIXTURES, 'cpp/auth.cpp'), 'cpp', 'cpp/auth.cpp');
+    const syms = result!.symbols.map(s => s.name);
+    expect(syms).toContain('App::AuthService');
+    expect(syms).toContain('App::LoginRequest');
+  });
+
+  it('extracts top-level function symbols', async () => {
+    const result = await parseFile(join(FIXTURES, 'cpp/auth.cpp'), 'cpp', 'cpp/auth.cpp');
+    const fn = result!.symbols.find(s => s.name === 'hashPassword');
+    expect(fn).toBeDefined();
+    expect(fn!.kind).toBe('function');
+  });
+
+  it('extracts relative #include as import', async () => {
+    const result = await parseFile(join(FIXTURES, 'cpp/auth.cpp'), 'cpp');
+    expect(result!.imports).toContain('include/utils/hash.h');
+  });
+
+  it('does not extract angle-bracket system includes as imports', async () => {
+    const result = await parseFile(join(FIXTURES, 'cpp/auth.cpp'), 'cpp');
+    expect(result!.imports.some(i => i.includes('vector') || i.includes('string'))).toBe(false);
+  });
+
+  it('produces hash and lineCount', async () => {
+    const result = await parseFile(join(FIXTURES, 'cpp/auth.cpp'), 'cpp');
+    expect(result!.hash).toMatch(/^[a-f0-9]{32}$/);
+    expect(result!.lineCount).toBeGreaterThan(5);
+  });
+});
