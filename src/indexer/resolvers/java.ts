@@ -69,7 +69,7 @@ export async function resolveJava(
   _fromFile: string,
   fileIdSet: Set<string>,
   _rootDir: string,
-  _aliasMap: Map<string, string>,
+  _aliasMap: Map<string, string[]>,
 ): Promise<string | null> {
   if (specifier.endsWith('.*')) return null;
 

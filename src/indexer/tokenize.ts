@@ -105,7 +105,10 @@ function sortSources(sources: Set<TokenSource>): TokenSource[] {
  * 2. Effective filename tokens (filename source, with dir-entry promotion)
  * 3. Exported symbol names (symbol source)
  *
- * Import tokens are added separately in src/index.ts after import resolution.
+ * Import specifiers are intentionally excluded: what a file imports describes
+ * its dependencies, not its identity. Adding them caused high-fan-out files
+ * (routers, layout roots, API clients) to match every query for the features
+ * they depend on — pure noise. Identity comes from path and exports only.
  */
 export function buildFileDomains(
   relativePath: string,
