@@ -32,10 +32,11 @@ So the system was reduced to 4 focused MCP tools:
 4. `trace-impact`
 
 Removed:
-- Query ranking pipeline
-- TF-IDF index
 - PageRank signals
 - Git co-change scoring
+- TF-IDF + co-occurrence ranking pipeline
+
+`get-overview` does have a lightweight ranking layer — convergence scoring (how many independent sources: filename, path, symbol agree on a concept) combined with IDF as a tiebreaker. This is different in kind from the old stack: no graph signals, no co-change, no model. It runs in-memory over the static index in microseconds.
 
 ---
 
@@ -58,18 +59,23 @@ Removed:
    - **C#**: Tree-sitter (tree-sitter-c-sharp) — public classes, interfaces, structs, enums, records, public methods. Extracts base type list for extends/implements. Captures `using` directives as imports.
    - **PHP**: Tree-sitter (tree-sitter-php) — classes, interfaces, traits, public methods. Extracts `extends`/`implements` clauses. Captures `use` namespace imports.
    - **Kotlin**: Tree-sitter (tree-sitter-kotlin) — classes, interfaces (detected via `interface` keyword in `class_declaration`), object declarations, top-level functions, methods. Public by default unless explicitly private/protected.
+   - **C++**: Tree-sitter (tree-sitter-cpp) — classes, structs, functions, methods, namespaces.
+   - **Vue/Svelte/Astro (SFC)**: script block extracted from the SFC source before handing off to the TypeScript/JavaScript parser. The rest of the file (template, style) is ignored.
+   - **AngularJS 1.x**: regex-based extractor (no AST) for `.service()`, `.controller()`, `.factory()`, `.directive()` module registrations — covers legacy Angular 1 codebases where Tree-sitter gives no useful symbols.
    - **TypeScript/JavaScript enhancements**: `export default <identifier>` (bare identifier form) now correctly marks the referenced symbol as exported in addition to setting `hasDefaultExport = true`.
-   - **Other languages** (Swift, Dart, C++): Walked by the filesystem scanner but not parsed — files appear in the index with empty imports/exports/symbols. No stable tree-sitter grammar npm packages available.
+   - **Other languages** (Swift, Dart): Walked by the filesystem scanner but not parsed — files appear in the index with empty imports/exports/symbols.
    - Derives metadata: hash, line count, token estimate.
 
 3. **Resolve** (`indexer/resolvers/`)
    - Per-language resolver files mirror the `extractors/` structure — one file per language, dispatched by `resolvers/index.ts`.
    - **TypeScript/JavaScript** (and C#, PHP, Kotlin, etc.): relative path resolution, extension probing, index-file fallback, tsconfig/jsconfig path alias support.
    - **Java**: converts fully-qualified class names (`com.example.User`) to file paths. Source roots are discovered at startup by scanning file IDs for well-known markers (`/src/main/java/`, `/src/test/java/`, `/src/java/`, `/target/generated-sources/`, `/build/generated-sources/`, `/src/`) — checked both with and without a leading slash to handle Maven projects whose file IDs start at `src/main/java/` directly. Also strips the last FQN segment to resolve static imports and inner class references (`org.foo.Outer.Inner` → `Outer.java`). Wildcard imports (`com.foo.*`) are skipped at extraction time — they cannot resolve to a single file.
-   - **Ruby**: relative paths (normalised to `./` prefix by the extractor for `require_relative`) resolve from the importing file's directory. Non-relative requires try `lib/` and `app/` load roots before giving up — external gems are left unresolved.
-   - **Go**: strips the module path prefix (read from `go.mod`), handles `vendor/` paths, skips `_test.go` file self-imports, and falls back to relative-to-project-root resolution for multi-module layouts.
+   - **Ruby**: relative paths (normalised to `./` prefix by the extractor for `require_relative`) resolve from the importing file's directory. Non-relative requires try `lib/` and `app/` load roots before giving up — external gems are left unresolved. `path:` gems in `Gemfile` are resolved as local source roots.
+   - **Go**: strips the module path prefix (read from `go.mod`), handles `vendor/` paths, skips `_test.go` file self-imports, and falls back to relative-to-project-root resolution for multi-module layouts. `go.work` workspace files are parsed to discover all module roots in a monorepo.
+   - **PHP**: standard namespace-to-path resolution via `composer.json` autoload maps. `path` repos in `composer.json` `repositories` are resolved as local source roots.
    - **Rust**: tries `<specifier>.rs` then `<specifier>/mod.rs` relative to the importing file.
    - **Python**: handles relative imports (counts leading dots to walk up directories), absolute imports mapped to project-relative paths, and `__init__.py` directory packages.
+   - **npm workspaces**: `workspaces` field in `package.json` is parsed to discover all package roots; cross-package imports resolve correctly.
    - Exposes `resolveImportsForFiles(files, fileIdSet, rootDir)` for incremental patching against a pre-built fileIdSet.
 
 4. **Graph** (`indexer/graph.ts`)
@@ -121,7 +127,7 @@ After the server starts, the index is kept current in-memory for the entire sess
 - `indexedAt`, `gitHead`
 
 Key per-file signals used by tools:
-- `domains: DomainToken[]`, `importedByCount`, `transitiveImportedByCount`, `isBarrel`, `reexportRatio`
+- `domainMap: Record<string, DomainEvidence>`, `importedByCount`, `transitiveImportedByCount`, `isBarrel`, `reexportRatio`
 - `symbols: SymbolNode[]` — per-file list of extracted symbols (all supported languages)
 
 `SymbolNode` captures:
@@ -158,8 +164,8 @@ Artifacts:
 ## Design tradeoffs
 
 1. **AST-only parsing via Tree-sitter across all supported languages**
-   - All indexed languages use Tree-sitter for symbol-level accuracy (exact function/class/interface extraction, line numbers, call tracking).
-   - Unsupported languages (Swift, Dart, C++) are walked but not parsed due to unavailable stable tree-sitter grammar npm packages.
+   - All indexed languages use Tree-sitter for symbol-level accuracy (exact function/class/interface extraction, line numbers, call tracking). AngularJS 1.x is the only exception — regex-based extraction because Tree-sitter gives no useful symbols for Angular 1 module registration patterns.
+   - Unsupported languages (Swift, Dart) are walked but not parsed — no stable tree-sitter grammar npm packages available.
    - node-tree-sitter chosen over web-tree-sitter for simpler Node.js API (no WASM loading boilerplate).
 
 2. **Hybrid incremental patch + full rebuild**
@@ -202,7 +208,7 @@ Artifacts:
 It is:
 - A local MCP indexing + routing service.
 - A fast structural context provider for coding agents.
-- A symbol-level dependency analyzer for TS/JS/Java/Ruby/Python/Go/Rust/C#/PHP/Kotlin, with accurate export detection via Tree-sitter AST parsing.
+- A symbol-level dependency analyzer for TS/JS/Vue/Svelte/Astro/AngularJS/Java/Ruby/Python/Go/Rust/C#/PHP/Kotlin/C++, with accurate export detection via Tree-sitter AST parsing.
 - A live index service — the in-memory graph stays current via file watching and incremental patching throughout the session.
 
 It is not:

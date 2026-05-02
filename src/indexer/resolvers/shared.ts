@@ -1,5 +1,12 @@
-import { access } from 'node:fs/promises';
 import { join, relative, extname } from 'node:path';
+
+// TypeScript ESM: `from './foo.js'` may resolve to `foo.ts` on disk.
+const JS_TO_TS: Record<string, string[]> = {
+  '.js':  ['.ts', '.tsx'],
+  '.jsx': ['.tsx'],
+  '.mjs': ['.mts'],
+  '.cjs': ['.cts'],
+};
 
 export const RESOLVABLE_EXTENSIONS = [
   '.ts', '.tsx', '.mts', '.cts',
@@ -15,46 +22,52 @@ export const INDEX_FILES = [
   '__init__.py', 'mod.rs',
 ];
 
-export async function fileExists(p: string): Promise<boolean> {
-  try {
-    await access(p);
-    return true;
-  } catch {
-    return false;
-  }
+/** Converts an absolute path to a normalized forward-slash file ID relative to rootDir. */
+export function toFileId(absolutePath: string, rootDir: string): string {
+  return relative(rootDir, absolutePath).replace(/\\/g, '/');
 }
 
 /**
- * Given a base path (no extension, or already has one), try:
+ * Given a base path (no extension, or already has one), try to find a match
+ * in fileIdSet using only in-memory lookups — no filesystem I/O.
+ *
  *   1. Exact match if base already has an extension
- *   2. Each entry in RESOLVABLE_EXTENSIONS appended to base
+ *   1b. JS→TS substitution: `foo.js` → `foo.ts` / `foo.tsx` (TypeScript ESM)
+ *   2. Each entry in RESOLVABLE_EXTENSIONS appended to base (no-extension path)
  *   3. Each INDEX_FILES entry inside base as a directory
- * Returns a rootDir-relative path if found in fileIdSet, else null.
+ *
+ * Returns a rootDir-relative forward-slash path if found in fileIdSet, else null.
  */
-export async function tryResolveBase(
+export function tryResolveBase(
   base: string,
   fileIdSet: Set<string>,
   rootDir: string,
-): Promise<string | null> {
-  if (extname(base) && await fileExists(base)) {
-    const rel = relative(rootDir, base).replace(/\\/g, '/');
-    if (fileIdSet.has(rel)) return rel;
+): string | null {
+  const ext = extname(base);
+  const id = toFileId(base, rootDir);
+
+  if (ext) {
+    if (fileIdSet.has(id)) return id;
+    // TypeScript ESM: `from './foo.js'` may be indexed as `foo.ts`
+    const tsAlts = JS_TO_TS[ext];
+    if (tsAlts) {
+      const stem = id.slice(0, -ext.length);
+      for (const alt of tsAlts) {
+        const altId = stem + alt;
+        if (fileIdSet.has(altId)) return altId;
+      }
+    }
+    return null; // has an extension — don't append more
   }
 
-  for (const ext of RESOLVABLE_EXTENSIONS) {
-    const candidate = base + ext;
-    if (await fileExists(candidate)) {
-      const rel = relative(rootDir, candidate).replace(/\\/g, '/');
-      if (fileIdSet.has(rel)) return rel;
-    }
+  for (const e of RESOLVABLE_EXTENSIONS) {
+    const candidate = id + e;
+    if (fileIdSet.has(candidate)) return candidate;
   }
 
   for (const idx of INDEX_FILES) {
-    const candidate = join(base, idx);
-    if (await fileExists(candidate)) {
-      const rel = relative(rootDir, candidate).replace(/\\/g, '/');
-      if (fileIdSet.has(rel)) return rel;
-    }
+    const candidate = id + '/' + idx;
+    if (fileIdSet.has(candidate)) return candidate;
   }
 
   return null;

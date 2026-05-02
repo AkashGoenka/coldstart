@@ -1,14 +1,14 @@
 import { basename, extname } from 'node:path';
-import type { DomainToken, TokenSource } from '../types.js';
+import type { DomainEvidence } from '../types.js';
 
 const STOP_WORDS = new Set([
-  'index', 'component', 'service', 'util', 'helper', 'default',
+  'index', 'component', 'util', 'helper', 'default',
   'type', 'interface', 'class', 'function', 'const', 'enum',
   'module', 'export', 'import', 'test', 'spec', 'mock',
   'base', 'abstract', 'impl', 'main', 'app', 'core',
   'get', 'set', 'has', 'is', 'on', 'to', 'from', 'with',
-  'new', 'create', 'build', 'make', 'init', 'setup',
-  'handler', 'wrapper', 'factory', 'provider', 'manager',
+  'new', 'init',
+  'handler', 'wrapper', 'provider', 'manager',
   'props', 'state', 'context', 'config', 'options', 'params',
 ]);
 
@@ -19,9 +19,7 @@ const GENERIC_DIRS = new Set([
 
 // Directory-entry filenames: when a file has one of these names, use the
 // parent directory name instead for the 'filename' source token.
-const DIR_ENTRY_NAMES = new Set(['index', '__init__', 'mod']);
-
-const SOURCE_ORDER: TokenSource[] = ['filename', 'path', 'symbol', 'import'];
+const DIR_ENTRY_NAMES = new Set(['index', '__init__', 'mod', 'page', 'route', 'layout', 'loading']);
 
 // Words that, when found as a token in any path segment, mark a file as test infrastructure.
 // Matched via tokenizeName so word-boundary splitting handles e2e-tests, __tests__, pageObjects etc.
@@ -78,10 +76,10 @@ export function tokenizeName(name: string): string[] {
 /**
  * Additive pluralization: for each token length >= 5, add the singular form
  * if the token ends in 's' or 'es' and the singular isn't already present.
- * Both forms coexist.
+ * Both forms coexist. Copies evidence counts from the plural origin entry.
  */
-function addPlurals(map: Map<string, Set<TokenSource>>): void {
-  for (const [token, sources] of [...map.entries()]) {
+function addPlurals(map: Record<string, DomainEvidence>): void {
+  for (const [token, evidence] of Object.entries(map)) {
     if (token.length < 5) continue;
     let singular: string | null = null;
     if (token.endsWith('es') && token.length > 4) {
@@ -89,18 +87,14 @@ function addPlurals(map: Map<string, Set<TokenSource>>): void {
     } else if (token.endsWith('s')) {
       singular = token.slice(0, -1);
     }
-    if (singular && singular.length >= 4 && !STOP_WORDS.has(singular) && !map.has(singular)) {
-      map.set(singular, new Set(sources));
+    if (singular && singular.length >= 4 && !STOP_WORDS.has(singular) && !map[singular]) {
+      map[singular] = { ...evidence };
     }
   }
 }
 
-function sortSources(sources: Set<TokenSource>): TokenSource[] {
-  return SOURCE_ORDER.filter(s => sources.has(s));
-}
-
 /**
- * Build the domains DomainToken[] for a file from:
+ * Build the domainMap Record<string, DomainEvidence> for a file from:
  * 1. Non-generic directory segments in the relative path (path source)
  * 2. Effective filename tokens (filename source, with dir-entry promotion)
  * 3. Exported symbol names (symbol source)
@@ -113,12 +107,12 @@ function sortSources(sources: Set<TokenSource>): TokenSource[] {
 export function buildFileDomains(
   relativePath: string,
   exports: string[],
-): DomainToken[] {
-  const tokenMap = new Map<string, Set<TokenSource>>();
+): Record<string, DomainEvidence> {
+  const domainMap: Record<string, DomainEvidence> = {};
 
-  function addToken(token: string, source: TokenSource): void {
-    if (!tokenMap.has(token)) tokenMap.set(token, new Set());
-    tokenMap.get(token)!.add(source);
+  function addToken(token: string, source: 'filename' | 'path' | 'symbol'): void {
+    if (!domainMap[token]) domainMap[token] = { filename: 0, path: 0, symbol: 0 };
+    domainMap[token][source]++;
   }
 
   const normalized = relativePath.replace(/\\/g, '/');
@@ -174,14 +168,7 @@ export function buildFileDomains(
   }
 
   // 4. Additive pluralization
-  addPlurals(tokenMap);
+  addPlurals(domainMap);
 
-  // Convert to sorted DomainToken[]
-  const result: DomainToken[] = [];
-  for (const [token, sources] of tokenMap) {
-    result.push({ token, sources: sortSources(sources) });
-  }
-  result.sort((a, b) => a.token.localeCompare(b.token));
-
-  return result;
+  return domainMap;
 }
