@@ -19,7 +19,7 @@ import { getGitHead } from './indexer/git.js';
 import { loadCachedIndex, saveCachedIndex } from './cache/disk-cache.js';
 import { startMCPServer } from './server/mcp.js';
 import { IndexManager } from './index-manager.js';
-import type { CodebaseIndex, IndexedFile, SymbolEdge, DomainToken } from './types.js';
+import type { CodebaseIndex, IndexedFile, SymbolEdge } from './types.js';
 
 // ---------------------------------------------------------------------------
 // Argument parsing (no external deps)
@@ -115,7 +115,7 @@ export async function buildIndex(
             path: wf.absolutePath,
             relativePath: wf.relativePath,
             language: wf.language,
-            domains: buildFileDomains(wf.relativePath, parsed.exports),
+            domainMap: buildFileDomains(wf.relativePath, parsed.exports),
             exports: parsed.exports,
             hasDefaultExport: parsed.hasDefaultExport,
             imports: parsed.imports,
@@ -195,22 +195,21 @@ export async function buildIndex(
   // Strip symbol-sourced tokens from barrel domains to prevent re-exported symbol pollution
   for (const file of indexedFiles) {
     if (!file.isBarrel) continue;
-    const domains = file.domains as DomainToken[];
-    file.domains = domains
-      .map(dt => ({ token: dt.token, sources: dt.sources.filter(s => s !== 'symbol') }))
-      .filter(dt => dt.sources.length > 0);
+    for (const [token, ev] of Object.entries(file.domainMap)) {
+      if (ev.filename === 0 && ev.path === 0) {
+        delete file.domainMap[token];
+      } else {
+        file.domainMap[token] = { ...ev, symbol: 0 };
+      }
+    }
   }
 
-  // 7. Token document frequency (skip barrels; skip import-only tokens — they inflate IDF)
+  // 7. Token document frequency (skip barrels)
   const tokenDocFreq = new Map<string, number>();
   for (const file of indexedFiles) {
     if (file.isBarrel) continue;
-    const domains = file.domains as DomainToken[];
-    const seen = new Set<string>();
-    for (const dt of domains) {
-      if (seen.has(dt.token)) continue;
-      seen.add(dt.token);
-      tokenDocFreq.set(dt.token, (tokenDocFreq.get(dt.token) ?? 0) + 1);
+    for (const token of Object.keys(file.domainMap)) {
+      tokenDocFreq.set(token, (tokenDocFreq.get(token) ?? 0) + 1);
     }
   }
 

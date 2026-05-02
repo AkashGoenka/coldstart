@@ -28,7 +28,7 @@ export async function resolveGeneric(
       const suffix = specifier.slice(alias.length);
       for (const target of aliasMap.get(alias)!) {
         const base = resolve(dirname(fromFile), target + suffix);
-        const result = await tryResolveBase(base, fileIdSet, rootDir);
+        const result = tryResolveBase(base, fileIdSet, rootDir);
         if (result) return result;
       }
       // Alias matched but no target resolved — stop (don't fall through to other aliases)
