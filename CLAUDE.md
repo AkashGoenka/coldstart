@@ -2,7 +2,7 @@
 
 Lightweight navigation layer for AI agents. Answers one question: which files are relevant to this task? Fast static index over file paths, symbol names, and exports — built once, queried instantly via four MCP tools: `get-overview`, `get-structure`, `trace-deps`, `trace-impact`.
 
-**Startup pipeline:** walk → parse (Tree-sitter for TS/JS/Java/Ruby/Python/Go/Rust/C#/PHP/Kotlin; Swift/Dart/C++ not parsed) → resolve imports → build graph (including cross-file call edge resolution) → serve over stdio.
+**Startup pipeline:** walk → parse (Tree-sitter for TS/JS/JSX/TSX/Java/Ruby/Python/Go/Rust/C#/PHP/Kotlin/C++; SFC script blocks extracted from Vue/Svelte/Astro before TS parsing; AngularJS 1.x via regex extractor; Swift/Dart not parsed) → resolve imports → build graph (including cross-file call edge resolution) → serve over stdio.
 
 **Live updates:** after startup, a native `fs.watch` listener keeps the in-memory index current for the entire session. File changes are debounced (400 ms), then either patched incrementally (≤30 files, ~2–5 ms/file) or trigger a full background rebuild (>30 files). No restarts required.
 
