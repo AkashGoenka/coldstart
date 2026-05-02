@@ -1,6 +1,6 @@
 import { stat } from 'node:fs/promises';
 import { relative, extname } from 'node:path';
-import type { CodebaseIndex, IndexedFile, ParsedFile, DomainToken, Language } from '../types.js';
+import type { CodebaseIndex, IndexedFile, ParsedFile, Language } from '../types.js';
 import { EXTENSION_TO_LANGUAGE } from '../constants.js';
 import { parseFile, buildFileId } from './parser.js';
 import { buildFileDomains, isTestPath } from './tokenize.js';
@@ -106,13 +106,10 @@ export async function patchIndex(
 
     // Decrement tokenDocFreq for old file's tokens (skip barrel files)
     if (!oldFile.isBarrel) {
-      const seen = new Set<string>();
-      for (const dt of oldFile.domains as DomainToken[]) {
-        if (seen.has(dt.token)) continue;
-        seen.add(dt.token);
-        const count = index.tokenDocFreq.get(dt.token) ?? 0;
-        if (count <= 1) index.tokenDocFreq.delete(dt.token);
-        else index.tokenDocFreq.set(dt.token, count - 1);
+      for (const token of Object.keys(oldFile.domainMap)) {
+        const count = index.tokenDocFreq.get(token) ?? 0;
+        if (count <= 1) index.tokenDocFreq.delete(token);
+        else index.tokenDocFreq.set(token, count - 1);
       }
     }
 
@@ -166,7 +163,7 @@ export async function patchIndex(
       path: absPath,
       relativePath: relPath,
       language: lang,
-      domains: buildFileDomains(relPath, parsed.exports),
+      domainMap: buildFileDomains(relPath, parsed.exports),
       exports: parsed.exports,
       hasDefaultExport: parsed.hasDefaultExport,
       imports: parsed.imports,
@@ -221,18 +218,19 @@ export async function patchIndex(
           file.exports.length > 0
         );
         if (file.isBarrel) {
-          file.domains = (file.domains as DomainToken[])
-            .map(dt => ({ token: dt.token, sources: dt.sources.filter(s => s !== 'symbol') }))
-            .filter(dt => dt.sources.length > 0);
+          for (const [token, ev] of Object.entries(file.domainMap)) {
+            if (ev.filename === 0 && ev.path === 0) {
+              delete file.domainMap[token];
+            } else {
+              file.domainMap[token] = { ...ev, symbol: 0 };
+            }
+          }
         }
       }
 
       if (!file.isBarrel) {
-        const seen = new Set<string>();
-        for (const dt of file.domains as DomainToken[]) {
-          if (seen.has(dt.token)) continue;
-          seen.add(dt.token);
-          index.tokenDocFreq.set(dt.token, (index.tokenDocFreq.get(dt.token) ?? 0) + 1);
+        for (const token of Object.keys(file.domainMap)) {
+          index.tokenDocFreq.set(token, (index.tokenDocFreq.get(token) ?? 0) + 1);
         }
       }
 

@@ -28,6 +28,9 @@ export const EXTENSION_TO_LANGUAGE: Record<string, Language> = {
   ".php": "php",
   ".kt": "kotlin",
   ".kts": "kotlin",
+  ".vue": "vue",
+  ".svelte": "svelte",
+  ".astro": "astro",
 };
 
 // ---------------------------------------------------------------------------
@@ -60,10 +63,12 @@ export const DEFAULT_EXCLUDES = new Set([
   "temp",
   ".cache",
   "logs",
+  "generated",
+  "__generated__",
 ]);
 
 // Cache version — bump when index schema changes to force re-index
-export const CACHE_VERSION = "8.0.0";
+export const CACHE_VERSION = "11.0.0";
 
 // IDF threshold for "rare" token: log(20) ≈ 3.0 — tokens appearing in < 5% of files
 export const IDF_RARITY_THRESHOLD = Math.log(20);

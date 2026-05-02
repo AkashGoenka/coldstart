@@ -9,12 +9,16 @@ const FIXTURES = join(__dirname, 'fixtures');
 const JAVA_FIXTURES = join(FIXTURES, 'java');
 const RUBY_FIXTURES = join(FIXTURES, 'ruby');
 const RUBY_SPEC_FIXTURES = join(FIXTURES, 'ruby-spec');
+const RUBY_GEMFILE_FIXTURES = join(FIXTURES, 'ruby-gemfile');
 const TS_ALIASES_FIXTURES = join(FIXTURES, 'ts-aliases');
 const TS_MULTI_TARGET_FIXTURES = join(FIXTURES, 'ts-multi-target');
 const TS_LONGEST_PREFIX_FIXTURES = join(FIXTURES, 'ts-longest-prefix');
+const NPM_WORKSPACES_FIXTURES = join(FIXTURES, 'npm-workspaces');
 const CPP_FIXTURES = join(FIXTURES, 'cpp');
 const GO_REPLACE_FIXTURES = join(FIXTURES, 'go-replace');
+const GO_WORKSPACE_FIXTURES = join(FIXTURES, 'go-workspace');
 const PHP_PSR4_FIXTURES = join(FIXTURES, 'php-psr4');
+const PHP_PATH_REPOS_FIXTURES = join(FIXTURES, 'php-path-repos');
 const PYTHON_SRC_FIXTURES = join(FIXTURES, 'python-src');
 
 function makeFile(id: string, lang: IndexedFile['language'], imports: string[]): IndexedFile {
@@ -36,6 +40,33 @@ function makeFile(id: string, lang: IndexedFile['language'], imports: string[]):
     depth: 0,
   };
 }
+
+// ---------------------------------------------------------------------------
+// TypeScript ESM .js → .ts extension resolution
+// ---------------------------------------------------------------------------
+
+describe('resolver — TypeScript ESM .js extension imports', () => {
+  it('resolves ./userRepository.js to typescript/userRepository.ts (relative)', async () => {
+    const files: IndexedFile[] = [
+      makeFile('typescript/auth.ts', 'typescript', ['./userRepository.js']),
+      makeFile('typescript/userRepository.ts', 'typescript', []),
+    ];
+
+    const { edges } = await resolveImports(files, FIXTURES);
+    expect(edges.some(e => e.from === 'typescript/auth.ts' && e.to === 'typescript/userRepository.ts')).toBe(true);
+  });
+
+  it('resolves @/components/Button.js to src/components/Button.ts (alias)', async () => {
+    const files: IndexedFile[] = [
+      makeFileIn(TS_ALIASES_FIXTURES, 'main.ts', 'typescript', ['@/components/Button.js']),
+      makeFileIn(TS_ALIASES_FIXTURES, 'src/components/Button.ts', 'typescript', []),
+    ];
+
+    const { edges } = await resolveImports(files, TS_ALIASES_FIXTURES);
+    expect(edges.some(e => e.from === 'main.ts' && e.to === 'src/components/Button.ts')).toBe(true);
+  });
+
+});
 
 describe('resolver — TypeScript relative imports', () => {
   it('resolves ./userRepository to typescript/userRepository.ts', async () => {
@@ -488,5 +519,144 @@ describe('resolver — Rust use declarations excluded from imports', () => {
     const { edges } = await resolveImports(files, FIXTURES);
     const authEdges = edges.filter(e => e.from === 'rust/auth.rs');
     expect(authEdges).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// npm workspace packages
+// ---------------------------------------------------------------------------
+
+describe('resolver — npm workspaces', () => {
+  it('resolves a scoped package import to its workspace directory', async () => {
+    // package.json workspaces: ["packages/*"]
+    // packages/shared-utils/package.json: { "name": "@acme/shared-utils" }
+    // app/index.ts imports '@acme/shared-utils/src/format'
+    const files: IndexedFile[] = [
+      makeFileIn(NPM_WORKSPACES_FIXTURES, 'app/index.ts', 'typescript', ['@acme/shared-utils/src/format']),
+      makeFileIn(NPM_WORKSPACES_FIXTURES, 'packages/shared-utils/src/format.ts', 'typescript', []),
+    ];
+
+    const { edges } = await resolveImports(files, NPM_WORKSPACES_FIXTURES);
+    expect(
+      edges.some(e => e.from === 'app/index.ts' && e.to === 'packages/shared-utils/src/format.ts'),
+    ).toBe(true);
+  });
+
+  it('does not resolve external packages not listed in workspaces', async () => {
+    const files: IndexedFile[] = [
+      makeFileIn(NPM_WORKSPACES_FIXTURES, 'app/index.ts', 'typescript', ['lodash']),
+    ];
+
+    const { unresolved } = await resolveImports(files, NPM_WORKSPACES_FIXTURES);
+    expect(unresolved.some(u => u.specifier === 'lodash')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Go workspace (go.work)
+// ---------------------------------------------------------------------------
+
+describe('resolver — Go workspace (go.work)', () => {
+  it('resolves an import from one workspace module to another', async () => {
+    // go.work: use ./api, use ./shared
+    // api/go.mod: module example.com/api
+    // shared/go.mod: module example.com/shared
+    // api/handlers/auth.go imports "example.com/shared/db"
+    const files: IndexedFile[] = [
+      makeGoFile(GO_WORKSPACE_FIXTURES, 'api/handlers/auth.go', ['example.com/shared/db']),
+      makeGoFile(GO_WORKSPACE_FIXTURES, 'shared/db/conn.go', []),
+    ];
+
+    const { edges } = await resolveImports(files, GO_WORKSPACE_FIXTURES);
+    expect(
+      edges.some(e => e.from === 'api/handlers/auth.go' && e.to === 'shared/db/conn.go'),
+    ).toBe(true);
+  });
+
+  it('treats third-party imports as unresolved when go.work is present', async () => {
+    const files: IndexedFile[] = [
+      makeGoFile(GO_WORKSPACE_FIXTURES, 'api/handlers/auth.go', ['github.com/gin-gonic/gin']),
+    ];
+
+    const { unresolved } = await resolveImports(files, GO_WORKSPACE_FIXTURES);
+    expect(unresolved.some(u => u.specifier === 'github.com/gin-gonic/gin')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Ruby Gemfile path gems
+// ---------------------------------------------------------------------------
+
+describe('resolver — Ruby Gemfile path gems', () => {
+  it('resolves require of a path gem entry point', async () => {
+    // Gemfile: gem 'payment_gem', path: './gems/payment_gem'
+    // require 'payment_gem' → gems/payment_gem/lib/payment_gem.rb
+    const files: IndexedFile[] = [
+      makeRubyFileIn(RUBY_GEMFILE_FIXTURES, 'app/controllers/orders_controller.rb', ['payment_gem']),
+      makeRubyFileIn(RUBY_GEMFILE_FIXTURES, 'gems/payment_gem/lib/payment_gem.rb', []),
+    ];
+
+    const { edges } = await resolveImports(files, RUBY_GEMFILE_FIXTURES);
+    expect(
+      edges.some(
+        e => e.from === 'app/controllers/orders_controller.rb' &&
+             e.to === 'gems/payment_gem/lib/payment_gem.rb',
+      ),
+    ).toBe(true);
+  });
+
+  it('resolves require of a sub-module inside a path gem', async () => {
+    // require 'payment_gem/processor' → gems/payment_gem/lib/payment_gem/processor.rb
+    const files: IndexedFile[] = [
+      makeRubyFileIn(RUBY_GEMFILE_FIXTURES, 'app/controllers/orders_controller.rb', ['payment_gem/processor']),
+      makeRubyFileIn(RUBY_GEMFILE_FIXTURES, 'gems/payment_gem/lib/payment_gem/processor.rb', []),
+    ];
+
+    const { edges } = await resolveImports(files, RUBY_GEMFILE_FIXTURES);
+    expect(
+      edges.some(
+        e => e.from === 'app/controllers/orders_controller.rb' &&
+             e.to === 'gems/payment_gem/lib/payment_gem/processor.rb',
+      ),
+    ).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PHP Composer path repositories
+// ---------------------------------------------------------------------------
+
+describe('resolver — PHP Composer path repositories', () => {
+  it('resolves a namespace from a path repo sub-package', async () => {
+    // Root composer.json has repositories[{type:"path", url:"./packages/mailer"}]
+    // packages/mailer/composer.json has psr-4: { "Acme\\Mailer\\": "src/" }
+    // Acme\Mailer\Mailer → packages/mailer/src/Mailer.php
+    const files: IndexedFile[] = [
+      makePhpFile(PHP_PATH_REPOS_FIXTURES, 'app/Services/NotificationService.php', ['Acme\\Mailer\\Mailer']),
+      makePhpFile(PHP_PATH_REPOS_FIXTURES, 'packages/mailer/src/Mailer.php', []),
+    ];
+
+    const { edges } = await resolveImports(files, PHP_PATH_REPOS_FIXTURES);
+    expect(
+      edges.some(
+        e => e.from === 'app/Services/NotificationService.php' &&
+             e.to === 'packages/mailer/src/Mailer.php',
+      ),
+    ).toBe(true);
+  });
+
+  it('still resolves root package PSR-4 alongside path repos', async () => {
+    // Root psr-4: "App\\" → "app/" — should still work
+    const files: IndexedFile[] = [
+      makePhpFile(PHP_PATH_REPOS_FIXTURES, 'index.php', ['App\\Services\\NotificationService']),
+      makePhpFile(PHP_PATH_REPOS_FIXTURES, 'app/Services/NotificationService.php', []),
+    ];
+
+    const { edges } = await resolveImports(files, PHP_PATH_REPOS_FIXTURES);
+    expect(
+      edges.some(
+        e => e.from === 'index.php' && e.to === 'app/Services/NotificationService.php',
+      ),
+    ).toBe(true);
   });
 });

@@ -1,5 +1,5 @@
-import { dirname, join, relative } from 'node:path';
-import { fileExists, tryResolveBase } from './shared.js';
+import { dirname, join } from 'node:path';
+import { toFileId, tryResolveBase } from './shared.js';
 
 /**
  * Python resolver: handles both relative and absolute imports.
@@ -38,11 +38,8 @@ export async function resolvePython(
 
     if (!module) {
       // from . import X — the package __init__.py
-      const initPy = join(base, '__init__.py');
-      if (await fileExists(initPy)) {
-        const rel = relative(rootDir, initPy).replace(/\\/g, '/');
-        if (fileIdSet.has(rel)) return rel;
-      }
+      const id = toFileId(join(base, '__init__.py'), rootDir);
+      if (fileIdSet.has(id)) return id;
       return null;
     }
 
@@ -53,7 +50,7 @@ export async function resolvePython(
   // Absolute import: 'django.db.models' → try rootDir then rootDir/src (common src layout)
   const relPath = specifier.replace(/\./g, '/');
   return (
-    await tryResolveBase(join(rootDir, relPath), fileIdSet, rootDir) ??
-    await tryResolveBase(join(rootDir, 'src', relPath), fileIdSet, rootDir)
+    tryResolveBase(join(rootDir, relPath), fileIdSet, rootDir) ??
+    tryResolveBase(join(rootDir, 'src', relPath), fileIdSet, rootDir)
   );
 }

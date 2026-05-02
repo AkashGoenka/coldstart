@@ -23,10 +23,21 @@ interface ComposerAutoload {
 interface ComposerJson {
   autoload?: ComposerAutoload;
   'autoload-dev'?: ComposerAutoload;
+  repositories?: Array<{ type: string; url?: string }>;
 }
 
 // Cache per rootDir
 const psr4Cache = new Map<string, Map<string, string> | null>();
+
+function applyPsr4Section(section: ComposerAutoload | undefined, baseDir: string, map: Map<string, string>): void {
+  const psr4 = section?.['psr-4'];
+  if (!psr4) return;
+  for (const [ns, dirs] of Object.entries(psr4)) {
+    const nsKey = ns.replace(/\\+$/, ''); // strip trailing backslash
+    const dir = Array.isArray(dirs) ? dirs[0] : dirs;
+    if (typeof dir === 'string') map.set(nsKey, resolve(baseDir, dir));
+  }
+}
 
 async function loadPsr4Map(rootDir: string): Promise<Map<string, string> | null> {
   if (psr4Cache.has(rootDir)) return psr4Cache.get(rootDir)!;
@@ -35,15 +46,21 @@ async function loadPsr4Map(rootDir: string): Promise<Map<string, string> | null>
     const cfg = JSON.parse(raw) as ComposerJson;
     const map = new Map<string, string>();
 
-    for (const section of [cfg.autoload, cfg['autoload-dev']]) {
-      const psr4 = section?.['psr-4'];
-      if (!psr4) continue;
-      for (const [ns, dirs] of Object.entries(psr4)) {
-        const nsKey = ns.replace(/\\+$/, ''); // strip trailing backslash
-        const dir = Array.isArray(dirs) ? dirs[0] : dirs;
-        if (typeof dir === 'string') {
-          map.set(nsKey, resolve(rootDir, dir));
-        }
+    // Root package PSR-4 autoload
+    applyPsr4Section(cfg.autoload, rootDir, map);
+    applyPsr4Section(cfg['autoload-dev'], rootDir, map);
+
+    // Path repositories — merge PSR-4 from each sub-package's composer.json
+    if (Array.isArray(cfg.repositories)) {
+      for (const repo of cfg.repositories) {
+        if (repo.type !== 'path' || !repo.url || repo.url.includes('*')) continue;
+        const repoDir = resolve(rootDir, repo.url);
+        try {
+          const subRaw = await readFile(join(repoDir, 'composer.json'), 'utf-8');
+          const subCfg = JSON.parse(subRaw) as ComposerJson;
+          applyPsr4Section(subCfg.autoload, repoDir, map);
+          applyPsr4Section(subCfg['autoload-dev'], repoDir, map);
+        } catch { /* skip inaccessible path repo */ }
       }
     }
 
