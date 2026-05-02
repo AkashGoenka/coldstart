@@ -155,7 +155,7 @@ function deserializeIndex(plain: SerializedIndex): CodebaseIndex {
     // Ensure symbols and domains arrays exist for files loaded from older cache
     const file = v as Record<string, unknown>;
     if (!Array.isArray(file['symbols'])) file['symbols'] = [];
-    if (!Array.isArray(file['domains'])) file['domains'] = [];
+    if (!file['domainMap'] || typeof file['domainMap'] !== 'object') file['domainMap'] = {};
     if (typeof file['isBarrel'] !== 'boolean') file['isBarrel'] = false;
     if (typeof file['transitiveImportedByCount'] !== 'number') file['transitiveImportedByCount'] = file['importedByCount'] as number ?? 0;
     files.set(k, file as unknown as Parameters<typeof files.set>[1]);

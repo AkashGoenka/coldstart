@@ -68,6 +68,10 @@ export async function walkDirectory(options: WalkOptions): Promise<WalkedFile[]>
       const language = EXTENSION_TO_LANGUAGE[ext] as Language | undefined;
       if (!language) continue;
 
+      // Skip generated files (e.g. foo.generated.ts, schema_pb.ts, api.pb.go)
+      const nameLower = entry.name.toLowerCase();
+      if (/\.(generated|pb)\.[a-z]+$/.test(nameLower) || /_(generated|pb)\.[a-z]+$/.test(nameLower)) continue;
+
       // Check file size
       try {
         const info = await stat(fullPath);

@@ -57,7 +57,7 @@ This saves tokens and avoids broad, speculative file reads.
    - Pluralization is automatic: "workspace" also matches "workspaces".
    - Results show \`path\` and \`sources\` (which tokens matched).
    - Call iteratively: if truncated, either call \`get-structure\` on a visible file or narrow the query.
-   - \`max_results\` defaults to 15 (increase sparingly; large result sets waste context).
+   - \`max_results\` defaults to 10 (increase sparingly; large result sets waste context).
    - \`include_tests\` (default false) — set true if searching for test files.
 
 2. **\`get-structure\`** — Inspect a single file's shape WITHOUT reading it.

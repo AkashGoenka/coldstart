@@ -20,7 +20,7 @@ export async function resolveCpp(
 ): Promise<string | null> {
   // Try relative to the including file first
   const fromDir = resolve(dirname(fromFile), specifier);
-  const result = await tryResolveBase(fromDir, fileIdSet, rootDir);
+  const result = tryResolveBase(fromDir, fileIdSet, rootDir);
   if (result) return result;
 
   // Fall back to rootDir-relative (project-wide include root)

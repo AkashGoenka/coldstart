@@ -88,7 +88,7 @@ Required params:
 - `domain_filter` (string) — One or more keywords relevant to your task. Matched against each file's indexed tokens (derived from filename, path segments, exports, and imports). Bare words are AND logic; bracket groups are OR synonyms: `"[auth|login|jwt] payment"` = any auth synonym AND payment. Pluralization is automatic: `"workspace"` also matches `"workspaces"`.
 
 Optional params:
-- `max_results` (number, default 15) — cap on returned files
+- `max_results` (number, default 10) — cap on returned files
 - `include_tests` (boolean, default false) — include test files in results
 
 Returns a compact list of matching files with `path` and `sources` (token sources: filename | path | symbol | import).
@@ -140,23 +140,26 @@ Use this before refactoring to understand blast radius without reading all depen
 ## How indexing works
 
 1. Walk source files (skip hidden dirs, symlinks, large files)
-2. Parse files with language-specific AST strategies via Tree-sitter:
-   - **TypeScript/JavaScript**: functions, classes, interfaces, methods, call relationships, nested handlers, re-export ratio
-   - **Java**: classes, interfaces, enums, records, methods, constructors, static fields, call tracking
-   - **Ruby**: classes, modules, methods, constants, Rails DSLs, inheritance chains
-   - **Python**: classes, top-level functions, methods; respects `__all__`; excludes `_private` names
-   - **Go**: structs, interfaces, top-level functions, methods, constants/vars; uppercase-first export convention
-   - **Rust**: pub structs/enums, pub traits, pub functions, pub type aliases; impl blocks for implements relationships
-   - **C#**: public classes, interfaces, structs, enums, records, public methods; base-type list for extends/implements
-   - **PHP**: classes, interfaces, traits, public methods; extends/implements clauses; use namespace imports
-   - **Kotlin**: classes, interfaces, object declarations, top-level functions, methods; public by default
-3. Resolve internal imports to graph edges (including tsconfig/jsconfig aliases)
+2. Parse files with language-specific strategies:
+   - **TypeScript/JavaScript** (Tree-sitter): functions, classes, interfaces, methods, call relationships, nested handlers, re-export ratio
+   - **Vue/Svelte/Astro** (SFC): script block extracted, then parsed as TypeScript/JavaScript
+   - **AngularJS 1.x** (regex): `.service()`, `.controller()`, `.factory()`, `.directive()` registrations
+   - **Java** (Tree-sitter): classes, interfaces, enums, records, methods, constructors, static fields, call tracking
+   - **Ruby** (Tree-sitter): classes, modules, methods, constants, Rails DSLs, inheritance chains
+   - **Python** (Tree-sitter): classes, top-level functions, methods; respects `__all__`; excludes `_private` names
+   - **Go** (Tree-sitter): structs, interfaces, top-level functions, methods, constants/vars; go.work workspace support
+   - **Rust** (Tree-sitter): pub structs/enums, pub traits, pub functions, pub type aliases; impl blocks for implements relationships
+   - **C#** (Tree-sitter): public classes, interfaces, structs, enums, records, public methods; base-type list for extends/implements
+   - **PHP** (Tree-sitter): classes, interfaces, traits, public methods; extends/implements clauses; composer path-repos
+   - **Kotlin** (Tree-sitter): classes, interfaces, object declarations, top-level functions, methods; public by default
+   - **C++** (Tree-sitter): classes, structs, functions, methods, namespaces
+3. Resolve internal imports to graph edges (including tsconfig/jsconfig aliases, npm workspaces, Ruby Gemfile path gems)
 4. Build graph adjacency maps and compute in-degree (`importedByCount`)
 5. Extract symbol-level relationships (calls, extends, implements, exports); cross-file call edges resolved by matching bare call names against the exports of each file's resolved imports
 
-**Currently supported:** TypeScript, JavaScript, Java, Ruby, Python, Go, Rust, C#, PHP, Kotlin.
+**Currently supported:** TypeScript, JavaScript, Vue, Svelte, Astro, AngularJS 1.x, Java, Ruby, Python, Go, Rust, C#, PHP, Kotlin, C++.
 
-**Not yet supported:** Swift, Dart, C++ — files are walked but not parsed.
+**Not yet supported:** Swift, Dart — files are walked but not parsed.
 
 ---
 
@@ -212,5 +215,5 @@ The cache TTL is **24 hours** and acts as a safety net only. The file watcher is
 2. It is a routing layer, not a behavior summarizer — no semantic analysis or code summaries.
 3. Hidden directories and files over 1 MB are skipped by default.
 4. Barrel detection (TS/JS only) uses re-export ratio; non-TS/JS barrel-style files are not detected.
-5. Swift, Dart, and C++ files are walked but not parsed — no exports/symbols extracted.
+5. Swift and Dart files are walked but not parsed — no exports/symbols extracted.
 6. `trace-impact` call edges: member expression calls (`this.method()`, `api.method()`) are not cross-file resolved — these callers will not appear in impact results. Named function calls matched to an import are fully resolved.

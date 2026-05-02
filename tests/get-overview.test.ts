@@ -1,9 +1,9 @@
 /**
  * Regression tests for get-overview redesign.
  *
- * These tests verify the new source-labeled token system, two-predicate filtering,
+ * These tests verify the source-labeled token system, two-predicate filtering,
  * AST-based barrel detection, directory-entry filename promotion, and additive
- * pluralization. They are expected to FAIL against the current implementation.
+ * pluralization against the current DomainEvidence (Record<string, DomainEvidence>) implementation.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { join, dirname } from 'node:path';
@@ -12,9 +12,9 @@ import { walkDirectory } from '../src/indexer/walker.js';
 import { parseFile, buildFileId } from '../src/indexer/parser.js';
 import { resolveImports } from '../src/indexer/resolvers/index.js';
 import { buildGraph } from '../src/indexer/graph.js';
-import { buildFileDomains } from '../src/indexer/tokenize.js';
+import { buildFileDomains, isTestPath } from '../src/indexer/tokenize.js';
 import { handleGetOverview } from '../src/server/tools.js';
-import type { CodebaseIndex, IndexedFile, SymbolEdge, DomainToken, TokenSource } from '../src/types.js';
+import type { CodebaseIndex, IndexedFile, SymbolEdge, DomainEvidence } from '../src/types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURE_ROOT = join(__dirname, '../fixtures/overview');
@@ -40,7 +40,7 @@ async function buildTestIndex(rootDir: string): Promise<CodebaseIndex> {
           path: wf.absolutePath,
           relativePath: wf.relativePath,
           language: wf.language,
-          domains: buildFileDomains(wf.relativePath, parsed.exports),
+          domainMap: buildFileDomains(wf.relativePath, parsed.exports),
           exports: parsed.exports,
           hasDefaultExport: parsed.hasDefaultExport,
           imports: parsed.imports,
@@ -50,6 +50,7 @@ async function buildTestIndex(rootDir: string): Promise<CodebaseIndex> {
           importedByCount: 0,
           transitiveImportedByCount: 0,
           isBarrel: false,
+          isTestFile: isTestPath(wf.relativePath),
           symbols: parsed.symbols,
           reexportRatio: parsed.reexportRatio,
         };
@@ -71,7 +72,7 @@ async function buildTestIndex(rootDir: string): Promise<CodebaseIndex> {
       path: id,
       relativePath: id,
       language: 'typescript',
-      domains: [{ token: 'filler', sources: ['filename' as TokenSource] }],
+      domainMap: { filler: { filename: 1, path: 0, symbol: 0 } },
       exports: ['placeholder'],
       hasDefaultExport: false,
       imports: [],
@@ -81,6 +82,7 @@ async function buildTestIndex(rootDir: string): Promise<CodebaseIndex> {
       importedByCount: 0,
       transitiveImportedByCount: 0,
       isBarrel: false,
+      isTestFile: false,
       symbols: [],
       reexportRatio: 0,
     });
@@ -120,20 +122,21 @@ async function buildTestIndex(rootDir: string): Promise<CodebaseIndex> {
   // Strip symbol-sourced tokens from barrel domains
   for (const file of indexedFiles) {
     if (!file.isBarrel) continue;
-    file.domains = (file.domains as DomainToken[])
-      .map(dt => ({ token: dt.token, sources: dt.sources.filter(s => s !== 'symbol') }))
-      .filter(dt => dt.sources.length > 0);
+    for (const [token, ev] of Object.entries(file.domainMap)) {
+      if (ev.filename === 0 && ev.path === 0) {
+        delete file.domainMap[token];
+      } else {
+        file.domainMap[token] = { ...ev, symbol: 0 };
+      }
+    }
   }
 
   // tokenDocFreq — skip barrels
   const tokenDocFreq = new Map<string, number>();
   for (const file of indexedFiles) {
     if (file.isBarrel) continue;
-    const seen = new Set<string>();
-    for (const dt of file.domains as DomainToken[]) {
-      if (seen.has(dt.token)) continue;
-      seen.add(dt.token);
-      tokenDocFreq.set(dt.token, (tokenDocFreq.get(dt.token) ?? 0) + 1);
+    for (const token of Object.keys(file.domainMap)) {
+      tokenDocFreq.set(token, (tokenDocFreq.get(token) ?? 0) + 1);
     }
   }
 
@@ -175,14 +178,14 @@ function queryPaths(filter: string, opts: { max_results?: number } = {}): string
   return result.results ?? [];
 }
 
-// Helper: get the DomainToken[] for a file (by relative path fragment)
-function getFileDomains(pathFragment: string): DomainToken[] {
+// Helper: get the domainMap for a file (by relative path fragment)
+function getFileDomains(pathFragment: string): Record<string, DomainEvidence> {
   for (const file of index.files.values()) {
     if (file.relativePath.includes(pathFragment)) {
-      return file.domains as unknown as DomainToken[];
+      return file.domainMap;
     }
   }
-  return [];
+  return {};
 }
 
 // ============================================================================
@@ -207,8 +210,12 @@ describe('Pluralization', () => {
 describe('No import tokens in domains', () => {
   it('permissions/RoleAccessHelper.ts has no import-source tokens in its domains', () => {
     const domains = getFileDomains('RoleAccessHelper');
-    const hasImportSource = domains.some(dt => dt.sources.includes('import'));
-    expect(hasImportSource).toBe(false);
+    // DomainEvidence only has filename/path/symbol counts — there is no import source type
+    // Verify all evidence entries only contain the expected keys
+    for (const ev of Object.values(domains)) {
+      expect(Object.keys(ev)).toEqual(expect.arrayContaining(['filename', 'path', 'symbol']));
+      expect(Object.keys(ev).length).toBe(3);
+    }
   });
 
   it('query "auth" does NOT return permissions/RoleAccessHelper.ts (no longer indexed via imports)', () => {
@@ -237,17 +244,6 @@ describe('Compound export name matching', () => {
 // ============================================================================
 describe('All-common-token diagnostic', () => {
   it('returns a diagnostic when all matched tokens are common (high frequency)', () => {
-    // "role" appears in RoleAccessHelper — likely rare in fixtures; use a very common token
-    // "role" appears in exactly one file, so test with a token that spans all fixture files
-    // We use "index" but that's a stop word — instead we'll rely on a path token like "forms"
-    // that appears in all fixtures... actually let's just verify the diagnostic field can appear.
-    // We test this by querying a token that matches most files (e.g. one that scores low IDF).
-    // The diagnostic fires when log(totalFiles / docFreq) <= log(20) for ALL matched tokens.
-    // With ~7 non-barrel files and a token matching >5% of them:
-    // IDF_RARITY_THRESHOLD = log(20) ≈ 3.0; token in > 1 file of 7 means IDF = log(7/2) ≈ 1.25 which is < 3.
-    // Query "role" to match RoleAccessHelper — "role" will appear in 1 file only.
-    // Let's instead manually verify: if a token appears in every file, diagnostic fires.
-    // Verify response shape: filter and results are always present
     const result = handleGetOverview(index, { domain_filter: 'auth' }) as any;
     expect(result).toHaveProperty('filter');
     expect(result).toHaveProperty('results');
@@ -265,11 +261,7 @@ describe('All-common-token diagnostic', () => {
 // ============================================================================
 describe('Truncation', () => {
   it('returns truncated:true and message when results exceed max_results', () => {
-    // With max_results=1 and a broad query like "forms" matching multiple files,
-    // or simply force truncation by setting max_results=1
     const result = handleGetOverview(index, { domain_filter: 'auth', max_results: 1 }) as any;
-    // auth matches auth/service.ts and auth/index.ts (if not barrel-excluded) and others
-    // If total matched > 1, we expect truncation
     if ((result.total_matched ?? 0) > 1 || result.truncated) {
       expect(result.truncated).toBe(true);
       expect(result.message).toContain('TRUNCATED');
@@ -285,20 +277,17 @@ describe('Truncation', () => {
 describe('Directory-entry filename promotion', () => {
   it('auth/index.ts has "auth" as a filename-source token (from parent dir promotion)', () => {
     const domains = getFileDomains('auth/index');
-    const authToken = domains.find(d => d.token === 'auth');
-    expect(authToken).toBeDefined();
-    expect(authToken!.sources).toContain('filename');
+    const authEv = domains['auth'];
+    expect(authEv).toBeDefined();
+    expect(authEv!.filename).toBeGreaterThan(0);
   });
 
   it('auth/index.ts has filename-source "auth" token despite being named "index.ts" (parent dir promotion)', () => {
-    // The filename promotion must run BEFORE barrel detection / domain stripping
-    // so even barrels get the correct filename token from their parent dir.
     const domains = getFileDomains('auth/index');
-    const authToken = domains.find(d => d.token === 'auth');
-    expect(authToken).toBeDefined();
-    // After barrel stripping, only filename and path sources survive (symbol stripped)
-    // filename source from dir-entry promotion must be present
-    expect(authToken!.sources).toContain('filename');
+    const authEv = domains['auth'];
+    expect(authEv).toBeDefined();
+    // After barrel stripping, symbol count is zeroed but filename must be > 0
+    expect(authEv!.filename).toBeGreaterThan(0);
   });
 });
 
@@ -320,12 +309,10 @@ describe('Barrel domain purity', () => {
 
   it('auth/index.ts domains do NOT contain "loginuser", "authservice", or "hashpassword" as symbol tokens', () => {
     const domains = getFileDomains('auth/index');
-    const symbolTokens = domains.filter(d => d.sources.includes('symbol' as any));
-    const symbolTokenNames = symbolTokens.map(d => d.token);
-    // These should have been stripped during barrel domain cleanup
-    expect(symbolTokenNames).not.toContain('loginuser');
-    expect(symbolTokenNames).not.toContain('authservice');
-    expect(symbolTokenNames).not.toContain('hashpassword');
+    // Tokens that were purely symbol-sourced are deleted during barrel stripping
+    expect(domains['loginuser']).toBeUndefined();
+    expect(domains['authservice']).toBeUndefined();
+    expect(domains['hashpassword']).toBeUndefined();
   });
 
   it('query "login" does NOT return auth/index.ts (symbol tokens stripped from barrel)', () => {
@@ -359,11 +346,11 @@ describe('Barrel detection — TS/JS AST only', () => {
 describe('Multi-source correctness', () => {
   it('auth/service.ts has "auth" token with both path and symbol sources', () => {
     const domains = getFileDomains('auth/service');
-    const authToken = domains.find(d => d.token === 'auth');
-    expect(authToken).toBeDefined();
+    const authEv = domains['auth'];
+    expect(authEv).toBeDefined();
     // "auth" comes from dir path AND from exports like "AuthService", "AuthResult"
-    expect(authToken!.sources).toContain('path');
-    expect(authToken!.sources).toContain('symbol');
+    expect(authEv!.path).toBeGreaterThan(0);
+    expect(authEv!.symbol).toBeGreaterThan(0);
   });
 
   it('query "auth login" returns auth/service.ts in results', () => {

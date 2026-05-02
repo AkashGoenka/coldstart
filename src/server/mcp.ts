@@ -53,11 +53,11 @@ export async function startMCPServer(
           properties: {
             domain_filter: {
               type: 'string',
-              description: 'One or more keywords relevant to your task. Bare words are independent concepts (AND logic across them). Bracket groups are synonyms (OR logic within): "[auth|login|jwt] payment" means files must match the auth concept AND payment concept, where any of auth/login/jwt satisfies the auth concept. You can pass camelCase names directly: "UsersPage" finds files that export UsersPage. Partial matches work: "workspace" matches files indexed under "workspaces".',
+              description: 'One or more keywords relevant to your task. Bare words are independent concepts (AND logic across them). Bracket groups are synonyms (OR logic within): "[auth|login|jwt] payment" means files must match the auth concept AND payment concept, where any of auth/login/jwt satisfies the auth concept. Accepts camelCase ("UsersPage") and partial matches ("workspace" matches "workspaces"). If results are missing the target file, retry with the codebase\'s own terms — codebases often use different words than your query (e.g. "post"→"Message", "edit"→"Update").',
             },
             max_results: {
               type: 'number',
-              description: 'Maximum number of files to return. Default 15.',
+              description: 'Maximum number of files to return. Default 10.',
             },
             include_tests: {
               type: 'boolean',

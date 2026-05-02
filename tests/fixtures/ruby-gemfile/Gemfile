@@ -1,0 +1,4 @@
+source 'https://rubygems.org'
+
+gem 'rails', '~> 7.0'
+gem 'payment_gem', path: './gems/payment_gem'
