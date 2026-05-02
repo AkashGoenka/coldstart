@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { join, resolve, dirname } from 'node:path';
 import type { IndexedFile, Edge, Language } from '../../types.js';
 import { resolveGeneric } from './generic.js';
@@ -97,6 +97,71 @@ async function loadTsConfigPaths(rootDir: string): Promise<Map<string, string[]>
 }
 
 // ---------------------------------------------------------------------------
+// Workspace package discovery (npm/yarn/pnpm)
+// ---------------------------------------------------------------------------
+
+async function expandWorkspacePattern(rootDir: string, pattern: string): Promise<string[]> {
+  if (pattern.startsWith('!')) return []; // negation patterns
+  if (pattern.endsWith('/*')) {
+    // e.g. "shared/*" → list all direct subdirectories of rootDir/shared
+    const baseDir = join(rootDir, pattern.slice(0, -2));
+    try {
+      const entries = await readdir(baseDir, { withFileTypes: true });
+      return entries.filter(e => e.isDirectory()).map(e => join(baseDir, e.name));
+    } catch {
+      return [];
+    }
+  }
+  if (pattern.includes('*')) return []; // complex globs — skip without a glob library
+  return [join(rootDir, pattern)]; // literal path
+}
+
+async function loadWorkspacePackages(rootDir: string): Promise<Map<string, string[]>> {
+  const packageMap = new Map<string, string[]>();
+  const patterns: string[] = [];
+
+  // npm / yarn: package.json workspaces field
+  try {
+    const raw = await readFile(join(rootDir, 'package.json'), 'utf-8');
+    const pkg = JSON.parse(raw);
+    const ws = pkg.workspaces;
+    if (Array.isArray(ws)) patterns.push(...ws);
+    else if (Array.isArray(ws?.packages)) patterns.push(...ws.packages); // yarn classic
+  } catch { /* no package.json */ }
+
+  // pnpm: pnpm-workspace.yaml — parse without a yaml library
+  try {
+    const yaml = await readFile(join(rootDir, 'pnpm-workspace.yaml'), 'utf-8');
+    for (const line of yaml.split('\n')) {
+      const m = line.match(/^\s+-\s+['"]?([^'"#\s]+)['"]?/);
+      if (m && !m[1].startsWith('!')) patterns.push(m[1]);
+    }
+  } catch { /* no pnpm-workspace.yaml */ }
+
+  for (const pattern of patterns) {
+    const dirs = await expandWorkspacePattern(rootDir, pattern);
+    for (const dir of dirs) {
+      try {
+        const raw = await readFile(join(dir, 'package.json'), 'utf-8');
+        const pkg = JSON.parse(raw);
+        if (typeof pkg.name === 'string') packageMap.set(pkg.name, [dir]);
+      } catch { /* no package.json in this workspace dir */ }
+    }
+  }
+
+  return packageMap;
+}
+
+async function buildAliasMap(rootDir: string): Promise<Map<string, string[]>> {
+  const [workspaceMap, tsconfigMap] = await Promise.all([
+    loadWorkspacePackages(rootDir),
+    loadTsConfigPaths(rootDir),
+  ]);
+  // Merge: tsconfig entries override workspace entries (more explicit)
+  return new Map([...workspaceMap, ...tsconfigMap]);
+}
+
+// ---------------------------------------------------------------------------
 // Language dispatch
 // ---------------------------------------------------------------------------
 
@@ -140,7 +205,7 @@ export async function resolveImportsForFiles(
   fileIdSet: Set<string>,
   rootDir: string,
 ): Promise<ResolveResult> {
-  const aliasMap = await loadTsConfigPaths(rootDir);
+  const aliasMap = await buildAliasMap(rootDir);
 
   const edges: Edge[] = [];
   const unresolved: Array<{ from: string; specifier: string }> = [];

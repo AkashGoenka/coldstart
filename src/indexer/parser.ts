@@ -11,8 +11,36 @@ import { parseCSharpContent } from './extractors/csharp.js';
 import { parsePhpContent } from './extractors/php.js';
 import { parseKotlinContent } from './extractors/kotlin.js';
 import { parseCppContent } from './extractors/cpp.js';
+import { extractAngularJsSymbols } from './extractors/angularjs.js';
 
 const MAX_FILE_SIZE = 1_000_000; // 1 MB
+
+/**
+ * Extract all <script> block bodies from a Vue or Svelte SFC and return them
+ * concatenated. Handles both <script> and <script setup>, with any lang attr.
+ * Returns null if no script block is found.
+ */
+function extractSfcScripts(content: string): string | null {
+  const blocks: string[] = [];
+  const re = /<script(?:\s[^>]*)?>[\s\S]*?<\/script>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) !== null) {
+    const inner = m[0]
+      .replace(/<script(?:\s[^>]*)?>/i, '')
+      .replace(/<\/script>/i, '');
+    blocks.push(inner);
+  }
+  return blocks.length > 0 ? blocks.join('\n') : null;
+}
+
+/**
+ * Extract TypeScript frontmatter from an Astro file (content between --- fences).
+ * Returns null if no frontmatter is present.
+ */
+function extractAstroFrontmatter(content: string): string | null {
+  const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  return m ? m[1] : null;
+}
 
 export async function parseFile(
   filePath: string,
@@ -44,6 +72,14 @@ export async function parseFile(
       // Tree-sitter parse error — skip symbol extraction but continue with imports/exports
       console.error(`[parser] Tree-sitter error in ${fileId || filePath}: ${err}`);
       tsResult = { imports: [], exports: [], hasDefaultExport: false, symbols: [], reexportRatio: 0 };
+    }
+
+    // AngularJS 1.x: merge registered names + this./\$scope. methods as pseudo-exports
+    if (language === 'javascript') {
+      const ngSymbols = extractAngularJsSymbols(content);
+      if (ngSymbols.length > 0) {
+        tsResult = { ...tsResult, exports: [...tsResult.exports, ...ngSymbols] };
+      }
     }
 
     return {
@@ -262,6 +298,60 @@ export async function parseFile(
       lineCount,
       tokenEstimate,
       symbols: cppResult.symbols,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Vue / Svelte: extract <script> blocks and parse as TS/JS
+  // -------------------------------------------------------------------------
+  if (language === 'vue' || language === 'svelte') {
+    const scriptContent = extractSfcScripts(content);
+    if (!scriptContent) {
+      return { imports: [], exports: [], hasDefaultExport: false, hash, lineCount, tokenEstimate, symbols: [] };
+    }
+    let tsResult;
+    try {
+      tsResult = parseTsContent(scriptContent, fileId || filePath, false);
+    } catch (err) {
+      console.error(`[parser] Tree-sitter error in ${fileId || filePath}: ${err}`);
+      tsResult = { imports: [], exports: [], hasDefaultExport: false, symbols: [], reexportRatio: 0 };
+    }
+    return {
+      imports: tsResult.imports,
+      exports: tsResult.exports,
+      hasDefaultExport: tsResult.hasDefaultExport,
+      hash,
+      lineCount,
+      tokenEstimate,
+      symbols: tsResult.symbols,
+      reexportRatio: tsResult.reexportRatio,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Astro: extract frontmatter (--- fences) and parse as TS
+  // -------------------------------------------------------------------------
+  if (language === 'astro') {
+    const frontmatter = extractAstroFrontmatter(content);
+    if (!frontmatter) {
+      return { imports: [], exports: [], hasDefaultExport: false, hash, lineCount, tokenEstimate, symbols: [] };
+    }
+    let tsResult;
+    try {
+      tsResult = parseTsContent(frontmatter, fileId || filePath, false);
+    } catch (err) {
+      console.error(`[parser] Tree-sitter error in ${fileId || filePath}: ${err}`);
+      tsResult = { imports: [], exports: [], hasDefaultExport: false, symbols: [], reexportRatio: 0 };
+    }
+    return {
+      imports: tsResult.imports,
+      exports: tsResult.exports,
+      hasDefaultExport: tsResult.hasDefaultExport,
+      hash,
+      lineCount,
+      tokenEstimate,
+      symbols: tsResult.symbols,
+      reexportRatio: tsResult.reexportRatio,
     };
   }
 

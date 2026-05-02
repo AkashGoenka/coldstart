@@ -621,3 +621,36 @@ describe('parser — C++', () => {
     expect(result!.lineCount).toBeGreaterThan(5);
   });
 });
+
+describe('parser — AngularJS 1.x symbol extraction', () => {
+  it('extracts registered service name from user.service.js', async () => {
+    const result = await parseFile(join(FIXTURES, 'javascript/user.service.js'), 'javascript');
+    expect(result).not.toBeNull();
+    expect(result!.exports).toContain('UserService');
+  });
+
+  it('extracts this.method names from service as pseudo-exports', async () => {
+    const result = await parseFile(join(FIXTURES, 'javascript/user.service.js'), 'javascript');
+    expect(result!.exports).toContain('getUser');
+    expect(result!.exports).toContain('updateUser');
+    expect(result!.exports).toContain('deleteUser');
+  });
+
+  it('extracts registered controller name from user.controller.js', async () => {
+    const result = await parseFile(join(FIXTURES, 'javascript/user.controller.js'), 'javascript');
+    expect(result).not.toBeNull();
+    expect(result!.exports).toContain('UserController');
+  });
+
+  it('extracts $scope.method names from controller as pseudo-exports', async () => {
+    const result = await parseFile(join(FIXTURES, 'javascript/user.controller.js'), 'javascript');
+    expect(result!.exports).toContain('loadUsers');
+    expect(result!.exports).toContain('selectUser');
+  });
+
+  it('does not add angular symbols to non-angular JS files', async () => {
+    const result = await parseFile(join(FIXTURES, 'typescript/auth.ts'), 'typescript');
+    expect(result!.exports).not.toContain('UserService');
+    expect(result!.exports).not.toContain('UserController');
+  });
+});
