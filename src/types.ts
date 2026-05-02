@@ -1,11 +1,6 @@
 // All shared interfaces and types for coldstart-mcp
 
-export type TokenSource = 'filename' | 'path' | 'symbol' | 'import';
-
-export interface DomainToken {
-  token: string;
-  sources: TokenSource[];  // stable sort order: filename, path, symbol, import
-}
+export type DomainEvidence = { filename: number; path: number; symbol: number };
 
 export type Language =
   | 'typescript'
@@ -20,7 +15,10 @@ export type Language =
   | 'php'
   | 'swift'
   | 'kotlin'
-  | 'dart';
+  | 'dart'
+  | 'vue'
+  | 'svelte'
+  | 'astro';
 
 export type EdgeType =
   | 'import'
@@ -57,7 +55,7 @@ export interface IndexedFile {
   path: string;             // absolute path
   relativePath: string;     // relative to root
   language: Language;
-  domains: DomainToken[];   // semantic keywords with source labels
+  domainMap: Record<string, DomainEvidence>;  // token → evidence counts per source
   exports: string[];        // named exports extracted by parser
   hasDefaultExport: boolean;
   imports: string[];        // raw import specifiers

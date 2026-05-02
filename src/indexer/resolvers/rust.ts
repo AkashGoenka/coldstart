@@ -1,5 +1,5 @@
-import { dirname, resolve, join, relative } from 'node:path';
-import { fileExists } from './shared.js';
+import { dirname, resolve, join } from 'node:path';
+import { toFileId } from './shared.js';
 
 /**
  * Rust resolver: maps `mod` declarations to sibling .rs files or mod.rs dirs.
@@ -14,17 +14,11 @@ export async function resolveRust(
 ): Promise<string | null> {
   const base = resolve(dirname(fromFile), specifier);
 
-  const rsFile = base + '.rs';
-  if (await fileExists(rsFile)) {
-    const rel = relative(rootDir, rsFile).replace(/\\/g, '/');
-    if (fileIdSet.has(rel)) return rel;
-  }
+  const rsId = toFileId(base + '.rs', rootDir);
+  if (fileIdSet.has(rsId)) return rsId;
 
-  const modRs = join(base, 'mod.rs');
-  if (await fileExists(modRs)) {
-    const rel = relative(rootDir, modRs).replace(/\\/g, '/');
-    if (fileIdSet.has(rel)) return rel;
-  }
+  const modRsId = toFileId(join(base, 'mod.rs'), rootDir);
+  if (fileIdSet.has(modRsId)) return modRsId;
 
   return null;
 }
