@@ -157,7 +157,7 @@ Use this before refactoring to understand blast radius without reading all depen
 4. Build graph adjacency maps and compute in-degree (`importedByCount`)
 5. Extract symbol-level relationships (calls, extends, implements, exports); cross-file call edges resolved by matching bare call names against the exports of each file's resolved imports
 
-**Currently supported:** TypeScript, JavaScript, Vue, Svelte, Astro, AngularJS 1.x, Java, Ruby, Python, Go, Rust, C#, PHP, Kotlin, C++.
+**Currently supported languages and frameworks:** TypeScript, JavaScript, Vue, Svelte, Astro, AngularJS 1.x, Java, Ruby, Python, Go, Rust, C#, PHP, Kotlin, C++.
 
 **Not yet supported:** Swift, Dart — files are walked but not parsed.
 
