@@ -168,8 +168,11 @@ function setupFiles(cwd: string): void {
 
 export async function runInit(): Promise<void> {
   const cwd = process.cwd();
-  const hasClaude = fs.existsSync(path.join(cwd, '.claude')) || fs.existsSync(path.join(cwd, 'CLAUDE.md'));
-  const hasCursor = fs.existsSync(path.join(cwd, '.cursor'));
+  const home = process.env.HOME ?? process.env.USERPROFILE ?? '';
+  const hasClaude = fs.existsSync(path.join(home, '.claude'));
+  const hasCursor =
+    fs.existsSync(path.join(home, '.cursor')) ||
+    fs.existsSync('/Applications/Cursor.app');
 
   const rl = createInterface({ input: process.stdin, output: process.stderr });
   const ask = async (question: string): Promise<string> => {
