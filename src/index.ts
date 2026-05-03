@@ -251,7 +251,7 @@ async function main(): Promise<void> {
   // Check for 'init' subcommand — prints MCP config and agent rules for manual setup
   if (process.argv[2] === 'init') {
     const { runInit } = await import('./init.js');
-    runInit();
+    await runInit();
     return;
   }
 
