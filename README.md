@@ -14,36 +14,23 @@ Agents are already good at reading code, tracing logic, and reasoning about stru
 
 Requires Node.js 18+.
 
-**Step 1 — Generate your config and agent rules:**
+**Run init from your project root:**
 
 ```bash
-npx coldstart-mcp init
+npx coldstart-mcp@latest init
 ```
 
-This prints two things: an MCP config snippet and a set of agent rules. Copy both.
+coldstart detects your IDE (Claude Code or Cursor) and writes the right files automatically:
 
-**Step 2 — Add the MCP config to your IDE:**
+| IDE | MCP config | Agent rules |
+|-----|-----------|-------------|
+| Claude Code | `.mcp.json` — merged if exists | `CLAUDE.md` — appended if exists |
+| Cursor | `.cursor/mcp.json` — merged if exists | `.cursor/rules/coldstart-mcp.mdc` |
+| Neither detected | `coldstart-mcp.json` + `coldstart-rules.md` to copy manually |
 
-```json
-{
-  "mcpServers": {
-    "coldstart": {
-      "command": "npx",
-      "args": ["coldstart-mcp", "--root", "/path/to/your/project"]
-    }
-  }
-}
-```
-
-Paste this into your IDE's MCP configuration file. Most MCP-compatible IDEs use the same JSON format — check your IDE's documentation for the exact file location.
+Re-running `init` is safe — it never duplicates entries.
 
 > **Note on `--root`:** The server auto-detects your project path from the MCP handshake. `--root` is a fallback for older clients or direct CLI use.
-
-**Step 3 — Paste the agent rules:**
-
-Add the printed rules to your IDE's instructions/rules file (Claude Code: `/CLAUDE.md`, Cursor: `.cursor/rules`). These give the agent a working mental model of the 4 tools.
-
-The rules are a starting point — every codebase is different and every model responds differently to instruction phrasing. Make them yours.
 
 ---
 
