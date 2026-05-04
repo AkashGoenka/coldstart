@@ -11,7 +11,7 @@ const DEFAULT_CACHE_DIR = join(homedir(), '.coldstart', 'indexes');
  * Compute a stable cache key for a root directory path.
  */
 function cacheKey(rootDir: string): string {
-  return createHash('md5').update(resolve(rootDir)).digest('hex').slice(0, 16);
+  return createHash('sha256').update(resolve(rootDir)).digest('hex').slice(0, 16);
 }
 
 export function getCacheDir(rootDir: string, baseCacheDir?: string): string {
