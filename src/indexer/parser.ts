@@ -17,6 +17,7 @@ import { parseYamlContent } from './extractors/yaml.js';
 import { parseTomlContent } from './extractors/toml.js';
 import { parseEnvContent } from './extractors/env.js';
 import { parseXmlContent } from './extractors/xml.js';
+import { parseGroovyContent } from './extractors/groovy.js';
 
 const MAX_FILE_SIZE = 1_000_000; // 1 MB
 
@@ -377,7 +378,7 @@ export async function parseFile(
   }
 
   // -------------------------------------------------------------------------
-  // YAML: regex-based extractor (top-level and nested keys)
+  // YAML: tree-sitter extractor (top-level and one-level-nested keys)
   // -------------------------------------------------------------------------
   if (language === 'yaml') {
     const yamlResult = parseYamlContent(content, fileId || filePath);
@@ -393,7 +394,7 @@ export async function parseFile(
   }
 
   // -------------------------------------------------------------------------
-  // TOML: regex-based extractor (sections, keys, array-of-tables)
+  // TOML: tree-sitter extractor (sections, keys, array-of-tables)
   // -------------------------------------------------------------------------
   if (language === 'toml') {
     const tomlResult = parseTomlContent(content, fileId || filePath);
@@ -444,6 +445,29 @@ export async function parseFile(
       lineCount,
       tokenEstimate,
       symbols: xmlResult.symbols,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Groovy: tree-sitter-based extractor (Gradle DSL, Jenkinsfile DSL)
+  // -------------------------------------------------------------------------
+  if (language === 'groovy') {
+    let groovyResult;
+    try {
+      groovyResult = parseGroovyContent(content, fileId || filePath);
+    } catch (err) {
+      console.error(`[parser] Tree-sitter error in ${fileId || filePath}: ${err}`);
+      groovyResult = { imports: [], exports: [], hasDefaultExport: false as const, symbols: [] };
+    }
+
+    return {
+      imports: groovyResult.imports,
+      exports: groovyResult.exports,
+      hasDefaultExport: false,
+      hash,
+      lineCount,
+      tokenEstimate,
+      symbols: groovyResult.symbols,
     };
   }
 

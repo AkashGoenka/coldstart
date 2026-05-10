@@ -356,6 +356,27 @@ export function handleTraceImpact(
   const candidates = findSymbolCandidates(index, symbol, filePath);
 
   if (candidates.length === 0) {
+    // Phase B: annotation-name fallback. If no symbol is named `symbol`,
+    // check whether any symbol bears it as an annotation (e.g. `@Transactional`).
+    const annotated = findSymbolsByAnnotation(index, symbol);
+    if (annotated.length > 0) {
+      const affected = [...new Set(annotated.map(a => a.fileEntry.relativePath))].sort();
+      return {
+        target: { symbol: `@${symbol}`, type: 'annotation', matchedVia: 'annotation' },
+        annotatedSymbols: annotated.map(a => ({
+          symbol: a.name,
+          file: a.fileEntry.relativePath,
+          line: a.startLine,
+          type: a.kind,
+        })),
+        summary: {
+          totalAnnotated: annotated.length,
+          affectedFiles: affected,
+          note: `No symbol named "${symbol}". ${annotated.length} symbol(s) annotated with @${symbol} below.`,
+        },
+      };
+    }
+
     return {
       error: `Symbol not found: ${symbol}`,
       suggestions: fuzzyMatchSymbols(index, symbol).slice(0, 5),
@@ -585,6 +606,24 @@ function findSymbolCandidates(
     }
   }
 
+  return results;
+}
+
+// ============================================================================
+// Helper: find symbols bearing a given annotation (Java/Kotlin)
+// ============================================================================
+function findSymbolsByAnnotation(
+  index: CodebaseIndex,
+  annotationName: string,
+): Array<{ id: string; name: string; kind: string; startLine: number; fileEntry: IndexedFileLike }> {
+  const results: Array<{ id: string; name: string; kind: string; startLine: number; fileEntry: IndexedFileLike }> = [];
+  for (const file of index.files.values()) {
+    for (const sym of file.symbols) {
+      if (sym.annotations?.includes(annotationName)) {
+        results.push({ id: sym.id, name: sym.name, kind: sym.kind, startLine: sym.startLine, fileEntry: file });
+      }
+    }
+  }
   return results;
 }
 
