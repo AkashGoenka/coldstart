@@ -1,6 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join, resolve, dirname } from 'node:path';
 import type { IndexedFile, Edge, Language } from '../../types.js';
+import { DEFAULT_EXCLUDES } from '../../constants.js';
 import { resolveGeneric } from './generic.js';
 import { resolveJava } from './java.js';
 import { resolveRuby } from './ruby.js';
@@ -102,50 +103,120 @@ async function loadTsConfigPaths(rootDir: string): Promise<Map<string, string[]>
 
 async function expandWorkspacePattern(rootDir: string, pattern: string): Promise<string[]> {
   if (pattern.startsWith('!')) return []; // negation patterns
-  if (pattern.endsWith('/*')) {
-    // e.g. "shared/*" → list all direct subdirectories of rootDir/shared
-    const baseDir = join(rootDir, pattern.slice(0, -2));
-    try {
-      const entries = await readdir(baseDir, { withFileTypes: true });
-      return entries.filter(e => e.isDirectory()).map(e => join(baseDir, e.name));
-    } catch {
-      return [];
+  if (!pattern.includes('*')) return [join(rootDir, pattern)]; // literal path
+
+  // Patterns can have a wildcard in any segment: "shared/*", "*-app", "packages/*/lib".
+  // Walk segment-by-segment, expanding `*` segments by listing matching subdirs.
+  const segments = pattern.split('/');
+  let dirs: string[] = [rootDir];
+
+  for (const seg of segments) {
+    if (!seg.includes('*')) {
+      dirs = dirs.map(d => join(d, seg));
+      continue;
+    }
+    // Convert glob segment to a regex (only `*` is supported here)
+    const regex = new RegExp('^' + seg.split('*').map(escapeRegex).join('.*') + '$');
+    const next: string[] = [];
+    for (const d of dirs) {
+      try {
+        const entries = await readdir(d, { withFileTypes: true });
+        for (const e of entries) {
+          if (e.isDirectory() && regex.test(e.name)) next.push(join(d, e.name));
+        }
+      } catch { /* skip */ }
+    }
+    dirs = next;
+  }
+
+  return dirs;
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Walk rootDir looking for files whose basenames are in the `targets` set.
+ * Skips DEFAULT_EXCLUDES, hidden dirs, and symlinks. Bounded depth as a safety rail.
+ */
+async function findConfigFiles(
+  rootDir: string,
+  targets: Set<string>,
+  maxDepth = 8,
+): Promise<string[]> {
+  const found: string[] = [];
+  async function walk(dir: string, depth: number): Promise<void> {
+    if (depth > maxDepth) return;
+    let entries;
+    try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue;
+      const fullPath = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name.startsWith('.')) continue;
+        if (DEFAULT_EXCLUDES.has(entry.name)) continue;
+        await walk(fullPath, depth + 1);
+      } else if (entry.isFile() && targets.has(entry.name)) {
+        found.push(fullPath);
+      }
     }
   }
-  if (pattern.includes('*')) return []; // complex globs — skip without a glob library
-  return [join(rootDir, pattern)]; // literal path
+  await walk(rootDir, 0);
+  return found;
 }
 
 async function loadWorkspacePackages(rootDir: string): Promise<Map<string, string[]>> {
   const packageMap = new Map<string, string[]>();
-  const patterns: string[] = [];
 
-  // npm / yarn: package.json workspaces field
-  try {
-    const raw = await readFile(join(rootDir, 'package.json'), 'utf-8');
-    const pkg = JSON.parse(raw);
-    const ws = pkg.workspaces;
-    if (Array.isArray(ws)) patterns.push(...ws);
-    else if (Array.isArray(ws?.packages)) patterns.push(...ws.packages); // yarn classic
-  } catch { /* no package.json */ }
+  // Find every package.json and pnpm-workspace.yaml under rootDir.
+  // Each one with a workspaces declaration acts as a workspace root for its own subtree.
+  // This handles monorepos where rootDir isn't the workspace root (e.g. user runs on
+  // a parent directory containing `app/package.json` but no top-level package.json).
+  const configPaths = await findConfigFiles(
+    rootDir,
+    new Set(['package.json', 'pnpm-workspace.yaml']),
+  );
 
-  // pnpm: pnpm-workspace.yaml — parse without a yaml library
-  try {
-    const yaml = await readFile(join(rootDir, 'pnpm-workspace.yaml'), 'utf-8');
-    for (const line of yaml.split('\n')) {
-      const m = line.match(/^\s+-\s+['"]?([^'"#\s]+)['"]?/);
-      if (m && !m[1].startsWith('!')) patterns.push(m[1]);
-    }
-  } catch { /* no pnpm-workspace.yaml */ }
+  // (workspaceRootDir, patterns[]) pairs — patterns are relative to workspaceRootDir
+  const decls: Array<{ dir: string; patterns: string[] }> = [];
 
-  for (const pattern of patterns) {
-    const dirs = await expandWorkspacePattern(rootDir, pattern);
-    for (const dir of dirs) {
+  for (const path of configPaths) {
+    const baseName = path.slice(path.lastIndexOf('/') + 1);
+    if (baseName === 'package.json') {
       try {
-        const raw = await readFile(join(dir, 'package.json'), 'utf-8');
+        const raw = await readFile(path, 'utf-8');
         const pkg = JSON.parse(raw);
-        if (typeof pkg.name === 'string') packageMap.set(pkg.name, [dir]);
-      } catch { /* no package.json in this workspace dir */ }
+        const ws = pkg.workspaces;
+        const patterns: string[] = [];
+        if (Array.isArray(ws)) patterns.push(...ws);
+        else if (Array.isArray(ws?.packages)) patterns.push(...ws.packages); // yarn classic
+        if (patterns.length > 0) decls.push({ dir: dirname(path), patterns });
+      } catch { /* malformed package.json — skip */ }
+    } else {
+      // pnpm-workspace.yaml
+      try {
+        const yaml = await readFile(path, 'utf-8');
+        const patterns: string[] = [];
+        for (const line of yaml.split('\n')) {
+          const m = line.match(/^\s+-\s+['"]?([^'"#\s]+)['"]?/);
+          if (m && !m[1].startsWith('!')) patterns.push(m[1]);
+        }
+        if (patterns.length > 0) decls.push({ dir: dirname(path), patterns });
+      } catch { /* skip */ }
+    }
+  }
+
+  for (const { dir, patterns } of decls) {
+    for (const pattern of patterns) {
+      const memberDirs = await expandWorkspacePattern(dir, pattern);
+      for (const memberDir of memberDirs) {
+        try {
+          const raw = await readFile(join(memberDir, 'package.json'), 'utf-8');
+          const pkg = JSON.parse(raw);
+          if (typeof pkg.name === 'string') packageMap.set(pkg.name, [memberDir]);
+        } catch { /* no package.json in this workspace dir */ }
+      }
     }
   }
 

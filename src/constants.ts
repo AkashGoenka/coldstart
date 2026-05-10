@@ -31,6 +31,8 @@ export const EXTENSION_TO_LANGUAGE: Record<string, Language> = {
   ".vue": "vue",
   ".svelte": "svelte",
   ".astro": "astro",
+  ".graphql": "graphql",
+  ".gql": "graphql",
 };
 
 // ---------------------------------------------------------------------------
@@ -54,6 +56,7 @@ export const DEFAULT_EXCLUDES = new Set([
   "target", // Rust/Maven
   ".gradle",
   "vendor", // PHP/Go
+  "venv", // Python virtual environments
   "Pods", // iOS CocoaPods
   ".dart_tool",
   ".pub-cache",
@@ -63,12 +66,15 @@ export const DEFAULT_EXCLUDES = new Set([
   "temp",
   ".cache",
   "logs",
+  "obj", // .NET intermediate build output
+  "CMakeFiles", // CMake generated
+  "bower_components", // legacy JS
   "generated",
   "__generated__",
 ]);
 
 // Cache version — bump when index schema changes to force re-index
-export const CACHE_VERSION = "11.0.0";
+export const CACHE_VERSION = "14.1.0";
 
 // IDF threshold for "rare" token: log(20) ≈ 3.0 — tokens appearing in < 5% of files
 export const IDF_RARITY_THRESHOLD = Math.log(20);

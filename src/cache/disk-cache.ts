@@ -1,17 +1,20 @@
-import { readFile, writeFile, mkdir, access } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { readFile, writeFile, mkdir, access, readdir, rm } from 'node:fs/promises';
+import { join, resolve, basename } from 'node:path';
 import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import type { CodebaseIndex, CacheMeta } from '../types.js';
 import { CACHE_VERSION, CACHE_TTL_MS } from '../constants.js';
 
 const DEFAULT_CACHE_DIR = join(homedir(), '.coldstart', 'indexes');
+const FILES_CHUNK_SIZE = 5000;
 
 /**
  * Compute a stable cache key for a root directory path.
  */
 function cacheKey(rootDir: string): string {
-  return createHash('sha256').update(resolve(rootDir)).digest('hex').slice(0, 16);
+  const abs = resolve(rootDir);
+  const hash = createHash('sha256').update(abs).digest('hex').slice(0, 16);
+  return `${basename(abs)}-${hash}`;
 }
 
 export function getCacheDir(rootDir: string, baseCacheDir?: string): string {
@@ -25,13 +28,19 @@ export async function loadCachedIndex(
 ): Promise<CodebaseIndex | null> {
   const dir = getCacheDir(rootDir, baseCacheDir);
   const metaPath = join(dir, 'meta.json');
-  const indexPath = join(dir, 'index.json');
+  const graphPath = join(dir, 'graph.json');
 
   try {
     await access(metaPath);
-    await access(indexPath);
+    await access(graphPath);
   } catch {
-    return null; // Cache does not exist
+    // Fall back to legacy single-file cache
+    try {
+      await access(join(dir, 'index.json'));
+    } catch {
+      return null;
+    }
+    return loadLegacyCache(dir);
   }
 
   let meta: CacheMeta & { version?: string };
@@ -52,13 +61,62 @@ export async function loadCachedIndex(
     return null;
   }
 
-  // Load index
+  // Load graph (edges, outEdges, inEdges, tokenDocFreq, metadata)
+  let graph: SerializedGraph;
   try {
-    const raw = await readFile(indexPath, 'utf-8');
+    const raw = await readFile(graphPath, 'utf-8');
+    graph = JSON.parse(raw) as SerializedGraph;
+  } catch {
+    return null;
+  }
+
+  // Load file chunks
+  const allFiles: Record<string, unknown> = {};
+  try {
+    const entries = await readdir(dir);
+    const chunkFiles = entries.filter(f => f.startsWith('files-') && f.endsWith('.json')).sort();
+    for (const cf of chunkFiles) {
+      const raw = await readFile(join(dir, cf), 'utf-8');
+      const chunk = JSON.parse(raw) as Record<string, unknown>;
+      Object.assign(allFiles, chunk);
+    }
+  } catch {
+    return null;
+  }
+
+  const plain: SerializedIndex = {
+    rootDir: graph.rootDir,
+    indexedAt: graph.indexedAt,
+    gitHead: graph.gitHead,
+    files: allFiles,
+    edges: graph.edges,
+    symbolEdges: graph.symbolEdges,
+    outEdges: graph.outEdges,
+    inEdges: graph.inEdges,
+    tokenDocFreq: graph.tokenDocFreq,
+  };
+
+  return deserializeIndex(plain);
+}
+
+async function loadLegacyCache(dir: string): Promise<CodebaseIndex | null> {
+  const metaPath = join(dir, 'meta.json');
+  let meta: CacheMeta & { version?: string };
+  try {
+    const raw = await readFile(metaPath, 'utf-8');
+    meta = JSON.parse(raw) as CacheMeta & { version?: string };
+  } catch {
+    return null;
+  }
+  if (meta.version !== CACHE_VERSION) return null;
+  if (Date.now() - meta.timestamp > CACHE_TTL_MS) return null;
+
+  try {
+    const raw = await readFile(join(dir, 'index.json'), 'utf-8');
     const plain = JSON.parse(raw) as SerializedIndex;
     return deserializeIndex(plain);
   } catch {
-    return null;
+    return null; // File too large or corrupt — will trigger fresh rebuild
   }
 }
 
@@ -77,8 +135,44 @@ export async function saveCachedIndex(
     version: CACHE_VERSION,
   };
 
+  // Clean up old cache files (legacy index.json + old chunks)
+  try {
+    const existing = await readdir(dir);
+    const toDelete = existing.filter(f => f === 'index.json' || f.startsWith('files-') || f === 'graph.json');
+    await Promise.all(toDelete.map(f => rm(join(dir, f), { force: true })));
+  } catch { /* ignore */ }
+
+  const serialized = serializeIndex(index);
+
+  // Save files in chunks to stay under Node's string limit
+  const fileEntries = Object.entries(serialized.files);
+  const chunkPromises: Promise<void>[] = [];
+  for (let i = 0; i < fileEntries.length; i += FILES_CHUNK_SIZE) {
+    const chunk: Record<string, unknown> = {};
+    const end = Math.min(i + FILES_CHUNK_SIZE, fileEntries.length);
+    for (let j = i; j < end; j++) {
+      chunk[fileEntries[j][0]] = fileEntries[j][1];
+    }
+    const chunkIdx = Math.floor(i / FILES_CHUNK_SIZE);
+    chunkPromises.push(writeFile(join(dir, `files-${chunkIdx}.json`), JSON.stringify(chunk)));
+  }
+
+  // Save graph (everything except files)
+  const graph: SerializedGraph = {
+    rootDir: serialized.rootDir,
+    indexedAt: serialized.indexedAt,
+    gitHead: serialized.gitHead,
+    edges: serialized.edges,
+    symbolEdges: serialized.symbolEdges,
+    outEdges: serialized.outEdges,
+    inEdges: serialized.inEdges,
+    tokenDocFreq: serialized.tokenDocFreq,
+  };
+  chunkPromises.push(writeFile(join(dir, 'graph.json'), JSON.stringify(graph)));
+
+  // Write all chunks + graph in parallel, then meta last (acts as commit marker)
+  await Promise.all(chunkPromises);
   await writeFile(join(dir, 'meta.json'), JSON.stringify(meta, null, 2));
-  await writeFile(join(dir, 'index.json'), JSON.stringify(serializeIndex(index)));
 }
 
 export async function isCacheStale(
@@ -119,8 +213,17 @@ interface SerializedIndex {
   outEdges: Record<string, string[]>;
   inEdges: Record<string, string[]>;
   tokenDocFreq?: Record<string, number>;
-  // v5.1.0+
-  // isBarrel and transitiveImportedByCount are stored inline in files records
+}
+
+interface SerializedGraph {
+  rootDir: string;
+  indexedAt: number;
+  gitHead: string;
+  edges: unknown[];
+  symbolEdges: unknown[];
+  outEdges: Record<string, string[]>;
+  inEdges: Record<string, string[]>;
+  tokenDocFreq?: Record<string, number>;
 }
 
 function serializeIndex(index: CodebaseIndex): SerializedIndex {

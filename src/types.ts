@@ -18,7 +18,8 @@ export type Language =
   | 'dart'
   | 'vue'
   | 'svelte'
-  | 'astro';
+  | 'astro'
+  | 'graphql';
 
 export type EdgeType =
   | 'import'

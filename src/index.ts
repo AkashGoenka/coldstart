@@ -6,6 +6,10 @@
  *   coldstart-mcp --root /path/to/project
  *   coldstart-mcp --root . --exclude vendor --quiet
  *   coldstart-mcp --root . --no-cache
+ *   coldstart-mcp --root . --no-daemon    # bypass daemon (single-process stdio mode)
+ *
+ * Internal (spawned automatically):
+ *   coldstart-mcp --root . --daemon       # background index daemon
  */
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,33 +22,43 @@ import { buildSymbolEdges } from './indexer/symbol-edges.js';
 import { getGitHead } from './indexer/git.js';
 import { loadCachedIndex, saveCachedIndex } from './cache/disk-cache.js';
 import { startMCPServer } from './server/mcp.js';
+import { startDaemonHttpServer } from './server/http-daemon.js';
+import { startBridge } from './server/bridge.js';
 import { IndexManager } from './index-manager.js';
+import { readLock, writeLock, deleteLock, isDaemonAlive } from './daemon-lock.js';
 import type { CodebaseIndex, IndexedFile, SymbolEdge } from './types.js';
 
 // ---------------------------------------------------------------------------
-// Argument parsing (no external deps)
+// Argument parsing
 // ---------------------------------------------------------------------------
 function parseArgs(argv: string[]): {
   root: string;
+  rootExplicit: boolean;
   excludes: string[];
   includes: string[];
   cacheDir?: string;
   quiet: boolean;
   noCache: boolean;
+  daemon: boolean;
+  noDaemon: boolean;
 } {
   const args = argv.slice(2);
   let root = '.';
+  let rootExplicit = false;
   const excludes: string[] = [];
   const includes: string[] = [];
   let cacheDir: string | undefined;
   let quiet = false;
   let noCache = false;
+  let daemon = false;
+  let noDaemon = false;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     switch (arg) {
       case '--root':
         root = args[++i] ?? root;
+        rootExplicit = true;
         break;
       case '--exclude':
         excludes.push(args[++i] ?? '');
@@ -61,14 +75,20 @@ function parseArgs(argv: string[]): {
       case '--no-cache':
         noCache = true;
         break;
+      case '--daemon':
+        daemon = true;
+        break;
+      case '--no-daemon':
+        noDaemon = true;
+        break;
     }
   }
 
-  return { root, excludes, includes, cacheDir, quiet, noCache };
+  return { root, rootExplicit, excludes, includes, cacheDir, quiet, noCache, daemon, noDaemon };
 }
 
 // ---------------------------------------------------------------------------
-// Logging (to stderr so stdout stays clean for MCP)
+// Logging
 // ---------------------------------------------------------------------------
 function log(quiet: boolean, ...args: unknown[]): void {
   if (!quiet) process.stderr.write(args.join(' ') + '\n');
@@ -85,16 +105,13 @@ export async function buildIndex(
 ): Promise<CodebaseIndex> {
   const start = Date.now();
 
-  // 1. Walk
   log(quiet, '[coldstart] Walking filesystem...');
   const walkedFiles = await walkDirectory({ rootDir, excludes, includes });
   log(quiet, `[coldstart] Found ${walkedFiles.length} source files`);
 
-  // 2. Parse — process in batches to cap peak memory and emit progress
   log(quiet, '[coldstart] Parsing files...');
   const indexedFiles: IndexedFile[] = [];
   const langCount: Record<string, number> = {};
-
   const allSymbolEdges: SymbolEdge[] = [];
 
   const BATCH_SIZE = 100;
@@ -139,7 +156,6 @@ export async function buildIndex(
       }),
     );
 
-    // Emit progress at each PROGRESS_INTERVAL boundary crossed in this batch, and always at 100%
     const prevMilestone = Math.floor((parsed_count - batch.length) / PROGRESS_INTERVAL);
     const currMilestone = Math.floor(parsed_count / PROGRESS_INTERVAL);
     const isLast = parsed_count === walkedFiles.length;
@@ -149,7 +165,6 @@ export async function buildIndex(
     }
   }
 
-  // 3. Resolve imports → edges
   log(quiet, '[coldstart] Resolving imports...');
   const { edges, unresolved } = await resolveImports(indexedFiles, rootDir);
   log(quiet, `[coldstart] Resolved ${edges.length} edges (${unresolved.length} unresolved)`);
@@ -165,22 +180,18 @@ export async function buildIndex(
     if (breakdown) process.stderr.write(`[coldstart] Resolution by language: ${breakdown}\n`);
   }
 
-  // 4. Build graph
   log(quiet, '[coldstart] Building graph...');
   const nodeIds = indexedFiles.map(f => f.id);
   const { outEdges, inEdges } = buildGraph(nodeIds, edges);
 
-  // 5. Attach importedByCount back to files
   for (const file of indexedFiles) {
     file.importedByCount = inEdges.get(file.id)?.length ?? 0;
   }
 
-  // Build symbol-level edges (exports, calls with cross-file resolution, extends, implements)
   const filesMap = new Map<string, IndexedFile>(indexedFiles.map(f => [f.id, f]));
   const allSymbolEdgesBuilt = buildSymbolEdges(indexedFiles, outEdges, filesMap);
   for (const e of allSymbolEdgesBuilt) allSymbolEdges.push(e);
 
-  // 6. Barrel detection: AST-based for TS/JS (reexportRatio), no heuristic for others
   for (const file of indexedFiles) {
     if (file.language === 'typescript' || file.language === 'javascript') {
       file.isBarrel = (
@@ -192,7 +203,6 @@ export async function buildIndex(
     file.transitiveImportedByCount = file.importedByCount;
   }
 
-  // Strip symbol-sourced tokens from barrel domains to prevent re-exported symbol pollution
   for (const file of indexedFiles) {
     if (!file.isBarrel) continue;
     for (const [token, ev] of Object.entries(file.domainMap)) {
@@ -204,7 +214,6 @@ export async function buildIndex(
     }
   }
 
-  // 7. Token document frequency (skip barrels)
   const tokenDocFreq = new Map<string, number>();
   for (const file of indexedFiles) {
     if (file.isBarrel) continue;
@@ -213,14 +222,11 @@ export async function buildIndex(
     }
   }
 
-  // 8. Git head
   const gitHead = await getGitHead(rootDir);
-
   const elapsed = ((Date.now() - start) / 1000).toFixed(1);
   log(quiet, `[coldstart] Indexed ${indexedFiles.length} files in ${elapsed}s`);
   log(quiet, `[coldstart] Languages: ${Object.entries(langCount).map(([l, c]) => `${l}(${c})`).join(', ')}`);
 
-  // Inflate transitiveImportedByCount through barrel files
   for (const file of indexedFiles) {
     if (!file.isBarrel) continue;
     for (const childId of outEdges.get(file.id) ?? []) {
@@ -229,7 +235,7 @@ export async function buildIndex(
     }
   }
 
-  const index: CodebaseIndex = {
+  return {
     rootDir,
     files: filesMap,
     edges,
@@ -240,88 +246,201 @@ export async function buildIndex(
     indexedAt: Date.now(),
     gitHead,
   };
+}
 
-  return index;
+// ---------------------------------------------------------------------------
+// Shared: load from cache or build, then create and return an IndexManager
+// ---------------------------------------------------------------------------
+async function buildManager(
+  finalRoot: string,
+  excludes: string[],
+  includes: string[],
+  cacheDir: string | undefined,
+  quiet: boolean,
+  noCache: boolean,
+): Promise<IndexManager> {
+  let index: CodebaseIndex | null = null;
+
+  if (!noCache) {
+    index = await loadCachedIndex(finalRoot, cacheDir);
+    if (index) {
+      const currentHead = await getGitHead(finalRoot);
+      if (currentHead && index.gitHead && currentHead !== index.gitHead) {
+        log(quiet, '[coldstart] Git HEAD changed, rebuilding index...');
+        index = null;
+      } else {
+        log(quiet, '[coldstart] Loaded from cache');
+      }
+    }
+  }
+
+  if (!index) {
+    index = await buildIndex(finalRoot, excludes, includes, quiet);
+    if (!noCache) {
+      try {
+        await saveCachedIndex(index, cacheDir);
+        log(quiet, '[coldstart] Index saved to cache');
+      } catch (err) {
+        log(quiet, `[coldstart] Warning: could not save cache: ${err}`);
+      }
+    }
+  }
+
+  const manager = new IndexManager(
+    index,
+    () => buildIndex(finalRoot, excludes, includes, quiet),
+    cacheDir,
+    noCache,
+    quiet,
+  );
+  manager.startWatching();
+  return manager;
+}
+
+// ---------------------------------------------------------------------------
+// Daemon mode: HTTP server + lockfile, runs until killed
+// ---------------------------------------------------------------------------
+async function runDaemon(
+  finalRoot: string,
+  excludes: string[],
+  includes: string[],
+  cacheDir: string | undefined,
+  quiet: boolean,
+  noCache: boolean,
+): Promise<void> {
+  log(quiet, `[coldstart] Daemon starting — root: ${finalRoot}`);
+
+  // Exit immediately if another daemon is already serving this root
+  const existing = await readLock(finalRoot);
+  if (existing && isDaemonAlive(existing.pid)) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${existing.port}/mcp`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(2000),
+      });
+      if (res.status < 500) {
+        log(quiet, '[coldstart] Another daemon is already running — exiting.');
+        process.exit(0);
+      }
+    } catch { /* stale lock — proceed */ }
+  }
+
+  // managerReady: tool calls queue here until index is built
+  let managerReadyResolve!: () => void;
+  let managerReadyReject!: (err: Error) => void;
+  const managerReady = new Promise<void>((res, rej) => {
+    managerReadyResolve = res;
+    managerReadyReject = rej;
+  });
+  let manager: IndexManager | null = null;
+
+  // Start HTTP server immediately so bridges can connect while index builds
+  const port = await startDaemonHttpServer(async () => {
+    await managerReady;
+    return manager!.getContext();
+  });
+
+  // Write lockfile — bridges start connecting
+  await writeLock(finalRoot, process.pid, port);
+  log(quiet, `[coldstart] Daemon HTTP server on port ${port} (PID ${process.pid})`);
+
+  // Build index in background
+  buildManager(finalRoot, excludes, includes, cacheDir, quiet, noCache)
+    .then(m => {
+      manager = m;
+      managerReadyResolve();
+      log(quiet, '[coldstart] Daemon index ready');
+    })
+    .catch(err => {
+      log(quiet, `[coldstart] Daemon index build failed: ${err}`);
+      managerReadyReject(err instanceof Error ? err : new Error(String(err)));
+      deleteLock(finalRoot).catch(() => {});
+      process.exit(1);
+    });
+
+  const cleanup = (): void => {
+    manager?.stopWatching();
+    deleteLock(finalRoot).catch(() => {}).finally(() => process.exit(0));
+  };
+  process.on('SIGTERM', cleanup);
+  process.on('SIGINT', cleanup);
+  process.on('exit', () => manager?.stopWatching());
+
+  // Run forever
+  await new Promise<never>(() => {});
 }
 
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 async function main(): Promise<void> {
-  // Check for 'init' subcommand — prints MCP config and agent rules for manual setup
   if (process.argv[2] === 'init') {
     const { runInit } = await import('./init.js');
     await runInit();
     return;
   }
 
-  const { root: cliRoot, excludes, includes, cacheDir, quiet, noCache } = parseArgs(process.argv);
-  
-  let manager: IndexManager | null = null;
+  const { root: cliRoot, rootExplicit, excludes, includes, cacheDir, quiet, noCache, daemon, noDaemon } = parseArgs(process.argv);
 
-  await startMCPServer(
-    async (clientRoots: string[]) => {
-      let finalRoot = resolve(cliRoot);
-      if (clientRoots && clientRoots.length > 0) {
-        const uri = clientRoots[0];
-        finalRoot = uri.startsWith('file://') ? fileURLToPath(uri) : resolve(uri);
-      }
+  // --daemon: background index process spawned by bridge
+  if (daemon) {
+    const finalRoot = resolve(cliRoot);
+    await runDaemon(finalRoot, excludes, includes, cacheDir, quiet, noCache);
+    return;
+  }
 
+  // --no-daemon: traditional single-process stdio mode (useful for debugging)
+  if (noDaemon) {
+    let manager: IndexManager | null = null;
+    let managerReadyResolve!: () => void;
+    let managerReadyReject!: (err: Error) => void;
+    const managerReady = new Promise<void>((res, rej) => {
+      managerReadyResolve = res;
+      managerReadyReject = rej;
+    });
+
+    const buildAndSet = async (finalRoot: string): Promise<void> => {
       log(quiet, `[coldstart] Starting — root: ${finalRoot}`);
-
-      let index: CodebaseIndex | null = null;
-
-      // Try cache first
-      if (!noCache) {
-        index = await loadCachedIndex(finalRoot, cacheDir);
-        if (index) {
-          // Invalidate cache if git HEAD has changed
-          const currentHead = await getGitHead(finalRoot);
-          if (currentHead && index.gitHead && currentHead !== index.gitHead) {
-            log(quiet, '[coldstart] Git HEAD changed, rebuilding index...');
-            index = null;
-          } else {
-            log(quiet, '[coldstart] Loaded from cache');
-          }
-        }
+      try {
+        manager = await buildManager(finalRoot, excludes, includes, cacheDir, quiet, noCache);
+        managerReadyResolve();
+        log(quiet, '[coldstart] MCP server ready');
+      } catch (err) {
+        log(quiet, `[coldstart] Fatal: ${err}`);
+        managerReadyReject(err instanceof Error ? err : new Error(String(err)));
+        process.exit(1);
       }
+    };
 
-      // Build fresh index if needed
-      if (!index) {
-        index = await buildIndex(finalRoot, excludes, includes, quiet);
-        if (!noCache) {
-          try {
-            await saveCachedIndex(index, cacheDir);
-            log(quiet, '[coldstart] Index saved to cache');
-          } catch (err) {
-            log(quiet, `[coldstart] Warning: could not save cache: ${err}`);
-          }
-        }
-      }
-
-      manager = new IndexManager(
-        index,
-        () => buildIndex(finalRoot, excludes, includes, quiet),
-        cacheDir,
-        noCache,
-        quiet,
-      );
-
-      log(quiet, '[coldstart] MCP server ready');
-      manager.startWatching();
-    },
-    () => {
-      if (!manager) {
-        throw new Error("IndexManager is not yet initialized");
-      }
-      return manager.getContext();
+    if (rootExplicit) {
+      buildAndSet(resolve(cliRoot)).catch(() => {});
     }
-  );
 
-  // Ensure watcher is stopped on process exit
-  process.on('exit', () => manager?.stopWatching());
-  process.on('SIGINT', () => { manager?.stopWatching(); process.exit(0); });
-  process.on('SIGTERM', () => { manager?.stopWatching(); process.exit(0); });
+    await startMCPServer(
+      async (clientRoots: string[]) => {
+        if (!rootExplicit) {
+          let finalRoot = resolve(cliRoot);
+          if (clientRoots.length > 0) {
+            const uri = clientRoots[0];
+            finalRoot = uri.startsWith('file://') ? fileURLToPath(uri) : resolve(uri);
+          }
+          buildAndSet(finalRoot).catch(() => {});
+        }
+      },
+      async () => {
+        await managerReady;
+        return manager!.getContext();
+      },
+    );
+
+    process.on('exit', () => manager?.stopWatching());
+    process.on('SIGINT', () => { manager?.stopWatching(); process.exit(0); });
+    process.on('SIGTERM', () => { manager?.stopWatching(); process.exit(0); });
+    return;
+  }
+
+  // Default: daemon + bridge mode
+  await startBridge(cliRoot, rootExplicit, quiet);
 }
 
 main().catch(err => {
