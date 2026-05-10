@@ -248,6 +248,78 @@ describe('java-parser — symbol extraction (direct)', () => {
       expect(sym.id.startsWith(AUTH_FILE_ID + '#')).toBe(true);
     }
   });
+
+  it('extracts @Override annotation on method', () => {
+    const src = `
+      public class MyClass {
+        @Override
+        public void foo() {}
+      }
+    `;
+    const result = parseJavaContent(src, AUTH_FILE_ID);
+    const method = result.symbols.find(s => s.name === 'MyClass.foo');
+    expect(method).toBeDefined();
+    expect(method!.annotations).toEqual(['Override']);
+  });
+
+  it('extracts multiple annotations on class', () => {
+    const src = `
+      @Service
+      @Autowired
+      public class Foo {}
+    `;
+    const result = parseJavaContent(src, AUTH_FILE_ID);
+    const cls = result.symbols.find(s => s.name === 'Foo');
+    expect(cls).toBeDefined();
+    expect(cls!.annotations).toEqual(['Service', 'Autowired']);
+  });
+
+  it('extracts simple name from scoped annotation', () => {
+    const src = `
+      @org.springframework.stereotype.Service
+      public class Foo {}
+    `;
+    const result = parseJavaContent(src, AUTH_FILE_ID);
+    const cls = result.symbols.find(s => s.name === 'Foo');
+    expect(cls).toBeDefined();
+    expect(cls!.annotations).toEqual(['Service']);
+  });
+
+  it('omits annotations field when no annotations present', () => {
+    const src = `
+      public class Bar {}
+    `;
+    const result = parseJavaContent(src, AUTH_FILE_ID);
+    const cls = result.symbols.find(s => s.name === 'Bar');
+    expect(cls).toBeDefined();
+    expect(cls!.annotations).toBeUndefined();
+  });
+
+  it('extracts custom event listener annotation on method', () => {
+    const src = `
+      public class Listener {
+        @OnUserRegistered
+        public void handle(UserEvent e) {}
+      }
+    `;
+    const result = parseJavaContent(src, AUTH_FILE_ID);
+    const method = result.symbols.find(s => s.name === 'Listener.handle');
+    expect(method).toBeDefined();
+    expect(method!.annotations).toEqual(['OnUserRegistered']);
+  });
+
+  it('extracts annotations on static final constants', () => {
+    const src = `
+      public class MyClass {
+        @CustomMarker
+        static final String FOO = "x";
+      }
+    `;
+    const result = parseJavaContent(src, AUTH_FILE_ID);
+    const constant = result.symbols.find(s => s.name === 'MyClass.FOO');
+    expect(constant).toBeDefined();
+    expect(constant!.annotations).toEqual(['CustomMarker']);
+  });
 });
 
 // =============================================================================
@@ -459,5 +531,111 @@ describe('ruby-parser — symbol extraction (direct)', () => {
     expect(cls).toBeDefined();
     // has_many :comments → Comment model in implementsNames (tracked as association)
     expect(cls!.implementsNames.some(n => n.includes('Comment'))).toBe(true);
+  });
+
+  it('attr_accessor emits getter and setter methods', () => {
+    const src = `
+      class User
+        attr_accessor :name, :age
+      end
+    `;
+    const result = parseRubyContent(src, 'app/models/user.rb');
+    expect(result.symbols.find(s => s.name === 'User.name')).toBeDefined();
+    expect(result.symbols.find(s => s.name === 'User.name=')).toBeDefined();
+    expect(result.symbols.find(s => s.name === 'User.age')).toBeDefined();
+    expect(result.symbols.find(s => s.name === 'User.age=')).toBeDefined();
+  });
+
+  it('attr_reader emits only getter methods', () => {
+    const src = `
+      class User
+        attr_reader :email
+      end
+    `;
+    const result = parseRubyContent(src, 'app/models/user.rb');
+    expect(result.symbols.find(s => s.name === 'User.email')).toBeDefined();
+    expect(result.symbols.find(s => s.name === 'User.email=')).toBeUndefined();
+  });
+
+  it('attr_writer emits only setter methods', () => {
+    const src = `
+      class User
+        attr_writer :password
+      end
+    `;
+    const result = parseRubyContent(src, 'app/models/user.rb');
+    expect(result.symbols.find(s => s.name === 'User.password=')).toBeDefined();
+    expect(result.symbols.find(s => s.name === 'User.password')).toBeUndefined();
+  });
+
+  it('delegate emits delegated method names', () => {
+    const src = `
+      class Account
+        delegate :email, :name, to: :user
+      end
+    `;
+    const result = parseRubyContent(src, 'app/models/account.rb');
+    expect(result.symbols.find(s => s.name === 'Account.email')).toBeDefined();
+    expect(result.symbols.find(s => s.name === 'Account.name')).toBeDefined();
+  });
+
+  it('scope emits scope as class method', () => {
+    const src = `
+      class Post < ApplicationRecord
+        scope :recent, -> { order(created_at: :desc) }
+      end
+    `;
+    const result = parseRubyContent(src, 'app/models/post.rb');
+    expect(result.symbols.find(s => s.name === 'Post.recent')).toBeDefined();
+  });
+
+  it('attribute emits attribute method', () => {
+    const src = `
+      class User < ApplicationRecord
+        attribute :webfinger, :string
+      end
+    `;
+    const result = parseRubyContent(src, 'app/models/user.rb');
+    expect(result.symbols.find(s => s.name === 'User.webfinger')).toBeDefined();
+  });
+
+  it('enum emits attribute and predicate methods', () => {
+    const src = `
+      class Post < ApplicationRecord
+        enum status: { active: 0, inactive: 1 }
+      end
+    `;
+    const result = parseRubyContent(src, 'app/models/post.rb');
+    expect(result.symbols.find(s => s.name === 'Post.status')).toBeDefined();
+    expect(result.symbols.find(s => s.name === 'Post.active?')).toBeDefined();
+    expect(result.symbols.find(s => s.name === 'Post.inactive?')).toBeDefined();
+  });
+
+  it('validates and validate are recognized as callback methods', () => {
+    const src = `
+      class User < ApplicationRecord
+        validates :email, presence: true
+        validate :password_strength
+      end
+    `;
+    const result = parseRubyContent(src, 'app/models/user.rb');
+    const cls = result.symbols.find(s => s.name === 'User');
+    expect(cls).toBeDefined();
+    expect(cls!.implementsNames).toContain('password_strength');
+  });
+
+  it('DSL methods work in bare command form', () => {
+    const src = `
+      class Post < ApplicationRecord
+        attr_accessor :title, :body
+        attr_reader :author
+        delegate :email, to: :user
+      end
+    `;
+    const result = parseRubyContent(src, 'app/models/post.rb');
+    expect(result.symbols.find(s => s.name === 'Post.title')).toBeDefined();
+    expect(result.symbols.find(s => s.name === 'Post.title=')).toBeDefined();
+    expect(result.symbols.find(s => s.name === 'Post.author')).toBeDefined();
+    expect(result.symbols.find(s => s.name === 'Post.email')).toBeDefined();
   });
 });

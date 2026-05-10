@@ -474,10 +474,13 @@ export function handleTraceImpact(
     }
   }
 
+  const targetLocation = `${target.fileEntry.relativePath}:${target.startLine}`;
+
   return {
     target: {
       symbol: target.name,
       file: target.fileEntry.relativePath,
+      line: target.startLine,
       type: target.kind,
     },
     impacted: displayImpacted.map(entry => {
@@ -503,10 +506,10 @@ export function handleTraceImpact(
       ...(fileImporters && fileImporters.length > 0
         ? {
             fileImporters,
-            note: 'No symbol-level dependents indexed for this target. Common causes: (a) member-expression calls (obj.method()) that did not resolve, or (b) the target has no callers. fileImporters below shows files importing this target\'s file — start there.',
+            note: `Defined at ${targetLocation}. No symbol-level callers indexed (common causes: member-expression calls like obj.method() that did not resolve, or no callers exist). fileImporters below shows files importing this file — start there.`,
           }
         : {
-            note: 'No symbol-level dependents indexed and no files import this target\'s file. The symbol may be unused, an entry point, or invoked dynamically.',
+            note: `Defined at ${targetLocation}. No callers indexed and no files import this file — symbol is an entry point, unused, or invoked dynamically. If you only needed to locate the definition, you have it.`,
           }),
     } : {}),
   };
@@ -537,8 +540,8 @@ function findSymbolCandidates(
   index: CodebaseIndex,
   symbolName: string,
   filePath?: string,
-): Array<{ id: string; name: string; kind: string; fileEntry: IndexedFileLike }> {
-  const results: Array<{ id: string; name: string; kind: string; fileEntry: IndexedFileLike }> = [];
+): Array<{ id: string; name: string; kind: string; startLine: number; fileEntry: IndexedFileLike }> {
+  const results: Array<{ id: string; name: string; kind: string; startLine: number; fileEntry: IndexedFileLike }> = [];
 
   // Suffixes for qualified names: Ruby uses ::, Java/TS use .
   const qualifiedSuffixes = ['::' + symbolName, '.' + symbolName];
@@ -546,7 +549,7 @@ function findSymbolCandidates(
   const searchIn = (file: IndexedFileLike) => {
     for (const sym of file.symbols) {
       if (sym.name === symbolName) {
-        results.push({ id: sym.id, name: sym.name, kind: sym.kind, fileEntry: file });
+        results.push({ id: sym.id, name: sym.name, kind: sym.kind, startLine: sym.startLine, fileEntry: file });
       }
     }
   };
@@ -555,7 +558,7 @@ function findSymbolCandidates(
   const searchInSuffix = (file: IndexedFileLike) => {
     for (const sym of file.symbols) {
       if (qualifiedSuffixes.some(suffix => sym.name.endsWith(suffix))) {
-        results.push({ id: sym.id, name: sym.name, kind: sym.kind, fileEntry: file });
+        results.push({ id: sym.id, name: sym.name, kind: sym.kind, startLine: sym.startLine, fileEntry: file });
       }
     }
   };

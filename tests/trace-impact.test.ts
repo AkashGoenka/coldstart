@@ -409,3 +409,47 @@ describe('trace-impact — extends and implements edges', () => {
     expect(result.impacted[0].relationship).toBe('implements');
   });
 });
+
+describe('trace-impact — symbol-name lookup (definition site)', () => {
+  it('returns target.line so the response works as a where-is-this-defined lookup', () => {
+    const sym: SymbolNode = {
+      id: 'src/foo.ts#computeThing',
+      name: 'computeThing',
+      kind: 'function',
+      startLine: 42,
+      endLine: 90,
+      isExported: true,
+      calls: [],
+      implementsNames: [],
+    };
+
+    const files = [makeFile('src/foo.ts', [sym])];
+    const index = makeIndex(files, []);
+    const result = handleTraceImpact(index, { symbol: 'computeThing' }) as any;
+
+    expect(result.target.symbol).toBe('computeThing');
+    expect(result.target.file).toBe('src/foo.ts');
+    expect(result.target.line).toBe(42);
+  });
+
+  it('empty-callers note leads with "Defined at <file>:<line>"', () => {
+    const sym: SymbolNode = {
+      id: 'src/util.ts#orphan',
+      name: 'orphan',
+      kind: 'function',
+      startLine: 7,
+      endLine: 9,
+      isExported: true,
+      calls: [],
+      implementsNames: [],
+    };
+
+    const files = [makeFile('src/util.ts', [sym])];
+    const index = makeIndex(files, []);
+    const result = handleTraceImpact(index, { symbol: 'orphan' }) as any;
+
+    expect(result.summary.totalImpacted).toBe(0);
+    expect(result.fallback).toBe('file-level');
+    expect(result.note).toContain('Defined at src/util.ts:7');
+  });
+});

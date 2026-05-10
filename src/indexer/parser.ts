@@ -13,6 +13,10 @@ import { parseKotlinContent } from './extractors/kotlin.js';
 import { parseCppContent } from './extractors/cpp.js';
 import { extractAngularJsSymbols } from './extractors/angularjs.js';
 import { parseGraphQLContent } from './extractors/graphql.js';
+import { parseYamlContent } from './extractors/yaml.js';
+import { parseTomlContent } from './extractors/toml.js';
+import { parseEnvContent } from './extractors/env.js';
+import { parseXmlContent } from './extractors/xml.js';
 
 const MAX_FILE_SIZE = 1_000_000; // 1 MB
 
@@ -369,6 +373,77 @@ export async function parseFile(
       lineCount,
       tokenEstimate,
       symbols: gqlResult.symbols,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // YAML: regex-based extractor (top-level and nested keys)
+  // -------------------------------------------------------------------------
+  if (language === 'yaml') {
+    const yamlResult = parseYamlContent(content, fileId || filePath);
+    return {
+      imports: yamlResult.imports,
+      exports: yamlResult.exports,
+      hasDefaultExport: false,
+      hash,
+      lineCount,
+      tokenEstimate,
+      symbols: yamlResult.symbols,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // TOML: regex-based extractor (sections, keys, array-of-tables)
+  // -------------------------------------------------------------------------
+  if (language === 'toml') {
+    const tomlResult = parseTomlContent(content, fileId || filePath);
+    return {
+      imports: tomlResult.imports,
+      exports: tomlResult.exports,
+      hasDefaultExport: false,
+      hash,
+      lineCount,
+      tokenEstimate,
+      symbols: tomlResult.symbols,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // .env: regex-based extractor (variable names)
+  // -------------------------------------------------------------------------
+  if (language === 'env') {
+    const envResult = parseEnvContent(content, fileId || filePath);
+    return {
+      imports: envResult.imports,
+      exports: envResult.exports,
+      hasDefaultExport: false,
+      hash,
+      lineCount,
+      tokenEstimate,
+      symbols: envResult.symbols,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // XML: tree-sitter-based extractor (attributes, element text)
+  // -------------------------------------------------------------------------
+  if (language === 'xml') {
+    let xmlResult;
+    try {
+      xmlResult = parseXmlContent(content, fileId || filePath);
+    } catch (err) {
+      console.error(`[parser] Tree-sitter error in ${fileId || filePath}: ${err}`);
+      xmlResult = { imports: [], exports: [], hasDefaultExport: false as const, symbols: [] };
+    }
+
+    return {
+      imports: xmlResult.imports,
+      exports: xmlResult.exports,
+      hasDefaultExport: false,
+      hash,
+      lineCount,
+      tokenEstimate,
+      symbols: xmlResult.symbols,
     };
   }
 

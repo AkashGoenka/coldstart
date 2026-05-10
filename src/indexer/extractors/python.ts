@@ -120,13 +120,32 @@ export function parsePythonContent(
       continue;
     }
 
-    // __all__ = [...]
+    // __all__ = [...] and module-level constants
     if (node.type === 'expression_statement') {
       const assign = firstChildOfType(node, 'assignment');
       if (assign) {
         const lhs = assign.namedChildren[0];
         if (lhs?.text === '__all__') {
           allList = extractAllList(assign);
+          continue;
+        }
+
+        // Top-level module constant: identifier matching UPPER_SNAKE pattern
+        if (lhs?.type === 'identifier') {
+          const constName = lhs.text;
+          // Match UPPER_SNAKE: optional leading underscore(s), then letter, then all caps with digits/underscores, length >= 2
+          if (/^_*[A-Z][A-Z0-9_]*$/.test(constName) && constName.length >= 2) {
+            symbols.push({
+              id: `${fileId}#${constName}`,
+              name: constName,
+              kind: 'constant',
+              startLine: node.startPosition.row + 1,
+              endLine: node.endPosition.row + 1,
+              isExported: isPublicName(constName),
+              calls: [],
+              implementsNames: [],
+            });
+          }
         }
       }
       continue;
