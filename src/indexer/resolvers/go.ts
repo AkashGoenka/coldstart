@@ -1,4 +1,4 @@
-import { join } from 'node:path';
+import { join, dirname, relative, isAbsolute } from 'node:path';
 import { readFile } from 'node:fs/promises';
 
 /**
@@ -21,6 +21,26 @@ import { readFile } from 'node:fs/promises';
 interface GoModInfo {
   moduleName: string;
   replaceMap: Map<string, string>; // module path → local directory (absolute)
+  modDir: string; // directory containing the go.mod (may be an ancestor of rootDir)
+}
+
+/**
+ * Walk up from `startDir` looking for a file named `filename`. Returns the
+ * directory containing it, or null. Stops at filesystem root.
+ */
+async function findUpwards(startDir: string, filename: string): Promise<string | null> {
+  let dir = startDir;
+  // 64 hops is far more than any real project depth — guards against weird symlink loops.
+  for (let i = 0; i < 64; i++) {
+    try {
+      await readFile(join(dir, filename), 'utf-8');
+      return dir;
+    } catch { /* not here, walk up */ }
+    const parent = dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -36,19 +56,21 @@ const goWorkCache = new Map<string, GoWorkInfo | null>();
 
 async function getGoWorkInfo(rootDir: string): Promise<GoWorkInfo | null> {
   if (goWorkCache.has(rootDir)) return goWorkCache.get(rootDir)!;
-  let content: string;
-  try {
-    content = await readFile(join(rootDir, 'go.work'), 'utf-8');
-  } catch {
+
+  // go.work may live at rootDir itself or any ancestor (e.g. when indexing a
+  // subdirectory of a multi-module workspace).
+  const workDir = await findUpwards(rootDir, 'go.work');
+  if (!workDir) {
     goWorkCache.set(rootDir, null);
     return null;
   }
 
+  const content = await readFile(join(workDir, 'go.work'), 'utf-8');
   const modules: Array<{ name: string; dir: string }> = [];
   const useRe = /^use\s+(\S+)/gm;
   let m: RegExpExecArray | null;
   while ((m = useRe.exec(content)) !== null) {
-    const useDir = join(rootDir, m[1]);
+    const useDir = isAbsolute(m[1]) ? m[1] : join(workDir, m[1]);
     try {
       const modContent = await readFile(join(useDir, 'go.mod'), 'utf-8');
       const nameMatch = modContent.match(/^module\s+(\S+)/m);
@@ -66,8 +88,17 @@ const goModCache = new Map<string, GoModInfo | null>();
 
 async function getGoModInfo(rootDir: string): Promise<GoModInfo | null> {
   if (goModCache.has(rootDir)) return goModCache.get(rootDir)!;
+
+  // go.mod may live at rootDir or any ancestor (single-module workspace where
+  // we're indexing a subdirectory).
+  const modDir = await findUpwards(rootDir, 'go.mod');
+  if (!modDir) {
+    goModCache.set(rootDir, null);
+    return null;
+  }
+
   try {
-    const content = await readFile(join(rootDir, 'go.mod'), 'utf-8');
+    const content = await readFile(join(modDir, 'go.mod'), 'utf-8');
     const moduleMatch = content.match(/^module\s+(\S+)/m);
     if (!moduleMatch) { goModCache.set(rootDir, null); return null; }
     const moduleName = moduleMatch[1];
@@ -81,11 +112,11 @@ async function getGoModInfo(rootDir: string): Promise<GoModInfo | null> {
       const oldPath = m[1];
       const newPath = m[2];
       if (newPath.startsWith('./') || newPath.startsWith('../')) {
-        replaceMap.set(oldPath, join(rootDir, newPath));
+        replaceMap.set(oldPath, join(modDir, newPath));
       }
     }
 
-    const info: GoModInfo = { moduleName, replaceMap };
+    const info: GoModInfo = { moduleName, replaceMap, modDir };
     goModCache.set(rootDir, info);
     return info;
   } catch {
