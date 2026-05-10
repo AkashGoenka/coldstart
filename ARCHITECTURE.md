@@ -76,7 +76,8 @@ AI client ──stdio──> bridge (per AI session) ──HTTP──> daemon (p
 - Failure mode: rotation is best-effort. Any I/O error inside the rotation loop is swallowed so a log issue can never crash the daemon.
 
 ### Status subcommand (`src/status.ts`)
-- Invoked as `coldstart-mcp status`. Reads every `*.json` in `~/.coldstart/daemon/`, probes `isDaemonAlive` (a zero-signal `process.kill(pid, 0)`) and `GET /mcp` per entry, and prints a fixed-width table with root path, PID, port, status (`ok` / `alive, http unreachable` / `dead (stale lock)`), log size, and log path.
+- Invoked as `coldstart-mcp status`. Reads every `*.json` in `~/.coldstart/daemon/`, probes `isDaemonAlive` (a zero-signal `process.kill(pid, 0)`), `GET /mcp`, and `GET /status` per entry in parallel, then prints a fixed-width table with columns: root path, PID, port, status (`ok` / `alive, http unreachable` / `dead (stale lock)`), index state, log size, and log path.
+- The `GET /status` endpoint on the daemon returns `{ state: 'building' | 'ready' | 'rebuilding' | 'failed', fileCount, startedAt, indexBuildMs }`. The CLI renders this as `ready (N files)`, `rebuilding (N files)`, `building`, or `failed`. Daemons predating the endpoint render as `?` — no regression.
 - Output is intentionally plain stdout text so it's grep-friendly. A `--json` flag is a future option without breaking the human form.
 
 ### `--no-daemon` mode
@@ -102,16 +103,21 @@ The daemon survives across AI client restarts — index build cost is paid once 
    - **Ruby**: Tree-sitter (tree-sitter-ruby) — classes, modules, methods, constants, singleton methods. Detects Rails DSLs (associations, callbacks, includes/extends). `require_relative` paths are normalised with a `./` prefix so the resolver treats them as relative to the importing file rather than as external gem names.
    - **Python**: Tree-sitter (tree-sitter-python) — classes, top-level functions, methods. Respects `__all__` for export list; excludes underscore-prefixed private names.
    - **Go**: Tree-sitter (tree-sitter-go) — structs (as class), interfaces, top-level functions, methods, constants/vars. Exports determined by uppercase-first identifier convention.
-   - **Rust**: Tree-sitter (tree-sitter-rust) — pub structs/enums (as class), pub traits (as interface), pub functions, pub type aliases. Tracks `impl Trait for Struct` to populate `implementsNames`. Module declarations treated as imports.
+   - **Rust**: Tree-sitter (tree-sitter-rust) — pub structs/enums (as class), pub traits (as interface), pub functions, pub type aliases. Tracks `impl Trait for Struct` to populate `implementsNames`. Module declarations and `use` paths to workspace-member crates are emitted as imports; external-crate `use` paths are filtered out at parse time against the workspace member set.
    - **C#**: Tree-sitter (tree-sitter-c-sharp) — public classes, interfaces, structs, enums, records, public methods. Extracts base type list for extends/implements. Captures `using` directives as imports.
    - **PHP**: Tree-sitter (tree-sitter-php) — classes, interfaces, traits, public methods. Extracts `extends`/`implements` clauses. Captures `use` namespace imports.
    - **Kotlin**: Tree-sitter (tree-sitter-kotlin) — classes, interfaces (detected via `interface` keyword in `class_declaration`), object declarations, top-level functions, methods. Public by default unless explicitly private/protected.
    - **C++**: Tree-sitter (tree-sitter-cpp) — classes, structs, functions, methods, namespaces.
    - **GraphQL** (`extractors/graphql.ts`): regex-based extractor — operations (query/mutation/subscription), fragments, type-system definitions (type/input/interface/enum/union/scalar/directive). No call tracking; symbols only.
+   - **YAML** (`extractors/yaml.ts`): Tree-sitter extractor — top-level keys and one-level-nested keys as exported symbols.
+   - **TOML** (`extractors/toml.ts`): Tree-sitter extractor — sections, keys, and array-of-tables as symbols.
+   - **XML** (`extractors/xml.ts`): Tree-sitter extractor — element attributes and text content as symbols.
+   - **Groovy** (`extractors/groovy.ts`): Tree-sitter extractor — classes, methods, and closures. Covers Gradle DSL and Jenkinsfile DSL.
+   - **`.env` files** (`extractors/env.ts`): regex-based extractor — variable names as exported symbols. Detected by filename pattern (`.env`, `.env.local`, `.env.production`, etc.) rather than file extension.
    - **Vue/Svelte/Astro (SFC)**: script block extracted from the SFC source before handing off to the TypeScript/JavaScript parser. The rest of the file (template, style) is ignored.
-   - **AngularJS 1.x**: regex-based extractor (no AST) for `.service()`, `.controller()`, `.factory()`, `.directive()` module registrations — covers legacy Angular 1 codebases where Tree-sitter gives no useful symbols.
+   - **AngularJS 1.x**: regex-based extractor (no AST) for `.service()`, `.controller()`, `.factory()`, `.directive()` module registrations — applied as a post-pass on TypeScript/JavaScript files to cover legacy Angular 1 codebases.
    - **TypeScript/JavaScript enhancements**: `export default <identifier>` (bare identifier form) correctly marks the referenced symbol as exported in addition to setting `hasDefaultExport = true`.
-   - **Other languages** (Swift, Dart): Walked by the filesystem scanner but not parsed — files appear in the index with empty imports/exports/symbols.
+   - **Not indexed** (Swift, Dart): no extension mapping in `EXTENSION_TO_LANGUAGE` — these file types are not walked or parsed.
    - Derives metadata: hash, line count, token estimate.
 
 3. **Resolve** (`indexer/resolvers/`)
@@ -121,7 +127,7 @@ The daemon survives across AI client restarts — index build cost is paid once 
    - **Ruby**: relative paths (normalised to `./` prefix by the extractor for `require_relative`) resolve from the importing file's directory. Non-relative requires try `lib/` and `app/` load roots before giving up — external gems are left unresolved. `path:` gems in `Gemfile` are resolved as local source roots.
    - **Go**: strips the module path prefix (read from `go.mod`), handles `vendor/` paths, skips `_test.go` file self-imports, and falls back to relative-to-project-root resolution for multi-module layouts. `go.work` workspace files are parsed to discover all module roots in a monorepo.
    - **PHP**: standard namespace-to-path resolution via `composer.json` autoload maps. `path` repos in `composer.json` `repositories` are resolved as local source roots.
-   - **Rust**: tries `<specifier>.rs` then `<specifier>/mod.rs` relative to the importing file.
+   - **Rust**: `mod` declarations resolve to sibling `<specifier>.rs` or `<specifier>/mod.rs`. Cross-crate `use crate_name::path::to::Thing` paths walk up from the importing file to find the nearest workspace `Cargo.toml`, parse its `[workspace] members` (with glob expansion for patterns like `crates/*`), and map crate names to each member's `src/` root. The resolver tries progressively shallower paths so `use tokio::sync::Mutex` lands on `tokio/src/sync.rs` (the trailing `Mutex` is a symbol, not a file). Crate names with `-` are normalised to `_` to match Rust identifier form.
    - **Python**: handles relative imports (counts leading dots to walk up directories), absolute imports mapped to project-relative paths, and `__init__.py` directory packages.
    - **npm workspaces**: `workspaces` field in `package.json` is parsed to discover all package roots; cross-package imports resolve correctly.
    - Exposes `resolveImportsForFiles(files, fileIdSet, rootDir)` for incremental patching against a pre-built fileIdSet.
@@ -196,11 +202,12 @@ Key per-file signals used by tools:
 
 `<basename>` is the directory name of the project root; `<hash>` is the first 16 hex chars of `sha256(absolute_path)`. Both are present so the directory listing is human-readable while remaining collision-safe.
 
-**Artifacts (split format):**
-- `meta.json` — schema version, root path, git HEAD, file checksums, timestamps. Small; read first to decide whether the cache is reusable.
-- `graph.json` — symbols, edges, domain map, adjacency maps. Bulk of the data; only loaded if `meta.json` validates.
+**Artifacts (three-file format):**
+- `meta.json` — schema version, root path, git HEAD, file count, timestamp. Tiny; read first to decide whether the full cache is worth loading. Written last — acts as the atomic commit marker (a partial write leaves no `meta.json`, so load fails safely).
+- `graph.json` — file-level edges, symbol edges, adjacency maps (`outEdges`/`inEdges`), token document frequencies. Loaded only if `meta.json` validates.
+- `files-N.json` — per-file metadata (exports, imports, symbols, domain map) in chunks of 5,000 entries. Large repos produce `files-0.json`, `files-1.json`, etc. Written in parallel alongside `graph.json`, then merged on load.
 
-The split lets the bridge probe `meta.json` to decide cache reuse without touching the multi-MB graph payload.
+Reading `meta.json` first lets the daemon decide cache reuse before touching the (potentially multi-MB) graph and file payloads.
 
 **Startup reuse conditions:**
 - `CACHE_VERSION` matches schema version (in `constants.ts`)
@@ -218,8 +225,8 @@ The split lets the bridge probe `meta.json` to decide cache reuse without touchi
 
 1. **AST-only parsing via Tree-sitter across most supported languages**
    - Tree-sitter languages get symbol-level accuracy (exact function/class/interface extraction, line numbers, call tracking).
-   - GraphQL and AngularJS 1.x use regex extraction — Tree-sitter gives no useful symbols for those file shapes.
-   - Unsupported languages (Swift, Dart) are walked but not parsed — no stable tree-sitter grammar npm packages available.
+   - GraphQL, `.env`, and AngularJS 1.x use regex extraction — Tree-sitter gives no useful symbols for those file shapes.
+   - Swift and Dart are not indexed at all — no stable tree-sitter grammar npm packages and no extension mapping.
    - node-tree-sitter chosen over web-tree-sitter for simpler Node.js API (no WASM loading boilerplate).
 
 2. **Hybrid incremental patch + full rebuild**
