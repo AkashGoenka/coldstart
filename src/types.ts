@@ -19,7 +19,11 @@ export type Language =
   | 'vue'
   | 'svelte'
   | 'astro'
-  | 'graphql';
+  | 'graphql'
+  | 'yaml'
+  | 'toml'
+  | 'env'
+  | 'xml';
 
 export type EdgeType =
   | 'import'
@@ -43,6 +47,7 @@ export interface SymbolNode {
   calls: string[];          // names called within body (identifier-level, intra-file resolved to full IDs)
   extendsName?: string;     // class only: parent class name
   implementsNames: string[]; // class only: interface names
+  annotations?: string[];   // Java only: annotation names attached to this symbol
 }
 
 export interface SymbolEdge {
