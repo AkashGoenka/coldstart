@@ -234,6 +234,83 @@ describe('parser — Python', () => {
     expect(result!.hash).toMatch(/^[a-f0-9]{32}$/);
     expect(result!.lineCount).toBeGreaterThan(5);
   });
+
+  it('extracts top-level module constants (FOO = 1)', async () => {
+    const src = `FOO = 1\nBAR = 2`;
+    const { parsePythonContent } = await import(
+      '../src/indexer/extractors/python.js'
+    );
+    const result = parsePythonContent(src, 'test.py');
+    const foo = result.symbols.find(s => s.name === 'FOO');
+    expect(foo).toBeDefined();
+    expect(foo!.kind).toBe('constant');
+    expect(foo!.isExported).toBe(true);
+  });
+
+  it('marks private constants (_PRIVATE = 1) as not exported', async () => {
+    const src = `_PRIVATE = 1`;
+    const { parsePythonContent } = await import(
+      '../src/indexer/extractors/python.js'
+    );
+    const result = parsePythonContent(src, 'test.py');
+    const priv = result.symbols.find(s => s.name === '_PRIVATE');
+    expect(priv).toBeDefined();
+    expect(priv!.kind).toBe('constant');
+    expect(priv!.isExported).toBe(false);
+  });
+
+  it('respects __all__ for constant exports', async () => {
+    const src = `
+__all__ = ['FOO']
+
+FOO = 1
+BAR = 2
+`;
+    const { parsePythonContent } = await import(
+      '../src/indexer/extractors/python.js'
+    );
+    const result = parsePythonContent(src, 'test.py');
+    const foo = result.symbols.find(s => s.name === 'FOO');
+    const bar = result.symbols.find(s => s.name === 'BAR');
+    expect(foo).toBeDefined();
+    expect(foo!.isExported).toBe(true);
+    expect(bar).toBeDefined();
+    expect(bar!.isExported).toBe(false);
+    expect(result.exports).toContain('FOO');
+    expect(result.exports).not.toContain('BAR');
+  });
+
+  it('does not emit tuple unpacking as constants (a, b = 1, 2)', async () => {
+    const src = `a, b = 1, 2`;
+    const { parsePythonContent } = await import(
+      '../src/indexer/extractors/python.js'
+    );
+    const result = parsePythonContent(src, 'test.py');
+    const a = result.symbols.find(s => s.name === 'a' && s.kind === 'constant');
+    const b = result.symbols.find(s => s.name === 'b' && s.kind === 'constant');
+    expect(a).toBeUndefined();
+    expect(b).toBeUndefined();
+  });
+
+  it('does not emit non-all-caps names as constants (Mixed = 1)', async () => {
+    const src = `Mixed = 1`;
+    const { parsePythonContent } = await import(
+      '../src/indexer/extractors/python.js'
+    );
+    const result = parsePythonContent(src, 'test.py');
+    const mixed = result.symbols.find(s => s.name === 'Mixed' && s.kind === 'constant');
+    expect(mixed).toBeUndefined();
+  });
+
+  it('does not emit single-letter constants (X = 1)', async () => {
+    const src = `X = 1`;
+    const { parsePythonContent } = await import(
+      '../src/indexer/extractors/python.js'
+    );
+    const result = parsePythonContent(src, 'test.py');
+    const x = result.symbols.find(s => s.name === 'X' && s.kind === 'constant');
+    expect(x).toBeUndefined();
+  });
 });
 
 describe('parser — Go', () => {
