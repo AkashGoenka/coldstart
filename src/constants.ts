@@ -1,4 +1,8 @@
 import type { Language } from "./types.js";
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { extname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 // ---------------------------------------------------------------------------
 // Extension → Language mapping
@@ -79,8 +83,39 @@ export const DEFAULT_EXCLUDES = new Set([
   "__generated__",
 ]);
 
-// Cache version — bump when index schema changes to force re-index
-export const CACHE_VERSION = "16.0.0";
+// Derived at startup by hashing all files in the sibling indexer/ directory.
+// Changes whenever indexer source (src/ tsx path) or compiled output (dist/ node path) changes.
+// No manual bumps needed.
+export const CACHE_VERSION: string = (() => {
+  function hashDir(dir: string, hash: ReturnType<typeof createHash>, ext: string): void {
+    let entries: string[];
+    try {
+      entries = readdirSync(dir).sort();
+    } catch {
+      return;
+    }
+    for (const name of entries) {
+      const fullPath = join(dir, name);
+      if (statSync(fullPath).isDirectory()) {
+        hashDir(fullPath, hash, ext);
+      } else if (extname(name) === ext) {
+        hash.update(name);
+        hash.update(readFileSync(fullPath));
+      }
+    }
+  }
+
+  try {
+    const thisFile = fileURLToPath(import.meta.url);
+    const ext = thisFile.endsWith(".ts") ? ".ts" : ".js";
+    const indexerDir = join(resolve(thisFile, ".."), "indexer");
+    const hash = createHash("sha256");
+    hashDir(indexerDir, hash, ext);
+    return hash.digest("hex").slice(0, 16);
+  } catch {
+    return "unknown";
+  }
+})();
 
 // IDF threshold for "rare" token: log(20) ≈ 3.0 — tokens appearing in < 5% of files
 export const IDF_RARITY_THRESHOLD = Math.log(20);
