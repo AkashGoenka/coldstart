@@ -969,3 +969,112 @@ describe('parser — XML', () => {
     expect(result.exports).toContain('@+id/foo');
   });
 });
+
+describe('Groovy / Gradle / Jenkinsfile extractor', () => {
+  it('extracts task NAME { ... }', async () => {
+    const { parseGroovyContent } = await import('../src/indexer/extractors/groovy.js');
+    const gradle = 'task buildAll { doLast { } }';
+    const result = parseGroovyContent(gradle, 'build.gradle');
+    expect(result.exports).toContain('buildAll');
+  });
+
+  it('extracts tasks.register("NAME")', async () => {
+    const { parseGroovyContent } = await import('../src/indexer/extractors/groovy.js');
+    const gradle = 'tasks.register(\'integrationTest\') { doLast { } }';
+    const result = parseGroovyContent(gradle, 'build.gradle');
+    expect(result.exports).toContain('integrationTest');
+  });
+
+  it('extracts implementation artifact from coordinate string', async () => {
+    const { parseGroovyContent } = await import('../src/indexer/extractors/groovy.js');
+    const gradle = 'dependencies { implementation \'org.springframework.boot:spring-boot-starter-web:3.2.0\' }';
+    const result = parseGroovyContent(gradle, 'build.gradle');
+    expect(result.exports).toContain('spring-boot-starter-web');
+  });
+
+  it('extracts implementation artifact from map form', async () => {
+    const { parseGroovyContent } = await import('../src/indexer/extractors/groovy.js');
+    const gradle = 'dependencies { implementation group: \'org.foo\', name: \'bar\', version: \'1.0\' }';
+    const result = parseGroovyContent(gradle, 'build.gradle');
+    expect(result.exports).toContain('bar');
+  });
+
+  it('extracts plugin id from plugins block', async () => {
+    const { parseGroovyContent } = await import('../src/indexer/extractors/groovy.js');
+    const gradle = 'plugins { id \'org.springframework.boot\' version \'3.2.0\' }';
+    const result = parseGroovyContent(gradle, 'build.gradle');
+    expect(result.exports).toContain('org.springframework.boot');
+  });
+
+  it('extracts stage name from Jenkinsfile pipeline', async () => {
+    const { parseGroovyContent } = await import('../src/indexer/extractors/groovy.js');
+    // Use newlines between stages — real Jenkinsfiles always do, and
+    // tree-sitter-groovy needs a separator to parse adjacent calls correctly.
+    const jenkinsfile = `pipeline {
+  stages {
+    stage('Build') { }
+    stage('Deploy') { }
+  }
+}`;
+    const result = parseGroovyContent(jenkinsfile, 'Jenkinsfile');
+    expect(result.exports).toContain('Build');
+    expect(result.exports).toContain('Deploy');
+  });
+
+  it('does not emit pipeline and stages (they are noise)', async () => {
+    const { parseGroovyContent } = await import('../src/indexer/extractors/groovy.js');
+    const jenkinsfile = 'pipeline { stages { stage(\'Build\') { } } }';
+    const result = parseGroovyContent(jenkinsfile, 'Jenkinsfile');
+    expect(result.exports).not.toContain('pipeline');
+    expect(result.exports).not.toContain('stages');
+  });
+
+  it('extracts environment variables from Jenkinsfile environment block', async () => {
+    const { parseGroovyContent } = await import('../src/indexer/extractors/groovy.js');
+    const jenkinsfile = 'pipeline { environment { AWS_KEY = \'x\'; DB_HOST = \'y\' } }';
+    const result = parseGroovyContent(jenkinsfile, 'Jenkinsfile');
+    expect(result.exports).toContain('AWS_KEY');
+    expect(result.exports).toContain('DB_HOST');
+  });
+
+  it('deduplicates symbols across repeated declarations', async () => {
+    const { parseGroovyContent } = await import('../src/indexer/extractors/groovy.js');
+    const gradle = 'dependencies { implementation \'g:foo:1\' implementation \'g:foo:2\' }';
+    const result = parseGroovyContent(gradle, 'build.gradle');
+    const fooCount = result.exports.filter(e => e === 'foo').length;
+    expect(fooCount).toBe(1);
+  });
+
+  it('produces symbols with correct metadata', async () => {
+    const { parseGroovyContent } = await import('../src/indexer/extractors/groovy.js');
+    const gradle = 'task testTask { }';
+    const result = parseGroovyContent(gradle, 'build.gradle');
+    expect(result.symbols.length).toBeGreaterThan(0);
+    const sym = result.symbols.find(s => s.name === 'testTask');
+    expect(sym).toBeDefined();
+    expect(sym!.kind).toBe('constant');
+    expect(sym!.isExported).toBe(true);
+    expect(sym!.calls).toEqual([]);
+    expect(sym!.implementsNames).toEqual([]);
+  });
+
+  it('handles api, compileOnly, testImplementation dependency configs', async () => {
+    const { parseGroovyContent } = await import('../src/indexer/extractors/groovy.js');
+    const gradle = `dependencies {
+      api 'org.x:lib-a:1.0'
+      compileOnly 'org.y:lib-b:2.0'
+      testImplementation 'org.z:lib-c:3.0'
+    }`;
+    const result = parseGroovyContent(gradle, 'build.gradle');
+    expect(result.exports).toContain('lib-a');
+    expect(result.exports).toContain('lib-b');
+    expect(result.exports).toContain('lib-c');
+  });
+
+  it('skips dependencies without proper coordinate format', async () => {
+    const { parseGroovyContent } = await import('../src/indexer/extractors/groovy.js');
+    const gradle = 'dependencies { implementation \'no-colons\' }';
+    const result = parseGroovyContent(gradle, 'build.gradle');
+    expect(result.exports).not.toContain('no-colons');
+  });
+});

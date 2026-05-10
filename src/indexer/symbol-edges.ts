@@ -95,7 +95,13 @@ export function buildSymbolEdges(
             resolved = `${matchFile}#${matchFull}`;
           }
         }
-        edges.push({ from: sym.id, to: resolved ?? callee, type: 'calls' });
+        // A2: drop unresolvable bare-name 'calls' edges. They're noise — query-time
+        // lookups always use qualified `fileId#name` ids, so bare-name targets
+        // never match and just bloat the symInEdges reverse-adjacency map.
+        // 'extends' / 'implements' bare-name edges are kept (queryable by class name).
+        if (resolved) {
+          edges.push({ from: sym.id, to: resolved, type: 'calls' });
+        }
       }
 
       // extends / implements

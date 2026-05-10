@@ -23,7 +23,8 @@ export type Language =
   | 'yaml'
   | 'toml'
   | 'env'
-  | 'xml';
+  | 'xml'
+  | 'groovy';
 
 export type EdgeType =
   | 'import'
