@@ -12,6 +12,7 @@ import { parsePhpContent } from './extractors/php.js';
 import { parseKotlinContent } from './extractors/kotlin.js';
 import { parseCppContent } from './extractors/cpp.js';
 import { extractAngularJsSymbols } from './extractors/angularjs.js';
+import { parseGraphQLContent } from './extractors/graphql.js';
 
 const MAX_FILE_SIZE = 1_000_000; // 1 MB
 
@@ -352,6 +353,22 @@ export async function parseFile(
       tokenEstimate,
       symbols: tsResult.symbols,
       reexportRatio: tsResult.reexportRatio,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // GraphQL: regex-based extractor (operations, fragments, type-system defs)
+  // -------------------------------------------------------------------------
+  if (language === 'graphql') {
+    const gqlResult = parseGraphQLContent(content, fileId || filePath);
+    return {
+      imports: gqlResult.imports,
+      exports: gqlResult.exports,
+      hasDefaultExport: false,
+      hash,
+      lineCount,
+      tokenEstimate,
+      symbols: gqlResult.symbols,
     };
   }
 
