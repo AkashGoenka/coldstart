@@ -73,6 +73,11 @@ export async function walkDirectory(options: WalkOptions): Promise<WalkedFile[]>
         language = 'env';
       }
 
+      // Handle Jenkinsfile: Jenkinsfile, Jenkinsfile.*, etc.
+      if (!language && /^Jenkinsfile(\.|$)/.test(entry.name)) {
+        language = 'groovy';
+      }
+
       if (!language) continue;
 
       // Skip generated files (e.g. foo.generated.ts, schema_pb.ts, api.pb.go)

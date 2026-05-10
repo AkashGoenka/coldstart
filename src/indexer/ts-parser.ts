@@ -297,20 +297,20 @@ function extractFromDeclaration(
         const nameNode = firstChildOfType(declarator, 'identifier');
         if (!nameNode) continue;
         const name = nameNode.text;
-        // Detect arrow/function expression to extract nested functions
         const value = declarator.namedChildren.find(
           (c: TSNode) => c.type === 'arrow_function' || c.type === 'function_expression',
         );
         const body = value ? firstChildOfType(value, 'statement_block') : null;
-        // Only track if it looks like a significant export (not just a primitive)
+        const calls = new Set<string>();
+        if (body) collectCalls(body, calls);
         nodes.push({
           id: `${fileId}#${name}`,
           name,
-          kind: 'constant',
+          kind: value ? 'function' : 'constant',
           startLine,
           endLine,
           isExported,
-          calls: [],
+          calls: [...calls].filter(c => c !== name),
           implementsNames: [],
         });
         if (body) {
