@@ -80,7 +80,7 @@ export const DEFAULT_EXCLUDES = new Set([
 ]);
 
 // Cache version — bump when index schema changes to force re-index
-export const CACHE_VERSION = "15.3.0";
+export const CACHE_VERSION = "16.0.0";
 
 // IDF threshold for "rare" token: log(20) ≈ 3.0 — tokens appearing in < 5% of files
 export const IDF_RARITY_THRESHOLD = Math.log(20);

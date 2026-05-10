@@ -1,36 +1,49 @@
-import { join, dirname, relative, isAbsolute } from 'node:path';
+import { join, dirname, isAbsolute } from 'node:path';
 import { readFile } from 'node:fs/promises';
 
 /**
- * Go resolver: resolves module-local import paths using go.mod.
+ * Go resolver: resolves module-local import paths using go.mod / go.work.
  *
  * Go imports are module paths, not file paths:
  *   import "github.com/org/repo/pkg/foo"
  *
  * Resolution:
- *   1. Parse go.mod to get the module name and any replace directives
- *   2. If the import starts with the module name, strip it to get the local path
- *   3. Check replace directives — local replacements (=> ./path or => ../path)
- *      are also in-repo and resolvable
- *   4. A Go package is a directory — find any .go file directly in that directory
+ *   1. From the importing file's directory, walk up to find go.work or go.mod.
+ *      go.mod / go.work may live at the file's package, or any ancestor —
+ *      including dirs above rootDir, or below rootDir, or split across modules
+ *      in a multi-module repo. Per-file walk-up handles all of these uniformly.
+ *   2. If go.work is found first, use its `use` directives — each declared
+ *      module's name → directory enables cross-module resolution.
+ *   3. Otherwise use the file's nearest go.mod: module name + replace directives.
+ *   4. A Go package is a directory — find any .go file directly in that dir.
  *
- * Imports not starting with the module name and not covered by a replace
- * directive are third-party → return null.
+ * Imports not matching the file's module / workspace and not covered by a
+ * replace directive are third-party → return null.
  */
 
 interface GoModInfo {
   moduleName: string;
   replaceMap: Map<string, string>; // module path → local directory (absolute)
-  modDir: string; // directory containing the go.mod (may be an ancestor of rootDir)
+  modDir: string;
 }
 
-/**
- * Walk up from `startDir` looking for a file named `filename`. Returns the
- * directory containing it, or null. Stops at filesystem root.
- */
+interface GoWorkInfo {
+  workDir: string;
+  // Sorted by descending name length for longest-prefix matching
+  modules: Array<{ name: string; dir: string }>;
+}
+
+// Caches keyed by the discovered config dir (NOT by rootDir or fromFile),
+// so multiple files in the same module share parsed state.
+const modInfoCache = new Map<string, GoModInfo | null>();
+const workInfoCache = new Map<string, GoWorkInfo | null>();
+// Per-startDir lookup result, to avoid repeated walk-ups for files in the
+// same package directory.
+const startDirToModDir = new Map<string, string | null>();
+const startDirToWorkDir = new Map<string, string | null>();
+
 async function findUpwards(startDir: string, filename: string): Promise<string | null> {
   let dir = startDir;
-  // 64 hops is far more than any real project depth — guards against weird symlink loops.
   for (let i = 0; i < 64; i++) {
     try {
       await readFile(join(dir, filename), 'utf-8');
@@ -43,84 +56,68 @@ async function findUpwards(startDir: string, filename: string): Promise<string |
   return null;
 }
 
-// ---------------------------------------------------------------------------
-// go.work support — multi-module workspaces
-// ---------------------------------------------------------------------------
-
-interface GoWorkInfo {
-  // Sorted by descending name length for longest-prefix matching
-  modules: Array<{ name: string; dir: string }>;
+async function findModDirFor(startDir: string): Promise<string | null> {
+  if (startDirToModDir.has(startDir)) return startDirToModDir.get(startDir)!;
+  const modDir = await findUpwards(startDir, 'go.mod');
+  startDirToModDir.set(startDir, modDir);
+  return modDir;
 }
 
-const goWorkCache = new Map<string, GoWorkInfo | null>();
-
-async function getGoWorkInfo(rootDir: string): Promise<GoWorkInfo | null> {
-  if (goWorkCache.has(rootDir)) return goWorkCache.get(rootDir)!;
-
-  // go.work may live at rootDir itself or any ancestor (e.g. when indexing a
-  // subdirectory of a multi-module workspace).
-  const workDir = await findUpwards(rootDir, 'go.work');
-  if (!workDir) {
-    goWorkCache.set(rootDir, null);
-    return null;
-  }
-
-  const content = await readFile(join(workDir, 'go.work'), 'utf-8');
-  const modules: Array<{ name: string; dir: string }> = [];
-  const useRe = /^use\s+(\S+)/gm;
-  let m: RegExpExecArray | null;
-  while ((m = useRe.exec(content)) !== null) {
-    const useDir = isAbsolute(m[1]) ? m[1] : join(workDir, m[1]);
-    try {
-      const modContent = await readFile(join(useDir, 'go.mod'), 'utf-8');
-      const nameMatch = modContent.match(/^module\s+(\S+)/m);
-      if (nameMatch) modules.push({ name: nameMatch[1], dir: useDir });
-    } catch { /* skip inaccessible modules */ }
-  }
-
-  modules.sort((a, b) => b.name.length - a.name.length);
-  const info: GoWorkInfo = { modules };
-  goWorkCache.set(rootDir, info);
-  return info;
+async function findWorkDirFor(startDir: string): Promise<string | null> {
+  if (startDirToWorkDir.has(startDir)) return startDirToWorkDir.get(startDir)!;
+  const workDir = await findUpwards(startDir, 'go.work');
+  startDirToWorkDir.set(startDir, workDir);
+  return workDir;
 }
 
-const goModCache = new Map<string, GoModInfo | null>();
-
-async function getGoModInfo(rootDir: string): Promise<GoModInfo | null> {
-  if (goModCache.has(rootDir)) return goModCache.get(rootDir)!;
-
-  // go.mod may live at rootDir or any ancestor (single-module workspace where
-  // we're indexing a subdirectory).
-  const modDir = await findUpwards(rootDir, 'go.mod');
-  if (!modDir) {
-    goModCache.set(rootDir, null);
-    return null;
-  }
-
+async function getGoModInfo(modDir: string): Promise<GoModInfo | null> {
+  if (modInfoCache.has(modDir)) return modInfoCache.get(modDir)!;
   try {
     const content = await readFile(join(modDir, 'go.mod'), 'utf-8');
     const moduleMatch = content.match(/^module\s+(\S+)/m);
-    if (!moduleMatch) { goModCache.set(rootDir, null); return null; }
+    if (!moduleMatch) { modInfoCache.set(modDir, null); return null; }
     const moduleName = moduleMatch[1];
 
-    // Parse replace directives: "replace A [vX] => B [vY]"
-    // Only capture local (relative) replacements — they're in this repo.
     const replaceMap = new Map<string, string>();
     const replaceRe = /^replace\s+(\S+)(?:\s+\S+)?\s+=>\s+(\S+)/gm;
     let m: RegExpExecArray | null;
     while ((m = replaceRe.exec(content)) !== null) {
-      const oldPath = m[1];
       const newPath = m[2];
       if (newPath.startsWith('./') || newPath.startsWith('../')) {
-        replaceMap.set(oldPath, join(modDir, newPath));
+        replaceMap.set(m[1], join(modDir, newPath));
       }
     }
 
     const info: GoModInfo = { moduleName, replaceMap, modDir };
-    goModCache.set(rootDir, info);
+    modInfoCache.set(modDir, info);
     return info;
   } catch {
-    goModCache.set(rootDir, null);
+    modInfoCache.set(modDir, null);
+    return null;
+  }
+}
+
+async function getGoWorkInfo(workDir: string): Promise<GoWorkInfo | null> {
+  if (workInfoCache.has(workDir)) return workInfoCache.get(workDir)!;
+  try {
+    const content = await readFile(join(workDir, 'go.work'), 'utf-8');
+    const modules: Array<{ name: string; dir: string }> = [];
+    const useRe = /^use\s+(\S+)/gm;
+    let m: RegExpExecArray | null;
+    while ((m = useRe.exec(content)) !== null) {
+      const useDir = isAbsolute(m[1]) ? m[1] : join(workDir, m[1]);
+      try {
+        const modContent = await readFile(join(useDir, 'go.mod'), 'utf-8');
+        const nameMatch = modContent.match(/^module\s+(\S+)/m);
+        if (nameMatch) modules.push({ name: nameMatch[1], dir: useDir });
+      } catch { /* skip inaccessible modules */ }
+    }
+    modules.sort((a, b) => b.name.length - a.name.length);
+    const info: GoWorkInfo = { workDir, modules };
+    workInfoCache.set(workDir, info);
+    return info;
+  } catch {
+    workInfoCache.set(workDir, null);
     return null;
   }
 }
@@ -143,47 +140,60 @@ function buildGoDirMap(fileIdSet: Set<string>): Map<string, string> {
 
 export async function resolveGo(
   specifier: string,
-  _fromFile: string,
+  fromFile: string,
   fileIdSet: Set<string>,
   rootDir: string,
   _aliasMap: Map<string, string[]>,
 ): Promise<string | null> {
   const dirMap = buildGoDirMap(fileIdSet);
+  const startDir = dirname(fromFile);
 
-  // go.work multi-module resolution takes priority
-  const workInfo = await getGoWorkInfo(rootDir);
-  if (workInfo) {
-    for (const { name, dir } of workInfo.modules) {
-      if (specifier !== name && !specifier.startsWith(name + '/')) continue;
-      const suffix = specifier.slice(name.length).replace(/^\//, '');
-      const absPath = suffix ? join(dir, suffix) : dir;
-      const relPath = absPath.slice(rootDir.length + 1).replace(/\\/g, '/');
-      const result = dirMap.get(relPath);
-      if (result) return result;
+  // go.work takes priority — multi-module workspace resolution
+  const workDir = await findWorkDirFor(startDir);
+  if (workDir) {
+    const workInfo = await getGoWorkInfo(workDir);
+    if (workInfo) {
+      for (const { name, dir } of workInfo.modules) {
+        if (specifier !== name && !specifier.startsWith(name + '/')) continue;
+        const suffix = specifier.slice(name.length).replace(/^\//, '');
+        const absPath = suffix ? join(dir, suffix) : dir;
+        if (!absPath.startsWith(rootDir + '/') && absPath !== rootDir) continue;
+        const relPath = absPath.slice(rootDir.length + 1).replace(/\\/g, '/');
+        const result = dirMap.get(relPath);
+        if (result) return result;
+      }
+      return null; // go.work governs this file but specifier didn't match any module
     }
-    return null; // go.work present but no module matched → external
   }
 
-  // Fall back to single go.mod at root
-  const info = await getGoModInfo(rootDir);
+  // Single-module: nearest go.mod above the file
+  const modDir = await findModDirFor(startDir);
+  if (!modDir) return null;
+  const info = await getGoModInfo(modDir);
   if (!info) return null;
 
+  const tryResolveAbs = (absPath: string): string | null => {
+    if (!absPath.startsWith(rootDir + '/') && absPath !== rootDir) return null;
+    const relPath = absPath.slice(rootDir.length + 1).replace(/\\/g, '/');
+    return dirMap.get(relPath) ?? null;
+  };
+
   // Module-local import
-  if (specifier.startsWith(info.moduleName)) {
-    const localPath = specifier === info.moduleName
+  if (specifier === info.moduleName || specifier.startsWith(info.moduleName + '/')) {
+    const suffix = specifier === info.moduleName
       ? ''
       : specifier.slice(info.moduleName.length + 1);
-    return dirMap.get(localPath) ?? null;
+    const absCandidate = suffix ? join(info.modDir, suffix) : info.modDir;
+    return tryResolveAbs(absCandidate);
   }
 
   // Replace-directive local import
   for (const [oldPath, localDir] of info.replaceMap) {
-    if (specifier === oldPath || specifier.startsWith(oldPath + '/')) {
-      const suffix = specifier.slice(oldPath.length).replace(/^\//, '');
-      const absCandidate = suffix ? join(localDir, suffix) : localDir;
-      const candidate = absCandidate.slice(rootDir.length + 1).replace(/\\/g, '/');
-      return dirMap.get(candidate) ?? null;
-    }
+    if (specifier !== oldPath && !specifier.startsWith(oldPath + '/')) continue;
+    const suffix = specifier.slice(oldPath.length).replace(/^\//, '');
+    const absCandidate = suffix ? join(localDir, suffix) : localDir;
+    const result = tryResolveAbs(absCandidate);
+    if (result) return result;
   }
 
   return null;

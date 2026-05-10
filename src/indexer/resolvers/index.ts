@@ -3,13 +3,14 @@ import { join, resolve, dirname } from 'node:path';
 import type { IndexedFile, Edge, Language } from '../../types.js';
 import { DEFAULT_EXCLUDES } from '../../constants.js';
 import { resolveGeneric } from './generic.js';
-import { resolveJava } from './java.js';
+import { resolveJava, resolveKotlin } from './java.js';
 import { resolveRuby } from './ruby.js';
 import { resolveGo } from './go.js';
 import { resolveRust } from './rust.js';
 import { resolvePython } from './python.js';
 import { resolvePHP } from './php.js';
 import { resolveCpp } from './cpp.js';
+import { resolveCSharp } from './csharp.js';
 
 // ---------------------------------------------------------------------------
 // tsconfig path alias loader — follows `extends` chains, collects all targets
@@ -77,17 +78,28 @@ async function loadTsConfigFile(
 async function loadTsConfigPaths(rootDir: string): Promise<Map<string, string[]>> {
   const aliasMap = new Map<string, string[]>();
 
-  for (const name of ['tsconfig.json', 'jsconfig.json']) {
-    const tscPath = join(rootDir, name);
+  // Discover every tsconfig.json/jsconfig.json under rootDir, not just the
+  // top-level one — repos often nest the actual project (e.g. <repo>/<clone>/tsconfig.json).
+  // For each tsconfig, paths resolve relative to its own dir (or its explicit baseUrl).
+  const tscPaths = await findConfigFiles(
+    rootDir,
+    new Set(['tsconfig.json', 'jsconfig.json']),
+  );
+
+  for (const tscPath of tscPaths) {
     try {
       const resolved = await loadTsConfigFile(tscPath, new Set());
       if (!Object.keys(resolved.paths).length) continue;
-      const baseDir = resolved.baseUrl ?? rootDir;
+      const tsconfigDir = dirname(tscPath);
+      const baseDir = resolved.baseUrl ?? tsconfigDir;
 
       for (const [alias, targets] of Object.entries(resolved.paths)) {
         const aliasKey = alias.replace(/\/\*$/, '');
         const resolvedTargets = targets.map(t => resolve(baseDir, t.replace(/\/\*$/, '')));
-        aliasMap.set(aliasKey, resolvedTargets);
+        const existing = aliasMap.get(aliasKey);
+        // Merge — multiple tsconfigs may define the same alias pointing into
+        // their own clone. Resolution tries each target until one matches.
+        aliasMap.set(aliasKey, existing ? [...existing, ...resolvedTargets] : resolvedTargets);
       }
     } catch {
       // ignore
@@ -247,12 +259,14 @@ type ResolverFn = (
 function getResolver(language: Language): ResolverFn {
   switch (language) {
     case 'java':   return resolveJava;
+    case 'kotlin': return resolveKotlin;
     case 'ruby':   return resolveRuby;
     case 'go':     return resolveGo;
     case 'rust':   return resolveRust;
     case 'python': return resolvePython;
     case 'php':    return resolvePHP;
     case 'cpp':    return resolveCpp;
+    case 'csharp': return resolveCSharp;
     default:       return resolveGeneric;
   }
 }
