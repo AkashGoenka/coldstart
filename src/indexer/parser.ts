@@ -378,7 +378,7 @@ export async function parseFile(
   }
 
   // -------------------------------------------------------------------------
-  // YAML: regex-based extractor (top-level and nested keys)
+  // YAML: tree-sitter extractor (top-level and one-level-nested keys)
   // -------------------------------------------------------------------------
   if (language === 'yaml') {
     const yamlResult = parseYamlContent(content, fileId || filePath);
@@ -394,7 +394,7 @@ export async function parseFile(
   }
 
   // -------------------------------------------------------------------------
-  // TOML: regex-based extractor (sections, keys, array-of-tables)
+  // TOML: tree-sitter extractor (sections, keys, array-of-tables)
   // -------------------------------------------------------------------------
   if (language === 'toml') {
     const tomlResult = parseTomlContent(content, fileId || filePath);
