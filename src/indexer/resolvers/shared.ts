@@ -9,7 +9,7 @@ const JS_TO_TS: Record<string, string[]> = {
 };
 
 export const RESOLVABLE_EXTENSIONS = [
-  '.ts', '.tsx', '.mts', '.cts',
+  '.ts', '.tsx', '.mts', '.cts', '.d.ts',
   '.js', '.jsx', '.mjs', '.cjs',
   '.py', '.go', '.rs', '.java', '.cs',
   '.cpp', '.c', '.h', '.hpp',

@@ -47,10 +47,21 @@ export async function resolvePython(
     return tryResolveBase(join(base, module.replace(/\./g, '/')), fileIdSet, rootDir);
   }
 
-  // Absolute import: 'django.db.models' → try rootDir then rootDir/src (common src layout)
+  // Absolute import: 'django.db.models' → try walking up from the file's own
+  // directory, looking for {ancestor}/<path> or {ancestor}/src/<path>. This
+  // handles repos where the project source lives in a subdirectory of rootDir
+  // (e.g. /repos/django/django-coldstart/django/...) and multi-project repos.
   const relPath = specifier.replace(/\./g, '/');
-  return (
-    tryResolveBase(join(rootDir, relPath), fileIdSet, rootDir) ??
-    tryResolveBase(join(rootDir, 'src', relPath), fileIdSet, rootDir)
-  );
+  let dir = dirname(fromFile);
+  for (let i = 0; i < 64; i++) {
+    const direct = await tryResolveBase(join(dir, relPath), fileIdSet, rootDir);
+    if (direct) return direct;
+    const srcLayout = await tryResolveBase(join(dir, 'src', relPath), fileIdSet, rootDir);
+    if (srcLayout) return srcLayout;
+    if (dir === rootDir) break;
+    const parent = dirname(dir);
+    if (parent === dir || !parent.startsWith(rootDir)) break;
+    dir = parent;
+  }
+  return null;
 }
