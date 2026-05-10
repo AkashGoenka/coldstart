@@ -13,6 +13,9 @@ import { parseKotlinContent } from './extractors/kotlin.js';
 import { parseCppContent } from './extractors/cpp.js';
 import { extractAngularJsSymbols } from './extractors/angularjs.js';
 import { parseGraphQLContent } from './extractors/graphql.js';
+import { parseYamlContent } from './extractors/yaml.js';
+import { parseTomlContent } from './extractors/toml.js';
+import { parseEnvContent } from './extractors/env.js';
 
 const MAX_FILE_SIZE = 1_000_000; // 1 MB
 
@@ -369,6 +372,54 @@ export async function parseFile(
       lineCount,
       tokenEstimate,
       symbols: gqlResult.symbols,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // YAML: regex-based extractor (top-level and nested keys)
+  // -------------------------------------------------------------------------
+  if (language === 'yaml') {
+    const yamlResult = parseYamlContent(content, fileId || filePath);
+    return {
+      imports: yamlResult.imports,
+      exports: yamlResult.exports,
+      hasDefaultExport: false,
+      hash,
+      lineCount,
+      tokenEstimate,
+      symbols: yamlResult.symbols,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // TOML: regex-based extractor (sections, keys, array-of-tables)
+  // -------------------------------------------------------------------------
+  if (language === 'toml') {
+    const tomlResult = parseTomlContent(content, fileId || filePath);
+    return {
+      imports: tomlResult.imports,
+      exports: tomlResult.exports,
+      hasDefaultExport: false,
+      hash,
+      lineCount,
+      tokenEstimate,
+      symbols: tomlResult.symbols,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // .env: regex-based extractor (variable names)
+  // -------------------------------------------------------------------------
+  if (language === 'env') {
+    const envResult = parseEnvContent(content, fileId || filePath);
+    return {
+      imports: envResult.imports,
+      exports: envResult.exports,
+      hasDefaultExport: false,
+      hash,
+      lineCount,
+      tokenEstimate,
+      symbols: envResult.symbols,
     };
   }
 

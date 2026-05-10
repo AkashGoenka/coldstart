@@ -731,3 +731,154 @@ describe('parser — AngularJS 1.x symbol extraction', () => {
     expect(result!.exports).not.toContain('UserController');
   });
 });
+
+describe('parser — YAML', () => {
+  it('extracts top-level keys', async () => {
+    const { parseYamlContent } = await import('../src/indexer/extractors/yaml.js');
+    const result = parseYamlContent('foo: 1\nbar: 2\n', 'test.yml');
+    expect(result.exports).toContain('foo');
+    expect(result.exports).toContain('bar');
+  });
+
+  it('extracts nested keys with parent prefix', async () => {
+    const { parseYamlContent } = await import('../src/indexer/extractors/yaml.js');
+    const result = parseYamlContent('streaming:\n  base_url: x\n  timeout: 30\n', 'test.yml');
+    expect(result.exports).toContain('streaming');
+    expect(result.exports).toContain('streaming.base_url');
+    expect(result.exports).toContain('streaming.timeout');
+  });
+
+  it('ignores comment lines', async () => {
+    const { parseYamlContent } = await import('../src/indexer/extractors/yaml.js');
+    const result = parseYamlContent('# foo: 1\nbar: 2\n', 'test.yml');
+    expect(result.exports).not.toContain('foo');
+    expect(result.exports).toContain('bar');
+  });
+
+  it('ignores list items', async () => {
+    const { parseYamlContent } = await import('../src/indexer/extractors/yaml.js');
+    const result = parseYamlContent('items:\n  - item1\n  - item2\n', 'test.yml');
+    expect(result.exports).toContain('items');
+    expect(result.exports).not.toContain('item1');
+    expect(result.exports).not.toContain('item2');
+  });
+
+  it('ignores block scalar bodies', async () => {
+    const { parseYamlContent } = await import('../src/indexer/extractors/yaml.js');
+    const result = parseYamlContent('description: |\n  some text with: colon\nother: value\n', 'test.yml');
+    expect(result.exports).toContain('description');
+    expect(result.exports).toContain('other');
+    expect(result.exports).not.toContain('text');
+  });
+
+  it('produces symbols with correct metadata', async () => {
+    const { parseYamlContent } = await import('../src/indexer/extractors/yaml.js');
+    const result = parseYamlContent('foo: 1\n', 'test.yml');
+    expect(result.symbols.length).toBeGreaterThan(0);
+    expect(result.symbols[0].kind).toBe('constant');
+    expect(result.symbols[0].isExported).toBe(true);
+    expect(result.symbols[0].calls).toEqual([]);
+    expect(result.symbols[0].implementsNames).toEqual([]);
+  });
+
+  it('does not emit duplicates', async () => {
+    const { parseYamlContent } = await import('../src/indexer/extractors/yaml.js');
+    const result = parseYamlContent('foo: 1\nfoo: 2\n', 'test.yml');
+    const fooCount = result.exports.filter(e => e === 'foo').length;
+    expect(fooCount).toBe(1);
+  });
+});
+
+describe('parser — TOML', () => {
+  it('extracts section headers', async () => {
+    const { parseTomlContent } = await import('../src/indexer/extractors/toml.js');
+    const result = parseTomlContent('[server]\nport = 8080\n', 'test.toml');
+    expect(result.exports).toContain('server');
+  });
+
+  it('extracts dotted section names', async () => {
+    const { parseTomlContent } = await import('../src/indexer/extractors/toml.js');
+    const result = parseTomlContent('[server.tls]\ncert = "path"\n', 'test.toml');
+    expect(result.exports).toContain('server.tls');
+  });
+
+  it('extracts keys within sections with section prefix', async () => {
+    const { parseTomlContent } = await import('../src/indexer/extractors/toml.js');
+    const result = parseTomlContent('[server]\nport = 8080\ntimeout = 30\n', 'test.toml');
+    expect(result.exports).toContain('server.port');
+    expect(result.exports).toContain('server.timeout');
+  });
+
+  it('extracts top-level keys without section', async () => {
+    const { parseTomlContent } = await import('../src/indexer/extractors/toml.js');
+    const result = parseTomlContent('name = "foo"\nversion = "1.0"\n', 'test.toml');
+    expect(result.exports).toContain('name');
+    expect(result.exports).toContain('version');
+  });
+
+  it('extracts array-of-tables names', async () => {
+    const { parseTomlContent } = await import('../src/indexer/extractors/toml.js');
+    const result = parseTomlContent('[[products]]\nname = "A"\n', 'test.toml');
+    expect(result.exports).toContain('products');
+  });
+
+  it('ignores comments', async () => {
+    const { parseTomlContent } = await import('../src/indexer/extractors/toml.js');
+    const result = parseTomlContent('# name = "foo"\nversion = "1.0"\n', 'test.toml');
+    expect(result.exports).not.toContain('name');
+    expect(result.exports).toContain('version');
+  });
+
+  it('produces symbols with correct metadata', async () => {
+    const { parseTomlContent } = await import('../src/indexer/extractors/toml.js');
+    const result = parseTomlContent('[server]\nport = 8080\n', 'test.toml');
+    expect(result.symbols.length).toBeGreaterThan(0);
+    expect(result.symbols[0].kind).toBe('constant');
+    expect(result.symbols[0].isExported).toBe(true);
+  });
+});
+
+describe('parser — .env', () => {
+  it('extracts variable names', async () => {
+    const { parseEnvContent } = await import('../src/indexer/extractors/env.js');
+    const result = parseEnvContent('FOO=bar\nBAZ=qux\n', 'test.env');
+    expect(result.exports).toContain('FOO');
+    expect(result.exports).toContain('BAZ');
+  });
+
+  it('strips export prefix', async () => {
+    const { parseEnvContent } = await import('../src/indexer/extractors/env.js');
+    const result = parseEnvContent('export API_KEY=xyz\n', 'test.env');
+    expect(result.exports).toContain('API_KEY');
+    expect(result.exports).not.toContain('export');
+  });
+
+  it('ignores comment lines', async () => {
+    const { parseEnvContent } = await import('../src/indexer/extractors/env.js');
+    const result = parseEnvContent('# COMMENTED=1\nACTIVE=yes\n', 'test.env');
+    expect(result.exports).not.toContain('COMMENTED');
+    expect(result.exports).toContain('ACTIVE');
+  });
+
+  it('handles empty lines', async () => {
+    const { parseEnvContent } = await import('../src/indexer/extractors/env.js');
+    const result = parseEnvContent('FOO=1\n\nBAR=2\n', 'test.env');
+    expect(result.exports).toContain('FOO');
+    expect(result.exports).toContain('BAR');
+  });
+
+  it('produces symbols with correct metadata', async () => {
+    const { parseEnvContent } = await import('../src/indexer/extractors/env.js');
+    const result = parseEnvContent('FOO=bar\n', 'test.env');
+    expect(result.symbols.length).toBeGreaterThan(0);
+    expect(result.symbols[0].kind).toBe('constant');
+    expect(result.symbols[0].isExported).toBe(true);
+  });
+
+  it('does not emit duplicates', async () => {
+    const { parseEnvContent } = await import('../src/indexer/extractors/env.js');
+    const result = parseEnvContent('FOO=1\nFOO=2\n', 'test.env');
+    const fooCount = result.exports.filter(e => e === 'FOO').length;
+    expect(fooCount).toBe(1);
+  });
+});

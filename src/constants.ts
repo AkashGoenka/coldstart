@@ -33,6 +33,9 @@ export const EXTENSION_TO_LANGUAGE: Record<string, Language> = {
   ".astro": "astro",
   ".graphql": "graphql",
   ".gql": "graphql",
+  ".yml": "yaml",
+  ".yaml": "yaml",
+  ".toml": "toml",
 };
 
 // ---------------------------------------------------------------------------

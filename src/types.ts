@@ -19,7 +19,10 @@ export type Language =
   | 'vue'
   | 'svelte'
   | 'astro'
-  | 'graphql';
+  | 'graphql'
+  | 'yaml'
+  | 'toml'
+  | 'env';
 
 export type EdgeType =
   | 'import'
