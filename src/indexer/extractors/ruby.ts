@@ -80,7 +80,8 @@ function getConstantName(node: TSNode): string | null {
 // ---------------------------------------------------------------------------
 
 const RAILS_ASSOCIATION_METHODS = new Set(['has_many', 'has_one', 'belongs_to', 'has_and_belongs_to_many']);
-const RAILS_CALLBACK_METHODS = new Set(['before_action', 'after_action', 'around_action', 'before_filter', 'after_filter']);
+const RAILS_CALLBACK_METHODS = new Set(['before_action', 'after_action', 'around_action', 'before_filter', 'after_filter', 'validates', 'validate']);
+const RAILS_DSL_METHODS = new Set(['attr_accessor', 'attr_reader', 'attr_writer', 'delegate', 'scope', 'attribute', 'enum']);
 
 /** Convert snake_case association name to CamelCase model name */
 function associationToModel(name: string): string {
@@ -89,6 +90,339 @@ function associationToModel(name: string): string {
   const singular = name.endsWith('s') && !name.endsWith('ss') ? name.slice(0, -1) : name;
   return singular.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase())
     .replace(/^(.)/, (_, c: string) => c.toUpperCase());
+}
+
+/** Extract DSL method names from command node arguments (bare method call form) */
+function extractDslMethodsFromCommand(
+  methodName: string,
+  parentName: string,
+  node: TSNode,
+  ctx: ExtractionContext,
+  symbols: SymbolNode[],
+): void {
+  if (!parentName) return;
+
+  const startLine = node.startPosition.row + 1;
+  const endLine = node.endPosition.row + 1;
+  const argList = node.namedChildren.slice(1);
+
+  if (methodName === 'attr_accessor') {
+    for (const arg of argList) {
+      if (arg.type === 'simple_symbol') {
+        const propName = arg.text.replace(/^:/, '');
+        symbols.push({
+          id: `${ctx.fileId}#${parentName}.${propName}`,
+          name: `${parentName}.${propName}`,
+          kind: 'method',
+          startLine,
+          endLine,
+          isExported: false,
+          calls: [],
+          implementsNames: [],
+        });
+        symbols.push({
+          id: `${ctx.fileId}#${parentName}.${propName}=`,
+          name: `${parentName}.${propName}=`,
+          kind: 'method',
+          startLine,
+          endLine,
+          isExported: false,
+          calls: [],
+          implementsNames: [],
+        });
+      }
+    }
+  } else if (methodName === 'attr_reader') {
+    for (const arg of argList) {
+      if (arg.type === 'simple_symbol') {
+        const propName = arg.text.replace(/^:/, '');
+        symbols.push({
+          id: `${ctx.fileId}#${parentName}.${propName}`,
+          name: `${parentName}.${propName}`,
+          kind: 'method',
+          startLine,
+          endLine,
+          isExported: false,
+          calls: [],
+          implementsNames: [],
+        });
+      }
+    }
+  } else if (methodName === 'attr_writer') {
+    for (const arg of argList) {
+      if (arg.type === 'simple_symbol') {
+        const propName = arg.text.replace(/^:/, '');
+        symbols.push({
+          id: `${ctx.fileId}#${parentName}.${propName}=`,
+          name: `${parentName}.${propName}=`,
+          kind: 'method',
+          startLine,
+          endLine,
+          isExported: false,
+          calls: [],
+          implementsNames: [],
+        });
+      }
+    }
+  } else if (methodName === 'delegate') {
+    for (const arg of argList) {
+      if (arg.type === 'simple_symbol') {
+        const delegatedName = arg.text.replace(/^:/, '');
+        symbols.push({
+          id: `${ctx.fileId}#${parentName}.${delegatedName}`,
+          name: `${parentName}.${delegatedName}`,
+          kind: 'method',
+          startLine,
+          endLine,
+          isExported: false,
+          calls: [],
+          implementsNames: [],
+        });
+      } else {
+        break;
+      }
+    }
+  } else if (methodName === 'scope') {
+    const firstArg = argList[0];
+    if (firstArg?.type === 'simple_symbol') {
+      const scopeName = firstArg.text.replace(/^:/, '');
+      symbols.push({
+        id: `${ctx.fileId}#${parentName}.${scopeName}`,
+        name: `${parentName}.${scopeName}`,
+        kind: 'method',
+        startLine,
+        endLine,
+        isExported: false,
+        calls: [],
+        implementsNames: [],
+      });
+    }
+  } else if (methodName === 'attribute') {
+    const firstArg = argList[0];
+    if (firstArg?.type === 'simple_symbol') {
+      const attrName = firstArg.text.replace(/^:/, '');
+      symbols.push({
+        id: `${ctx.fileId}#${parentName}.${attrName}`,
+        name: `${parentName}.${attrName}`,
+        kind: 'method',
+        startLine,
+        endLine,
+        isExported: false,
+        calls: [],
+        implementsNames: [],
+      });
+    }
+  } else if (methodName === 'enum') {
+    const firstArg = argList[0];
+    if (firstArg?.type === 'pair') {
+      const keyNode = firstChildOfTypes(firstArg, ['hash_key_symbol', 'simple_symbol', 'symbol']);
+      if (keyNode) {
+        const enumName = keyNode.text.replace(/^:/, '');
+        symbols.push({
+          id: `${ctx.fileId}#${parentName}.${enumName}`,
+          name: `${parentName}.${enumName}`,
+          kind: 'method',
+          startLine,
+          endLine,
+          isExported: false,
+          calls: [],
+          implementsNames: [],
+        });
+        const valueNode = firstChildOfType(firstArg, 'hash');
+        if (valueNode) {
+          const valuePairs = childrenOfType(valueNode, 'pair');
+          for (const pair of valuePairs) {
+            const pairKey = firstChildOfTypes(pair, ['hash_key_symbol', 'simple_symbol', 'symbol']);
+            if (pairKey) {
+              const valueName = pairKey.text.replace(/^:/, '');
+              symbols.push({
+                id: `${ctx.fileId}#${parentName}.${valueName}?`,
+                name: `${parentName}.${valueName}?`,
+                kind: 'method',
+                startLine,
+                endLine,
+                isExported: false,
+                calls: [],
+                implementsNames: [],
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/** Extract synthesized method names from Rails DSL calls and emit SymbolNode for each */
+function extractDslMethods(
+  node: TSNode,
+  methodName: string,
+  parentName: string,
+  ctx: ExtractionContext,
+  symbols: SymbolNode[],
+): void {
+  if (!parentName) return;
+
+  const startLine = node.startPosition.row + 1;
+  const endLine = node.endPosition.row + 1;
+  const args = firstChildOfType(node, 'argument_list') ?? firstChildOfType(node, 'arguments');
+  if (!args) return;
+
+  const argList = args.namedChildren;
+
+  if (methodName === 'attr_accessor') {
+    // attr_accessor :name, :age → emit name, name=, age, age=
+    for (const arg of argList) {
+      if (arg.type === 'simple_symbol') {
+        const propName = arg.text.replace(/^:/, '');
+        symbols.push({
+          id: `${ctx.fileId}#${parentName}.${propName}`,
+          name: `${parentName}.${propName}`,
+          kind: 'method',
+          startLine,
+          endLine,
+          isExported: false,
+          calls: [],
+          implementsNames: [],
+        });
+        symbols.push({
+          id: `${ctx.fileId}#${parentName}.${propName}=`,
+          name: `${parentName}.${propName}=`,
+          kind: 'method',
+          startLine,
+          endLine,
+          isExported: false,
+          calls: [],
+          implementsNames: [],
+        });
+      }
+    }
+  } else if (methodName === 'attr_reader') {
+    // attr_reader :name, :age → emit name, age
+    for (const arg of argList) {
+      if (arg.type === 'simple_symbol') {
+        const propName = arg.text.replace(/^:/, '');
+        symbols.push({
+          id: `${ctx.fileId}#${parentName}.${propName}`,
+          name: `${parentName}.${propName}`,
+          kind: 'method',
+          startLine,
+          endLine,
+          isExported: false,
+          calls: [],
+          implementsNames: [],
+        });
+      }
+    }
+  } else if (methodName === 'attr_writer') {
+    // attr_writer :name, :age → emit name=, age=
+    for (const arg of argList) {
+      if (arg.type === 'simple_symbol') {
+        const propName = arg.text.replace(/^:/, '');
+        symbols.push({
+          id: `${ctx.fileId}#${parentName}.${propName}=`,
+          name: `${parentName}.${propName}=`,
+          kind: 'method',
+          startLine,
+          endLine,
+          isExported: false,
+          calls: [],
+          implementsNames: [],
+        });
+      }
+    }
+  } else if (methodName === 'delegate') {
+    // delegate :foo, :bar, to: :user → emit foo, bar (stop at first non-symbol arg)
+    for (const arg of argList) {
+      if (arg.type === 'simple_symbol') {
+        const delegatedName = arg.text.replace(/^:/, '');
+        symbols.push({
+          id: `${ctx.fileId}#${parentName}.${delegatedName}`,
+          name: `${parentName}.${delegatedName}`,
+          kind: 'method',
+          startLine,
+          endLine,
+          isExported: false,
+          calls: [],
+          implementsNames: [],
+        });
+      } else {
+        // Stop at first non-symbol arg (hash with to:)
+        break;
+      }
+    }
+  } else if (methodName === 'scope') {
+    // scope :recent, -> { ... } → emit recent (class method)
+    const firstArg = argList[0];
+    if (firstArg?.type === 'simple_symbol') {
+      const scopeName = firstArg.text.replace(/^:/, '');
+      symbols.push({
+        id: `${ctx.fileId}#${parentName}.${scopeName}`,
+        name: `${parentName}.${scopeName}`,
+        kind: 'method',
+        startLine,
+        endLine,
+        isExported: false,
+        calls: [],
+        implementsNames: [],
+      });
+    }
+  } else if (methodName === 'attribute') {
+    // attribute :webfinger, :string → emit webfinger
+    const firstArg = argList[0];
+    if (firstArg?.type === 'simple_symbol') {
+      const attrName = firstArg.text.replace(/^:/, '');
+      symbols.push({
+        id: `${ctx.fileId}#${parentName}.${attrName}`,
+        name: `${parentName}.${attrName}`,
+        kind: 'method',
+        startLine,
+        endLine,
+        isExported: false,
+        calls: [],
+        implementsNames: [],
+      });
+    }
+  } else if (methodName === 'enum') {
+    // enum status: { active: 0, inactive: 1 } → emit status, active?, inactive?
+    const firstArg = argList[0];
+    if (firstArg?.type === 'pair') {
+      const keyNode = firstChildOfTypes(firstArg, ['hash_key_symbol', 'simple_symbol', 'symbol']);
+      if (keyNode) {
+        const enumName = keyNode.text.replace(/^:/, '');
+        symbols.push({
+          id: `${ctx.fileId}#${parentName}.${enumName}`,
+          name: `${parentName}.${enumName}`,
+          kind: 'method',
+          startLine,
+          endLine,
+          isExported: false,
+          calls: [],
+          implementsNames: [],
+        });
+        const valueNode = firstChildOfType(firstArg, 'hash');
+        if (valueNode) {
+          const valuePairs = childrenOfType(valueNode, 'pair');
+          for (const pair of valuePairs) {
+            const pairKey = firstChildOfTypes(pair, ['hash_key_symbol', 'simple_symbol', 'symbol']);
+            if (pairKey) {
+              const valueName = pairKey.text.replace(/^:/, '');
+              symbols.push({
+                id: `${ctx.fileId}#${parentName}.${valueName}?`,
+                name: `${parentName}.${valueName}?`,
+                kind: 'method',
+                startLine,
+                endLine,
+                isExported: false,
+                calls: [],
+                implementsNames: [],
+              });
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -314,6 +648,9 @@ function extractNode(
           const refMethod = firstArg.text.replace(/^:/, '');
           ctx.extraCalls.push({ fromId: `${ctx.fileId}#${parentName}`, toName: refMethod });
         }
+      } else if (RAILS_DSL_METHODS.has(methodName)) {
+        // attr_accessor, delegate, scope, enum, etc. → emit method symbols
+        extractDslMethods(node, methodName, parentName, ctx, symbols);
       }
       break;
     }
@@ -346,6 +683,8 @@ function extractNode(
           const refMethod = firstArg.text.replace(/^:/, '');
           ctx.extraCalls.push({ fromId: `${ctx.fileId}#${parentName}`, toName: refMethod });
         }
+      } else if (RAILS_DSL_METHODS.has(methodName)) {
+        extractDslMethodsFromCommand(methodName, parentName, node, ctx, symbols);
       }
       break;
     }

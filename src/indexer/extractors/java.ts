@@ -101,6 +101,26 @@ function isStaticFinal(node: TSNode): boolean {
   return mods.includes('static') && mods.includes('final');
 }
 
+function getAnnotations(node: TSNode): string[] {
+  const annotations: string[] = [];
+  for (const child of node.namedChildren) {
+    if (child.type === 'modifiers') {
+      for (const mod of (child.children ?? child.namedChildren)) {
+        if (mod.type === 'marker_annotation' || mod.type === 'annotation') {
+          const nameNode = mod.childForFieldName('name');
+          if (nameNode) {
+            const text = nameNode.text;
+            // Extract last segment for scoped identifiers (e.g. org.junit.Test → Test)
+            const lastSegment = text.split('.').pop();
+            if (lastSegment) annotations.push(lastSegment);
+          }
+        }
+      }
+    }
+  }
+  return annotations;
+}
+
 // ---------------------------------------------------------------------------
 // Extract symbols from class/interface/enum body
 // ---------------------------------------------------------------------------
@@ -123,7 +143,8 @@ function extractClassMembers(
       const calls = new Set<string>();
       const methodBody = firstChildOfType(child, 'block');
       if (methodBody) collectCalls(methodBody, calls);
-      members.push({
+      const annotations = getAnnotations(child);
+      const symbol: SymbolNode = {
         id: `${fileId}#${parentName}.${methodName}`,
         name: `${parentName}.${methodName}`,
         kind: 'method',
@@ -132,7 +153,9 @@ function extractClassMembers(
         isExported: isPublic(child),
         calls: [...calls].filter(c => c !== methodName),
         implementsNames: [],
-      });
+      };
+      if (annotations.length > 0) symbol.annotations = annotations;
+      members.push(symbol);
     } else if (child.type === 'constructor_declaration') {
       const nameNode = firstChildOfType(child, 'identifier');
       if (!nameNode) continue;
@@ -140,7 +163,8 @@ function extractClassMembers(
       const calls = new Set<string>();
       const ctorBody = firstChildOfType(child, 'constructor_body');
       if (ctorBody) collectCalls(ctorBody, calls);
-      members.push({
+      const annotations = getAnnotations(child);
+      const symbol: SymbolNode = {
         id: `${fileId}#${parentName}.${ctorName}`,
         name: `${parentName}.${ctorName}`,
         kind: 'method',
@@ -149,15 +173,18 @@ function extractClassMembers(
         isExported: isPublic(child),
         calls: [...calls],
         implementsNames: [],
-      });
+      };
+      if (annotations.length > 0) symbol.annotations = annotations;
+      members.push(symbol);
     } else if (child.type === 'field_declaration') {
       // Only extract static final fields (constants)
       if (!isStaticFinal(child)) continue;
       const declarators = childrenOfType(child, 'variable_declarator');
+      const annotations = getAnnotations(child);
       for (const decl of declarators) {
         const nameNode = firstChildOfType(decl, 'identifier');
         if (!nameNode) continue;
-        members.push({
+        const symbol: SymbolNode = {
           id: `${fileId}#${parentName}.${nameNode.text}`,
           name: `${parentName}.${nameNode.text}`,
           kind: 'constant',
@@ -166,7 +193,9 @@ function extractClassMembers(
           isExported: false,
           calls: [],
           implementsNames: [],
-        });
+        };
+        if (annotations.length > 0) symbol.annotations = annotations;
+        members.push(symbol);
       }
     } else if (
       child.type === 'class_declaration' ||
@@ -227,6 +256,7 @@ function extractTypeDeclaration(
         }
       }
 
+      const annotations = getAnnotations(node);
       const classSymbol: SymbolNode = {
         id: `${fileId}#${name}`,
         name,
@@ -238,6 +268,7 @@ function extractTypeDeclaration(
         extendsName,
         implementsNames,
       };
+      if (annotations.length > 0) classSymbol.annotations = annotations;
 
       const symbols: SymbolNode[] = [classSymbol];
 
@@ -268,6 +299,7 @@ function extractTypeDeclaration(
         }
       }
 
+      const annotations = getAnnotations(node);
       const ifaceSymbol: SymbolNode = {
         id: `${fileId}#${name}`,
         name,
@@ -279,6 +311,7 @@ function extractTypeDeclaration(
         // For interfaces extending other interfaces: store in implementsNames
         implementsNames,
       };
+      if (annotations.length > 0) ifaceSymbol.annotations = annotations;
 
       const symbols: SymbolNode[] = [ifaceSymbol];
 
@@ -323,6 +356,7 @@ function extractTypeDeclaration(
         }
       }
 
+      const annotations = getAnnotations(node);
       const enumSymbol: SymbolNode = {
         id: `${fileId}#${name}`,
         name,
@@ -333,6 +367,7 @@ function extractTypeDeclaration(
         calls: [],
         implementsNames,
       };
+      if (annotations.length > 0) enumSymbol.annotations = annotations;
 
       const symbols: SymbolNode[] = [enumSymbol];
 

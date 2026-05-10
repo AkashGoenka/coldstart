@@ -64,8 +64,15 @@ export async function walkDirectory(options: WalkOptions): Promise<WalkedFile[]>
 
       if (!entry.isFile()) continue;
 
+      let language: Language | undefined;
       const ext = extname(entry.name).toLowerCase();
-      const language = EXTENSION_TO_LANGUAGE[ext] as Language | undefined;
+      language = EXTENSION_TO_LANGUAGE[ext] as Language | undefined;
+
+      // Handle .env files: .env, .env.local, .env.production, .env.development, etc.
+      if (!language && /^\.env(\.|$)/.test(entry.name)) {
+        language = 'env';
+      }
+
       if (!language) continue;
 
       // Skip generated files (e.g. foo.generated.ts, schema_pb.ts, api.pb.go)
