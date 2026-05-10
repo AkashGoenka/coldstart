@@ -41,6 +41,7 @@ function parseArgs(argv: string[]): {
   noCache: boolean;
   daemon: boolean;
   noDaemon: boolean;
+  probe: boolean;
 } {
   const args = argv.slice(2);
   let root = '.';
@@ -52,6 +53,7 @@ function parseArgs(argv: string[]): {
   let noCache = false;
   let daemon = false;
   let noDaemon = false;
+  let probe = false;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -81,10 +83,13 @@ function parseArgs(argv: string[]): {
       case '--no-daemon':
         noDaemon = true;
         break;
+      case '--probe':
+        probe = true;
+        break;
     }
   }
 
-  return { root, rootExplicit, excludes, includes, cacheDir, quiet, noCache, daemon, noDaemon };
+  return { root, rootExplicit, excludes, includes, cacheDir, quiet, noCache, daemon, noDaemon, probe };
 }
 
 // ---------------------------------------------------------------------------
@@ -249,6 +254,134 @@ export async function buildIndex(
 }
 
 // ---------------------------------------------------------------------------
+// Probe mode: walk → parse → resolve, emit JSON stats to stdout, exit.
+// Per-language: total imports, resolved, unresolved, plus top-N unresolved
+// specifiers (with sample fromFile) so we can tell external libs apart from
+// broken-internal resolution gaps.
+// ---------------------------------------------------------------------------
+async function runProbe(rootDir: string, excludes: string[], includes: string[]): Promise<void> {
+  const start = Date.now();
+  const walked = await walkDirectory({ rootDir, excludes, includes });
+  const tWalk = Date.now() - start;
+  const tParseStart = Date.now();
+
+  const indexedFiles: IndexedFile[] = [];
+  for (let i = 0; i < walked.length; i += 100) {
+    const batch = walked.slice(i, i + 100);
+    await Promise.all(batch.map(async (wf) => {
+      try {
+        const id = buildFileId(wf.relativePath);
+        const parsed = await parseFile(wf.absolutePath, wf.language, id);
+        if (!parsed) return;
+        indexedFiles.push({
+          id,
+          path: wf.absolutePath,
+          relativePath: wf.relativePath,
+          language: wf.language,
+          domainMap: {},
+          exports: parsed.exports,
+          hasDefaultExport: parsed.hasDefaultExport,
+          imports: parsed.imports,
+          hash: parsed.hash,
+          lineCount: parsed.lineCount,
+          tokenEstimate: parsed.tokenEstimate,
+          importedByCount: 0,
+          transitiveImportedByCount: 0,
+          isBarrel: false,
+          isTestFile: false,
+          symbols: parsed.symbols,
+          reexportRatio: parsed.reexportRatio,
+        });
+      } catch { /* skip parse errors */ }
+    }));
+  }
+
+  const tParse = Date.now() - tParseStart;
+  const tResolveStart = Date.now();
+  const { resolveImportsForFiles } = await import('./indexer/resolvers/index.js');
+
+  // Per-language resolve timing — pass the FULL fileIdSet (resolvers index it
+  // once via WeakMap) but invoke per-language so we can attribute time. Java
+  // resolves to Kotlin files and vice versa, so we must not narrow the set.
+  const fullFileIdSet = new Set(indexedFiles.map(f => f.id));
+  const filesByLang = new Map<string, IndexedFile[]>();
+  for (const f of indexedFiles) {
+    const arr = filesByLang.get(f.language) ?? [];
+    arr.push(f);
+    filesByLang.set(f.language, arr);
+  }
+  const langTimes: Record<string, number> = {};
+  let allEdges: Awaited<ReturnType<typeof resolveImportsForFiles>>['edges'] = [];
+  let allUnresolved: Awaited<ReturnType<typeof resolveImportsForFiles>>['unresolved'] = [];
+  for (const [lang, files] of filesByLang) {
+    const t0 = Date.now();
+    const r = await resolveImportsForFiles(files, fullFileIdSet, rootDir);
+    langTimes[lang] = Date.now() - t0;
+    allEdges = allEdges.concat(r.edges);
+    allUnresolved = allUnresolved.concat(r.unresolved);
+  }
+  const edges = allEdges;
+  const unresolved = allUnresolved;
+  const tResolve = Date.now() - tResolveStart;
+
+  const langById = new Map(indexedFiles.map(f => [f.id, f.language]));
+  const fileById = new Map(indexedFiles.map(f => [f.id, f.relativePath]));
+
+  type LangBucket = {
+    files: number;
+    totalImports: number;
+    resolved: number;
+    unresolved: number;
+    unresolvedBySpec: Map<string, { count: number; sampleFrom: string }>;
+  };
+  const byLang = new Map<string, LangBucket>();
+  const get = (l: string): LangBucket => {
+    let b = byLang.get(l);
+    if (!b) {
+      b = { files: 0, totalImports: 0, resolved: 0, unresolved: 0, unresolvedBySpec: new Map() };
+      byLang.set(l, b);
+    }
+    return b;
+  };
+
+  for (const f of indexedFiles) { get(f.language).files++; get(f.language).totalImports += f.imports.length; }
+  for (const e of edges) { get(langById.get(e.from)!).resolved++; }
+  for (const u of unresolved) {
+    const b = get(langById.get(u.from)!);
+    b.unresolved++;
+    const existing = b.unresolvedBySpec.get(u.specifier);
+    if (existing) existing.count++;
+    else b.unresolvedBySpec.set(u.specifier, { count: 1, sampleFrom: fileById.get(u.from) ?? '' });
+  }
+
+  const out = {
+    rootDir,
+    totalFiles: indexedFiles.length,
+    totalEdges: edges.length,
+    totalUnresolved: unresolved.length,
+    elapsedMs: Date.now() - start,
+    phaseMs: { walk: tWalk, parse: tParse, resolve: tResolve, resolveByLang: langTimes },
+    languages: Object.fromEntries(
+      [...byLang.entries()]
+        .sort((a, b) => b[1].totalImports - a[1].totalImports)
+        .map(([lang, b]) => [lang, {
+          files: b.files,
+          totalImports: b.totalImports,
+          resolved: b.resolved,
+          unresolved: b.unresolved,
+          resolvedRatio: b.totalImports > 0 ? +(b.resolved / b.totalImports).toFixed(3) : 0,
+          topUnresolved: [...b.unresolvedBySpec.entries()]
+            .sort((a, b) => b[1].count - a[1].count)
+            .slice(0, 30)
+            .map(([specifier, v]) => ({ specifier, count: v.count, sampleFrom: v.sampleFrom })),
+        }]),
+    ),
+  };
+
+  process.stdout.write(JSON.stringify(out, null, 2) + '\n');
+}
+
+// ---------------------------------------------------------------------------
 // Shared: load from cache or build, then create and return an IndexManager
 // ---------------------------------------------------------------------------
 async function buildManager(
@@ -380,7 +513,13 @@ async function main(): Promise<void> {
     return;
   }
 
-  const { root: cliRoot, rootExplicit, excludes, includes, cacheDir, quiet, noCache, daemon, noDaemon } = parseArgs(process.argv);
+  const { root: cliRoot, rootExplicit, excludes, includes, cacheDir, quiet, noCache, daemon, noDaemon, probe } = parseArgs(process.argv);
+
+  // --probe: one-shot stats dump for the validation harness, then exit.
+  if (probe) {
+    await runProbe(resolve(cliRoot), excludes, includes);
+    return;
+  }
 
   // --daemon: background index process spawned by bridge
   if (daemon) {

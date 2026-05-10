@@ -3,17 +3,17 @@ import { readFile } from 'node:fs/promises';
 import { tryResolveBase } from './shared.js';
 
 /**
- * PHP resolver: handles both PSR-4 namespace imports and relative path includes.
+ * PHP resolver: handles PSR-4 namespace imports and relative path includes.
  *
  * `use App\Models\User` — resolved via composer.json autoload.psr-4 mapping.
  *   PSR-4 maps a namespace prefix (e.g. "App\\") to a directory (e.g. "app/").
- *   "App\Models\User" → strip "App\\" prefix → "Models/User" → "app/Models/User.php"
+ *   "App\Models\User" → strip "App\\" → "Models/User" → "app/Models/User.php"
  *
- * `require_once './config.php'` — already a relative path; resolveGeneric handles
- *   these, but the extractor prefixes require paths with the raw string so we
- *   handle relative ones here too.
+ * `require_once './config.php'` — relative paths handled directly.
  *
- * Imports that don't match any PSR-4 prefix (vendor classes, built-ins) → null.
+ * composer.json may live at the file's own package, or any ancestor — including
+ * dirs below rootDir, or split across packages in a monorepo. We walk up from
+ * the file's directory to find the nearest composer.json.
  */
 
 interface ComposerAutoload {
@@ -26,48 +26,71 @@ interface ComposerJson {
   repositories?: Array<{ type: string; url?: string }>;
 }
 
-// Cache per rootDir
-const psr4Cache = new Map<string, Map<string, string> | null>();
+// Caches keyed by the discovered composer.json directory.
+// Each PSR-4 prefix may map to multiple dirs (composer.json supports arrays).
+const psr4ByDir = new Map<string, Map<string, string[]> | null>();
+// Nearest-to-farthest list of composer.json directories ancestors of a startDir.
+// Sub-component composer.jsons (e.g. Laravel's per-Illuminate-component setup)
+// only declare their own namespace; we fall through to ancestors for the rest.
+const startDirToComposerDirs = new Map<string, string[]>();
 
-function applyPsr4Section(section: ComposerAutoload | undefined, baseDir: string, map: Map<string, string>): void {
+async function findComposerDirs(startDir: string): Promise<string[]> {
+  const cached = startDirToComposerDirs.get(startDir);
+  if (cached) return cached;
+  const found: string[] = [];
+  let dir = startDir;
+  for (let i = 0; i < 64; i++) {
+    try {
+      await readFile(join(dir, 'composer.json'), 'utf-8');
+      found.push(dir);
+    } catch { /* not here */ }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  startDirToComposerDirs.set(startDir, found);
+  return found;
+}
+
+function applyPsr4Section(section: ComposerAutoload | undefined, baseDir: string, map: Map<string, string[]>): void {
   const psr4 = section?.['psr-4'];
   if (!psr4) return;
   for (const [ns, dirs] of Object.entries(psr4)) {
-    const nsKey = ns.replace(/\\+$/, ''); // strip trailing backslash
-    const dir = Array.isArray(dirs) ? dirs[0] : dirs;
-    if (typeof dir === 'string') map.set(nsKey, resolve(baseDir, dir));
+    const nsKey = ns.replace(/\\+$/, '');
+    const dirList = Array.isArray(dirs) ? dirs : (typeof dirs === 'string' ? [dirs] : []);
+    const resolved = dirList.map(d => resolve(baseDir, d));
+    const existing = map.get(nsKey);
+    map.set(nsKey, existing ? [...existing, ...resolved] : resolved);
   }
 }
 
-async function loadPsr4Map(rootDir: string): Promise<Map<string, string> | null> {
-  if (psr4Cache.has(rootDir)) return psr4Cache.get(rootDir)!;
+async function loadPsr4MapForDir(composerDir: string): Promise<Map<string, string[]> | null> {
+  if (psr4ByDir.has(composerDir)) return psr4ByDir.get(composerDir)!;
   try {
-    const raw = await readFile(join(rootDir, 'composer.json'), 'utf-8');
+    const raw = await readFile(join(composerDir, 'composer.json'), 'utf-8');
     const cfg = JSON.parse(raw) as ComposerJson;
-    const map = new Map<string, string>();
+    const map = new Map<string, string[]>();
 
-    // Root package PSR-4 autoload
-    applyPsr4Section(cfg.autoload, rootDir, map);
-    applyPsr4Section(cfg['autoload-dev'], rootDir, map);
+    applyPsr4Section(cfg.autoload, composerDir, map);
+    applyPsr4Section(cfg['autoload-dev'], composerDir, map);
 
-    // Path repositories — merge PSR-4 from each sub-package's composer.json
     if (Array.isArray(cfg.repositories)) {
       for (const repo of cfg.repositories) {
         if (repo.type !== 'path' || !repo.url || repo.url.includes('*')) continue;
-        const repoDir = resolve(rootDir, repo.url);
+        const repoDir = resolve(composerDir, repo.url);
         try {
           const subRaw = await readFile(join(repoDir, 'composer.json'), 'utf-8');
           const subCfg = JSON.parse(subRaw) as ComposerJson;
           applyPsr4Section(subCfg.autoload, repoDir, map);
           applyPsr4Section(subCfg['autoload-dev'], repoDir, map);
-        } catch { /* skip inaccessible path repo */ }
+        } catch { /* skip */ }
       }
     }
 
-    psr4Cache.set(rootDir, map);
+    psr4ByDir.set(composerDir, map);
     return map;
   } catch {
-    psr4Cache.set(rootDir, null);
+    psr4ByDir.set(composerDir, null);
     return null;
   }
 }
@@ -85,21 +108,27 @@ export async function resolvePHP(
     return tryResolveBase(base, fileIdSet, rootDir);
   }
 
-  // PSR-4 namespace import: "App\Models\User"
-  const psr4 = await loadPsr4Map(rootDir);
-  if (!psr4) return null;
+  // PSR-4 namespace import: walk up from file dir collecting all ancestor
+  // composer.json mappings. Try them nearest-first; for a given map, longest
+  // prefix wins but fall through to shorter prefixes if the longer one's dirs
+  // don't yield a file.
+  const composerDirs = await findComposerDirs(dirname(fromFile));
+  if (composerDirs.length === 0) return null;
 
-  // Normalise backslashes to forward slashes for comparison
   const normalised = specifier.replace(/\\/g, '/');
-
-  // Longest-prefix match among PSR-4 namespace roots
-  const entries = [...psr4.entries()].sort((a, b) => b[0].length - a[0].length);
-  for (const [nsKey, dir] of entries) {
-    const nsSlash = nsKey.replace(/\\/g, '/');
-    if (normalised === nsSlash || normalised.startsWith(nsSlash + '/')) {
+  for (const composerDir of composerDirs) {
+    const psr4 = await loadPsr4MapForDir(composerDir);
+    if (!psr4) continue;
+    const entries = [...psr4.entries()].sort((a, b) => b[0].length - a[0].length);
+    for (const [nsKey, dirs] of entries) {
+      const nsSlash = nsKey.replace(/\\/g, '/');
+      if (normalised !== nsSlash && !normalised.startsWith(nsSlash + '/')) continue;
       const suffix = normalised.slice(nsSlash.length).replace(/^\//, '');
-      const base = join(dir, suffix);
-      return tryResolveBase(base, fileIdSet, rootDir);
+      for (const dir of dirs) {
+        const base = join(dir, suffix);
+        const result = await tryResolveBase(base, fileIdSet, rootDir);
+        if (result) return result;
+      }
     }
   }
 
