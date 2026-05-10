@@ -234,6 +234,83 @@ describe('parser — Python', () => {
     expect(result!.hash).toMatch(/^[a-f0-9]{32}$/);
     expect(result!.lineCount).toBeGreaterThan(5);
   });
+
+  it('extracts top-level module constants (FOO = 1)', async () => {
+    const src = `FOO = 1\nBAR = 2`;
+    const { parsePythonContent } = await import(
+      '../src/indexer/extractors/python.js'
+    );
+    const result = parsePythonContent(src, 'test.py');
+    const foo = result.symbols.find(s => s.name === 'FOO');
+    expect(foo).toBeDefined();
+    expect(foo!.kind).toBe('constant');
+    expect(foo!.isExported).toBe(true);
+  });
+
+  it('marks private constants (_PRIVATE = 1) as not exported', async () => {
+    const src = `_PRIVATE = 1`;
+    const { parsePythonContent } = await import(
+      '../src/indexer/extractors/python.js'
+    );
+    const result = parsePythonContent(src, 'test.py');
+    const priv = result.symbols.find(s => s.name === '_PRIVATE');
+    expect(priv).toBeDefined();
+    expect(priv!.kind).toBe('constant');
+    expect(priv!.isExported).toBe(false);
+  });
+
+  it('respects __all__ for constant exports', async () => {
+    const src = `
+__all__ = ['FOO']
+
+FOO = 1
+BAR = 2
+`;
+    const { parsePythonContent } = await import(
+      '../src/indexer/extractors/python.js'
+    );
+    const result = parsePythonContent(src, 'test.py');
+    const foo = result.symbols.find(s => s.name === 'FOO');
+    const bar = result.symbols.find(s => s.name === 'BAR');
+    expect(foo).toBeDefined();
+    expect(foo!.isExported).toBe(true);
+    expect(bar).toBeDefined();
+    expect(bar!.isExported).toBe(false);
+    expect(result.exports).toContain('FOO');
+    expect(result.exports).not.toContain('BAR');
+  });
+
+  it('does not emit tuple unpacking as constants (a, b = 1, 2)', async () => {
+    const src = `a, b = 1, 2`;
+    const { parsePythonContent } = await import(
+      '../src/indexer/extractors/python.js'
+    );
+    const result = parsePythonContent(src, 'test.py');
+    const a = result.symbols.find(s => s.name === 'a' && s.kind === 'constant');
+    const b = result.symbols.find(s => s.name === 'b' && s.kind === 'constant');
+    expect(a).toBeUndefined();
+    expect(b).toBeUndefined();
+  });
+
+  it('does not emit non-all-caps names as constants (Mixed = 1)', async () => {
+    const src = `Mixed = 1`;
+    const { parsePythonContent } = await import(
+      '../src/indexer/extractors/python.js'
+    );
+    const result = parsePythonContent(src, 'test.py');
+    const mixed = result.symbols.find(s => s.name === 'Mixed' && s.kind === 'constant');
+    expect(mixed).toBeUndefined();
+  });
+
+  it('does not emit single-letter constants (X = 1)', async () => {
+    const src = `X = 1`;
+    const { parsePythonContent } = await import(
+      '../src/indexer/extractors/python.js'
+    );
+    const result = parsePythonContent(src, 'test.py');
+    const x = result.symbols.find(s => s.name === 'X' && s.kind === 'constant');
+    expect(x).toBeUndefined();
+  });
 });
 
 describe('parser — Go', () => {
@@ -652,5 +729,243 @@ describe('parser — AngularJS 1.x symbol extraction', () => {
     const result = await parseFile(join(FIXTURES, 'typescript/auth.ts'), 'typescript');
     expect(result!.exports).not.toContain('UserService');
     expect(result!.exports).not.toContain('UserController');
+  });
+});
+
+describe('parser — YAML', () => {
+  it('extracts top-level keys', async () => {
+    const { parseYamlContent } = await import('../src/indexer/extractors/yaml.js');
+    const result = parseYamlContent('foo: 1\nbar: 2\n', 'test.yml');
+    expect(result.exports).toContain('foo');
+    expect(result.exports).toContain('bar');
+  });
+
+  it('extracts nested keys with parent prefix', async () => {
+    const { parseYamlContent } = await import('../src/indexer/extractors/yaml.js');
+    const result = parseYamlContent('streaming:\n  base_url: x\n  timeout: 30\n', 'test.yml');
+    expect(result.exports).toContain('streaming');
+    expect(result.exports).toContain('streaming.base_url');
+    expect(result.exports).toContain('streaming.timeout');
+  });
+
+  it('ignores comment lines', async () => {
+    const { parseYamlContent } = await import('../src/indexer/extractors/yaml.js');
+    const result = parseYamlContent('# foo: 1\nbar: 2\n', 'test.yml');
+    expect(result.exports).not.toContain('foo');
+    expect(result.exports).toContain('bar');
+  });
+
+  it('ignores list items', async () => {
+    const { parseYamlContent } = await import('../src/indexer/extractors/yaml.js');
+    const result = parseYamlContent('items:\n  - item1\n  - item2\n', 'test.yml');
+    expect(result.exports).toContain('items');
+    expect(result.exports).not.toContain('item1');
+    expect(result.exports).not.toContain('item2');
+  });
+
+  it('ignores block scalar bodies', async () => {
+    const { parseYamlContent } = await import('../src/indexer/extractors/yaml.js');
+    const result = parseYamlContent('description: |\n  some text with: colon\nother: value\n', 'test.yml');
+    expect(result.exports).toContain('description');
+    expect(result.exports).toContain('other');
+    expect(result.exports).not.toContain('text');
+  });
+
+  it('produces symbols with correct metadata', async () => {
+    const { parseYamlContent } = await import('../src/indexer/extractors/yaml.js');
+    const result = parseYamlContent('foo: 1\n', 'test.yml');
+    expect(result.symbols.length).toBeGreaterThan(0);
+    expect(result.symbols[0].kind).toBe('constant');
+    expect(result.symbols[0].isExported).toBe(true);
+    expect(result.symbols[0].calls).toEqual([]);
+    expect(result.symbols[0].implementsNames).toEqual([]);
+  });
+
+  it('does not emit duplicates', async () => {
+    const { parseYamlContent } = await import('../src/indexer/extractors/yaml.js');
+    const result = parseYamlContent('foo: 1\nfoo: 2\n', 'test.yml');
+    const fooCount = result.exports.filter(e => e === 'foo').length;
+    expect(fooCount).toBe(1);
+  });
+});
+
+describe('parser — TOML', () => {
+  it('extracts section headers', async () => {
+    const { parseTomlContent } = await import('../src/indexer/extractors/toml.js');
+    const result = parseTomlContent('[server]\nport = 8080\n', 'test.toml');
+    expect(result.exports).toContain('server');
+  });
+
+  it('extracts dotted section names', async () => {
+    const { parseTomlContent } = await import('../src/indexer/extractors/toml.js');
+    const result = parseTomlContent('[server.tls]\ncert = "path"\n', 'test.toml');
+    expect(result.exports).toContain('server.tls');
+  });
+
+  it('extracts keys within sections with section prefix', async () => {
+    const { parseTomlContent } = await import('../src/indexer/extractors/toml.js');
+    const result = parseTomlContent('[server]\nport = 8080\ntimeout = 30\n', 'test.toml');
+    expect(result.exports).toContain('server.port');
+    expect(result.exports).toContain('server.timeout');
+  });
+
+  it('extracts top-level keys without section', async () => {
+    const { parseTomlContent } = await import('../src/indexer/extractors/toml.js');
+    const result = parseTomlContent('name = "foo"\nversion = "1.0"\n', 'test.toml');
+    expect(result.exports).toContain('name');
+    expect(result.exports).toContain('version');
+  });
+
+  it('extracts array-of-tables names', async () => {
+    const { parseTomlContent } = await import('../src/indexer/extractors/toml.js');
+    const result = parseTomlContent('[[products]]\nname = "A"\n', 'test.toml');
+    expect(result.exports).toContain('products');
+  });
+
+  it('ignores comments', async () => {
+    const { parseTomlContent } = await import('../src/indexer/extractors/toml.js');
+    const result = parseTomlContent('# name = "foo"\nversion = "1.0"\n', 'test.toml');
+    expect(result.exports).not.toContain('name');
+    expect(result.exports).toContain('version');
+  });
+
+  it('produces symbols with correct metadata', async () => {
+    const { parseTomlContent } = await import('../src/indexer/extractors/toml.js');
+    const result = parseTomlContent('[server]\nport = 8080\n', 'test.toml');
+    expect(result.symbols.length).toBeGreaterThan(0);
+    expect(result.symbols[0].kind).toBe('constant');
+    expect(result.symbols[0].isExported).toBe(true);
+  });
+});
+
+describe('parser — .env', () => {
+  it('extracts variable names', async () => {
+    const { parseEnvContent } = await import('../src/indexer/extractors/env.js');
+    const result = parseEnvContent('FOO=bar\nBAZ=qux\n', 'test.env');
+    expect(result.exports).toContain('FOO');
+    expect(result.exports).toContain('BAZ');
+  });
+
+  it('strips export prefix', async () => {
+    const { parseEnvContent } = await import('../src/indexer/extractors/env.js');
+    const result = parseEnvContent('export API_KEY=xyz\n', 'test.env');
+    expect(result.exports).toContain('API_KEY');
+    expect(result.exports).not.toContain('export');
+  });
+
+  it('ignores comment lines', async () => {
+    const { parseEnvContent } = await import('../src/indexer/extractors/env.js');
+    const result = parseEnvContent('# COMMENTED=1\nACTIVE=yes\n', 'test.env');
+    expect(result.exports).not.toContain('COMMENTED');
+    expect(result.exports).toContain('ACTIVE');
+  });
+
+  it('handles empty lines', async () => {
+    const { parseEnvContent } = await import('../src/indexer/extractors/env.js');
+    const result = parseEnvContent('FOO=1\n\nBAR=2\n', 'test.env');
+    expect(result.exports).toContain('FOO');
+    expect(result.exports).toContain('BAR');
+  });
+
+  it('produces symbols with correct metadata', async () => {
+    const { parseEnvContent } = await import('../src/indexer/extractors/env.js');
+    const result = parseEnvContent('FOO=bar\n', 'test.env');
+    expect(result.symbols.length).toBeGreaterThan(0);
+    expect(result.symbols[0].kind).toBe('constant');
+    expect(result.symbols[0].isExported).toBe(true);
+  });
+
+  it('does not emit duplicates', async () => {
+    const { parseEnvContent } = await import('../src/indexer/extractors/env.js');
+    const result = parseEnvContent('FOO=1\nFOO=2\n', 'test.env');
+    const fooCount = result.exports.filter(e => e === 'FOO').length;
+    expect(fooCount).toBe(1);
+  });
+});
+
+describe('parser — XML', () => {
+  it('extracts Spring bean id attribute', async () => {
+    const { parseXmlContent } = await import('../src/indexer/extractors/xml.js');
+    const xml = '<bean id="userService" class="com.example.UserService"/>';
+    const result = parseXmlContent(xml, 'spring.xml');
+    expect(result.exports).toContain('userService');
+  });
+
+  it('extracts class attribute last segment', async () => {
+    const { parseXmlContent } = await import('../src/indexer/extractors/xml.js');
+    const xml = '<bean id="userService" class="com.example.UserService"/>';
+    const result = parseXmlContent(xml, 'spring.xml');
+    expect(result.exports).toContain('UserService');
+  });
+
+  it('extracts Maven artifactId text content', async () => {
+    const { parseXmlContent } = await import('../src/indexer/extractors/xml.js');
+    const xml = '<artifactId>spring-core</artifactId>';
+    const result = parseXmlContent(xml, 'pom.xml');
+    expect(result.exports).toContain('spring-core');
+  });
+
+  it('extracts Maven groupId text content', async () => {
+    const { parseXmlContent } = await import('../src/indexer/extractors/xml.js');
+    const xml = '<groupId>org.springframework</groupId>';
+    const result = parseXmlContent(xml, 'pom.xml');
+    expect(result.exports).toContain('org.springframework');
+  });
+
+  it('extracts Android resource name attribute', async () => {
+    const { parseXmlContent } = await import('../src/indexer/extractors/xml.js');
+    const xml = '<string name="welcome">Hello</string>';
+    const result = parseXmlContent(xml, 'strings.xml');
+    expect(result.exports).toContain('welcome');
+  });
+
+  it('extracts ref attribute values', async () => {
+    const { parseXmlContent } = await import('../src/indexer/extractors/xml.js');
+    const xml = '<property ref="dataSource"/>';
+    const result = parseXmlContent(xml, 'spring.xml');
+    expect(result.exports).toContain('dataSource');
+  });
+
+  it('extracts key attribute values', async () => {
+    const { parseXmlContent } = await import('../src/indexer/extractors/xml.js');
+    const xml = '<entry key="adminRole" value="ADMIN"/>';
+    const result = parseXmlContent(xml, 'config.xml');
+    expect(result.exports).toContain('adminRole');
+  });
+
+  it('does not capture commented elements', async () => {
+    const { parseXmlContent } = await import('../src/indexer/extractors/xml.js');
+    const xml = '<!-- <bean id="ignored"/> -->\n<bean id="active"/>';
+    const result = parseXmlContent(xml, 'spring.xml');
+    expect(result.exports).toContain('active');
+    expect(result.exports).not.toContain('ignored');
+  });
+
+  it('does not emit duplicates across repeated elements', async () => {
+    const { parseXmlContent } = await import('../src/indexer/extractors/xml.js');
+    const xml = '<groupId>org.foo</groupId>\n<groupId>org.foo</groupId>';
+    const result = parseXmlContent(xml, 'pom.xml');
+    const fooCount = result.exports.filter(e => e === 'org.foo').length;
+    expect(fooCount).toBe(1);
+  });
+
+  it('produces symbols with correct metadata', async () => {
+    const { parseXmlContent } = await import('../src/indexer/extractors/xml.js');
+    const xml = '<bean id="userService" class="com.example.UserService"/>';
+    const result = parseXmlContent(xml, 'spring.xml');
+    expect(result.symbols.length).toBeGreaterThan(0);
+    const sym = result.symbols.find(s => s.name === 'userService');
+    expect(sym).toBeDefined();
+    expect(sym!.kind).toBe('constant');
+    expect(sym!.isExported).toBe(true);
+    expect(sym!.calls).toEqual([]);
+    expect(sym!.implementsNames).toEqual([]);
+  });
+
+  it('handles namespaced attributes (android:id)', async () => {
+    const { parseXmlContent } = await import('../src/indexer/extractors/xml.js');
+    const xml = '<android:item android:id="@+id/foo"/>';
+    const result = parseXmlContent(xml, 'layout.xml');
+    expect(result.exports).toContain('@+id/foo');
   });
 });
