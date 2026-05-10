@@ -49,10 +49,10 @@ function firstChildOfTypes(node: TSNode, types: string[]): TSNode | null {
 /** Collect all call node method names in a subtree */
 function collectCalls(node: TSNode, results: Set<string>): void {
   if (node.type === 'call') {
-    // call: receiver '.' method arguments?
-    const methodNode = node.namedChildren.find(
-      (c: TSNode) => c.type === 'identifier' || c.type === 'constant',
-    );
+    // call grammar: field('receiver', ...) '.' field('method', identifier|constant) field('arguments', ...)?
+    // Use the field accessor — `find(...)` returns the receiver when it's a bare
+    // identifier/constant, not the method name.
+    const methodNode = node.childForFieldName('method');
     if (methodNode) results.add(methodNode.text);
   } else if (node.type === 'method_call' || node.type === 'command') {
     // bare method call: method_name args

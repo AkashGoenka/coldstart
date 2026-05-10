@@ -49,11 +49,11 @@ function firstChildOfTypes(node: TSNode, types: string[]): TSNode | null {
 /** Recursively walk a node and collect method_invocation callee names */
 function collectCalls(node: TSNode, results: Set<string>): void {
   if (node.type === 'method_invocation') {
-    // method_invocation: [object '.'] name arguments
-    // The 'name' child is an identifier
-    const nameNode = node.namedChildren.find(
-      (c: TSNode) => c.type === 'identifier',
-    );
+    // method_invocation grammar: field('object', ...)? field('name', identifier) field('arguments', ...)
+    // Use the field accessor — `find(c.type === 'identifier')` returns the receiver
+    // identifier when the object is a bare variable (`dispatcher.notifyMessagePost(x)`),
+    // not the method name. That made every member-call invisible to trace-impact.
+    const nameNode = node.childForFieldName('name');
     if (nameNode) results.add(nameNode.text);
   }
   for (const child of node.namedChildren) {
