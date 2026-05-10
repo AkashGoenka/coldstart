@@ -23,8 +23,30 @@ export function buildSymbolEdges(
 ): SymbolEdge[] {
   // Pre-build export lookup: fileId → Set<exportedSymbolName>
   const exportsByFile = new Map<string, Set<string>>();
+  // Suffix index for qualified names: fileId → Map<suffix, fullExportName>.
+  // Java methods are stored as "Class.method"; Ruby as "Class::method" or "Module::Class".
+  // Bare callees ("method") need to resolve back to the qualified export.
+  // If a file has two exports with the same suffix (rare in practice), drop both
+  // from the suffix index so we don't pick arbitrarily.
+  const suffixIndexByFile = new Map<string, Map<string, string>>();
   for (const [id, file] of allFiles) {
     exportsByFile.set(id, new Set(file.exports));
+    const suffixMap = new Map<string, string>();
+    const ambiguous = new Set<string>();
+    for (const exp of file.exports) {
+      // Split on last '.' or '::'. Tree-sitter Java/Ruby extractors don't mix separators.
+      const dotIdx = exp.lastIndexOf('.');
+      const colonIdx = exp.lastIndexOf('::');
+      const sepIdx = Math.max(dotIdx, colonIdx);
+      if (sepIdx <= 0) continue;
+      const sepLen = colonIdx === sepIdx ? 2 : 1;
+      const suffix = exp.slice(sepIdx + sepLen);
+      if (!suffix) continue;
+      if (suffixMap.has(suffix)) ambiguous.add(suffix);
+      else suffixMap.set(suffix, exp);
+    }
+    for (const a of ambiguous) suffixMap.delete(a);
+    suffixIndexByFile.set(id, suffixMap);
   }
 
   const edges: SymbolEdge[] = [];
@@ -45,12 +67,32 @@ export function buildSymbolEdges(
           edges.push({ from: sym.id, to: callee, type: 'calls' });
           continue;
         }
-        // Try to resolve against imported files
+        // Try to resolve against imported files.
+        // Pass 1: direct export match (TS/JS, anything that exports bare names).
         let resolved: string | null = null;
         for (const importedId of importedFileIds) {
           if (exportsByFile.get(importedId)?.has(callee)) {
             resolved = `${importedId}#${callee}`;
             break;
+          }
+        }
+        // Pass 2: suffix match against qualified exports (Java/Ruby). Only resolve
+        // if exactly one imported file's suffix index contains this callee — else
+        // we'd be guessing.
+        if (!resolved) {
+          let matchFile: string | null = null;
+          let matchFull: string | null = null;
+          let multiple = false;
+          for (const importedId of importedFileIds) {
+            const full = suffixIndexByFile.get(importedId)?.get(callee);
+            if (full) {
+              if (matchFile) { multiple = true; break; }
+              matchFile = importedId;
+              matchFull = full;
+            }
+          }
+          if (matchFile && matchFull && !multiple) {
+            resolved = `${matchFile}#${matchFull}`;
           }
         }
         edges.push({ from: sym.id, to: resolved ?? callee, type: 'calls' });

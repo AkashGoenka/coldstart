@@ -1,4 +1,4 @@
-# Architecture — coldstart-mcp (v0.2)
+# Architecture — coldstart-mcp
 
 This document captures the *current* architecture.
 
@@ -27,8 +27,8 @@ Real-world testing on a ~5800-file codebase showed:
 
 So the system was reduced to 4 focused MCP tools:
 1. `get-overview`
-2. `trace-deps`
-3. `get-structure`
+2. `get-structure`
+3. `trace-deps`
 4. `trace-impact`
 
 Removed:
@@ -40,7 +40,44 @@ Removed:
 
 ---
 
-## Runtime architecture
+## Process model
+
+By default `coldstart-mcp` runs as **two processes** per project:
+
+```
+AI client ──stdio──> bridge (per AI session) ──HTTP──> daemon (per project root)
+                                                            │
+                                                            └── live index in memory
+```
+
+### Bridge (`src/server/bridge.ts`)
+- Spawned by the AI client over stdio, one per AI session.
+- Speaks the standard MCP stdio protocol on its client-facing side.
+- On its other side, opens an HTTP/MCP connection (`StreamableHTTPClientTransport`) to a local daemon.
+- Lazy-connects to the daemon on the first tool call so MCP `initialize` completes immediately — even if the daemon is still indexing.
+- Acts as a thin proxy: `listTools`/`callTool` calls forward straight through.
+
+### Daemon (`src/server/http-daemon.ts`, `src/index-manager.ts`)
+- Long-lived background process. One daemon per absolute project root.
+- Spawned automatically by the first bridge that finds no live daemon. Re-used by all subsequent bridges for the same root.
+- Holds the index, runs the file watcher, manages patch/rebuild — all entirely separate from any AI client lifecycle.
+- HTTP server binds to `127.0.0.1` on a random ephemeral port. Each AI session gets its own MCP `Server + Transport` pair on the daemon side, but they all share the same `getContext` closure (same live index).
+
+### Lockfile (`src/daemon-lock.ts`)
+- Path: `~/.coldstart/daemon/<basename>-<hash>.json` — `<basename>` is the directory name of the project root, `<hash>` is the first 16 hex chars of `sha256(absolute_path)`. The basename prefix is human-readable; the hash disambiguates collisions and makes the file safe to grep.
+- Contents: `{ pid, port }`.
+- Bridges check the lockfile, verify the PID is alive (`process.kill(pid, 0)`), and probe the port (`GET /mcp`) before reusing it. A stale lockfile triggers respawn.
+- A separate **spawn lock** (`<basename>-<hash>.spawn`, opened with `O_CREAT | O_EXCL`) ensures only one bridge spawns the daemon when several start in parallel; the rest wait on the lockfile.
+
+### `--no-daemon` mode
+Bypasses the bridge/daemon split entirely. The single CLI process runs the stdio MCP server *and* holds the index *and* runs the watcher — same code paths, just no IPC. Used for development, debugging, and environments where spawning detached processes is undesirable.
+
+### Why split it
+The daemon survives across AI client restarts — index build cost is paid once per machine boot (or after a `CACHE_VERSION` bump), not on every new session. Two AI sessions on the same project share one index instead of holding two copies.
+
+---
+
+## Indexing pipeline (daemon side)
 
 ### Startup pipeline
 
@@ -48,7 +85,7 @@ Removed:
    - Recursively discovers source files by extension.
    - Skips hidden directories, symlinks, and files above size threshold.
 
-2. **Parse** (`indexer/parser.ts`, `indexer/ts-parser.ts`, `indexer/extractors/`)
+2. **Parse** (`indexer/parser.ts`, `indexer/extractors/`)
    - Files are processed in batches of 100 (via `Promise.all` per batch, sequential across batches). This keeps peak memory at O(batch_size) instead of O(total_files) — relevant when running alongside a large local LLM. Parse progress is logged to stderr every 500 files and always at 100%.
    - **TypeScript/JavaScript**: Tree-sitter (tree-sitter-typescript) — functions, classes, interfaces, type aliases, constants, methods. Tracks intra-file call relationships, extends/implements chains.
    - **Java**: Tree-sitter (tree-sitter-java) — classes, interfaces, enums, records, methods, constructors. Tracks method invocations, extends, implements chains. Extracts static final constants. Public methods are marked `isExported: true` and included in the exports list for cross-file call edge resolution. Wildcard imports are dropped at parse time.
@@ -60,9 +97,10 @@ Removed:
    - **PHP**: Tree-sitter (tree-sitter-php) — classes, interfaces, traits, public methods. Extracts `extends`/`implements` clauses. Captures `use` namespace imports.
    - **Kotlin**: Tree-sitter (tree-sitter-kotlin) — classes, interfaces (detected via `interface` keyword in `class_declaration`), object declarations, top-level functions, methods. Public by default unless explicitly private/protected.
    - **C++**: Tree-sitter (tree-sitter-cpp) — classes, structs, functions, methods, namespaces.
+   - **GraphQL** (`extractors/graphql.ts`): regex-based extractor — operations (query/mutation/subscription), fragments, type-system definitions (type/input/interface/enum/union/scalar/directive). No call tracking; symbols only.
    - **Vue/Svelte/Astro (SFC)**: script block extracted from the SFC source before handing off to the TypeScript/JavaScript parser. The rest of the file (template, style) is ignored.
    - **AngularJS 1.x**: regex-based extractor (no AST) for `.service()`, `.controller()`, `.factory()`, `.directive()` module registrations — covers legacy Angular 1 codebases where Tree-sitter gives no useful symbols.
-   - **TypeScript/JavaScript enhancements**: `export default <identifier>` (bare identifier form) now correctly marks the referenced symbol as exported in addition to setting `hasDefaultExport = true`.
+   - **TypeScript/JavaScript enhancements**: `export default <identifier>` (bare identifier form) correctly marks the referenced symbol as exported in addition to setting `hasDefaultExport = true`.
    - **Other languages** (Swift, Dart): Walked by the filesystem scanner but not parsed — files appear in the index with empty imports/exports/symbols.
    - Derives metadata: hash, line count, token estimate.
 
@@ -82,16 +120,16 @@ Removed:
    - Builds adjacency maps (`outEdges`, `inEdges`).
    - Derives `importedByCount` from in-degree.
 
-5. **Serve** (`server/mcp.ts`, `server/tools.ts`)
-   - Exposes the 4 MCP tools over stdio.
+5. **Serve** (`server/mcp.ts`, `server/tools.ts`, `server/http-daemon.ts`)
+   - Tool definitions are exported as `TOOL_DEFINITIONS` and shared by both the stdio path (`--no-daemon`) and the HTTP daemon path.
    - All tool responses come from in-memory index data (no file reads per tool call).
    - `trace-impact` additionally queries symbol-level edges (calls, extends, implements) to compute transitive dependents.
-   - Reads the active index via `IndexManager.getContext()` — always gets the latest live snapshot.
+   - Reads the active index via `IndexManager.getContext()` — always returns the latest live snapshot.
    - Surfaces `_indexStatus: "rebuilding"` in responses when a full rebuild is in progress.
 
 ### Live update loop (post-startup)
 
-After the server starts, the index is kept current in-memory for the entire session:
+After the daemon's index is ready, it is kept current in-memory for the entire daemon lifetime:
 
 6. **Watch** (`watcher.ts`)
    - Starts a recursive `fs.watch` on the project root (native Node.js, no extra deps).
@@ -144,27 +182,33 @@ Key per-file signals used by tools:
 
 ## Caching strategy
 
-Cache path:
-- `~/.coldstart/indexes/<hash-of-root>/`
+**Cache path:** `~/.coldstart/indexes/<basename>-<hash>/`
 
-Artifacts:
-- `meta.json`
-- `index.json`
+`<basename>` is the directory name of the project root; `<hash>` is the first 16 hex chars of `sha256(absolute_path)`. Both are present so the directory listing is human-readable while remaining collision-safe.
+
+**Artifacts (split format):**
+- `meta.json` — schema version, root path, git HEAD, file checksums, timestamps. Small; read first to decide whether the cache is reusable.
+- `graph.json` — symbols, edges, domain map, adjacency maps. Bulk of the data; only loaded if `meta.json` validates.
+
+The split lets the bridge probe `meta.json` to decide cache reuse without touching the multi-MB graph payload.
 
 **Startup reuse conditions:**
-- Cache version matches schema version (`CACHE_VERSION` in `constants.ts`)
+- `CACHE_VERSION` matches schema version (in `constants.ts`)
 - Git HEAD has not changed since the index was built (branch switch or new commit forces a rebuild)
 
 **TTL:** 24 hours — safety net only. The file watcher is the primary freshness mechanism during a session. The in-memory index is kept current regardless of TTL.
 
 **Cache writes:** Triggered lazily (5 s after last patch or rebuild) to avoid hammering disk during rapid AI-agent write bursts. Disabled when `--no-cache` is set.
 
+**Daemon lockfile:** Separate path — `~/.coldstart/daemon/<basename>-<hash>.json` — see "Process model" above. Cache directory and daemon directory are independent; wiping one does not affect the other.
+
 ---
 
 ## Design tradeoffs
 
-1. **AST-only parsing via Tree-sitter across all supported languages**
-   - All indexed languages use Tree-sitter for symbol-level accuracy (exact function/class/interface extraction, line numbers, call tracking). AngularJS 1.x is the only exception — regex-based extraction because Tree-sitter gives no useful symbols for Angular 1 module registration patterns.
+1. **AST-only parsing via Tree-sitter across most supported languages**
+   - Tree-sitter languages get symbol-level accuracy (exact function/class/interface extraction, line numbers, call tracking).
+   - GraphQL and AngularJS 1.x use regex extraction — Tree-sitter gives no useful symbols for those file shapes.
    - Unsupported languages (Swift, Dart) are walked but not parsed — no stable tree-sitter grammar npm packages available.
    - node-tree-sitter chosen over web-tree-sitter for simpler Node.js API (no WASM loading boilerplate).
 
@@ -173,11 +217,15 @@ Artifacts:
    - Large changes (>30 files) or git HEAD changes: full rebuild. Cleaner than attempting large multi-file graph patches; still fast on modern hardware (~5 s for 5k files).
    - Changes mid-rebuild are queued and applied as a follow-up patch — no silent drops.
 
-3. **Structural answers over semantic summaries**
+3. **Bridge ↔ daemon split**
+   - Pros: index survives AI client restarts; multiple sessions share one in-memory copy.
+   - Cons: more moving parts; lockfile and port hygiene to maintain. `--no-daemon` is the escape hatch when this complexity is unwelcome.
+
+4. **Structural answers over semantic summaries**
    - Pros: less drift, clearer contract, easier to validate.
    - Cons: agent still needs to open files for implementation details.
 
-4. **Zero external dependencies for live updates**
+5. **Zero external dependencies for live updates**
    - File watching uses Node.js native `fs.watch` (FSEvents on macOS, inotify on Linux) — no chokidar or polling.
    - The 400 ms debounce handles editor atomic-save patterns (temp file + rename).
 
@@ -208,10 +256,11 @@ Artifacts:
 It is:
 - A local MCP indexing + routing service.
 - A fast structural context provider for coding agents.
-- A symbol-level dependency analyzer for TS/JS/Vue/Svelte/Astro/AngularJS/Java/Ruby/Python/Go/Rust/C#/PHP/Kotlin/C++, with accurate export detection via Tree-sitter AST parsing.
-- A live index service — the in-memory graph stays current via file watching and incremental patching throughout the session.
+- A symbol-level dependency analyzer for the languages listed in [README.md](./README.md).
+- A live, daemon-backed index — the in-memory graph stays current via file watching and incremental patching across the daemon's lifetime, not just one AI session.
 
 It is not:
 - A replacement for code reading.
 - A semantic RAG/embedding platform.
 - A behavioral summarization system.
+- A networked/multi-machine service — the daemon is per-host, bound to `127.0.0.1`.

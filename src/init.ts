@@ -20,64 +20,81 @@ function out(msg: string): void {
 // Rules content (same for Claude and Cursor)
 // ---------------------------------------------------------------------------
 
-const RULES_CONTENT = `# Codebase navigation — use coldstart MCP tools
+const RULES_CONTENT = `# Codebase navigation — coldstart MCP tools
 
-Before searching or opening files, use the coldstart MCP tools to orient yourself.
-This saves tokens and avoids broad, speculative file reads.
+You have 4 MCP tools for navigating this codebase. Use them before Read/Grep/Glob/Bash.
 
-## The 4 tools
+## Tools
 
-1. **\`get-overview\`** — Find files by domain/token keywords (filename, path, exports, imports).
-   - Pass \`domain_filter\` with specific code tokens from your task.
-   - Bare words = AND logic: "auth payment" matches files with both tokens.
-   - Bracket groups = OR synonyms: "[auth|login|jwt] payment" = any auth term AND payment.
-   - Pluralization is automatic: "workspace" also matches "workspaces".
-   - Results show \`path\` and \`sources\` (which tokens matched).
-   - Call iteratively: if truncated, either call \`get-structure\` on a visible file or narrow the query.
-   - \`max_results\` defaults to 10 (increase sparingly; large result sets waste context).
-   - \`include_tests\` (default false) — set true if searching for test files.
+1. **\`get-overview\`** — Find files by keyword. Pass \`domain_filter\` with code tokens.
+   - Bare words = AND: \`auth payment\` matches files with both tokens.
+   - Brackets = OR synonyms: \`[auth|login|jwt] payment\`.
+   - Returns 7 ranked file paths — nothing else. To learn what's inside one, drill in with \`get-structure\`.
 
-2. **\`get-structure\`** — Inspect a single file's shape WITHOUT reading it.
-   - Returns: exports, imports, symbols with line numbers, language, line count, token estimate.
-   - Fast way to decide if a file is relevant before opening it.
+2. **\`get-structure\`** — Drill into a single file. Returns its symbols (name, kind, line range, extends/implements) and 1-hop internal imports as a compact text block.
+   - Use AFTER get-overview, BEFORE Read. Lets you decide if a file is worth opening.
+   - Library/external imports are stripped; only internal repo paths are shown.
 
-3. **\`trace-deps\`** — Follow dependency chains WITHOUT opening files.
-   - \`direction="imports"\`: what does this file depend on?
-   - \`direction="importers"\`: what depends on this file?
-   - Use \`depth=2\` or \`depth=3\` for transitive chains.
+3. **\`trace-deps\`** — For a known file, returns its imports and/or importers. Default depth 1; raise to 2-3 for transitive reach.
+   - **Reverse lookup** (\`direction: "importers"\`): scope blast radius before changing a file.
+   - **Transitive reach** (\`depth: 2-3\`): explore deeper than get-structure's 1 hop.
 
-4. **\`trace-impact\`** — Understand blast radius of symbol changes.
-   - Returns known static dependents: symbols that directly or transitively call, extend, or implement the target.
-   - Named function calls are resolved cross-file. Member expression calls (\`this.x()\`, \`obj.x()\`) are not — use \`trace-deps\` to find file-level importers when call graph coverage is uncertain.
-   - Use before refactoring to scope affected code without reading dependent files.
+4. **\`trace-impact\`** — Find callers/implementors of a symbol across the codebase.
+   - Use before refactoring a function/class.
+   - Inheritance chains (extends/implements) are reliable; cross-file call edges may be incomplete.
 
-## Workflow examples
+## Key guidance
 
-**Starting a task with a known concept (e.g. "fix the auth flow"):**
-1. \`get-overview(domain_filter="[auth|login|jwt]")\`
-2. \`get-structure\` on a promising file
-3. Read the file only if confirmed relevant
+- **Typical flow:** \`get-overview\` to shortlist files → \`get-structure\` on the most promising one → \`trace-deps\` or \`trace-impact\` to expand the graph → \`Read\` only when you need actual implementation.
+- **Page size is 7. Do not raise it.** If the right file isn't in the top 7, your query is wrong — refine it with different keywords, synonyms (\`[a|b]\`), or a more specific token. Pagination almost never helps: if the answer isn't in 7, it isn't in 12 either.
+- **Stop when data is sufficient.** Don't re-query to confirm what you already found.
+- **Fall back to grep** for string literals, exact call sites, or dynamic dispatch patterns.
+`;
 
-**Understanding how a component connects:**
-1. \`get-structure(file_path="path/to/file.ts")\`
-2. \`trace-deps(file_path="path/to/file.ts", direction="importers")\`
-3. Read dependent files if needed
+// ---------------------------------------------------------------------------
+// Skill content (Claude Code only)
+// ---------------------------------------------------------------------------
 
-**Before refactoring a function or class:**
-1. \`trace-impact(symbol="MyFunction")\`
-2. Review affected symbols and dependencies
-3. Make targeted edits
+const SKILL_CONTENT = `---
+name: trace-files
+description: Answer questions about how code works, trace flows, find where things happen, understand architecture, or locate relevant files in an unfamiliar codebase
+---
 
-## When to fall back to grep/rg
+## Instructions
 
-Use grep only when coldstart tools don't answer the question:
-- Searching for a specific string literal inside file contents
-- Looking for all call sites of a function by exact name across the whole repo
-- Searching inside comments or string values
+You have 4 coldstart MCP tools. Use them before Read/Grep/Glob/Bash:
 
-In all other cases, prefer coldstart tools first.
+- **get-overview**: Find files by keyword/symbol/path. Returns 7 ranked file paths — nothing else.
+- **get-structure**: Drill into a candidate file. Returns its symbols + 1-hop internal imports as compact text. Use this AFTER get-overview, BEFORE Read.
+- **trace-deps**: For a known file, returns imports/importers (depth 1-3). Use \`direction: "importers"\` to scope refactor blast radius, or raise \`depth\` to reach beyond get-structure's 1 hop.
+- **trace-impact**: Find callers/implementors of a specific symbol before refactoring it.
 
-# These rules are a starting point — adapt them to your model and project as you see fit.
+## Exploration strategy
+
+1. Start with \`get-overview\` to shortlist files.
+2. Call \`get-structure\` on the most promising candidate to see its shape (symbols + internal imports) before opening it.
+3. To expand the graph: \`trace-deps\` for file-level imports/importers; \`trace-impact\` for symbol-level callers.
+4. \`Read\` the file only when you need actual implementation details.
+5. If results span multiple distinct areas (different top-level directories, separate concerns like UI vs data layer vs API), spawn one sub-agent per area.
+6. If results cluster in one area, proceed inline — no sub-agents needed.
+
+When spawning sub-agents, include these instructions in each sub-agent prompt:
+
+> You have coldstart MCP tools available: get-overview, get-structure, trace-deps, trace-impact.
+> Use these BEFORE Read/Grep/Glob/Bash.
+> Flow: get-overview → get-structure on a candidate → trace-deps/trace-impact to expand → Read only if needed.
+> Report file paths with line numbers for all key findings.
+
+## Anti-patterns
+
+- Don't raise \`max_results\` above 7. If the right file isn't in the top 7, refine the query — pagination won't fix a bad query.
+- Don't Read a file just to inspect its shape or imports — call \`get-structure\` instead.
+- Don't Read a file just to find who imports it — call \`trace-deps\` with \`direction: "importers"\`.
+- Don't use \`find\` or \`ls\` via Bash when get-overview can do the job.
+
+## Task
+
+$ARGUMENTS
 `;
 
 const MDC_FRONTMATTER = `---
@@ -126,6 +143,15 @@ function writeClaudeMd(cwd: string): 'created' | 'appended' | 'skipped' {
   return 'created';
 }
 
+function writeClaudeSkill(cwd: string): 'created' | 'updated' {
+  const skillDir = path.join(cwd, '.claude', 'skills', 'trace-files');
+  const filePath = path.join(skillDir, 'SKILL.md');
+  const existed = fs.existsSync(filePath);
+  fs.mkdirSync(skillDir, { recursive: true });
+  fs.writeFileSync(filePath, SKILL_CONTENT);
+  return existed ? 'updated' : 'created';
+}
+
 function writeCursorRule(cwd: string): 'created' | 'updated' {
   const rulesDir = path.join(cwd, '.cursor', 'rules');
   const filePath = path.join(rulesDir, 'coldstart-mcp.mdc');
@@ -142,8 +168,10 @@ function writeCursorRule(cwd: string): 'created' | 'updated' {
 function setupClaude(cwd: string): void {
   const mcpResult = mergeMcpJson(path.join(cwd, '.mcp.json'), cwd);
   const mdResult = writeClaudeMd(cwd);
-  out(`  .mcp.json  — ${mcpResult}`);
-  out(`  CLAUDE.md  — ${mdResult}`);
+  const skillResult = writeClaudeSkill(cwd);
+  out(`  .mcp.json                              — ${mcpResult}`);
+  out(`  CLAUDE.md                              — ${mdResult}`);
+  out(`  .claude/skills/trace-files/SKILL.md    — ${skillResult}`);
 }
 
 function setupCursor(cwd: string): void {
@@ -192,7 +220,7 @@ export async function runInit(): Promise<void> {
     out('Detected: Claude Code and Cursor');
     out('');
     out('Will write:');
-    out('  .mcp.json, CLAUDE.md');
+    out('  .mcp.json, CLAUDE.md, .claude/skills/trace-files/SKILL.md');
     out('  .cursor/mcp.json, .cursor/rules/coldstart-mcp.mdc');
     out('');
     const answer = await ask('Set up for both? [Y/n] ');
@@ -201,8 +229,9 @@ export async function runInit(): Promise<void> {
     out('Detected: Claude Code');
     out('');
     out('Will write:');
-    out('  .mcp.json   — MCP server config (merge if exists)');
-    out('  CLAUDE.md   — agent rules (append if exists, create if not)');
+    out('  .mcp.json                            — MCP server config (merge if exists)');
+    out('  CLAUDE.md                            — agent rules (append if exists, create if not)');
+    out('  .claude/skills/trace-files/SKILL.md  — auto-invoked exploration skill');
     out('');
     const answer = await ask('Proceed? [Y/n] ');
     target = (answer === '' || answer === 'y') ? 'claude' : 'files';

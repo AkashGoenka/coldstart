@@ -23,7 +23,7 @@ export function handleGetOverview(
     include_tests?: boolean;
   },
 ): object {
-  const { domain_filter, max_results = 10, include_tests = false } = params;
+  const { domain_filter, max_results = 7, include_tests = false } = params;
 
   if (!domain_filter) {
     return {
@@ -162,6 +162,80 @@ export function handleGetOverview(
 }
 
 // ============================================================================
+// get-structure (merged drill-down: symbols + 1-hop internal imports)
+// ============================================================================
+export function handleGetStructure(
+  index: CodebaseIndex,
+  params: { file_path: string },
+): object {
+  if (!params.file_path) {
+    return { error: 'file_path is required' };
+  }
+  const fileEntry = findFileByPath(index, params.file_path);
+  if (!fileEntry) {
+    return { error: `File not found: ${params.file_path}` };
+  }
+  const [fileId, file] = fileEntry;
+
+  const lines: string[] = [`${file.relativePath} (${file.lineCount} lines, importedBy: ${file.importedByCount})`];
+
+  // Symbols — one per line, indented under parent class when applicable
+  const filtered = file.symbols
+    .filter(s => s.isExported || s.kind === 'class' || s.kind === 'function')
+    .slice()
+    .sort((a, b) => a.startLine - b.startLine);
+
+  if (filtered.length > 0) {
+    lines.push('');
+    lines.push('Symbols:');
+    let lastClassName: string | null = null;
+    for (const s of filtered) {
+      let displayName = s.name;
+      let indent = '';
+      if (lastClassName && s.name.startsWith(lastClassName + '.')) {
+        displayName = s.name.slice(lastClassName.length + 1);
+        indent = '  ';
+      } else if (s.kind === 'class') {
+        lastClassName = s.name;
+      }
+      const range = s.startLine === s.endLine ? `[${s.startLine}]` : `[${s.startLine}-${s.endLine}]`;
+      let line = `${indent}${s.kind} ${displayName} ${range}`;
+      if (s.extendsName) line += ` extends ${s.extendsName}`;
+      if (s.implementsNames.length > 0) line += ` implements ${s.implementsNames.join(', ')}`;
+      lines.push(line);
+    }
+  }
+
+  // Imports — internal only, bare paths, deduped.
+  // Above IMPORTS_LIST_THRESHOLD we show only the count + pointer to trace-deps,
+  // since agents skim long lists and `trace-deps` is the right tool for a full list.
+  const IMPORTS_LIST_THRESHOLD = 15;
+  const internalImports = [...new Set(
+    index.edges
+      .filter(e => e.from === fileId)
+      .map(e => index.files.get(e.to)?.relativePath)
+      .filter((p): p is string => !!p)
+  )];
+
+  if (internalImports.length > 0) {
+    lines.push('');
+    if (internalImports.length <= IMPORTS_LIST_THRESHOLD) {
+      lines.push('Imports:');
+      for (const p of internalImports) lines.push(p);
+    } else {
+      lines.push(`Imports: ${internalImports.length} internal files — use trace-deps for the list.`);
+    }
+  }
+
+  // Next-step pointer — bake into output so the agent sees the chain options
+  // without relying on CLAUDE.md / SKILL.md (which it routinely ignores).
+  lines.push('');
+  lines.push('Next: trace-deps on this file (direction: "importers") to see who imports it; trace-impact <symbol> on any symbol above to see callers/implementors. Open the file with Read only when you need actual implementation.');
+
+  return { __rawText: lines.join('\n') };
+}
+
+// ============================================================================
 // trace-deps
 // ============================================================================
 export function handleTraceDeps(
@@ -185,6 +259,11 @@ export function handleTraceDeps(
   }
   const [fileId, file] = fileEntry;
 
+  // Drop high-fanout neighbors (shared utils, contexts, enums) — they're
+  // almost never on the path to the answer and they bloat the result.
+  const FANOUT_CAP = 30;
+  let skippedHighFanout = 0;
+
   function collectDeps(
     startId: string,
     getNeighbors: (id: string) => string[],
@@ -200,6 +279,10 @@ export function handleTraceDeps(
         if (visited.has(neighborId)) continue;
         const neighbor = index.files.get(neighborId);
         if (!neighbor) continue;
+        if (neighbor.importedByCount > FANOUT_CAP) {
+          skippedHighFanout++;
+          continue;
+        }
         result.push({
           path: neighbor.relativePath,
           language: neighbor.language,
@@ -239,63 +322,12 @@ export function handleTraceDeps(
     );
   }
 
+  if (skippedHighFanout > 0) {
+    response.skippedHighFanout = skippedHighFanout;
+    response.note = `Omitted ${skippedHighFanout} neighbor(s) with importedByCount > ${FANOUT_CAP} (shared utils/contexts/enums — rarely on the path to a feature).`;
+  }
+
   return response;
-}
-
-// ============================================================================
-// get-structure
-// ============================================================================
-export function handleGetStructure(
-  index: CodebaseIndex,
-  params: { file_path: string },
-): object {
-  if (!params.file_path) {
-    return { error: 'file_path is required' };
-  }
-  const fileEntry = findFileByPath(index, params.file_path);
-  if (!fileEntry) {
-    return { error: `File not found: ${params.file_path}` };
-  }
-  const [fileId, file] = fileEntry;
-
-  // Classify imports as internal vs external
-  const edges = index.edges.filter(e => e.from === fileId);
-  const internalImports = edges
-    .map(e => {
-      const target = index.files.get(e.to);
-      return target ? { specifier: e.specifier, resolvedPath: target.relativePath } : null;
-    })
-    .filter(Boolean);
-
-  const allImportSpecifiers = file.imports;
-  const resolvedSpecifiers = new Set(edges.map(e => e.specifier));
-  const externalImports = allImportSpecifiers.filter(s => !resolvedSpecifiers.has(s));
-
-  // Build symbol summary (TS/JS only)
-  const symbolSummary = file.symbols.length > 0
-    ? file.symbols
-        .filter(s => s.isExported || s.kind === 'class' || s.kind === 'function')
-        .map(s => ({
-          name: s.name,
-          kind: s.kind,
-          lines: `${s.startLine}-${s.endLine}`,
-          ...(s.extendsName ? { extends: s.extendsName } : {}),
-          ...(s.implementsNames.length > 0 ? { implements: s.implementsNames } : {}),
-          ...(s.calls.length > 0 ? { calls: s.calls.slice(0, 8) } : {}),
-        }))
-    : undefined;
-
-  return {
-    path: file.relativePath,
-    exports: file.exports,
-    ...(symbolSummary ? { symbols: symbolSummary } : {}),
-    imports: {
-      internal: internalImports,
-      external: externalImports,
-    },
-    lineCount: file.lineCount,
-    importedByCount: file.importedByCount,
-  };
 }
 
 // ============================================================================
@@ -424,6 +456,24 @@ export function handleTraceImpact(
     if (info) affectedFilesSet.add(info.file);
   }
 
+  // -------------------------------------------------------------------------
+  // Step 6: If no symbol-level impact, fall back to file-level importers
+  // This covers languages where calls are member expressions (obj.method())
+  // that don't produce symbol edges.
+  // -------------------------------------------------------------------------
+  let fileImporters: string[] | undefined;
+  if (impacted.length === 0) {
+    // Find the fileId for the target symbol's file
+    const targetFileId = findFileIdByRelativePath(index, target.fileEntry.relativePath);
+    if (targetFileId) {
+      const importerIds = index.inEdges.get(targetFileId) ?? [];
+      fileImporters = importerIds
+        .map(id => index.files.get(id)?.relativePath)
+        .filter((p): p is string => p !== undefined)
+        .sort();
+    }
+  }
+
   return {
     target: {
       symbol: target.name,
@@ -448,6 +498,17 @@ export function handleTraceImpact(
       affectedFiles: [...affectedFilesSet].sort(),
       ...(truncated ? { truncatedAt: TRUNCATE_AT, note: 'Impact set exceeded limit; results truncated' } : {}),
     },
+    ...(impacted.length === 0 ? {
+      fallback: 'file-level',
+      ...(fileImporters && fileImporters.length > 0
+        ? {
+            fileImporters,
+            note: 'No symbol-level dependents indexed for this target. Common causes: (a) member-expression calls (obj.method()) that did not resolve, or (b) the target has no callers. fileImporters below shows files importing this target\'s file — start there.',
+          }
+        : {
+            note: 'No symbol-level dependents indexed and no files import this target\'s file. The symbol may be unused, an entry point, or invoked dynamically.',
+          }),
+    } : {}),
   };
 }
 
@@ -479,6 +540,9 @@ function findSymbolCandidates(
 ): Array<{ id: string; name: string; kind: string; fileEntry: IndexedFileLike }> {
   const results: Array<{ id: string; name: string; kind: string; fileEntry: IndexedFileLike }> = [];
 
+  // Suffixes for qualified names: Ruby uses ::, Java/TS use .
+  const qualifiedSuffixes = ['::' + symbolName, '.' + symbolName];
+
   const searchIn = (file: IndexedFileLike) => {
     for (const sym of file.symbols) {
       if (sym.name === symbolName) {
@@ -487,12 +551,34 @@ function findSymbolCandidates(
     }
   };
 
+  // Suffix match: find symbols ending with ::SymbolName or .SymbolName
+  const searchInSuffix = (file: IndexedFileLike) => {
+    for (const sym of file.symbols) {
+      if (qualifiedSuffixes.some(suffix => sym.name.endsWith(suffix))) {
+        results.push({ id: sym.id, name: sym.name, kind: sym.kind, fileEntry: file });
+      }
+    }
+  };
+
   if (filePath) {
     const fileEntry = findFileByPath(index, filePath);
-    if (fileEntry) searchIn(fileEntry[1]);
+    if (fileEntry) {
+      searchIn(fileEntry[1]);
+      // Fall back to suffix match in that file — handles the case where the
+      // ambiguity error returned a qualified name (e.g. "Class.method") but
+      // the user retries with the bare name ("method").
+      if (results.length === 0) searchInSuffix(fileEntry[1]);
+    }
   } else {
+    // Try exact match first
     for (const file of index.files.values()) {
       searchIn(file);
+    }
+    // Fall back to suffix match if no exact hits
+    if (results.length === 0) {
+      for (const file of index.files.values()) {
+        searchInSuffix(file);
+      }
     }
   }
 
@@ -519,6 +605,16 @@ function fuzzyMatchSymbols(
   }
 
   return results;
+}
+
+// ============================================================================
+// Helper: find fileId by relative path (for file-level graph lookups)
+// ============================================================================
+function findFileIdByRelativePath(index: CodebaseIndex, relativePath: string): string | null {
+  for (const [id, file] of index.files) {
+    if (file.relativePath === relativePath) return id;
+  }
+  return null;
 }
 
 // ============================================================================

@@ -23,15 +23,61 @@ const DIR_ENTRY_NAMES = new Set(['index', '__init__', 'mod', 'page', 'route', 'l
 
 // Words that, when found as a token in any path segment, mark a file as test infrastructure.
 // Matched via tokenizeName so word-boundary splitting handles e2e-tests, __tests__, pageObjects etc.
+// Compound forms (integrationtest, uitests, etc.) are listed because tokenizeName won't split
+// all-lowercase compounds without separators.
 const TEST_SEGMENT_WORDS = new Set([
   'test', 'tests', 'spec', 'specs', 'e2e', 'mock', 'mocks', 'fixture', 'fixtures',
   'stub', 'stubs', 'locator', 'locators', 'pageobject', 'pageobjects',
   'automation', 'cypress', 'playwright', 'selenium', 'nightwatch', 'webdriver',
+  // QA top-level directories
+  'qa', 'qe',
+  // Compound test-dir names (tokenizeName doesn't split all-lowercase compounds)
+  'unittest', 'unittests',
+  'integrationtest', 'integrationtests',
+  'whiteboxtest', 'whiteboxtests',
+  'blackboxtest', 'blackboxtests',
+  'uitest', 'uitests',
+  'apitest', 'apitests',
+  'e2etest', 'e2etests',
+  'smoketest', 'smoketests',
+  'loadtest', 'loadtests',
+  'perftest', 'perftests',
 ]);
 
 /**
+ * Detects test files by filename convention across the supported languages.
+ * Case-sensitive checks on the stem avoid false positives like `latest.js`,
+ * `Contest.java`, `Manifest.java`.
+ */
+function isTestFilename(filename: string): boolean {
+  const lower = filename.toLowerCase();
+
+  // 1. JS/TS dotted: foo.test.ts, foo.spec.js, foo.mock.tsx, foo.e2e.ts, foo.cy.ts
+  if (/\.(test|spec|mock|e2e|cy)\.[a-z]+$/.test(lower)) return true;
+
+  // 2. Snake_case suffix: foo_test.go, foo_spec.rb, foo_test.py, foo_tests.rs, foo_test.cpp
+  if (/_(?:tests?|specs?)\.[a-z]+$/.test(lower)) return true;
+
+  // 3. Snake_case prefix: test_foo.py, test_foo.cpp
+  if (/^test_.+\.(?:py|cpp|cc|cxx|h|hpp)$/.test(lower)) return true;
+
+  // 4. Pytest config
+  if (lower === 'conftest.py') return true;
+
+  // 5. CamelCase suffix on stem (Java/Kotlin/C#/PHP): MyClassTest.java, MySpec.kt, MyITCase.java
+  const stem = filename.replace(/\.[^.]+$/, '');
+  if (/(?:Test|Tests|Spec|Specs|ITCase)$/.test(stem)) return true;
+
+  // 6. CamelCase prefix on stem (Java/Kotlin/C#/PHP): TestMyClass.java
+  if (/^Test[A-Z]/.test(stem)) return true;
+
+  return false;
+}
+
+/**
  * Returns true if any directory segment in the relative path contains a test
- * infrastructure word (e.g. "e2e-tests/", "locators/", "__tests__/").
+ * infrastructure word (e.g. "e2e-tests/", "locators/", "__tests__/", "qa/"),
+ * or if the filename matches a per-language test convention.
  * Works for any project structure — no hardcoded paths.
  */
 export function isTestPath(relativePath: string): boolean {
@@ -39,10 +85,7 @@ export function isTestPath(relativePath: string): boolean {
   const parts = normalized.split('/');
   const filename = parts[parts.length - 1];
 
-  // Check filename directly for .test., .spec., .mock. patterns (before extension stripping)
-  // Can't use tokenizeName here — 'test'/'spec'/'mock' are stop words and get filtered out
-  const filenameLower = filename.toLowerCase();
-  if (/\.(test|spec|mock)\.[a-z]+$/.test(filenameLower)) return true;
+  if (isTestFilename(filename)) return true;
 
   // Check all directory segments
   const dirParts = parts.slice(0, -1);
