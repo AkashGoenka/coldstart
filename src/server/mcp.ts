@@ -96,9 +96,9 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'trace-impact',
     description:
-      'Symbol-level blast radius. Use when the question is "who calls X / who implements X / who extends X / where else is X used / what breaks if I change X". Returns every indexed symbol that calls, extends, or implements the target, with the dependency chain for each.\n\n' +
-      'Reach for this BEFORE grepping for callers or reading suspected callsites — one call returns the full caller/implementor set. Especially useful for interface methods, listener/handler hooks, and cross-cutting concerns where callsites are scattered.\n\n' +
-      'Limitations: (1) only top-level and one-level-nested symbols are indexed. (2) If `impacted` comes back empty, the response includes a file-level fallback — use that, do not retry with grep. (3) Inheritance chains (extends/implements) are the most reliable signal.',
+      'Symbol-level blast radius AND symbol-name lookup. Use when the question is "who calls X / who implements X / who extends X / where else is X used / what breaks if I change X" — but ALSO use it as the fast "where is symbol X defined" lookup whenever you have an exact function/class/constant name. The response always includes `target.file` and `target.line` for the definition site, even when there are zero callers.\n\n' +
+      'Reach for this BEFORE grepping for `def foo`, `class Foo`, or `FOO_CONSTANT` — one call returns the definition site plus the full caller/implementor set. Especially useful for interface methods, listener/handler hooks, and cross-cutting concerns where callsites are scattered.\n\n' +
+      'Limitations: (1) only top-level and one-level-nested symbols are indexed. (2) If `impacted` comes back empty, the response includes a file-level fallback and an explicit "Defined at" note — use that, do not retry with grep. (3) Inheritance chains (extends/implements) are the most reliable signal.',
     inputSchema: {
       type: 'object',
       properties: {
