@@ -882,3 +882,90 @@ describe('parser — .env', () => {
     expect(fooCount).toBe(1);
   });
 });
+
+describe('parser — XML', () => {
+  it('extracts Spring bean id attribute', async () => {
+    const { parseXmlContent } = await import('../src/indexer/extractors/xml.js');
+    const xml = '<bean id="userService" class="com.example.UserService"/>';
+    const result = parseXmlContent(xml, 'spring.xml');
+    expect(result.exports).toContain('userService');
+  });
+
+  it('extracts class attribute last segment', async () => {
+    const { parseXmlContent } = await import('../src/indexer/extractors/xml.js');
+    const xml = '<bean id="userService" class="com.example.UserService"/>';
+    const result = parseXmlContent(xml, 'spring.xml');
+    expect(result.exports).toContain('UserService');
+  });
+
+  it('extracts Maven artifactId text content', async () => {
+    const { parseXmlContent } = await import('../src/indexer/extractors/xml.js');
+    const xml = '<artifactId>spring-core</artifactId>';
+    const result = parseXmlContent(xml, 'pom.xml');
+    expect(result.exports).toContain('spring-core');
+  });
+
+  it('extracts Maven groupId text content', async () => {
+    const { parseXmlContent } = await import('../src/indexer/extractors/xml.js');
+    const xml = '<groupId>org.springframework</groupId>';
+    const result = parseXmlContent(xml, 'pom.xml');
+    expect(result.exports).toContain('org.springframework');
+  });
+
+  it('extracts Android resource name attribute', async () => {
+    const { parseXmlContent } = await import('../src/indexer/extractors/xml.js');
+    const xml = '<string name="welcome">Hello</string>';
+    const result = parseXmlContent(xml, 'strings.xml');
+    expect(result.exports).toContain('welcome');
+  });
+
+  it('extracts ref attribute values', async () => {
+    const { parseXmlContent } = await import('../src/indexer/extractors/xml.js');
+    const xml = '<property ref="dataSource"/>';
+    const result = parseXmlContent(xml, 'spring.xml');
+    expect(result.exports).toContain('dataSource');
+  });
+
+  it('extracts key attribute values', async () => {
+    const { parseXmlContent } = await import('../src/indexer/extractors/xml.js');
+    const xml = '<entry key="adminRole" value="ADMIN"/>';
+    const result = parseXmlContent(xml, 'config.xml');
+    expect(result.exports).toContain('adminRole');
+  });
+
+  it('does not capture commented elements', async () => {
+    const { parseXmlContent } = await import('../src/indexer/extractors/xml.js');
+    const xml = '<!-- <bean id="ignored"/> -->\n<bean id="active"/>';
+    const result = parseXmlContent(xml, 'spring.xml');
+    expect(result.exports).toContain('active');
+    expect(result.exports).not.toContain('ignored');
+  });
+
+  it('does not emit duplicates across repeated elements', async () => {
+    const { parseXmlContent } = await import('../src/indexer/extractors/xml.js');
+    const xml = '<groupId>org.foo</groupId>\n<groupId>org.foo</groupId>';
+    const result = parseXmlContent(xml, 'pom.xml');
+    const fooCount = result.exports.filter(e => e === 'org.foo').length;
+    expect(fooCount).toBe(1);
+  });
+
+  it('produces symbols with correct metadata', async () => {
+    const { parseXmlContent } = await import('../src/indexer/extractors/xml.js');
+    const xml = '<bean id="userService" class="com.example.UserService"/>';
+    const result = parseXmlContent(xml, 'spring.xml');
+    expect(result.symbols.length).toBeGreaterThan(0);
+    const sym = result.symbols.find(s => s.name === 'userService');
+    expect(sym).toBeDefined();
+    expect(sym!.kind).toBe('constant');
+    expect(sym!.isExported).toBe(true);
+    expect(sym!.calls).toEqual([]);
+    expect(sym!.implementsNames).toEqual([]);
+  });
+
+  it('handles namespaced attributes (android:id)', async () => {
+    const { parseXmlContent } = await import('../src/indexer/extractors/xml.js');
+    const xml = '<android:item android:id="@+id/foo"/>';
+    const result = parseXmlContent(xml, 'layout.xml');
+    expect(result.exports).toContain('@+id/foo');
+  });
+});

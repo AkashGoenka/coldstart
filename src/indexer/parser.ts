@@ -16,6 +16,7 @@ import { parseGraphQLContent } from './extractors/graphql.js';
 import { parseYamlContent } from './extractors/yaml.js';
 import { parseTomlContent } from './extractors/toml.js';
 import { parseEnvContent } from './extractors/env.js';
+import { parseXmlContent } from './extractors/xml.js';
 
 const MAX_FILE_SIZE = 1_000_000; // 1 MB
 
@@ -420,6 +421,29 @@ export async function parseFile(
       lineCount,
       tokenEstimate,
       symbols: envResult.symbols,
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // XML: tree-sitter-based extractor (attributes, element text)
+  // -------------------------------------------------------------------------
+  if (language === 'xml') {
+    let xmlResult;
+    try {
+      xmlResult = parseXmlContent(content, fileId || filePath);
+    } catch (err) {
+      console.error(`[parser] Tree-sitter error in ${fileId || filePath}: ${err}`);
+      xmlResult = { imports: [], exports: [], hasDefaultExport: false as const, symbols: [] };
+    }
+
+    return {
+      imports: xmlResult.imports,
+      exports: xmlResult.exports,
+      hasDefaultExport: false,
+      hash,
+      lineCount,
+      tokenEstimate,
+      symbols: xmlResult.symbols,
     };
   }
 

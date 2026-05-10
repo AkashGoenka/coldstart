@@ -22,7 +22,8 @@ export type Language =
   | 'graphql'
   | 'yaml'
   | 'toml'
-  | 'env';
+  | 'env'
+  | 'xml';
 
 export type EdgeType =
   | 'import'
