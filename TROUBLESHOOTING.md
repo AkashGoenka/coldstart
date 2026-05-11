@@ -4,10 +4,32 @@ Most coldstart issues come from the daemon — either it didn't start, isn't res
 
 If a fix below references the daemon directory or cache, those live at:
 
-- `~/.coldstart/daemon/` — lockfiles, one `<basename>-<hash>.json` per project root
+- `~/.coldstart/daemon/` — lockfiles + log files, one set of `<basename>-<hash>.{json,log,log.prev}` per project root
 - `~/.coldstart/indexes/<basename>-<hash>/` — cached `meta.json` + `graph.json`
 
 `<basename>` is your project's directory name; `<hash>` is the first 16 chars of `sha256(absolute_path)`.
+
+---
+
+## First step for any daemon problem: `status` and `log`
+
+The daemon is auto-spawned with its stdio disconnected from the AI client, so its output doesn't appear in the client's logs. Coldstart writes every daemon log line to a file instead.
+
+**See which daemons exist and whether they're healthy:**
+
+```bash
+npx coldstart-mcp status
+```
+
+Output shows one row per daemon: root path, PID, port, status (`ok` / `alive, http unreachable` / `dead (stale lock)`), log size, and the log path.
+
+**Tail the log for a misbehaving daemon:**
+
+```bash
+tail -f ~/.coldstart/daemon/<basename>-<hash>.log
+```
+
+Logs rotate at 1 MB. The most recent run is in `.log`; the previous run is preserved in `.log.prev` — which is the file to read when a daemon has crashed and respawned.
 
 ---
 
@@ -15,14 +37,15 @@ If a fix below references the daemon directory or cache, those live at:
 
 The bridge waits for the daemon to finish its initial index build, up to 180 seconds. On large repos (10k+ files, slow disks, or first run with no cache) this can take a while.
 
-**Check stderr.** The bridge logs `[coldstart] Daemon spawned` when it starts a new daemon, and the daemon logs parse progress every 500 files. If you see no progress, the daemon isn't running.
+**Check progress.** The bridge logs `[coldstart] Daemon spawned` to the AI client's stderr when it starts a new daemon. The daemon itself logs parse progress every 500 files into its log file — `tail -f` it (path from `coldstart-mcp status`) to confirm forward motion.
 
 **Confirm the daemon is alive:**
 
 ```bash
+npx coldstart-mcp status
+# or, by hand:
 cat ~/.coldstart/daemon/<basename>-<hash>.json
-# {"pid":12345,"port":54123}
-ps -p 12345
+ps -p <pid>
 ```
 
 If the PID is gone but the lockfile remains, that's a stale lockfile — see below.
@@ -42,14 +65,14 @@ This builds the cache. Subsequent daemon-mode starts will reuse it.
 The bridge timed out waiting on the daemon. Possible causes:
 
 - **Index is genuinely still building** on a very large repo. Re-run; the cache from the partial build (if it got far enough to write) will speed up the second attempt.
-- **Daemon crashed silently.** Check `ps` for the PID in the lockfile, and look for any `[coldstart] Fatal` messages on stderr. Remove the lockfile and retry.
+- **Daemon crashed silently.** Run `npx coldstart-mcp status` to see whether the daemon process is still alive. Then read the daemon log (`~/.coldstart/daemon/<basename>-<hash>.log`) for any `[coldstart] Fatal` or error lines — if the daemon respawned after a crash, the previous run's output is in the corresponding `.log.prev`. Remove the lockfile and retry.
 - **Port is bound but unresponsive.** Rare. `curl http://127.0.0.1:<port>/mcp` to probe; if it doesn't respond, kill the daemon PID and remove the lockfile.
 
 ---
 
 ## Stale lockfile (daemon crashed but lock remains)
 
-Symptom: bridge logs nothing, or gets stuck. `~/.coldstart/daemon/<basename>-<hash>.json` exists but the PID inside is dead.
+Symptom: bridge logs nothing, or gets stuck. `npx coldstart-mcp status` reports `dead (stale lock)` — the JSON file exists but the PID inside is dead.
 
 The bridge *should* detect this automatically (`process.kill(pid, 0)` returns false → respawn), but if you're hitting an edge case, force a clean state:
 
@@ -58,7 +81,7 @@ rm ~/.coldstart/daemon/<basename>-<hash>.json
 rm ~/.coldstart/daemon/<basename>-<hash>.spawn   # if present
 ```
 
-Restart your AI client. The next tool call will spawn a fresh daemon.
+The `.log` and `.log.prev` files stay where they are — useful for postmortem. Restart your AI client; the next tool call will spawn a fresh daemon.
 
 ---
 
@@ -173,8 +196,9 @@ When reporting a daemon-related issue, please include:
 - Coldstart version (`npx coldstart-mcp --version` or your `package.json` entry)
 - OS and Node.js version
 - Whether you can reproduce with `--no-daemon` (helps isolate daemon vs. indexer bugs)
+- Output of `npx coldstart-mcp status`
+- Last 100 lines of the daemon log (`~/.coldstart/daemon/<basename>-<hash>.log`) and, if relevant, `.log.prev`
 - Stderr from the AI client / bridge
-- Contents of `~/.coldstart/daemon/<basename>-<hash>.json` if relevant
 - Approximate repo size (file count) and language mix
 
 Issues: https://github.com/akashgoenka/coldstart-mcp/issues

@@ -47,9 +47,18 @@ AI client ──stdio──> coldstart bridge ──HTTP──> coldstart daemon
 ```
 
 - **One daemon per project root.** Identified by the absolute path (no daemon sharing across projects).
-- **Lockfile:** `~/.coldstart/daemon/<basename>-<hash>.json` records `{pid, port}`.
+- **Lockfile:** `~/.coldstart/daemon/<basename>-<hash>.json` records `{pid, port, rootDir}`.
+- **Log file:** `~/.coldstart/daemon/<basename>-<hash>.log` captures the daemon's full stderr (parse progress, errors, watcher events). The previous run is preserved at `.log.prev`. Each file caps at 1 MB.
 - **Idle daemon:** stays alive across client restarts. Nothing pings it shut — it sits at near-zero CPU and a few MB of RAM until invoked.
 - **First-call latency:** the bridge waits up to 180s for the daemon to finish its initial index, then proxies tool calls.
+
+**Health check at any time:**
+
+```bash
+npx coldstart-mcp status
+```
+
+Lists every daemon known to your user account with PID, port, alive/HTTP status, and the path to its log file. First stop for any "is it broken?" question.
 
 If you want to avoid the daemon entirely (e.g. for debugging or in environments where spawning detached processes is awkward), pass `--no-daemon` and coldstart runs as a single stdio process — same tools, no background state.
 

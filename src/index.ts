@@ -8,6 +8,10 @@
  *   coldstart-mcp --root . --no-cache
  *   coldstart-mcp --root . --no-daemon    # bypass daemon (single-process stdio mode)
  *
+ * Subcommands:
+ *   coldstart-mcp init        # interactive setup for Claude Code / Cursor
+ *   coldstart-mcp status      # list every running daemon and its health
+ *
  * Internal (spawned automatically):
  *   coldstart-mcp --root . --daemon       # background index daemon
  */
@@ -26,6 +30,7 @@ import { startDaemonHttpServer } from './server/http-daemon.js';
 import { startBridge } from './server/bridge.js';
 import { IndexManager } from './index-manager.js';
 import { readLock, writeLock, deleteLock, isDaemonAlive } from './daemon-lock.js';
+import { attachDaemonLogger } from './daemon-log.js';
 import type { CodebaseIndex, IndexedFile, SymbolEdge } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -441,7 +446,13 @@ async function runDaemon(
   quiet: boolean,
   noCache: boolean,
 ): Promise<void> {
-  log(quiet, `[coldstart] Daemon starting — root: ${finalRoot}`);
+  // Attach the file-backed logger BEFORE the first log() call so daemon
+  // startup output (including any fatal "another daemon already running"
+  // exit) is captured. The daemon is auto-spawned with stdio: 'ignore',
+  // so without this every line written below would vanish.
+  const detachLogger = attachDaemonLogger(finalRoot);
+
+  log(quiet, `[coldstart] Daemon starting — root: ${finalRoot} (PID ${process.pid})`);
 
   // Exit immediately if another daemon is already serving this root
   const existing = await readLock(finalRoot);
@@ -467,11 +478,33 @@ async function runDaemon(
   });
   let manager: IndexManager | null = null;
 
+  // Status snapshot for GET /status — cheap to read, used by `coldstart-mcp status`.
+  const daemonStartedAt = Date.now();
+  let indexReadyAt: number | null = null;
+  let buildFailed = false;
+
   // Start HTTP server immediately so bridges can connect while index builds
-  const port = await startDaemonHttpServer(async () => {
-    await managerReady;
-    return manager!.getContext();
-  });
+  const port = await startDaemonHttpServer(
+    async () => {
+      await managerReady;
+      return manager!.getContext();
+    },
+    () => {
+      if (buildFailed) {
+        return { state: 'failed', fileCount: null, startedAt: daemonStartedAt, indexBuildMs: null };
+      }
+      if (!manager) {
+        return { state: 'building', fileCount: null, startedAt: daemonStartedAt, indexBuildMs: null };
+      }
+      const ctx = manager.getContext();
+      return {
+        state: ctx.isRebuilding ? 'rebuilding' : 'ready',
+        fileCount: ctx.index.files.size,
+        startedAt: daemonStartedAt,
+        indexBuildMs: indexReadyAt !== null ? indexReadyAt - daemonStartedAt : null,
+      };
+    },
+  );
 
   // Write lockfile — bridges start connecting
   await writeLock(finalRoot, process.pid, port);
@@ -481,23 +514,33 @@ async function runDaemon(
   buildManager(finalRoot, excludes, includes, cacheDir, quiet, noCache)
     .then(m => {
       manager = m;
+      indexReadyAt = Date.now();
       managerReadyResolve();
       log(quiet, '[coldstart] Daemon index ready');
     })
     .catch(err => {
       log(quiet, `[coldstart] Daemon index build failed: ${err}`);
+      buildFailed = true;
       managerReadyReject(err instanceof Error ? err : new Error(String(err)));
-      deleteLock(finalRoot).catch(() => {});
-      process.exit(1);
+      deleteLock(finalRoot).catch(() => {}).finally(() => {
+        detachLogger();
+        process.exit(1);
+      });
     });
 
   const cleanup = (): void => {
     manager?.stopWatching();
-    deleteLock(finalRoot).catch(() => {}).finally(() => process.exit(0));
+    deleteLock(finalRoot).catch(() => {}).finally(() => {
+      detachLogger();
+      process.exit(0);
+    });
   };
   process.on('SIGTERM', cleanup);
   process.on('SIGINT', cleanup);
-  process.on('exit', () => manager?.stopWatching());
+  process.on('exit', () => {
+    manager?.stopWatching();
+    detachLogger();
+  });
 
   // Run forever
   await new Promise<never>(() => {});
@@ -510,6 +553,12 @@ async function main(): Promise<void> {
   if (process.argv[2] === 'init') {
     const { runInit } = await import('./init.js');
     await runInit();
+    return;
+  }
+
+  if (process.argv[2] === 'status') {
+    const { runStatus } = await import('./status.js');
+    await runStatus();
     return;
   }
 
