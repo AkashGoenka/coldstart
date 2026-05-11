@@ -26,3 +26,44 @@ export function buildGraph(nodeIds: string[], edges: Edge[]): GraphData {
 
   return { outEdges, inEdges };
 }
+
+/** Add Rails controller→view file edges for discovered controller/view pairs */
+export function addRailsControllerViewEdges(
+  nodeIds: Set<string>,
+  outEdges: Map<string, string[]>,
+  inEdges: Map<string, string[]>,
+): void {
+  const controllerRegex = /^(.+\/)?app\/controllers\/(.+)_controller\.rb$/;
+  const viewsByDir = new Map<string, Set<string>>();
+
+  for (const nodeId of nodeIds) {
+    const match = nodeId.match(/^(.+\/)?app\/views\/(.+)\/(.+)\.(.+)$/);
+    if (match) {
+      const viewDir = match[2];
+      if (!viewsByDir.has(viewDir)) viewsByDir.set(viewDir, new Set());
+      viewsByDir.get(viewDir)!.add(nodeId);
+    }
+  }
+
+  for (const nodeId of nodeIds) {
+    const match = nodeId.match(controllerRegex);
+    if (match) {
+      const controllerName = match[2];
+      const viewDirFiles = viewsByDir.get(controllerName);
+      if (viewDirFiles) {
+        const currentOutEdges = outEdges.get(nodeId) ?? [];
+        for (const viewFile of viewDirFiles) {
+          if (!currentOutEdges.includes(viewFile)) {
+            currentOutEdges.push(viewFile);
+            const currentInEdges = inEdges.get(viewFile) ?? [];
+            if (!currentInEdges.includes(nodeId)) {
+              currentInEdges.push(nodeId);
+            }
+            inEdges.set(viewFile, currentInEdges);
+          }
+        }
+        outEdges.set(nodeId, currentOutEdges);
+      }
+    }
+  }
+}

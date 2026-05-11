@@ -101,6 +101,11 @@ The daemon survives across AI client restarts — index build cost is paid once 
    - **TypeScript/JavaScript**: Tree-sitter (tree-sitter-typescript) — functions, classes, interfaces, type aliases, constants, methods. Tracks intra-file call relationships, extends/implements chains.
    - **Java**: Tree-sitter (tree-sitter-java) — classes, interfaces, enums, records, methods, constructors. Tracks method invocations, extends, implements chains. Extracts static final constants. Public methods are marked `isExported: true` and included in the exports list for cross-file call edge resolution. Wildcard imports are dropped at parse time.
    - **Ruby**: Tree-sitter (tree-sitter-ruby) — classes, modules, methods, constants, singleton methods. Detects Rails DSLs (associations, callbacks, includes/extends). `require_relative` paths are normalised with a `./` prefix so the resolver treats them as relative to the importing file rather than as external gem names.
+   - **Rails-aware Ruby edges** (gated to repos with a `Gemfile` and `app/models/`):
+     - `has_many` / `belongs_to` / `has_one` / `has_and_belongs_to_many` calls in `app/models/*.rb` emit synthetic relative imports to the target model (`has_many :comments` → `./comment`). Class names are derived with simple pluralization rules (`ies → y`, `es → ""` after `s/x/z/sh/ch`, trailing `s`); `:class_name => "..."` overrides are honoured.
+     - `config/routes.rb` is parsed for `resources :foo` and explicit HTTP verb calls (`get '/x', to: 'foo#index'`); each emits an edge to the corresponding controller under `app/controllers/`.
+     - Controller↔views pairing is added at graph-build time (`addRailsControllerViewEdges` in `graph.ts`): every `app/controllers/X_controller.rb` gets bidirectional file edges to all files under `app/views/X/`.
+     - Polymorphic associations, gem-backed models, and namespaced targets remain unresolved — these are runtime DSL artefacts the static index can't follow. Specs, migrations, and locale YAMLs are deliberately not linked: grep handles them at edit time.
    - **Python**: Tree-sitter (tree-sitter-python) — classes, top-level functions, methods. Respects `__all__` for export list; excludes underscore-prefixed private names.
    - **Go**: Tree-sitter (tree-sitter-go) — structs (as class), interfaces, top-level functions, methods, constants/vars. Exports determined by uppercase-first identifier convention.
    - **Rust**: Tree-sitter (tree-sitter-rust) — pub structs/enums (as class), pub traits (as interface), pub functions, pub type aliases. Tracks `impl Trait for Struct` to populate `implementsNames`. Module declarations and `use` paths to workspace-member crates are emitted as imports; external-crate `use` paths are filtered out at parse time against the workspace member set.
@@ -264,7 +269,7 @@ Reading `meta.json` first lets the daemon decide cache reuse before touching the
 - `extends` — symbol is inherited by a class
 - `implements` — symbol implements an interface (for Ruby: includes/extends modules)
 
-**Use case:** Before refactoring a public function or interface, understand the full blast radius without manually reading dependent files.
+**Use case:** Navigation — locate where a symbol is defined and find every caller, implementor, or extender, without reading their files. Secondary use: blast-radius assessment before a refactor.
 
 ---
 

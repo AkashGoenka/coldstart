@@ -148,7 +148,7 @@ Optional params:
 
 Returns all symbols that directly or transitively depend on the target (with relationship types: `calls`, `extends`, `implements`), full dependency chain paths, summary counts, and affected files list.
 
-Use this before refactoring to understand blast radius without reading all dependent files.
+Use this to locate where a symbol is defined and find every caller, implementor, and extender without opening their files. Also useful for blast-radius checks before a refactor.
 
 **Confidence notes:**
 - `calls` edges are resolved cross-file for named function/constant calls — if `login` in `auth.ts` calls `hashPassword` exported from `utils.ts`, that edge is fully qualified and will appear in impact results.
@@ -160,7 +160,7 @@ Use this before refactoring to understand blast radius without reading all depen
 
 ## Supported languages and frameworks
 
-TypeScript, JavaScript, Vue, Svelte, Astro, AngularJS 1.x, Java, Ruby, Python, Go, Rust, C#, PHP, Kotlin, C++, GraphQL, YAML, TOML, XML, Groovy (including Gradle DSL), `.env` files.
+TypeScript, JavaScript, Vue, Svelte, Astro, AngularJS 1.x, Java, Ruby (with Rails-aware edges: `has_many`/`belongs_to` associations, `routes.rb` resources, controller↔views), Python, Go, Rust, C#, PHP, Kotlin, C++, GraphQL, YAML, TOML, XML, Groovy (including Gradle DSL), `.env` files.
 
 **Not indexed:** Swift, Dart — no extension mapping; these file types are not walked or parsed.
 

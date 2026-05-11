@@ -67,12 +67,10 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'trace-deps',
     description:
-      'For a known file: returns the files it imports and/or the files that import it, up to a configurable depth.\n\n' +
-      'Use this to expand from a confirmed file to its neighbors in one call, instead of calling get-structure on each neighbor individually.\n\n' +
-      'Two main uses:\n' +
-      '  • Discovery — after get-overview surfaces a candidate file, expand to its 1-hop neighbors to find related files without another keyword search.\n' +
-      '  • Edit/refactor — before changing a file, list its importers to scope blast radius.\n\n' +
-      'Use this BEFORE reading a file just to inspect imports. Default depth is 1; raise to 2-3 for transitive reach.',
+      'Who depends on this file? Lists every file that imports it, directly or transitively. Reach for this BEFORE grepping for import paths or opening files just to check their dependents.\n\n' +
+      'Also accepts the outgoing direction (what this file imports) — most useful with depth 2-3 for transitive reach. For a file\'s direct 1-hop imports, get-structure already returns them inline.\n\n' +
+      'Secondary use — blast-radius: before changing a file, list its importers to scope what\'s affected.\n\n' +
+      'Default depth 1; raise to 2-3 for transitive reach.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -96,9 +94,10 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'trace-impact',
     description:
-      'Symbol-level blast radius AND symbol-name lookup. Use when the question is "who calls X / who implements X / who extends X / where else is X used / what breaks if I change X" — but ALSO use it as the fast "where is symbol X defined" lookup whenever you have an exact function/class/constant name. The response always includes `target.file` and `target.line` for the definition site, even when there are zero callers.\n\n' +
-      'Reach for this BEFORE grepping for `def foo`, `class Foo`, or `FOO_CONSTANT` — one call returns the definition site plus the full caller/implementor set. Especially useful for interface methods, listener/handler hooks, and cross-cutting concerns where callsites are scattered.\n\n' +
+      'Locate where a symbol is defined and find every caller, implementor, and extender. Use this whenever you have an exact function/class/constant name — to jump to its definition, find its callsites, or trace inheritance chains. The response always includes `target.file` and `target.line` for the definition site, even when there are zero callers.\n\n' +
+      'This is your fastest path to "where is X defined" and "who uses X" — reach for it BEFORE grepping `def foo`, `class Foo`, or `FOO_CONSTANT`. One call returns the definition plus the full caller/implementor set, which matters most for interface methods, listener/handler hooks, and cross-cutting concerns where callsites are scattered.\n\n' +
       'Also accepts a Java/Kotlin annotation name (e.g. `Transactional`, `OnUserRegistered`): if no symbol matches by name, the response lists every symbol bearing `@<name>` as `annotatedSymbols`. Use this instead of grepping for `@SomeAnnotation`.\n\n' +
+      'Secondary use — blast-radius: when you\'re about to change a symbol, the same response tells you what depends on it.\n\n' +
       'Limitations: (1) only top-level and one-level-nested symbols are indexed. (2) If `impacted` comes back empty, the response includes a file-level fallback and an explicit "Defined at" note — use that, do not retry with grep. (3) Inheritance chains (extends/implements) are the most reliable signal.',
     inputSchema: {
       type: 'object',
