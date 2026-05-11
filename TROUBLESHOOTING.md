@@ -5,7 +5,7 @@ Most coldstart issues come from the daemon — either it didn't start, isn't res
 If a fix below references the daemon directory or cache, those live at:
 
 - `~/.coldstart/daemon/` — lockfiles + log files, one set of `<basename>-<hash>.{json,log,log.prev}` per project root
-- `~/.coldstart/indexes/<basename>-<hash>/` — cached `meta.json` + `graph.json`
+- `~/.coldstart/indexes/<basename>-<hash>/` — cached `meta.json`, `graph.json`, and `files-N.json` chunks
 
 `<basename>` is your project's directory name; `<hash>` is the first 16 chars of `sha256(absolute_path)`.
 
@@ -156,7 +156,7 @@ Coldstart's cache is small for most repos but can grow on very large codebases:
 - A 6k-file Java repo (Apache Kafka) caches at ~30–50 MB.
 - A 50k-file monorepo can run into hundreds of MB.
 
-`graph.json` holds the bulk of the data. To inspect:
+Each cached index directory holds `meta.json`, `graph.json`, and one or more `files-N.json` chunks (5,000 files per chunk). The `files-*.json` chunks carry the per-file metadata and typically account for most of the disk usage. To inspect:
 
 ```bash
 du -sh ~/.coldstart/indexes/*/
