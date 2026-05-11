@@ -30,52 +30,6 @@ Reach for them before Read/Grep/Glob/Bash. Per-tool details are in the tool desc
 - **Fall back to grep** only for string literals, exact call sites, or dynamic dispatch — not as your default discovery method.
 `;
 
-// ---------------------------------------------------------------------------
-// Skill content (Claude Code only)
-// ---------------------------------------------------------------------------
-
-const SKILL_CONTENT = `---
-name: trace-files
-description: Answer questions about how code works, trace flows, find where things happen, understand architecture, or locate relevant files in an unfamiliar codebase
----
-
-## Instructions
-
-You have 4 coldstart MCP tools. Use them before Read/Grep/Glob/Bash:
-
-- **get-overview**: Find files by keyword/symbol/path. Returns 7 ranked file paths — nothing else.
-- **get-structure**: Drill into a candidate file. Returns its symbols + 1-hop internal imports as compact text. Use this AFTER get-overview, BEFORE Read.
-- **trace-deps**: For a known file, returns imports/importers (depth 1-3). Use \`direction: "importers"\` to scope refactor blast radius, or raise \`depth\` to reach beyond get-structure's 1 hop.
-- **trace-impact**: Find callers/implementors of a specific symbol before refactoring it.
-
-## Exploration strategy
-
-1. Start with \`get-overview\` to shortlist files.
-2. Call \`get-structure\` on the most promising candidate to see its shape (symbols + internal imports) before opening it.
-3. To expand the graph: \`trace-deps\` for file-level imports/importers; \`trace-impact\` for symbol-level callers.
-4. \`Read\` the file only when you need actual implementation details.
-5. If results span multiple distinct areas (different top-level directories, separate concerns like UI vs data layer vs API), spawn one sub-agent per area.
-6. If results cluster in one area, proceed inline — no sub-agents needed.
-
-When spawning sub-agents, include these instructions in each sub-agent prompt:
-
-> You have coldstart MCP tools available: get-overview, get-structure, trace-deps, trace-impact.
-> Use these BEFORE Read/Grep/Glob/Bash.
-> Flow: get-overview → get-structure on a candidate → trace-deps/trace-impact to expand → Read only if needed.
-> Report file paths with line numbers for all key findings.
-
-## Anti-patterns
-
-- Don't raise \`max_results\` above 7. If the right file isn't in the top 7, refine the query — pagination won't fix a bad query.
-- Don't Read a file just to inspect its shape or imports — call \`get-structure\` instead.
-- Don't Read a file just to find who imports it — call \`trace-deps\` with \`direction: "importers"\`.
-- Don't use \`find\` or \`ls\` via Bash when get-overview can do the job.
-
-## Task
-
-$ARGUMENTS
-`;
-
 const MDC_FRONTMATTER = `---
 description: Codebase navigation with coldstart MCP tools
 alwaysApply: true
@@ -122,15 +76,6 @@ function writeClaudeMd(cwd: string): 'created' | 'appended' | 'skipped' {
   return 'created';
 }
 
-function writeClaudeSkill(cwd: string): 'created' | 'updated' {
-  const skillDir = path.join(cwd, '.claude', 'skills', 'trace-files');
-  const filePath = path.join(skillDir, 'SKILL.md');
-  const existed = fs.existsSync(filePath);
-  fs.mkdirSync(skillDir, { recursive: true });
-  fs.writeFileSync(filePath, SKILL_CONTENT);
-  return existed ? 'updated' : 'created';
-}
-
 function writeCursorRule(cwd: string): 'created' | 'updated' {
   const rulesDir = path.join(cwd, '.cursor', 'rules');
   const filePath = path.join(rulesDir, 'coldstart-mcp.mdc');
@@ -147,10 +92,8 @@ function writeCursorRule(cwd: string): 'created' | 'updated' {
 function setupClaude(cwd: string): void {
   const mcpResult = mergeMcpJson(path.join(cwd, '.mcp.json'), cwd);
   const mdResult = writeClaudeMd(cwd);
-  const skillResult = writeClaudeSkill(cwd);
-  out(`  .mcp.json                              — ${mcpResult}`);
-  out(`  CLAUDE.md                              — ${mdResult}`);
-  out(`  .claude/skills/trace-files/SKILL.md    — ${skillResult}`);
+  out(`  .mcp.json   — ${mcpResult}`);
+  out(`  CLAUDE.md   — ${mdResult}`);
 }
 
 function setupCursor(cwd: string): void {
@@ -199,7 +142,7 @@ export async function runInit(): Promise<void> {
     out('Detected: Claude Code and Cursor');
     out('');
     out('Will write:');
-    out('  .mcp.json, CLAUDE.md, .claude/skills/trace-files/SKILL.md');
+    out('  .mcp.json, CLAUDE.md');
     out('  .cursor/mcp.json, .cursor/rules/coldstart-mcp.mdc');
     out('');
     const answer = await ask('Set up for both? [Y/n] ');
@@ -208,9 +151,8 @@ export async function runInit(): Promise<void> {
     out('Detected: Claude Code');
     out('');
     out('Will write:');
-    out('  .mcp.json                            — MCP server config (merge if exists)');
-    out('  CLAUDE.md                            — agent rules (append if exists, create if not)');
-    out('  .claude/skills/trace-files/SKILL.md  — auto-invoked exploration skill');
+    out('  .mcp.json   — MCP server config (merge if exists)');
+    out('  CLAUDE.md   — agent rules (append if exists, create if not)');
     out('');
     const answer = await ask('Proceed? [Y/n] ');
     target = (answer === '' || answer === 'y') ? 'claude' : 'files';
