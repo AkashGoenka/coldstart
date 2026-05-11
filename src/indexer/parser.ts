@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import type { Language, ParsedFile } from '../types.js';
 import { parseTsContent } from './ts-parser.js';
@@ -7,6 +8,7 @@ import { parseRubyContent } from './extractors/ruby.js';
 import { parsePythonContent } from './extractors/python.js';
 import { parseGoContent } from './extractors/go.js';
 import { parseRustContent } from './extractors/rust.js';
+import { findRustWorkspace } from './rust-workspace.js';
 import { parseCSharpContent } from './extractors/csharp.js';
 import { parsePhpContent } from './extractors/php.js';
 import { parseKotlinContent } from './extractors/kotlin.js';
@@ -204,8 +206,21 @@ export async function parseFile(
       rustResult = { imports: [], exports: [], hasDefaultExport: false as const, symbols: [] };
     }
 
+    // Filter `use crate_name::…` specifiers to only those whose leading
+    // segment matches a workspace member crate. External crates (third-party
+    // deps like `bytes`, `criterion`) are out of scope — including them in
+    // imports[] would just inflate unresolved counts without yielding edges.
+    const ws = await findRustWorkspace(dirname(filePath));
+    const workspaceCrates = ws?.crates;
+    const filteredImports = workspaceCrates
+      ? rustResult.imports.filter(spec => {
+          if (!spec.includes('::')) return true; // mod / extern crate / bare use
+          return workspaceCrates.has(spec.split('::')[0]);
+        })
+      : rustResult.imports.filter(spec => !spec.includes('::'));
+
     return {
-      imports: rustResult.imports,
+      imports: filteredImports,
       exports: rustResult.exports,
       hasDefaultExport: false,
       hash,

@@ -35,6 +35,46 @@ function hasVisibilityPub(node: TSNode): boolean {
   return node.namedChildren.some((c: TSNode) => c.type === 'visibility_modifier');
 }
 
+// In-crate prefixes — these resolve to symbols within the current crate's
+// module tree, not to other files in a workspace.
+const NON_CRATE_USE_PREFIXES = new Set([
+  'crate', 'super', 'self', 'Self',
+  'std', 'core', 'alloc', 'proc_macro', 'test',
+]);
+
+/**
+ * Pull the leading path of a `use` declaration as a `::`-separated string.
+ * Trims everything from the first `{`, `*`, or `as` keyword onward, so:
+ *   `use tokio::sync::Mutex;`            → "tokio::sync::Mutex"
+ *   `use tokio::sync::{Mutex, RwLock};`  → "tokio::sync"
+ *   `use tokio::*;`                      → "tokio"
+ *   `use tokio::sync as s;`              → "tokio::sync"
+ * Returns null for `use crate::…`, `use std::…`, `use {…}` group-only, etc.
+ */
+function extractUsePath(node: TSNode): string | null {
+  let text: string;
+  try { text = node.text; } catch { return null; }
+  if (!text) return null;
+  // Strip `pub`/`pub(crate)` and `use` prefix, plus trailing `;`
+  const body = text
+    .replace(/^\s*(pub(\s*\([^)]*\))?\s+)?use\s+/, '')
+    .replace(/;\s*$/, '')
+    .trim();
+  if (!body) return null;
+  // Cut at the first `{`, `*`, or whitespace+`as`+whitespace
+  const asMatch = body.match(/\bas\b/);
+  const cuts = [body.indexOf('{'), body.indexOf('*'), asMatch ? asMatch.index! : -1]
+    .filter(i => i >= 0);
+  const cut = cuts.length ? Math.min(...cuts) : body.length;
+  // Match a leading rust path: ident (:: ident)*
+  const pathMatch = body.slice(0, cut).match(/^[A-Za-z_][A-Za-z0-9_]*(\s*::\s*[A-Za-z_][A-Za-z0-9_]*)*/);
+  if (!pathMatch) return null;
+  const path = pathMatch[0].replace(/\s+/g, '');
+  const firstSeg = path.split('::')[0];
+  if (NON_CRATE_USE_PREFIXES.has(firstSeg)) return null;
+  return path;
+}
+
 // ---------------------------------------------------------------------------
 // Result type
 // ---------------------------------------------------------------------------
@@ -84,11 +124,18 @@ export function parseRustContent(
     const startLine = node.startPosition.row + 1;
     const endLine = node.endPosition.row + 1;
 
-    // use X::Y — these are namespace paths, not file boundaries.
-    // Pushing them through the path resolver produces garbage candidate paths
-    // (e.g. crate::auth::handlers → ./crate/auth/handlers.rs which never exists).
-    // Only mod declarations represent actual file boundaries and belong in imports[].
+    // use X::Y — for sibling crates this is a cross-crate file edge, so we emit
+    // the full path string (e.g. "tokio_util::codec::Decoder") and let the Rust
+    // resolver decide: if the leading segment matches a workspace crate, resolve
+    // into that crate's src/; otherwise drop the specifier. In-crate paths
+    // (crate::, super::, self::, Self::) are filtered out here because they
+    // never produce file-level edges — they're symbol-level scoping.
+    //
+    // Single-segment uses (`use foo;`) get a trailing `::` so the resolver and
+    // the workspace pre-filter can distinguish them from mod declarations.
     if (node.type === 'use_declaration') {
+      const usePath = extractUsePath(node);
+      if (usePath) imports.push(usePath.includes('::') ? usePath : usePath + '::');
       return;
     }
 
@@ -108,10 +155,13 @@ export function parseRustContent(
       return;
     }
 
-    // extern crate X
+    // extern crate X — semantically a crate import (same as `use X;`), so emit
+    // with a trailing `::` to share the workspace filtering path.
     if (node.type === 'extern_crate_declaration') {
       const nameNode = firstChildOfType(node, 'identifier');
-      if (nameNode) imports.push(nameNode.text);
+      if (nameNode && !NON_CRATE_USE_PREFIXES.has(nameNode.text)) {
+        imports.push(nameNode.text + '::');
+      }
       return;
     }
 
