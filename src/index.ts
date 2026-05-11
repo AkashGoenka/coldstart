@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { walkDirectory } from './indexer/walker.js';
 import { parseFile, buildFileId } from './indexer/parser.js';
 import { resolveImports } from './indexer/resolvers/index.js';
-import { buildGraph } from './indexer/graph.js';
+import { buildGraph, addRailsControllerViewEdges } from './indexer/graph.js';
 import { buildFileDomains, isTestPath } from './indexer/tokenize.js';
 import { buildSymbolEdges } from './indexer/symbol-edges.js';
 import { getGitHead } from './indexer/git.js';
@@ -193,6 +193,8 @@ export async function buildIndex(
   log(quiet, '[coldstart] Building graph...');
   const nodeIds = indexedFiles.map(f => f.id);
   const { outEdges, inEdges } = buildGraph(nodeIds, edges);
+
+  addRailsControllerViewEdges(new Set(nodeIds), outEdges, inEdges);
 
   for (const file of indexedFiles) {
     file.importedByCount = inEdges.get(file.id)?.length ?? 0;

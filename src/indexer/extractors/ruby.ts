@@ -86,10 +86,93 @@ const RAILS_DSL_METHODS = new Set(['attr_accessor', 'attr_reader', 'attr_writer'
 /** Convert snake_case association name to CamelCase model name */
 function associationToModel(name: string): string {
   // has_many :comments → Comment; has_one :profile → Profile
-  // Strip trailing 's' for plurals (basic)
-  const singular = name.endsWith('s') && !name.endsWith('ss') ? name.slice(0, -1) : name;
-  return singular.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase())
-    .replace(/^(.)/, (_, c: string) => c.toUpperCase());
+  // Singularize the name if it's plural, convert to CamelCase
+  const singular = singularize(name);
+  return singular.replace(/_([a-z])/g, (_: string, c: string) => c.toUpperCase())
+    .replace(/^(.)/, (_: string, c: string) => c.toUpperCase());
+}
+
+/** Singularize plural English nouns (basic rules for Rails conventions) */
+function singularize(word: string): string {
+  // Leave already-singular words alone: -us (status, virus, focus), -ss (address, class),
+  // -is (basis, axis), -ous (famous). Rails Inflector also treats these as uncountable/no-op.
+  if (word.endsWith('us') || word.endsWith('ss') || word.endsWith('is')) return word;
+  if (word.endsWith('ies')) return word.slice(0, -3) + 'y';
+  if (word.endsWith('ches') || word.endsWith('shes') || word.endsWith('sses') || word.endsWith('xes') || word.endsWith('zes')) return word.slice(0, -2);
+  if (word.endsWith('es') && (word.endsWith('oes') || word.endsWith('zes') || word[word.length - 3] === 's' || word[word.length - 3] === 'x' || word[word.length - 3] === 'z' || word[word.length - 3] === 'h')) return word.slice(0, -2);
+  if (word.endsWith('s')) return word.slice(0, -1);
+  return word;
+}
+
+/** Pluralize singular English nouns (basic rules for Rails conventions) */
+function pluralize(word: string): string {
+  if (word.endsWith('y')) return word.slice(0, -1) + 'ies';
+  if (word.endsWith('s') || word.endsWith('x') || word.endsWith('z') || word.endsWith('ch') || word.endsWith('sh')) return word + 'es';
+  return word + 's';
+}
+
+/** Extract Rails model association file imports from config/routes.rb */
+function extractRoutesImports(rootNode: TSNode, _fileId: string): string[] {
+  const routeImports: string[] = [];
+
+  function walkNode(node: TSNode): void {
+    if (node.type === 'call' || node.type === 'command') {
+      const methodNode = node.type === 'call'
+        ? node.namedChildren.find((c: TSNode) => c.type === 'identifier')
+        : node.namedChildren[0];
+      if (!methodNode || methodNode.type !== 'identifier') {
+        for (const child of node.namedChildren) walkNode(child);
+        return;
+      }
+      const methodName = methodNode.text;
+
+      if (methodName === 'resources' || methodName === 'resource') {
+        const args = firstChildOfType(node, 'argument_list') ?? firstChildOfType(node, 'arguments');
+        const firstArg = args?.namedChildren[0] ?? node.namedChildren[1];
+        if (firstArg?.type === 'simple_symbol') {
+          const resourceName = firstArg.text.replace(/^:/, '');
+          const controllerName = methodName === 'resource' ? pluralize(resourceName) : resourceName;
+          routeImports.push(`../app/controllers/${controllerName}_controller`);
+        }
+      } else if (['get', 'post', 'put', 'patch', 'delete'].includes(methodName)) {
+        const toTargetRef: { value: string | null } = { value: null };
+        function findToValue(n: TSNode): void {
+          if (toTargetRef.value !== null) return;
+          if (n.type === 'pair' && n.namedChildren.length >= 2) {
+            const firstChild = n.namedChildren[0];
+            const secondChild = n.namedChildren[1];
+            const keyText = firstChild.type === 'hash_key_symbol' ? firstChild.text : (firstChild.text.startsWith(':') ? firstChild.text.slice(1) : firstChild.text);
+            if ((firstChild.type === 'hash_key_symbol' || firstChild.type === 'simple_symbol') && keyText === 'to') {
+              if (secondChild.type === 'string' || secondChild.type === 'string_literal') {
+                const content = firstChildOfType(secondChild, 'string_content');
+                toTargetRef.value = content?.text ?? secondChild.text.replace(/^['"]|['"]$/g, '');
+              }
+            }
+          }
+          for (const child of n.namedChildren) {
+            findToValue(child);
+          }
+        }
+        findToValue(node);
+        const toTarget = toTargetRef.value;
+        if (toTarget && toTarget.includes('#')) {
+          const [controller, _action] = toTarget.split('#');
+          const parts = controller.split('/');
+          const fileName = parts[parts.length - 1];
+          const dir = parts.slice(0, -1).join('/');
+          const controllerPath = dir ? `../app/controllers/${dir}/${fileName}_controller` : `../app/controllers/${fileName}_controller`;
+          routeImports.push(controllerPath);
+        }
+      }
+    }
+
+    for (const child of node.namedChildren) {
+      walkNode(child);
+    }
+  }
+
+  walkNode(rootNode);
+  return routeImports;
 }
 
 /** Extract DSL method names from command node arguments (bare method call form) */
@@ -435,6 +518,8 @@ interface ExtractionContext {
   allSymbolNames: Set<string>;
   /** Accumulated extra edges (Rails associations etc.) */
   extraCalls: Array<{ fromId: string; toName: string }>;
+  /** Rails association target model names (CamelCase) — used to emit synthetic file-level imports for has_many/belongs_to/has_one/HABTM only, never callbacks or includes */
+  associationTargets: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -639,6 +724,7 @@ function extractNode(
           const assocName = firstArg.text.replace(/^:/, '');
           const modelName = associationToModel(assocName);
           ctx.extraCalls.push({ fromId: `${ctx.fileId}#${parentName}`, toName: modelName });
+          ctx.associationTargets.push(modelName);
         }
       } else if (RAILS_CALLBACK_METHODS.has(methodName)) {
         // before_action :method_name → calls edge within same class
@@ -676,6 +762,7 @@ function extractNode(
           const assocName = firstArg.text.replace(/^:/, '');
           const modelName = associationToModel(assocName);
           ctx.extraCalls.push({ fromId: `${ctx.fileId}#${parentName}`, toName: modelName });
+          ctx.associationTargets.push(modelName);
         }
       } else if (RAILS_CALLBACK_METHODS.has(methodName)) {
         const firstArg = node.namedChildren[1];
@@ -782,6 +869,7 @@ export function parseRubyContent(
     fileId,
     allSymbolNames: new Set<string>(),
     extraCalls: [],
+    associationTargets: [],
   };
 
   // First pass: collect all require/require_relative calls
@@ -848,6 +936,27 @@ export function parseRubyContent(
       // For include/extend/prepend: add to implementsNames
       // For Rails associations/callbacks: add to calls
       sym.implementsNames.push(toName);
+    }
+  }
+
+  // For Rails models (files under app/models/), convert association names to file-level imports
+  if (fileId.includes('app/models/')) {
+    for (const modelName of ctx.associationTargets) {
+      const modelSnake = modelName.replace(/([A-Z])/g, '_$1').slice(1).toLowerCase();
+      const importPath = `./${modelSnake}`;
+      if (!imports.includes(importPath)) {
+        imports.push(importPath);
+      }
+    }
+  }
+
+  // Extract routes.rb controller imports
+  if (fileId.endsWith('config/routes.rb')) {
+    const routeImports = extractRoutesImports(root, fileId);
+    for (const imp of routeImports) {
+      if (!imports.includes(imp)) {
+        imports.push(imp);
+      }
     }
   }
 

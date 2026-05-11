@@ -1,6 +1,8 @@
 # coldstart-mcp
 
-Lightweight navigation layer for AI agents. Answers one question: which files are relevant to this task? Fast static index over file paths, symbol names, and exports — built once, queried instantly via four MCP tools: `get-overview` (ranked file paths), `get-structure` (compact symbols + 1-hop imports for a single file), `trace-deps` (file-level import graph), `trace-impact` (symbol-level blast radius).
+Lightweight navigation layer for AI agents. Answers one question: which files are relevant to this task? Fast static index over file paths, symbol names, and exports — built once, queried instantly via four MCP tools: `get-overview` (ranked file paths), `get-structure` (compact symbols + 1-hop imports for a single file), `trace-deps` (file-level import graph), `trace-impact` (locate a symbol and find every caller/implementor/extender — navigation first, blast-radius second).
+
+For Rails repos: the Ruby parser emits synthetic edges for `has_many`/`belongs_to`/`has_one`/`has_and_belongs_to_many` (gated to `app/models/`), parses `config/routes.rb` resources, and adds bidirectional controller↔views edges. Polymorphic associations and gem-backed models stay unresolved (runtime DSL).
 
 **Startup pipeline:** walk → parse (Tree-sitter for TS/JS/JSX/TSX/Java/Ruby/Python/Go/Rust/C#/PHP/Kotlin/C++/YAML/TOML/XML/Groovy; SFC script blocks extracted from Vue/Svelte/Astro before TS parsing; GraphQL/.env/AngularJS 1.x via regex extractors; Swift/Dart not indexed) → resolve imports → build graph (including cross-file call edge resolution) → serve.
 
