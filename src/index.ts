@@ -478,11 +478,33 @@ async function runDaemon(
   });
   let manager: IndexManager | null = null;
 
+  // Status snapshot for GET /status — cheap to read, used by `coldstart-mcp status`.
+  const daemonStartedAt = Date.now();
+  let indexReadyAt: number | null = null;
+  let buildFailed = false;
+
   // Start HTTP server immediately so bridges can connect while index builds
-  const port = await startDaemonHttpServer(async () => {
-    await managerReady;
-    return manager!.getContext();
-  });
+  const port = await startDaemonHttpServer(
+    async () => {
+      await managerReady;
+      return manager!.getContext();
+    },
+    () => {
+      if (buildFailed) {
+        return { state: 'failed', fileCount: null, startedAt: daemonStartedAt, indexBuildMs: null };
+      }
+      if (!manager) {
+        return { state: 'building', fileCount: null, startedAt: daemonStartedAt, indexBuildMs: null };
+      }
+      const ctx = manager.getContext();
+      return {
+        state: ctx.isRebuilding ? 'rebuilding' : 'ready',
+        fileCount: ctx.index.files.size,
+        startedAt: daemonStartedAt,
+        indexBuildMs: indexReadyAt !== null ? indexReadyAt - daemonStartedAt : null,
+      };
+    },
+  );
 
   // Write lockfile — bridges start connecting
   await writeLock(finalRoot, process.pid, port);
@@ -492,11 +514,13 @@ async function runDaemon(
   buildManager(finalRoot, excludes, includes, cacheDir, quiet, noCache)
     .then(m => {
       manager = m;
+      indexReadyAt = Date.now();
       managerReadyResolve();
       log(quiet, '[coldstart] Daemon index ready');
     })
     .catch(err => {
       log(quiet, `[coldstart] Daemon index build failed: ${err}`);
+      buildFailed = true;
       managerReadyReject(err instanceof Error ? err : new Error(String(err)));
       deleteLock(finalRoot).catch(() => {}).finally(() => {
         detachLogger();

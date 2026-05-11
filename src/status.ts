@@ -30,6 +30,42 @@ async function probeHttp(port: number): Promise<boolean> {
   }
 }
 
+interface IndexStatus {
+  state: 'building' | 'ready' | 'rebuilding' | 'failed' | 'unknown';
+  fileCount: number | null;
+  indexBuildMs: number | null;
+}
+
+async function probeIndexStatus(port: number): Promise<IndexStatus | null> {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/status`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(1500),
+    });
+    if (!res.ok) return null;
+    const raw = await res.json() as Partial<IndexStatus>;
+    const state = raw.state ?? 'unknown';
+    return {
+      state: state as IndexStatus['state'],
+      fileCount: typeof raw.fileCount === 'number' ? raw.fileCount : null,
+      indexBuildMs: typeof raw.indexBuildMs === 'number' ? raw.indexBuildMs : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function renderIndexCol(s: IndexStatus | null): string {
+  if (!s) return '?';
+  switch (s.state) {
+    case 'building':   return 'building';
+    case 'rebuilding': return s.fileCount !== null ? `rebuilding (${s.fileCount} files)` : 'rebuilding';
+    case 'ready':      return s.fileCount !== null ? `ready (${s.fileCount} files)` : 'ready';
+    case 'failed':     return 'failed';
+    default:           return s.state;
+  }
+}
+
 function fileSize(path: string): string {
   try {
     if (!existsSync(path)) return '-';
@@ -47,6 +83,7 @@ interface Row {
   pid: string;
   port: string;
   status: string;
+  index: string;
   log: string;
   logSize: string;
 }
@@ -74,7 +111,9 @@ export async function runStatus(): Promise<void> {
   // 127.0.0.1, so even with timeouts this stays well under a second.
   const probed = await Promise.all(listings.map(async (l) => {
     const alive = isDaemonAlive(l.lock.pid);
-    const httpOk = alive ? await probeHttp(l.lock.port) : false;
+    const [httpOk, indexStatus] = alive
+      ? await Promise.all([probeHttp(l.lock.port), probeIndexStatus(l.lock.port)])
+      : [false, null];
     let status: string;
     if (!alive) status = 'dead (stale lock)';
     else if (!httpOk) status = 'alive, http unreachable';
@@ -84,7 +123,7 @@ export async function runStatus(): Promise<void> {
     const logPath = l.lock.rootDir ? daemonLogPath(l.lock.rootDir) : '';
     const prevPath = l.lock.rootDir ? daemonLogPrevPath(l.lock.rootDir) : '';
     const log = logPath || `${daemonDir()}/${l.basename}.log`;
-    return { listing: l, status, log, logSize: fileSize(log), prevPath } as const;
+    return { listing: l, status, indexStatus, log, logSize: fileSize(log), prevPath } as const;
   }));
 
   const rows: Row[] = probed.map(p => ({
@@ -92,6 +131,7 @@ export async function runStatus(): Promise<void> {
     pid: String(p.listing.lock.pid),
     port: String(p.listing.lock.port),
     status: p.status,
+    index: renderIndexCol(p.indexStatus),
     log: p.log,
     logSize: p.logSize,
   }));
@@ -102,6 +142,7 @@ export async function runStatus(): Promise<void> {
     pid: Math.max(3, ...rows.map(r => r.pid.length)),
     port: Math.max(4, ...rows.map(r => r.port.length)),
     status: Math.max(6, ...rows.map(r => r.status.length)),
+    index: Math.max(5, ...rows.map(r => r.index.length)),
     log: Math.max(3, ...rows.map(r => r.log.length)),
     logSize: Math.max(4, ...rows.map(r => r.logSize.length)),
   };
@@ -112,6 +153,7 @@ export async function runStatus(): Promise<void> {
     pad('PID', widths.pid),
     pad('PORT', widths.port),
     pad('STATUS', widths.status),
+    pad('INDEX', widths.index),
     pad('SIZE', widths.logSize),
     pad('LOG', widths.log),
   ].join('  ');
@@ -123,6 +165,7 @@ export async function runStatus(): Promise<void> {
       pad(r.pid, widths.pid),
       pad(r.port, widths.port),
       pad(r.status, widths.status),
+      pad(r.index, widths.index),
       pad(r.logSize, widths.logSize),
       pad(r.log, widths.log),
     ].join('  '));
