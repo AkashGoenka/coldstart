@@ -1,29 +1,8 @@
 # Codebase navigation — coldstart MCP tools
 
-You have 4 MCP tools for navigating this codebase. Use them before Read/Grep/Glob/Bash.
+You have 4 MCP tools (`get-overview`, `get-structure`, `trace-deps`, `trace-impact`).
+Reach for them before Read/Grep/Glob/Bash. Per-tool details are in the tool descriptions — these are the cross-tool rules:
 
-## Tools
-
-1. **`get-overview`** — Find files by keyword. Pass `domain_filter` with code tokens.
-   - Bare words = AND: `auth payment` matches files with both tokens.
-   - Brackets = OR synonyms: `[auth|login|jwt] payment`.
-   - Returns 7 ranked file paths — nothing else. To learn what's inside one, drill in with `get-structure`.
-
-2. **`get-structure`** — Drill into a single file. Returns its symbols (name, kind, line range, extends/implements) and 1-hop internal imports as a compact text block.
-   - Use AFTER get-overview, BEFORE Read. Lets you decide if a file is worth opening.
-   - Library/external imports are stripped; only internal repo paths are shown.
-
-3. **`trace-deps`** — For a known file, returns its imports and/or importers. Default depth 1; raise to 2-3 for transitive reach.
-   - **Reverse lookup** (`direction: "importers"`): scope blast radius before changing a file.
-   - **Transitive reach** (`depth: 2-3`): explore deeper than get-structure's 1 hop.
-
-4. **`trace-impact`** — Find callers/implementors of a symbol across the codebase.
-   - Use before refactoring a function/class.
-   - Inheritance chains (extends/implements) are reliable; cross-file call edges may be incomplete.
-
-## Key guidance
-
-- **Typical flow:** `get-overview` to shortlist files → `get-structure` on the most promising one → `trace-deps` or `trace-impact` to expand the graph → `Read` only when you need actual implementation.
-- **Page size is 7. Do not raise it.** If the right file isn't in the top 7, your query is wrong — refine it with different keywords, synonyms (`[a|b]`), or a more specific token. Pagination almost never helps: if the answer isn't in 7, it isn't in 12 either.
+- **Typical flow:** `get-overview` → `get-structure` (one promising file) → `trace-deps` / `trace-impact` to expand → `Read` only when you need implementation.
 - **Stop when data is sufficient.** Don't re-query to confirm what you already found.
-- **Fall back to grep** for string literals, exact call sites, or dynamic dispatch patterns.
+- **Fall back to grep** only for string literals, exact call sites, or dynamic dispatch — not as your default discovery method.
