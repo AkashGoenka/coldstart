@@ -65,9 +65,19 @@ AI client ──stdio──> bridge (per AI session) ──HTTP──> daemon (p
 
 ### Lockfile (`src/daemon-lock.ts`)
 - Path: `~/.coldstart/daemon/<basename>-<hash>.json` — `<basename>` is the directory name of the project root, `<hash>` is the first 16 hex chars of `sha256(absolute_path)`. The basename prefix is human-readable; the hash disambiguates collisions and makes the file safe to grep.
-- Contents: `{ pid, port }`.
+- Contents: `{ pid, port, rootDir }`. `rootDir` was added so the `status` subcommand can show absolute paths; pre-existing lockfiles without it still work and fall back to the basename for display.
 - Bridges check the lockfile, verify the PID is alive (`process.kill(pid, 0)`), and probe the port (`GET /mcp`) before reusing it. A stale lockfile triggers respawn.
 - A separate **spawn lock** (`<basename>-<hash>.spawn`, opened with `O_CREAT | O_EXCL`) ensures only one bridge spawns the daemon when several start in parallel; the rest wait on the lockfile.
+
+### Daemon logging (`src/daemon-log.ts`)
+- Path: `~/.coldstart/daemon/<basename>-<hash>.log` (current run) and `.log.prev` (previous run, retained for postmortem).
+- The daemon is spawned with `stdio: 'ignore'`, so without a file backing log the entire stderr stream would be lost. `attachDaemonLogger(rootDir)` is the first call inside `runDaemon` — it opens the log file (rotating any existing `.log` to `.log.prev` first), then monkey-patches `process.stderr.write` so every existing `log(...)` call site is captured without per-callsite changes.
+- Rotation: a `setInterval` (60 s, `unref()`'d) checks the file size; when it crosses 1 MB, the current stream is closed, the file moves to `.log.prev`, and a fresh stream opens. Worst case per project is ~2 MB across both files.
+- Failure mode: rotation is best-effort. Any I/O error inside the rotation loop is swallowed so a log issue can never crash the daemon.
+
+### Status subcommand (`src/status.ts`)
+- Invoked as `coldstart-mcp status`. Reads every `*.json` in `~/.coldstart/daemon/`, probes `isDaemonAlive` (a zero-signal `process.kill(pid, 0)`) and `GET /mcp` per entry, and prints a fixed-width table with root path, PID, port, status (`ok` / `alive, http unreachable` / `dead (stale lock)`), log size, and log path.
+- Output is intentionally plain stdout text so it's grep-friendly. A `--json` flag is a future option without breaking the human form.
 
 ### `--no-daemon` mode
 Bypasses the bridge/daemon split entirely. The single CLI process runs the stdio MCP server *and* holds the index *and* runs the watcher — same code paths, just no IPC. Used for development, debugging, and environments where spawning detached processes is undesirable.

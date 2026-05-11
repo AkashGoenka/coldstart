@@ -13,17 +13,45 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
 }
 
 /**
+ * Lightweight daemon status reported by `GET /status`. Cheap to compute —
+ * intended for the `coldstart-mcp status` CLI to poll without opening an
+ * MCP session. Kept inline-typed so http-daemon stays free of MCP imports.
+ */
+export interface DaemonStatusResponse {
+  state: 'building' | 'ready' | 'rebuilding' | 'failed';
+  /** Files currently in the index, or null when no index exists yet. */
+  fileCount: number | null;
+  /** Daemon process startup time (epoch ms). */
+  startedAt: number;
+  /** Time taken to build the initial index, or null while still building. */
+  indexBuildMs: number | null;
+}
+
+/**
  * Start the HTTP daemon server. Returns the port it bound to.
  * Each incoming MCP session gets its own Server + Transport instance,
  * but all sessions share the same getContext closure (same live index).
+ *
+ * `getStatus` is an optional cheap status accessor exposed on `GET /status`.
+ * The CLI `status` subcommand polls it; absent or unreachable callers get
+ * an "unknown" indicator.
  */
 export async function startDaemonHttpServer(
   getContext: () => Promise<IndexContext>,
+  getStatus?: () => DaemonStatusResponse,
 ): Promise<number> {
   const sessions = new Map<string, StreamableHTTPServerTransport>();
 
   const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = req.url ?? '';
+
+    if (url.startsWith('/status') && req.method === 'GET') {
+      const body = JSON.stringify(getStatus ? getStatus() : { state: 'unknown' });
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(body);
+      return;
+    }
+
     if (!url.startsWith('/mcp')) { res.writeHead(404); res.end(); return; }
 
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
