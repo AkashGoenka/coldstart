@@ -58,7 +58,7 @@ AI client ──stdio──> coldstart bridge ──HTTP──> coldstart daemon
 npx coldstart-mcp status
 ```
 
-Lists every daemon known to your user account with PID, port, alive/HTTP status, and the path to its log file. First stop for any "is it broken?" question.
+Lists every daemon known to your user account with PID, port, process/HTTP status, indexing state (`ready (N files)` / `building` / `rebuilding (N files)` / `failed`), and the path to its log file. The daemon also writes its full stderr (parse progress, errors, watcher events) to that log file — `tail -f` it to watch a long index build, or read `.log.prev` for a crashed daemon's last words. First stop for any "is it broken?" question.
 
 If you want to avoid the daemon entirely (e.g. for debugging or in environments where spawning detached processes is awkward), pass `--no-daemon` and coldstart runs as a single stdio process — same tools, no background state.
 
@@ -72,7 +72,7 @@ There is no separate indexing step. On first run coldstart automatically:
 
 1. Walks the filesystem and parses all source files in batches of 100 — progress is logged to stderr every 500 files so you can see it's alive on large repos
 2. Resolves imports and builds a dependency graph
-3. Caches the index to `~/.coldstart/indexes/<basename>-<hash>/` (split into `meta.json` + `graph.json`)
+3. Caches the index to `~/.coldstart/indexes/<basename>-<hash>/` (`meta.json` + `graph.json` + `files-N.json` chunks)
 4. Starts a file watcher — index stays live for the entire daemon session, no restarts needed
 
 On a repo like Apache Kafka (~6k Java files) expect ~22s and ~42k edges on first run; subsequent starts load from cache instantly.
@@ -160,9 +160,9 @@ Use this before refactoring to understand blast radius without reading all depen
 
 ## Supported languages and frameworks
 
-TypeScript, JavaScript, Vue, Svelte, Astro, AngularJS 1.x, Java, Ruby, Python, Go, Rust, C#, PHP, Kotlin, C++, GraphQL.
+TypeScript, JavaScript, Vue, Svelte, Astro, AngularJS 1.x, Java, Ruby, Python, Go, Rust, C#, PHP, Kotlin, C++, GraphQL, YAML, TOML, XML, Groovy (including Gradle DSL), `.env` files.
 
-**Not yet parsed:** Swift, Dart — files are walked but no symbols are extracted.
+**Not indexed:** Swift, Dart — no extension mapping; these file types are not walked or parsed.
 
 ---
 
@@ -208,9 +208,10 @@ During a full rebuild, tool calls are served from the previous snapshot and a `_
 
 ## Cache behavior
 
-Indexes are stored at `~/.coldstart/indexes/<basename>-<hash>/`, split into:
-- `meta.json` — schema version, root path, git HEAD, file checksums
-- `graph.json` — symbols, edges, domain map (the bulk of the data)
+Indexes are stored at `~/.coldstart/indexes/<basename>-<hash>/`, split into three artifact types:
+- `meta.json` — schema version, root path, git HEAD, file count, timestamp. Written last as an atomic commit marker; read first on startup to decide whether the rest of the cache is worth loading.
+- `graph.json` — file-level and symbol-level edges, adjacency maps, token document frequencies.
+- `files-N.json` — per-file metadata (exports, imports, symbols, domain map) in chunks of 5,000 entries. Large repos produce multiple chunks (`files-0.json`, `files-1.json`, …). Chunks are written in parallel alongside `graph.json`; `meta.json` is committed last.
 
 The cache is reused when:
 - `CACHE_VERSION` matches the running binary
@@ -228,6 +229,6 @@ To force a fresh index for a single run, pass `--no-cache`. To wipe everything f
 2. It is a routing layer, not a behavior summarizer — no semantic analysis or code summaries.
 3. Hidden directories and files over 1 MB are skipped by default.
 4. Barrel detection (TS/JS only) uses re-export ratio; non-TS/JS barrel-style files are not detected.
-5. Swift and Dart files are walked but not parsed — no exports/symbols extracted.
+5. Swift and Dart are not indexed — they have no extension mapping and are not walked.
 6. `trace-impact` call edges: member expression calls (`this.method()`, `api.method()`) are not cross-file resolved — these callers will not appear in impact results. Named function calls matched to an import are fully resolved.
 7. The daemon is per-project and per-machine. Each project root gets its own daemon process and its own in-memory index — there's no sharing across projects. And the daemon binds to `127.0.0.1` only, so two machines accessing the same project (e.g. via NFS) each spin up a separate daemon.
