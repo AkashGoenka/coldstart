@@ -1,44 +1,29 @@
-# Codebase navigation — use coldstart MCP tools
+# Codebase navigation — coldstart MCP tools
 
-Before searching or opening files in an unfamiliar codebase, use the
-coldstart MCP tools to orient yourself. This saves tokens and avoids
-broad, speculative file reads.
+You have 4 MCP tools for navigating this codebase. Use them before Read/Grep/Glob/Bash.
 
-## Lookup order
+## Tools
 
-1. Call `get-overview` first — before any Glob, grep, or file read.
-   - Tells you which domains exist, what files live in each, and how
-     domains connect to each other.
-   - Use `domain_filter` to zoom into one area (e.g. `"auth"`, `"payments"`).
+1. **`get-overview`** — Find files by keyword. Pass `domain_filter` with code tokens.
+   - Bare words = AND: `auth payment` matches files with both tokens.
+   - Brackets = OR synonyms: `[auth|login|jwt] payment`.
+   - Returns 7 ranked file paths — nothing else. To learn what's inside one, drill in with `get-structure`.
 
-2. Call `get-structure` instead of reading a file just to check its shape.
-   - Returns exports, internal/external imports, line count, token estimate,
-     and architectural role — at zero file-read cost.
-   - Only read the full file if `get-structure` confirms it's relevant.
+2. **`get-structure`** — Drill into a single file. Returns its symbols (name, kind, line range, extends/implements) and 1-hop internal imports as a compact text block.
+   - Use AFTER get-overview, BEFORE Read. Lets you decide if a file is worth opening.
+   - Library/external imports are stripped; only internal repo paths are shown.
 
-3. Call `trace-deps` instead of manually chasing import statements.
-   - `direction="imports"` — what does this file depend on?
-   - `direction="importers"` — what depends on this file? (impact analysis)
-   - `depth=2` or `depth=3` for transitive chains.
+3. **`trace-deps`** — For a known file, returns its imports and/or importers. Default depth 1; raise to 2-3 for transitive reach.
+   - **Reverse lookup** (`direction: "importers"`): scope blast radius before changing a file.
+   - **Transitive reach** (`depth: 2-3`): explore deeper than get-structure's 1 hop.
 
-## Preferred patterns
+4. **`trace-impact`** — Find callers/implementors of a symbol across the codebase.
+   - Use before refactoring a function/class.
+   - Inheritance chains (extends/implements) are reliable; cross-file call edges may be incomplete.
 
-```
-# Starting a new task in an unfamiliar area
-get-overview → get-structure → read file (only if needed)
+## Key guidance
 
-# Understanding how a component connects to the rest of the codebase
-get-overview → trace-deps → read file (only if needed)
-
-# Impact analysis before editing a file
-trace-deps (direction="importers") → decide which callers to update
-```
-
-## When to fall back to grep/rg
-
-Use grep or rg only when coldstart tools don't answer the question:
-- Searching for a specific string or literal value inside file contents
-- Looking for call sites of a function by name across the whole repo
-- Searching inside comments or string values
-
-In all other cases, prefer coldstart tools first.
+- **Typical flow:** `get-overview` to shortlist files → `get-structure` on the most promising one → `trace-deps` or `trace-impact` to expand the graph → `Read` only when you need actual implementation.
+- **Page size is 7. Do not raise it.** If the right file isn't in the top 7, your query is wrong — refine it with different keywords, synonyms (`[a|b]`), or a more specific token. Pagination almost never helps: if the answer isn't in 7, it isn't in 12 either.
+- **Stop when data is sufficient.** Don't re-query to confirm what you already found.
+- **Fall back to grep** for string literals, exact call sites, or dynamic dispatch patterns.
