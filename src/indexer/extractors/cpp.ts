@@ -36,6 +36,54 @@ export interface CppParseResult {
 const MAX_STRING = 32000;
 const CHUNK_SIZE = 4096;
 
+// Headers we know cannot resolve to project files — drop at parse time so they
+// don't pollute the unresolved metric and don't waste resolver work.
+const STDLIB_EXACT = new Set([
+  // C++ standard library
+  'algorithm', 'array', 'atomic', 'bitset', 'cassert', 'cctype', 'cerrno',
+  'cfloat', 'chrono', 'climits', 'cmath', 'codecvt', 'complex', 'condition_variable',
+  'cstddef', 'cstdint', 'cstdio', 'cstdlib', 'cstring', 'ctime', 'cwchar', 'cwctype',
+  'deque', 'exception', 'filesystem', 'forward_list', 'fstream', 'functional',
+  'future', 'initializer_list', 'iomanip', 'ios', 'iosfwd', 'iostream', 'istream',
+  'iterator', 'limits', 'list', 'locale', 'map', 'memory', 'mutex', 'new', 'numeric',
+  'optional', 'ostream', 'queue', 'random', 'ratio', 'regex', 'set', 'shared_mutex',
+  'sstream', 'stack', 'stdexcept', 'streambuf', 'string', 'string_view',
+  'system_error', 'thread', 'tuple', 'type_traits', 'typeindex', 'typeinfo',
+  'unordered_map', 'unordered_set', 'utility', 'valarray', 'variant', 'vector',
+  // C standard library
+  'assert.h', 'ctype.h', 'errno.h', 'float.h', 'limits.h', 'math.h', 'setjmp.h',
+  'signal.h', 'stdarg.h', 'stddef.h', 'stdint.h', 'stdio.h', 'stdlib.h', 'string.h',
+  'time.h', 'wchar.h', 'wctype.h',
+  // POSIX
+  'unistd.h', 'pthread.h', 'fcntl.h', 'dirent.h', 'sys/stat.h', 'sys/types.h',
+  'sys/socket.h', 'sys/mman.h', 'sys/ioctl.h', 'sys/wait.h', 'sys/time.h',
+  'sys/resource.h', 'sys/eventfd.h', 'sys/epoll.h', 'sys/inotify.h',
+  'netinet/in.h', 'netinet/tcp.h', 'arpa/inet.h', 'netdb.h', 'poll.h', 'sched.h',
+  'semaphore.h', 'syslog.h', 'termios.h',
+  // Windows
+  'windows.h', 'winsock2.h', 'ws2tcpip.h',
+]);
+
+const THIRD_PARTY_PREFIXES = [
+  'boost/', 'gtest/', 'gmock/', 'benchmark/',
+  'Qt5/', 'Qt6/', 'QtCore/', 'QtGui/', 'QtWidgets/', 'QtNetwork/',
+  'fmt/', 'spdlog/', 'absl/', 'google/',
+  'openssl/', 'zlib.h', 'png.h', 'jpeglib.h',
+  'glib-2.0/', 'gio/', 'gtk/', 'cairo/', 'pango/',
+  'eigen3/', 'Eigen/', 'opencv2/',
+  'protobuf/', 'grpcpp/',
+  'event2/', 'sodium/', 'secp256k1',
+  'kj/', 'mp/', 'capnp/', 'univalue',
+];
+
+function isStdlibOrThirdParty(spec: string): boolean {
+  if (STDLIB_EXACT.has(spec)) return true;
+  for (const p of THIRD_PARTY_PREFIXES) if (spec.startsWith(p)) return true;
+  // Heuristic: single-token no extension and no slash → almost certainly stdlib
+  if (!spec.includes('/') && !spec.includes('.')) return true;
+  return false;
+}
+
 function parseContent(parser: TSNode, content: string): TSNode {
   if (content.length <= MAX_STRING) return parser.parse(content);
   return parser.parse((startIndex: number) => {
@@ -84,15 +132,23 @@ export function parseCppContent(content: string, fileId: string): CppParseResult
     const startLine = node.startPosition.row + 1;
     const endLine   = node.endPosition.row + 1;
 
-    // #include "foo.h" or #include "../utils/bar.hpp"
+    // #include "foo.h" or #include <boost/asio.hpp>
     if (node.type === 'preproc_include') {
-      const pathNode = firstChildOfType(node, 'string_literal');
-      if (pathNode) {
-        // Strip surrounding quotes
-        const raw = pathNode.text.replace(/^"|"$/g, '');
-        if (raw) imports.push(raw);
+      // Quoted include: #include "path/to/file.h"
+      const quoted = firstChildOfType(node, 'string_literal');
+      if (quoted) {
+        const raw = quoted.text.replace(/^"|"$/g, '');
+        // Also filter third-party for quoted includes — they can't resolve locally
+        if (raw && !isStdlibOrThirdParty(raw)) imports.push(raw);
+        return;
       }
-      // angle-bracket includes (<vector>) are system headers — skip
+      // Angle-bracket include: #include <path/to/file.h>
+      const sys = firstChildOfType(node, 'system_lib_string');
+      if (sys) {
+        const raw = sys.text.replace(/^<|>$/g, '');
+        // Skip stdlib and third-party — let resolver handle only local includes
+        if (raw && !isStdlibOrThirdParty(raw)) imports.push(raw);
+      }
       return;
     }
 
