@@ -9,7 +9,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createInterface } from 'node:readline/promises';
-import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -48,10 +47,10 @@ alwaysApply: true
 /**
  * Resolve the absolute path to a stable install of coldstart-mcp.
  *
- * Logic:
- * - If an install already exists at ~/.coldstart/versions/<version>/, reuse it.
- * - Otherwise, install coldstart-mcp into that directory synchronously.
- * - Return the absolute path to the entry file.
+ * If `~/.coldstart/versions/<version>/` already has the install, reuse it.
+ * Otherwise, copy the running install's node_modules into that directory.
+ * `init` always runs from a complete on-disk install (npx cache, global, or
+ * local devDep), so the source tree is guaranteed to exist.
  */
 function getOrInstallStableVersion(): string {
   const home = process.env.HOME ?? process.env.USERPROFILE ?? '';
@@ -59,12 +58,7 @@ function getOrInstallStableVersion(): string {
     throw new Error('Could not determine HOME directory');
   }
 
-  // Read our version from package.json
   const pkgPath = path.resolve(path.dirname(path.dirname(__filename)), 'package.json');
-  if (!fs.existsSync(pkgPath)) {
-    throw new Error('Could not read package.json');
-  }
-
   const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version?: string };
   const version = pkg.version;
   if (!version) {
@@ -74,25 +68,25 @@ function getOrInstallStableVersion(): string {
   const versionDir = path.join(home, '.coldstart', 'versions', version);
   const entryPath = path.join(versionDir, 'node_modules', 'coldstart-mcp', 'dist', 'index.js');
 
-  // Check if already installed
   if (fs.existsSync(entryPath)) {
     return entryPath;
   }
 
-  // Install coldstart-mcp into the versioned directory
-  out(`Installing coldstart-mcp@${version} into ~/.coldstart/versions/${version}/ (one-time, ~30–60 s)…`);
-  try {
-    const cmd = `npm install --prefix "${versionDir}" coldstart-mcp@${version}`;
-    execSync(cmd, { stdio: 'inherit' });
-  } catch (err) {
-    throw new Error(`Failed to install coldstart-mcp: ${err}`);
+  // argv[1] → .../<install_root>/node_modules/coldstart-mcp/dist/index.js
+  // realpath resolves .bin/ symlinks; three dirnames up is the node_modules root.
+  const running = fs.realpathSync(process.argv[1]);
+  const sourceNm = path.resolve(running, '..', '..', '..');
+  if (!fs.existsSync(path.join(sourceNm, 'coldstart-mcp', 'package.json'))) {
+    throw new Error(`Cannot locate the running coldstart-mcp install from ${running}.`);
   }
 
-  // Verify the install
+  out(`Copying coldstart-mcp@${version} to ~/.coldstart/versions/${version}/ …`);
+  fs.mkdirSync(versionDir, { recursive: true });
+  fs.cpSync(sourceNm, path.join(versionDir, 'node_modules'), { recursive: true });
+
   if (!fs.existsSync(entryPath)) {
-    throw new Error(`Install completed but entry file not found at ${entryPath}`);
+    throw new Error(`Copy completed but entry file not found at ${entryPath}`);
   }
-
   return entryPath;
 }
 
