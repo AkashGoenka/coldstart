@@ -11,25 +11,42 @@ If a fix below references the daemon directory or cache, those live at:
 
 ---
 
-## First step for any daemon problem: `status` and `log`
+## First step for any daemon problem: `doctor`, `status`, or just restart it
 
-The daemon is auto-spawned with its stdio disconnected from the AI client, so its output doesn't appear in the client's logs. Coldstart writes every daemon log line to a file instead.
+As of v1.4.3 the bridge tails the daemon log to its own stderr, so daemon output (build progress, parse errors, watcher events) appears in your AI client's Output panel in real time. You usually won't need to chase log files. If something still looks wrong:
 
-**See which daemons exist and whether they're healthy:**
+**Quick health check for the current project's daemon:**
+
+```bash
+npx coldstart-mcp doctor
+```
+
+Exits 0 + prints `PASS` if the daemon for your `cwd` is alive, HTTP-responding, and finished indexing. Exits 1 + prints `FAIL` with the reason otherwise (no daemon, stale PID, unreachable HTTP, build failure).
+
+**See every daemon across all projects:**
 
 ```bash
 npx coldstart-mcp status
 ```
 
-Output shows one row per daemon: root path, PID, port, status (`ok` / `alive, http unreachable` / `dead (stale lock)`), log size, and the log path.
+Output shows one row per daemon: root path, PID, port, state (`ok` / `alive, http unreachable` / `dead (stale lock)`), log size, and the log path.
 
-**Tail the log for a misbehaving daemon:**
+**Force a clean restart when you suspect anything wrong:**
+
+```bash
+npx coldstart-mcp restart        # current project's daemon
+npx coldstart-mcp restart --all  # every running daemon
+```
+
+Sends SIGTERM (5 s grace) then SIGKILL fallback, and removes the lockfile. The next time your AI client makes a tool call, a fresh daemon spawns from your installed version. This is the right answer for *almost every* "something feels off" situation — version upgrades, suspected stale index, weird tool output.
+
+**Tail the log directly for a deep investigation:**
 
 ```bash
 tail -f ~/.coldstart/daemon/<basename>-<hash>.log
 ```
 
-Logs rotate at 1 MB. The most recent run is in `.log`; the previous run is preserved in `.log.prev` — which is the file to read when a daemon has crashed and respawned.
+Logs rotate at 1 MB. The most recent run is in `.log`; the previous run is preserved in `.log.prev` — read this when a daemon has crashed and respawned.
 
 ---
 
@@ -87,18 +104,25 @@ The `.log` and `.log.prev` files stay where they are — useful for postmortem. 
 
 ## Index seems out of date
 
-The file watcher should keep the in-memory index current — but if it missed an event (rare; happens on some network filesystems or when files change while the daemon is paused/suspended) the simplest reset is to restart the daemon:
+The file watcher should keep the in-memory index current — but if it missed an event (rare; happens on some network filesystems or when files change while the daemon is paused/suspended):
 
 ```bash
-# Find PID
-cat ~/.coldstart/daemon/<basename>-<hash>.json
-# Kill it
-kill <pid>
+npx coldstart-mcp restart
 ```
 
-The bridge respawns the daemon on the next tool call. The in-memory index is rebuilt from cache + incremental patches as needed.
+The next tool call spawns a fresh daemon, which loads from disk cache (if valid) or rebuilds.
 
-If you've changed branches or pulled a large diff, the file watcher's git-HEAD check should trigger a rebuild automatically. If it hasn't (you can see this from the `_indexStatus` field on tool responses), restart the daemon.
+**To force a full rebuild** (not just a daemon restart), also remove the cache directory's `meta.json` — the running daemon will detect this within 200 ms and rebuild in place:
+
+```bash
+rm ~/.coldstart/indexes/<basename>-<hash>/meta.json
+```
+
+If you've changed branches or pulled a large diff, the file watcher's git-HEAD check should trigger a rebuild automatically. If it hasn't (you can see this from the `_indexStatus` field on tool responses), `coldstart-mcp restart`.
+
+## After upgrading coldstart-mcp
+
+No action needed. The bridge stamps its version into the lockfile and refuses to attach to a daemon running an older version — on first reconnect after upgrade, the old daemon is SIGTERM'd and a fresh one spawns from the new binary. If for any reason it doesn't happen, `coldstart-mcp restart` fixes it explicitly.
 
 ---
 
