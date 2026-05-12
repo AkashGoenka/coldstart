@@ -167,15 +167,16 @@ export class IndexManager {
 
     const cacheDir = getCacheDir(this.activeIndex.rootDir, this.cacheDir);
     const metaPath = join(cacheDir, 'meta.json');
-    const parentDir = dirname(cacheDir);
 
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     let watcher: ReturnType<typeof watch> | null = null;
 
     try {
-      watcher = watch(parentDir, (_eventType, filename) => {
-        // fs.watch fires even if we don't care about the filename, so we
-        // just check if our meta.json exists. If it doesn't, trigger rebuild.
+      watcher = watch(cacheDir, { recursive: false }, (_eventType, filename) => {
+        // Watch fires on file changes in the cache dir. Only rebuild if meta.json
+        // is missing (e.g., user deleted it via `rm meta.json`).
+        // The existence check is the safety gate: if meta.json was just written
+        // by the daemon, it exists and we don't rebuild.
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
           debounceTimer = null;
