@@ -1,8 +1,12 @@
+import { watch } from 'node:fs';
+import { existsSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 import type { CodebaseIndex } from './types.js';
 import { startWatcher } from './watcher.js';
 import { patchIndex } from './indexer/patch.js';
-import { saveCachedIndex } from './cache/disk-cache.js';
+import { saveCachedIndex, getCacheDir } from './cache/disk-cache.js';
 import { PATCH_THRESHOLD } from './constants.js';
+import { daemonDir } from './daemon-lock.js';
 
 export type RebuildFn = () => Promise<CodebaseIndex>;
 
@@ -32,6 +36,7 @@ export class IndexManager {
   private activeIndex: CodebaseIndex;
   private rebuilding = false;
   private stopWatcherFn: (() => void) | null = null;
+  private stopCacheWatcherFn: (() => void) | null = null;
   private pendingCacheSave: ReturnType<typeof setTimeout> | null = null;
 
   /**
@@ -62,12 +67,17 @@ export class IndexManager {
       (batch) => { void this.handleBatch(batch); },
     );
     this.log('[coldstart] File watcher active');
+
+    // Fix #2: Watch cache directory for manual deletes
+    this.stopCacheWatcherFn = this.startCacheWatcher();
   }
 
   /** Stop watching (called on process exit). */
   stopWatching(): void {
     this.stopWatcherFn?.();
     this.stopWatcherFn = null;
+    this.stopCacheWatcherFn?.();
+    this.stopCacheWatcherFn = null;
     if (this.pendingCacheSave) clearTimeout(this.pendingCacheSave);
   }
 
@@ -140,5 +150,50 @@ export class IndexManager {
         this.log(`[coldstart] Cache write failed: ${err}`),
       );
     }, 5_000); // write 5s after last change settles
+  }
+
+  /**
+   * Fix #2: Watch the cache directory for manual deletes (e.g., user runs
+   * `rm -rf ~/.coldstart/indexes/<x>/meta.json`). If meta.json is missing,
+   * trigger a rebuild so the cache is recreated.
+   *
+   * Uses fs.watch on the parent directory (Windows quirk) and checks for
+   * meta.json existence. The existence check prevents a loop: the daemon
+   * itself writes meta.json on every save, which would fire the watch event,
+   * but we only rebuild if meta.json is MISSING.
+   */
+  private startCacheWatcher(): () => void {
+    if (this.noCache) return () => {}; // No cache watching if caching is disabled
+
+    const cacheDir = getCacheDir(this.activeIndex.rootDir, this.cacheDir);
+    const metaPath = join(cacheDir, 'meta.json');
+    const parentDir = dirname(cacheDir);
+
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    let watcher: ReturnType<typeof watch> | null = null;
+
+    try {
+      watcher = watch(parentDir, (_eventType, filename) => {
+        // fs.watch fires even if we don't care about the filename, so we
+        // just check if our meta.json exists. If it doesn't, trigger rebuild.
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          debounceTimer = null;
+          // Only rebuild if meta.json is missing (user deleted cache manually)
+          if (!existsSync(metaPath)) {
+            this.log('[coldstart] Cache meta.json missing — triggering rebuild');
+            void this.triggerRebuild();
+          }
+        }, 200);
+      });
+    } catch (err) {
+      this.log(`[coldstart] Cache watcher unavailable: ${err}`);
+      return () => {};
+    }
+
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      watcher?.close();
+    };
   }
 }
