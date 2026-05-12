@@ -31,6 +31,7 @@ import { startBridge } from './server/bridge.js';
 import { IndexManager } from './index-manager.js';
 import { readLock, writeLock, deleteLock, isDaemonAlive } from './daemon-lock.js';
 import { attachDaemonLogger } from './daemon-log.js';
+import { migrateLegacyMcpConfig } from './migrate.js';
 import type { CodebaseIndex, IndexedFile, SymbolEdge } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -512,6 +513,13 @@ async function runDaemon(
   await writeLock(finalRoot, process.pid, port);
   log(quiet, `[coldstart] Daemon HTTP server on port ${port} (PID ${process.pid})`);
 
+  // Auto-migrate legacy npx-based .mcp.json entries
+  try {
+    await migrateLegacyMcpConfig(finalRoot);
+  } catch {
+    // Non-fatal; continue with indexing
+  }
+
   // Build index in background
   buildManager(finalRoot, excludes, includes, cacheDir, quiet, noCache)
     .then(m => {
@@ -592,6 +600,7 @@ async function main(): Promise<void> {
     const buildAndSet = async (finalRoot: string): Promise<void> => {
       log(quiet, `[coldstart] Starting — root: ${finalRoot}`);
       try {
+        await migrateLegacyMcpConfig(finalRoot);
         manager = await buildManager(finalRoot, excludes, includes, cacheDir, quiet, noCache);
         managerReadyResolve();
         log(quiet, '[coldstart] MCP server ready');

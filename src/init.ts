@@ -9,6 +9,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createInterface } from 'node:readline/promises';
+import { execSync } from 'node:child_process';
 
 const DIVIDER = '─'.repeat(60);
 
@@ -38,11 +39,63 @@ alwaysApply: true
 `;
 
 // ---------------------------------------------------------------------------
-// File writers
+// Stable install resolution and MCP entry builders
 // ---------------------------------------------------------------------------
 
-function buildMcpEntry(cwd: string) {
-  return { command: 'npx', args: ['-y', 'coldstart-mcp', '--root', cwd] };
+/**
+ * Resolve the absolute path to a stable install of coldstart-mcp.
+ *
+ * Logic:
+ * - If an install already exists at ~/.coldstart/versions/<version>/, reuse it.
+ * - Otherwise, install coldstart-mcp into that directory synchronously.
+ * - Return the absolute path to the entry file.
+ */
+function getOrInstallStableVersion(): string {
+  const home = process.env.HOME ?? process.env.USERPROFILE ?? '';
+  if (!home) {
+    throw new Error('Could not determine HOME directory');
+  }
+
+  // Read our version from package.json
+  const pkgPath = path.resolve(path.dirname(path.dirname(__filename)), 'package.json');
+  if (!fs.existsSync(pkgPath)) {
+    throw new Error('Could not read package.json');
+  }
+
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version?: string };
+  const version = pkg.version;
+  if (!version) {
+    throw new Error('Could not determine version from package.json');
+  }
+
+  const versionDir = path.join(home, '.coldstart', 'versions', version);
+  const entryPath = path.join(versionDir, 'node_modules', 'coldstart-mcp', 'dist', 'index.js');
+
+  // Check if already installed
+  if (fs.existsSync(entryPath)) {
+    return entryPath;
+  }
+
+  // Install coldstart-mcp into the versioned directory
+  out(`Installing coldstart-mcp@${version} into ~/.coldstart/versions/${version}/ (one-time, ~30–60 s)…`);
+  try {
+    const cmd = `npm install --prefix "${versionDir}" coldstart-mcp@${version}`;
+    execSync(cmd, { stdio: 'inherit' });
+  } catch (err) {
+    throw new Error(`Failed to install coldstart-mcp: ${err}`);
+  }
+
+  // Verify the install
+  if (!fs.existsSync(entryPath)) {
+    throw new Error(`Install completed but entry file not found at ${entryPath}`);
+  }
+
+  return entryPath;
+}
+
+function buildMcpEntry(cwd: string): { command: string; args: string[] } {
+  const entryPath = getOrInstallStableVersion();
+  return { command: 'node', args: [entryPath, '--root', cwd] };
 }
 
 function mergeMcpJson(filePath: string, cwd: string): 'created' | 'merged' {
