@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { spawn } from 'node:child_process';
+import { watch, statSync, openSync, readSync, closeSync, existsSync } from 'node:fs';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -14,6 +15,10 @@ import {
   readLock,
   isDaemonAlive,
   tryAcquireSpawnLock,
+  killDaemon,
+  getCurrentVersion,
+  deleteLock,
+  daemonLogPath,
 } from '../daemon-lock.js';
 
 // ---------------------------------------------------------------------------
@@ -29,6 +34,114 @@ async function isDaemonServing(port: number): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Fix #4: Tail daemon log to bridge stderr
+//
+// On cold start, the daemon is spawned detached and creates its log file
+// asynchronously — it does NOT exist at the moment we want to start tailing.
+// We poll-wait (cheap stat calls) up to 5s for it to appear before installing
+// the watcher. Once the watcher is attached, it's kernel-driven (FSEvents /
+// inotify / ReadDirectoryChangesW) and costs ~0 CPU at idle; each event reads
+// only the newly-appended bytes.
+// ---------------------------------------------------------------------------
+function startLogTailer(rootDir: string): () => void {
+  const logPath = daemonLogPath(rootDir);
+  let stopped = false;
+  let watcher: ReturnType<typeof watch> | null = null;
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let pollTimer: ReturnType<typeof setTimeout> | null = null;
+  let currentOffset = 0;
+
+  const drain = (): void => {
+    try {
+      if (!existsSync(logPath)) {
+        currentOffset = 0;
+        return;
+      }
+      const stat = statSync(logPath);
+      if (stat.size < currentOffset) {
+        // Log rotated (e.g., .log -> .log.prev on daemon restart)
+        currentOffset = 0;
+      }
+      if (stat.size > currentOffset) {
+        // Positional read from exact offset to avoid races with concurrent
+        // appends and to skip re-reading bytes we've already streamed.
+        const length = stat.size - currentOffset;
+        const buf = Buffer.allocUnsafe(length);
+        const fd = openSync(logPath, 'r');
+        try {
+          const bytesRead = readSync(fd, buf, 0, length, currentOffset);
+          if (bytesRead > 0) {
+            currentOffset += bytesRead;
+            process.stderr.write(buf.subarray(0, bytesRead));
+          }
+        } finally {
+          closeSync(fd);
+        }
+      }
+    } catch {
+      // Best effort — don't crash bridge over log read errors
+    }
+  };
+
+  const attachWatcher = (): void => {
+    if (stopped) return;
+    let initialSize: number;
+    try {
+      initialSize = statSync(logPath).size;
+    } catch {
+      return;
+    }
+    // Cold start: the daemon just rotated its log and the new .log is small
+    // (a fresh boot writes ~5 KB). Start from offset 0 so users see the full
+    // "Daemon starting / HTTP server / Walking filesystem ..." sequence.
+    // Warm reconnect: the daemon has been running, log already has history;
+    // start at EOF so we don't replay hours of past events on every connect.
+    const COLD_START_THRESHOLD = 8 * 1024;
+    currentOffset = initialSize < COLD_START_THRESHOLD ? 0 : initialSize;
+    // Stream whatever already exists at attach time (so we don't miss the
+    // first few lines written between file creation and watcher install).
+    // Then keep `currentOffset` at the new EOF.
+    drain();
+    try {
+      watcher = watch(logPath, () => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          debounceTimer = null;
+          drain();
+        }, 100);
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  // Cold start: daemon is spawned detached and creates its log file async.
+  // Poll-wait (cheap stat) up to 5s for the file to appear, then attach.
+  if (existsSync(logPath)) {
+    attachWatcher();
+  } else {
+    const deadline = Date.now() + 5000;
+    const poll = (): void => {
+      if (stopped) return;
+      if (existsSync(logPath)) {
+        attachWatcher();
+        return;
+      }
+      if (Date.now() > deadline) return; // give up silently
+      pollTimer = setTimeout(poll, 50);
+    };
+    poll();
+  }
+
+  return () => {
+    stopped = true;
+    if (debounceTimer) clearTimeout(debounceTimer);
+    if (pollTimer) clearTimeout(pollTimer);
+    watcher?.close();
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -49,10 +162,29 @@ async function waitForDaemon(rootDir: string, timeoutMs = 180_000): Promise<numb
 // ---------------------------------------------------------------------------
 // Ensure exactly one daemon is running for this root
 // ---------------------------------------------------------------------------
+let logTailerStop: (() => void) | null = null;
+
 async function ensureDaemon(rootDir: string, quiet: boolean): Promise<void> {
   const lock = await readLock(rootDir);
-  if (lock && isDaemonAlive(lock.pid) && await isDaemonServing(lock.port)) {
-    return; // Already running
+  const currentVersion = getCurrentVersion();
+
+  // Fix #1: Version-mismatch restart
+  // If a daemon exists but its version doesn't match the current bridge version,
+  // kill it and proceed to spawn a new one.
+  if (lock && isDaemonAlive(lock.pid)) {
+    if (lock.version && lock.version !== currentVersion) {
+      if (!quiet) {
+        process.stderr.write(
+          `[coldstart] Version mismatch: daemon v${lock.version} vs bridge v${currentVersion}, restarting...\n`,
+        );
+      }
+      await killDaemon(lock.pid);
+      await deleteLock(rootDir).catch(() => {});
+    } else if (await isDaemonServing(lock.port)) {
+      // Already running and version matches — start log tailer
+      logTailerStop = startLogTailer(rootDir);
+      return;
+    }
   }
 
   const release = await tryAcquireSpawnLock(rootDir);
@@ -64,7 +196,17 @@ async function ensureDaemon(rootDir: string, quiet: boolean): Promise<void> {
   try {
     // Re-check after acquiring lock in case daemon appeared in the meantime
     const lock2 = await readLock(rootDir);
-    if (lock2 && isDaemonAlive(lock2.pid) && await isDaemonServing(lock2.port)) return;
+    if (lock2 && isDaemonAlive(lock2.pid) && await isDaemonServing(lock2.port)) {
+      // Check version again
+      if (!lock2.version || lock2.version === currentVersion) {
+        // Already running — start log tailer
+        logTailerStop = startLogTailer(rootDir);
+        return;
+      }
+      // Version mismatch — kill and proceed
+      await killDaemon(lock2.pid);
+      await deleteLock(rootDir).catch(() => {});
+    }
 
     const daemonArgv = [...process.argv.slice(1)];
     if (!daemonArgv.includes('--daemon')) daemonArgv.push('--daemon');
@@ -76,6 +218,8 @@ async function ensureDaemon(rootDir: string, quiet: boolean): Promise<void> {
     child.unref();
 
     if (!quiet) process.stderr.write('[coldstart] Daemon spawned\n');
+    // Fix #4: Start tailing daemon log once it's spawned
+    logTailerStop = startLogTailer(rootDir);
   } finally {
     await release();
   }

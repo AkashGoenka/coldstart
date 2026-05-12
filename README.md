@@ -67,17 +67,22 @@ AI client ──stdio──> coldstart bridge ──HTTP──> coldstart daemon
 - **Idle daemon:** stays alive across client restarts. Nothing pings it shut — it sits at near-zero CPU and a few MB of RAM until invoked.
 - **First-call latency:** the bridge waits up to 180s for the daemon to finish its initial index, then proxies tool calls.
 
-**Health check at any time:**
+**Daemon management:**
 
 ```bash
-npx coldstart-mcp status
+npx coldstart-mcp doctor          # is the current project's daemon healthy?
+npx coldstart-mcp status          # list every daemon on the machine
+npx coldstart-mcp restart         # kill the current project's daemon (next tool call respawns)
+npx coldstart-mcp restart --all   # kill every running daemon
 ```
 
-Lists every daemon known to your user account with PID, port, process/HTTP status, indexing state (`ready (N files)` / `building` / `rebuilding (N files)` / `failed`), and the path to its log file. The daemon also writes its full stderr (parse progress, errors, watcher events) to that log file — `tail -f` it to watch a long index build, or read `.log.prev` for a crashed daemon's last words. First stop for any "is it broken?" question.
+`doctor` exits 0 on PASS and 1 on FAIL — easy to wire into scripts. `restart` is the right answer when *anything* feels off; a fresh daemon loads the disk cache (or rebuilds if missing). Upgrading the package is automatic — the bridge version-checks the running daemon and respawns it from your new binary; you don't need to restart anything by hand.
+
+As of v1.4.3 the daemon's log lines (parse progress, errors, watcher events) stream into your AI client's Output panel in real time, so you'll usually see what's happening without `tail`. The full log still lives at `~/.coldstart/daemon/<basename>-<hash>.log` (rotated at 1 MB; previous run in `.log.prev`) for crash postmortems.
 
 If you want to avoid the daemon entirely (e.g. for debugging or in environments where spawning detached processes is awkward), pass `--no-daemon` and coldstart runs as a single stdio process — same tools, no background state.
 
-See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) if the daemon hangs, refuses to start, or returns stale data.
+See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for deeper recovery procedures.
 
 ---
 
