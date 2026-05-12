@@ -10,15 +10,17 @@ Agents are already good at reading code, tracing logic, and reasoning about stru
 
 ---
 
-## Getting started
+## Installation
 
 Requires Node.js 18+.
 
-**Run init from your project root:**
+**Run once from inside your project:**
 
 ```bash
-npx coldstart-mcp@latest init
+npx -y coldstart-mcp@latest init
 ```
+
+This installs coldstart-mcp into `~/.coldstart/versions/<version>/` and writes a `.mcp.json` pointing directly at it. After that, every MCP startup is a direct `node` invocation — fast, no per-session npm overhead.
 
 coldstart detects your IDE (Claude Code or Cursor) and writes the right files automatically:
 
@@ -29,6 +31,19 @@ coldstart detects your IDE (Claude Code or Cursor) and writes the right files au
 | Neither detected | `coldstart-mcp.json` + `coldstart-rules.md` to copy manually |
 
 Re-running `init` is safe — it never duplicates entries.
+
+### Migrating from a previous version
+
+If your `.mcp.json` was written by an earlier release and uses `"command": "npx"`, you have two options:
+
+1. **Re-run init** (recommended):
+   ```bash
+   npx -y coldstart-mcp@latest init
+   ```
+
+2. **Automatic on next launch**: starting in v1.4.0, coldstart-mcp detects legacy `npx`-style entries in `.mcp.json` at startup and rewrites them to use direct `node` (with a backup file). The current session keeps running on the slow path; the next session is fast.
+
+To opt out of auto-migration: set `COLDSTART_NO_AUTO_MIGRATE=1` in the MCP entry's `env`.
 
 > **Note on `--root`:** Modern MCP clients (Claude Code, Cursor) advertise the workspace via `roots/list` during the handshake — coldstart auto-detects the project path from that. `--root` is a fallback for older clients, direct CLI use, or pinning a specific subdirectory of a monorepo.
 >
