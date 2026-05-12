@@ -1,13 +1,17 @@
 import { readFile, writeFile, mkdir, unlink, open, readdir } from 'node:fs/promises';
-import { join, resolve, basename } from 'node:path';
+import { readFileSync, watch, existsSync } from 'node:fs';
+import { join, resolve, basename, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 
 export interface DaemonLock {
   pid: number;
   port: number;
   /** Absolute project root. Optional for forward-compat with old lockfiles. */
   rootDir?: string;
+  /** Version of the daemon that wrote this lock. Optional for forward-compat with old lockfiles. */
+  version?: string;
 }
 
 export function daemonDir(): string {
@@ -54,9 +58,10 @@ export async function writeLock(
   rootDir: string,
   pid: number,
   port: number,
+  version?: string,
 ): Promise<void> {
   await mkdir(daemonDir(), { recursive: true });
-  const payload: DaemonLock = { pid, port, rootDir: resolve(rootDir) };
+  const payload: DaemonLock = { pid, port, rootDir: resolve(rootDir), version };
   await writeFile(lockPath(rootDir), JSON.stringify(payload));
 }
 
@@ -110,6 +115,51 @@ export function isDaemonAlive(pid: number): boolean {
 }
 
 /**
+ * Get the current version of coldstart-mcp from package.json.
+ */
+export function getCurrentVersion(): string {
+  try {
+    const __filename = fileURLToPath(import.meta.url);
+    const pkgPath = resolve(dirname(__filename), '..', 'package.json');
+    const content = readFileSync(pkgPath, 'utf-8');
+    const pkg = JSON.parse(content) as { version?: string };
+    return pkg.version ?? 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+/**
+ * Kill a daemon by PID with escalating signals: SIGTERM (5s wait), then SIGKILL.
+ * Returns true if the daemon was alive and has been killed; false if already dead.
+ */
+export async function killDaemon(pid: number): Promise<boolean> {
+  if (!isDaemonAlive(pid)) return false;
+
+  try {
+    process.kill(pid, 'SIGTERM');
+  } catch {
+    return false;
+  }
+
+  // Wait up to 5 seconds for graceful shutdown
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    if (!isDaemonAlive(pid)) return true;
+    await new Promise(r => setTimeout(r, 100));
+  }
+
+  // SIGKILL if still alive
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch {
+    // Already dead or permission denied — either way, treat as killed
+  }
+
+  return true;
+}
+
+/**
  * Try to atomically acquire a spawn lock so only one bridge process spawns the daemon.
  * Returns a release function if acquired, null if another process already holds it.
  */
@@ -124,4 +174,37 @@ export async function tryAcquireSpawnLock(rootDir: string): Promise<(() => Promi
   } catch {
     return null; // Another bridge already holds the spawn lock
   }
+}
+
+/**
+ * Fix #6: Watch the daemon lockfile directory for deletions of our own lockfile.
+ * If our lockfile is deleted (e.g., user ran `rm ~/.coldstart/daemon/foo.json`),
+ * call onMissing() so the daemon can exit cleanly.
+ *
+ * Returns a function to stop watching.
+ */
+export function watchOwnLockfile(rootDir: string, onMissing: () => void): () => void {
+  const lock = lockPath(rootDir);
+  const parent = daemonDir();
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let watcher: ReturnType<typeof watch> | null = null;
+
+  try {
+    watcher = watch(parent, (_eventType, filename) => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        if (!existsSync(lock)) {
+          onMissing();
+        }
+      }, 200);
+    });
+  } catch (err) {
+    return () => {};
+  }
+
+  return () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    watcher?.close();
+  };
 }

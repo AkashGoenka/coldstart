@@ -29,7 +29,7 @@ import { startMCPServer } from './server/mcp.js';
 import { startDaemonHttpServer } from './server/http-daemon.js';
 import { startBridge } from './server/bridge.js';
 import { IndexManager } from './index-manager.js';
-import { readLock, writeLock, deleteLock, isDaemonAlive } from './daemon-lock.js';
+import { readLock, writeLock, deleteLock, isDaemonAlive, getCurrentVersion, watchOwnLockfile } from './daemon-lock.js';
 import { attachDaemonLogger } from './daemon-log.js';
 import { migrateLegacyMcpConfig } from './migrate.js';
 import type { CodebaseIndex, IndexedFile, SymbolEdge } from './types.js';
@@ -505,12 +505,15 @@ async function runDaemon(
         fileCount: ctx.index.files.size,
         startedAt: daemonStartedAt,
         indexBuildMs: indexReadyAt !== null ? indexReadyAt - daemonStartedAt : null,
+        // Fix #3: Extended health surface for doctor command
+        indexedAt: ctx.index.indexedAt,
       };
     },
   );
 
   // Write lockfile — bridges start connecting
-  await writeLock(finalRoot, process.pid, port);
+  // Fix #1: Include version in lockfile for version-mismatch detection
+  await writeLock(finalRoot, process.pid, port, getCurrentVersion());
   log(quiet, `[coldstart] Daemon HTTP server on port ${port} (PID ${process.pid})`);
 
   // Auto-migrate legacy npx-based .mcp.json entries
@@ -545,9 +548,17 @@ async function runDaemon(
       process.exit(0);
     });
   };
+
+  // Fix #6: Watch lockfile for deletion; exit cleanly if user removes it
+  const stopLockWatcher = watchOwnLockfile(finalRoot, () => {
+    log(quiet, '[coldstart] Lockfile deleted — shutting down');
+    cleanup();
+  });
+
   process.on('SIGTERM', cleanup);
   process.on('SIGINT', cleanup);
   process.on('exit', () => {
+    stopLockWatcher();
     manager?.stopWatching();
     detachLogger();
   });
@@ -569,6 +580,20 @@ async function main(): Promise<void> {
   if (process.argv[2] === 'status') {
     const { runStatus } = await import('./status.js');
     await runStatus();
+    return;
+  }
+
+  // Fix #3: Add doctor subcommand for health checks
+  if (process.argv[2] === 'doctor') {
+    const { runDoctor } = await import('./doctor.js');
+    await runDoctor();
+    return;
+  }
+
+  // Fix #5: Add restart subcommand to kill daemons
+  if (process.argv[2] === 'restart') {
+    const { runRestart } = await import('./restart.js');
+    await runRestart();
     return;
   }
 

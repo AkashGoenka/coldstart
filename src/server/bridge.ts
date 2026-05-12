@@ -1,6 +1,8 @@
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { spawn } from 'node:child_process';
+import { watch, statSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -14,6 +16,10 @@ import {
   readLock,
   isDaemonAlive,
   tryAcquireSpawnLock,
+  killDaemon,
+  getCurrentVersion,
+  deleteLock,
+  daemonLogPath,
 } from '../daemon-lock.js';
 
 // ---------------------------------------------------------------------------
@@ -29,6 +35,59 @@ async function isDaemonServing(port: number): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Fix #4: Tail daemon log to bridge stderr
+// ---------------------------------------------------------------------------
+function startLogTailer(rootDir: string): () => void {
+  const logPath = daemonLogPath(rootDir);
+  if (!existsSync(logPath)) {
+    return () => {};
+  }
+
+  let currentOffset = statSync(logPath).size;
+  let watcher: ReturnType<typeof watch> | null = null;
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  try {
+    watcher = watch(logPath, () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        try {
+          if (!existsSync(logPath)) {
+            // File was rotated — reset offset
+            currentOffset = 0;
+            return;
+          }
+
+          const stat = statSync(logPath);
+          if (stat.size < currentOffset) {
+            // File was rotated — reset offset
+            currentOffset = 0;
+          }
+
+          if (stat.size > currentOffset) {
+            const chunk = readFileSync(logPath, { encoding: 'utf-8' }).slice(currentOffset);
+            currentOffset = stat.size;
+            if (chunk) {
+              process.stderr.write(chunk);
+            }
+          }
+        } catch {
+          // Best effort — don't crash bridge over log read errors
+        }
+      }, 100);
+    });
+  } catch (err) {
+    return () => {};
+  }
+
+  return () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    watcher?.close();
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -49,10 +108,29 @@ async function waitForDaemon(rootDir: string, timeoutMs = 180_000): Promise<numb
 // ---------------------------------------------------------------------------
 // Ensure exactly one daemon is running for this root
 // ---------------------------------------------------------------------------
+let logTailerStop: (() => void) | null = null;
+
 async function ensureDaemon(rootDir: string, quiet: boolean): Promise<void> {
   const lock = await readLock(rootDir);
-  if (lock && isDaemonAlive(lock.pid) && await isDaemonServing(lock.port)) {
-    return; // Already running
+  const currentVersion = getCurrentVersion();
+
+  // Fix #1: Version-mismatch restart
+  // If a daemon exists but its version doesn't match the current bridge version,
+  // kill it and proceed to spawn a new one.
+  if (lock && isDaemonAlive(lock.pid)) {
+    if (lock.version && lock.version !== currentVersion) {
+      if (!quiet) {
+        process.stderr.write(
+          `[coldstart] Version mismatch: daemon v${lock.version} vs bridge v${currentVersion}, restarting...\n`,
+        );
+      }
+      await killDaemon(lock.pid);
+      await deleteLock(rootDir).catch(() => {});
+    } else if (await isDaemonServing(lock.port)) {
+      // Already running and version matches — start log tailer
+      logTailerStop = startLogTailer(rootDir);
+      return;
+    }
   }
 
   const release = await tryAcquireSpawnLock(rootDir);
@@ -64,7 +142,17 @@ async function ensureDaemon(rootDir: string, quiet: boolean): Promise<void> {
   try {
     // Re-check after acquiring lock in case daemon appeared in the meantime
     const lock2 = await readLock(rootDir);
-    if (lock2 && isDaemonAlive(lock2.pid) && await isDaemonServing(lock2.port)) return;
+    if (lock2 && isDaemonAlive(lock2.pid) && await isDaemonServing(lock2.port)) {
+      // Check version again
+      if (!lock2.version || lock2.version === currentVersion) {
+        // Already running — start log tailer
+        logTailerStop = startLogTailer(rootDir);
+        return;
+      }
+      // Version mismatch — kill and proceed
+      await killDaemon(lock2.pid);
+      await deleteLock(rootDir).catch(() => {});
+    }
 
     const daemonArgv = [...process.argv.slice(1)];
     if (!daemonArgv.includes('--daemon')) daemonArgv.push('--daemon');
@@ -76,6 +164,8 @@ async function ensureDaemon(rootDir: string, quiet: boolean): Promise<void> {
     child.unref();
 
     if (!quiet) process.stderr.write('[coldstart] Daemon spawned\n');
+    // Fix #4: Start tailing daemon log once it's spawned
+    logTailerStop = startLogTailer(rootDir);
   } finally {
     await release();
   }
