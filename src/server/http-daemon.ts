@@ -25,6 +25,10 @@ export interface DaemonStatusResponse {
   startedAt: number;
   /** Time taken to build the initial index, or null while still building. */
   indexBuildMs: number | null;
+  /** Fix #3: Extended health surface for doctor command. */
+  indexedAt?: number;
+  watcher?: { active: boolean; lastEventAt: number | null; patchCount: number; patchErrors: number };
+  gitHeadMatches?: boolean;
 }
 
 /**
