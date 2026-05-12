@@ -39,53 +39,89 @@ async function isDaemonServing(port: number): Promise<boolean> {
 
 // ---------------------------------------------------------------------------
 // Fix #4: Tail daemon log to bridge stderr
+//
+// On cold start, the daemon is spawned detached and creates its log file
+// asynchronously — it does NOT exist at the moment we want to start tailing.
+// We poll-wait (cheap stat calls) up to 5s for it to appear before installing
+// the watcher. Once the watcher is attached, it's kernel-driven (FSEvents /
+// inotify / ReadDirectoryChangesW) and costs ~0 CPU at idle; each event reads
+// only the newly-appended bytes.
 // ---------------------------------------------------------------------------
 function startLogTailer(rootDir: string): () => void {
   const logPath = daemonLogPath(rootDir);
-  if (!existsSync(logPath)) {
-    return () => {};
-  }
-
-  let currentOffset = statSync(logPath).size;
+  let stopped = false;
   let watcher: ReturnType<typeof watch> | null = null;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let pollTimer: ReturnType<typeof setTimeout> | null = null;
+  let currentOffset = 0;
 
-  try {
-    watcher = watch(logPath, () => {
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        debounceTimer = null;
-        try {
-          if (!existsSync(logPath)) {
-            // File was rotated — reset offset
-            currentOffset = 0;
-            return;
-          }
+  const drain = (): void => {
+    try {
+      if (!existsSync(logPath)) {
+        currentOffset = 0;
+        return;
+      }
+      const stat = statSync(logPath);
+      if (stat.size < currentOffset) {
+        // Log rotated (e.g., .log -> .log.prev on daemon restart)
+        currentOffset = 0;
+      }
+      if (stat.size > currentOffset) {
+        const chunk = readFileSync(logPath, { encoding: 'utf-8' }).slice(currentOffset);
+        currentOffset = stat.size;
+        if (chunk) process.stderr.write(chunk);
+      }
+    } catch {
+      // Best effort — don't crash bridge over log read errors
+    }
+  };
 
-          const stat = statSync(logPath);
-          if (stat.size < currentOffset) {
-            // File was rotated — reset offset
-            currentOffset = 0;
-          }
+  const attachWatcher = (): void => {
+    if (stopped) return;
+    try {
+      currentOffset = statSync(logPath).size;
+    } catch {
+      return;
+    }
+    // Stream whatever already exists at attach time (so we don't miss the
+    // first few lines written between file creation and watcher install).
+    // Then keep `currentOffset` at the new EOF.
+    drain();
+    try {
+      watcher = watch(logPath, () => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          debounceTimer = null;
+          drain();
+        }, 100);
+      });
+    } catch {
+      // ignore
+    }
+  };
 
-          if (stat.size > currentOffset) {
-            const chunk = readFileSync(logPath, { encoding: 'utf-8' }).slice(currentOffset);
-            currentOffset = stat.size;
-            if (chunk) {
-              process.stderr.write(chunk);
-            }
-          }
-        } catch {
-          // Best effort — don't crash bridge over log read errors
-        }
-      }, 100);
-    });
-  } catch (err) {
-    return () => {};
+  // Cold start: daemon is spawned detached and creates its log file async.
+  // Poll-wait (cheap stat) up to 5s for the file to appear, then attach.
+  if (existsSync(logPath)) {
+    attachWatcher();
+  } else {
+    const deadline = Date.now() + 5000;
+    const poll = (): void => {
+      if (stopped) return;
+      if (existsSync(logPath)) {
+        attachWatcher();
+        return;
+      }
+      if (Date.now() > deadline) return; // give up silently
+      pollTimer = setTimeout(poll, 50);
+    };
+    poll();
   }
 
   return () => {
+    stopped = true;
     if (debounceTimer) clearTimeout(debounceTimer);
+    if (pollTimer) clearTimeout(pollTimer);
     watcher?.close();
   };
 }
