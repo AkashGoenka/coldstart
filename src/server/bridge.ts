@@ -1,8 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { spawn } from 'node:child_process';
-import { watch, statSync, readFileSync } from 'node:fs';
-import { existsSync } from 'node:fs';
+import { watch, statSync, openSync, readSync, closeSync, existsSync } from 'node:fs';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -67,9 +66,20 @@ function startLogTailer(rootDir: string): () => void {
         currentOffset = 0;
       }
       if (stat.size > currentOffset) {
-        const chunk = readFileSync(logPath, { encoding: 'utf-8' }).slice(currentOffset);
-        currentOffset = stat.size;
-        if (chunk) process.stderr.write(chunk);
+        // Positional read from exact offset to avoid races with concurrent
+        // appends and to skip re-reading bytes we've already streamed.
+        const length = stat.size - currentOffset;
+        const buf = Buffer.allocUnsafe(length);
+        const fd = openSync(logPath, 'r');
+        try {
+          const bytesRead = readSync(fd, buf, 0, length, currentOffset);
+          if (bytesRead > 0) {
+            currentOffset += bytesRead;
+            process.stderr.write(buf.subarray(0, bytesRead));
+          }
+        } finally {
+          closeSync(fd);
+        }
       }
     } catch {
       // Best effort — don't crash bridge over log read errors
@@ -78,11 +88,19 @@ function startLogTailer(rootDir: string): () => void {
 
   const attachWatcher = (): void => {
     if (stopped) return;
+    let initialSize: number;
     try {
-      currentOffset = statSync(logPath).size;
+      initialSize = statSync(logPath).size;
     } catch {
       return;
     }
+    // Cold start: the daemon just rotated its log and the new .log is small
+    // (a fresh boot writes ~5 KB). Start from offset 0 so users see the full
+    // "Daemon starting / HTTP server / Walking filesystem ..." sequence.
+    // Warm reconnect: the daemon has been running, log already has history;
+    // start at EOF so we don't replay hours of past events on every connect.
+    const COLD_START_THRESHOLD = 8 * 1024;
+    currentOffset = initialSize < COLD_START_THRESHOLD ? 0 : initialSize;
     // Stream whatever already exists at attach time (so we don't miss the
     // first few lines written between file creation and watcher install).
     // Then keep `currentOffset` at the new EOF.
