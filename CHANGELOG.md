@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.4] - 2026-05-13
+
+### Fixed
+- **`npx coldstart-mcp@latest init` hangs indefinitely on a fresh machine.** Several tree-sitter grammar packages declare peer-dep ranges that conflict under npm's strict resolver — `^0.21` vs `^0.22` — causing npm's idealTree to loop forever with no lockfile (which is exactly the state npx uses). The `.npmrc` (`legacy-peer-deps=true`) in the source repo was ineffective because npm does not read `.npmrc` from inside a package being installed; it only reads the caller's project root or `~/.npmrc`. Fixed by changing the recommended install command from `npx -y coldstart-mcp@latest init` to `npm --legacy-peer-deps exec -y coldstart-mcp@latest -- init`, which passes the flag directly to npm's resolver and completes in ~20s on a cold cache.
+
 ## [1.4.3] - 2026-05-12
 
 ### Fixed
