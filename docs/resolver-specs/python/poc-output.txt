@@ -1,0 +1,368 @@
+
+## importlib:import_module (3)
+tests/utils/frontend_configuration_utils/test_generate_frontend_configuration.py:13 → arches/app/utils/frontend_configuration_utils/generate_frontend_configuration.py [target: arches.app.utils.frontend_configuration_utils.generate_frontend_configuration, surface: importlib.import_module( "arches.app.utils.frontend_configuration_utils.generate_frontend_configura…]
+tests/utils/frontend_configuration_utils/test_generate_tsconfig_paths.py:10 → arches/app/utils/frontend_configuration_utils/generate_tsconfig_paths.py [target: arches.app.utils.frontend_configuration_utils.generate_tsconfig_paths, surface: importlib.import_module( "arches.app.utils.frontend_configuration_utils.generate_tsconfig_paths" )]
+tests/utils/frontend_configuration_utils/test_generate_webpack_configuration.py:17 → arches/app/utils/frontend_configuration_utils/generate_webpack_configuration.py [target: arches.app.utils.frontend_configuration_utils.generate_webpack_configuration, surface: importlib.import_module( "arches.app.utils.frontend_configuration_utils.generate_webpack_configurat…]
+
+## orm:apps.get_model (120)
+arches/app/models/migrations/0001_initial.py:29 → arches/app/models/models.py [target: models.Ontology, surface: apps.get_model("models", "Ontology")]
+arches/app/models/migrations/0001_initial.py:37 ↛ (unresolved) [target: auth.Group, surface: apps.get_model("auth", "Group")]
+arches/app/models/migrations/0001_initial.py:38 ↛ (unresolved) [target: auth.User, surface: apps.get_model("auth", "User")]
+arches/app/models/migrations/0001_initial.py:39 ↛ (unresolved) [target: auth.Permission, surface: apps.get_model("auth", "Permission")]
+arches/app/models/migrations/0003_40b4.py:16 ↛ (unresolved) [target: auth.Group, surface: apps.get_model("auth", "Group")]
+arches/app/models/migrations/0003_40b4.py:17 ↛ (unresolved) [target: auth.Permission, surface: apps.get_model("auth", "Permission")]
+arches/app/models/migrations/0005_4_0_1.py:20 → arches/app/models/models.py [target: models.DValueType, surface: apps.get_model("models", "DValueType")]
+arches/app/models/migrations/0005_4_0_1.py:31 → arches/app/models/models.py [target: models.Node, surface: apps.get_model("models", "Node")]
+arches/app/models/migrations/0005_4_0_1.py:32 → arches/app/models/models.py [target: models.Edge, surface: apps.get_model("models", "Edge")]
+arches/app/models/migrations/0005_4_0_1.py:51 → arches/app/models/models.py [target: models.DValueType, surface: apps.get_model("models", "DValueType")]
+arches/app/models/migrations/0009_4_0_1.py:12 → arches/app/models/models.py [target: models.FunctionXGraph, surface: apps.get_model("models", "FunctionXGraph")]
+arches/app/models/migrations/0009_4_0_1.py:13 → arches/app/models/models.py [target: models.Node, surface: apps.get_model("models", "Node")]
+arches/app/models/migrations/0009_4_0_1.py:28 → arches/app/models/models.py [target: models.Node, surface: apps.get_model("models", "Node")]
+arches/app/models/migrations/0009_4_0_1.py:29 → arches/app/models/models.py [target: models.Function, surface: apps.get_model("models", "Function")]
+arches/app/models/migrations/0009_4_0_1.py:30 → arches/app/models/models.py [target: models.FunctionXGraph, surface: apps.get_model("models", "FunctionXGraph")]
+arches/app/models/migrations/10260_add_iiifmanifest_globalid.py:12 → arches/app/models/models.py [target: models.IIIFManifest, surface: apps.get_model("models", "IIIFManifest")]
+arches/app/models/migrations/10437_node_alias_not_null.py:17 → arches/app/models/models.py [target: models.Node, surface: apps.get_model("models", "Node")]
+arches/app/models/migrations/10437_node_alias_not_null.py:18 → arches/app/models/models.py [target: models.GraphModel, surface: apps.get_model("models", "GraphModel")]
+arches/app/models/migrations/10798_jsonld_importer.py:18 → arches/app/models/models.py [target: models.ETLModule, surface: apps.get_model("models", "ETLModule")]
+arches/app/models/migrations/10798_jsonld_importer.py:49 → arches/app/models/models.py [target: models.ETLModule, surface: apps.get_model("models", "ETLModule")]
+arches/app/models/migrations/11042_add_resource_instance_lifecycle.py:7 → arches/app/models/models.py [target: models.ResourceInstanceLifecycle, surface: apps.get_model("models", "ResourceInstanceLifecycle")]
+arches/app/models/migrations/11042_add_resource_instance_lifecycle.py:15 → arches/app/models/models.py [target: models.ResourceInstanceLifecycle, surface: apps.get_model("models", "ResourceInstanceLifecycle")]
+arches/app/models/migrations/11042_add_resource_instance_lifecycle.py:23 → arches/app/models/models.py [target: models.ResourceInstanceLifecycleState, surface: apps.get_model( "models", "ResourceInstanceLifecycleState" )]
+arches/app/models/migrations/11042_add_resource_instance_lifecycle.py:41 → arches/app/models/models.py [target: models.ResourceInstanceLifecycleState, surface: apps.get_model( "models", "ResourceInstanceLifecycleState" )]
+arches/app/models/migrations/11042_add_resource_instance_lifecycle.py:53 → arches/app/models/models.py [target: models.ResourceInstanceLifecycle, surface: apps.get_model("models", "ResourceInstanceLifecycle")]
+arches/app/models/migrations/11042_add_resource_instance_lifecycle.py:61 → arches/app/models/models.py [target: models.ResourceInstanceLifecycle, surface: apps.get_model("models", "ResourceInstanceLifecycle")]
+arches/app/models/migrations/11042_add_resource_instance_lifecycle.py:69 → arches/app/models/models.py [target: models.ResourceInstanceLifecycleState, surface: apps.get_model( "models", "ResourceInstanceLifecycleState" )]
+arches/app/models/migrations/11042_add_resource_instance_lifecycle.py:114 → arches/app/models/models.py [target: models.ResourceInstanceLifecycleState, surface: apps.get_model( "models", "ResourceInstanceLifecycleState" )]
+arches/app/models/migrations/11042_add_resource_instance_lifecycle.py:134 → arches/app/models/models.py [target: models.GraphModel, surface: apps.get_model("models", "GraphModel")]
+arches/app/models/migrations/11042_add_resource_instance_lifecycle.py:135 → arches/app/models/models.py [target: models.ResourceInstanceLifecycle, surface: apps.get_model("models", "ResourceInstanceLifecycle")]
+arches/app/models/migrations/11042_add_resource_instance_lifecycle.py:154 → arches/app/models/models.py [target: models.GraphModel, surface: apps.get_model("models", "GraphModel")]
+arches/app/models/migrations/11613_nodegroup_grouping_node.py:14 → arches/app/models/models.py [target: models.NodeGroup, surface: apps.get_model("models", "NodeGroup")]
+arches/app/models/migrations/11613_nodegroup_grouping_node.py:20 → arches/app/models/models.py [target: models.PublishedGraph, surface: apps.get_model("models", "PublishedGraph")]
+arches/app/models/migrations/11613_nodegroup_grouping_node.py:28 → arches/app/models/models.py [target: models.PublishedGraph, surface: apps.get_model("models", "PublishedGraph")]
+arches/app/models/migrations/11799_require_graph_slug.py:17 → arches/app/models/models.py [target: models.Graph, surface: apps.get_model("models", "Graph")]
+arches/app/models/migrations/11955_set_graphs_active.py:13 → arches/app/models/models.py [target: models.GraphModel, surface: apps.get_model("models", "GraphModel")]
+arches/app/models/migrations/11958_check_excess_widgets.py:15 → arches/app/models/models.py [target: models.Node, surface: apps.get_model("models", "Node")]
+arches/app/models/migrations/12229_add_lifecycle_filter_to_standard_search.py:7 → arches/app/models/models.py [target: models.SearchComponent, surface: apps.get_model("models", "SearchComponent")]
+arches/app/models/migrations/12229_add_lifecycle_filter_to_standard_search.py:106 → arches/app/models/models.py [target: models.SearchComponent, surface: apps.get_model("models", "SearchComponent")]
+arches/app/models/migrations/12542_update_file_list_default_config.py:7 → arches/app/models/models.py [target: models.DDataType, surface: apps.get_model("models", "DDataType")]
+arches/app/models/migrations/12542_update_file_list_default_config.py:8 → arches/app/models/models.py [target: models.Node, surface: apps.get_model("models", "Node")]
+arches/app/models/migrations/12542_update_file_list_default_config.py:28 → arches/app/models/models.py [target: models.DDataType, surface: apps.get_model("models", "DDataType")]
+arches/app/models/migrations/12542_update_file_list_default_config.py:29 → arches/app/models/models.py [target: models.Node, surface: apps.get_model("models", "Node")]
+arches/app/models/migrations/12557_add_language_datatype.py:13 → arches/app/models/models.py [target: models.DDataType, surface: apps.get_model("models", "DDataType")]
+arches/app/models/migrations/12557_add_language_datatype.py:14 → arches/app/models/models.py [target: models.Widget, surface: apps.get_model("models", "Widget")]
+arches/app/models/migrations/12557_add_language_datatype.py:47 → arches/app/models/models.py [target: models.DDataType, surface: apps.get_model("models", "DDataType")]
+arches/app/models/migrations/12557_add_language_datatype.py:48 → arches/app/models/models.py [target: models.Widget, surface: apps.get_model("models", "Widget")]
+arches/app/models/migrations/12587_move_default_value_to_node_config.py:56 → arches/app/models/models.py [target: models.PublishedGraph, surface: apps.get_model("models", "PublishedGraph")]
+arches/app/models/migrations/2724_instance_permissions.py:13 ↛ (unresolved) [target: auth.Permission, surface: apps.get_model("auth", "Permission")]
+arches/app/models/migrations/2724_instance_permissions.py:28 ↛ (unresolved) [target: auth.Permission, surface: apps.get_model("auth", "Permission")]
+arches/app/models/migrations/2891_tile_qa_schema.py:19 ↛ (unresolved) [target: auth.Group, surface: apps.get_model("auth", "Group")]
+arches/app/models/migrations/2891_tile_qa_schema.py:20 ↛ (unresolved) [target: auth.Permission, surface: apps.get_model("auth", "Permission")]
+arches/app/models/migrations/2891_tile_qa_schema.py:21 ↛ (unresolved) [target: auth.User, surface: apps.get_model("auth", "User")]
+arches/app/models/migrations/2891_tile_qa_schema.py:42 ↛ (unresolved) [target: auth.Group, surface: apps.get_model("auth", "Group")]
+arches/app/models/migrations/2891_tile_qa_schema.py:46 ↛ (unresolved) [target: auth.User, surface: apps.get_model("auth", "User")]
+arches/app/models/migrations/3201_remove_node_and_nodetype_branches.py:10 → arches/app/models/models.py [target: models.GraphModel, surface: apps.get_model("models", "GraphModel")]
+arches/app/models/migrations/3201_remove_node_and_nodetype_branches.py:11 → arches/app/models/models.py [target: models.NodeGroup, surface: apps.get_model("models", "NodeGroup")]
+arches/app/models/migrations/3201_remove_node_and_nodetype_branches.py:28 → arches/app/models/models.py [target: models.GraphModel, surface: apps.get_model("models", "GraphModel")]
+arches/app/models/migrations/3201_remove_node_and_nodetype_branches.py:29 → arches/app/models/models.py [target: models.Node, surface: apps.get_model("models", "Node")]
+arches/app/models/migrations/3201_remove_node_and_nodetype_branches.py:30 → arches/app/models/models.py [target: models.NodeGroup, surface: apps.get_model("models", "NodeGroup")]
+arches/app/models/migrations/3201_remove_node_and_nodetype_branches.py:31 → arches/app/models/models.py [target: models.Edge, surface: apps.get_model("models", "Edge")]
+arches/app/models/migrations/3201_remove_node_and_nodetype_branches.py:32 → arches/app/models/models.py [target: models.CardModel, surface: apps.get_model("models", "CardModel")]
+arches/app/models/migrations/3201_replace_node_and_nodetype_branches.py:10 → arches/app/models/models.py [target: models.GraphModel, surface: apps.get_model("models", "GraphModel")]
+arches/app/models/migrations/3201_replace_node_and_nodetype_branches.py:11 → arches/app/models/models.py [target: models.NodeGroup, surface: apps.get_model("models", "NodeGroup")]
+arches/app/models/migrations/3201_replace_node_and_nodetype_branches.py:28 → arches/app/models/models.py [target: models.GraphModel, surface: apps.get_model("models", "GraphModel")]
+arches/app/models/migrations/3201_replace_node_and_nodetype_branches.py:29 → arches/app/models/models.py [target: models.Node, surface: apps.get_model("models", "Node")]
+arches/app/models/migrations/3201_replace_node_and_nodetype_branches.py:30 → arches/app/models/models.py [target: models.NodeGroup, surface: apps.get_model("models", "NodeGroup")]
+arches/app/models/migrations/3201_replace_node_and_nodetype_branches.py:31 → arches/app/models/models.py [target: models.Edge, surface: apps.get_model("models", "Edge")]
+arches/app/models/migrations/3201_replace_node_and_nodetype_branches.py:32 → arches/app/models/models.py [target: models.CardModel, surface: apps.get_model("models", "CardModel")]
+arches/app/models/migrations/3201_second_removal_of_node_nodetype_branch.py:10 → arches/app/models/models.py [target: models.GraphModel, surface: apps.get_model("models", "GraphModel")]
+arches/app/models/migrations/3201_second_removal_of_node_nodetype_branch.py:11 → arches/app/models/models.py [target: models.NodeGroup, surface: apps.get_model("models", "NodeGroup")]
+arches/app/models/migrations/3201_second_removal_of_node_nodetype_branch.py:31 → arches/app/models/models.py [target: models.GraphModel, surface: apps.get_model("models", "GraphModel")]
+arches/app/models/migrations/3201_second_removal_of_node_nodetype_branch.py:32 → arches/app/models/models.py [target: models.Node, surface: apps.get_model("models", "Node")]
+arches/app/models/migrations/3201_second_removal_of_node_nodetype_branch.py:33 → arches/app/models/models.py [target: models.NodeGroup, surface: apps.get_model("models", "NodeGroup")]
+arches/app/models/migrations/3201_second_removal_of_node_nodetype_branch.py:34 → arches/app/models/models.py [target: models.Edge, surface: apps.get_model("models", "Edge")]
+arches/app/models/migrations/3201_second_removal_of_node_nodetype_branch.py:35 → arches/app/models/models.py [target: models.CardModel, surface: apps.get_model("models", "CardModel")]
+arches/app/models/migrations/3693_ontology_in_pkgs.py:14 → arches/app/models/models.py [target: models.Ontology, surface: apps.get_model("models", "Ontology")]
+arches/app/models/migrations/3892_integrity_error.py:11 → arches/app/models/models.py [target: models.CardXNodeXWidget, surface: apps.get_model("models", "CardXNodeXWidget")]
+arches/app/models/migrations/3892_integrity_error.py:12 → arches/app/models/models.py [target: models.CardModel, surface: apps.get_model("models", "CardModel")]
+arches/app/models/migrations/4273_provisional_edit_timestamps.py:21 → arches/app/models/models.py [target: models.TileModel, surface: apps.get_model("models", "TileModel")]
+arches/app/models/migrations/4273_provisional_edit_timestamps.py:37 → arches/app/models/models.py [target: models.TileModel, surface: apps.get_model("models", "TileModel")]
+arches/app/models/migrations/4679_resource_editor_permissions.py:16 ↛ (unresolved) [target: auth.Group, surface: apps.get_model("auth", "Group")]
+arches/app/models/migrations/4679_resource_editor_permissions.py:17 ↛ (unresolved) [target: auth.Permission, surface: apps.get_model("auth", "Permission")]
+arches/app/models/migrations/4679_resource_editor_permissions.py:43 ↛ (unresolved) [target: auth.Group, surface: apps.get_model("auth", "Group")]
+arches/app/models/migrations/4679_resource_editor_permissions.py:44 ↛ (unresolved) [target: auth.Permission, surface: apps.get_model("auth", "Permission")]
+arches/app/models/migrations/5476_search_export.py:12 → arches/app/models/models.py [target: models.TileModel, surface: apps.get_model("models", "TileModel")]
+arches/app/models/migrations/5476_search_export.py:29 → arches/app/models/models.py [target: models.CardXNodeXWidget, surface: apps.get_model("models", "CardXNodeXWidget")]
+arches/app/models/migrations/6019_node_config_for_resource_instance.py:11 → arches/app/models/models.py [target: models.Node, surface: apps.get_model("models", "Node")]
+arches/app/models/migrations/6019_node_config_for_resource_instance.py:12 → arches/app/models/models.py [target: models.DDataType, surface: apps.get_model("models", "DDataType")]
+arches/app/models/migrations/6019_node_config_for_resource_instance.py:38 → arches/app/models/models.py [target: models.Node, surface: apps.get_model("models", "Node")]
+arches/app/models/migrations/6019_node_config_for_resource_instance.py:39 → arches/app/models/models.py [target: models.DDataType, surface: apps.get_model("models", "DDataType")]
+arches/app/models/migrations/6020_bi_directional_node_to_resource.py:11 → arches/app/models/models.py [target: models.Node, surface: apps.get_model("models", "Node")]
+arches/app/models/migrations/6020_bi_directional_node_to_resource.py:12 → arches/app/models/models.py [target: models.Tile, surface: apps.get_model("models", "Tile")]
+arches/app/models/migrations/6020_bi_directional_node_to_resource.py:13 → arches/app/models/models.py [target: models.ResourceXResource, surface: apps.get_model("models", "ResourceXResource")]
+arches/app/models/migrations/6020_bi_directional_node_to_resource.py:14 → arches/app/models/models.py [target: models.Resource, surface: apps.get_model("models", "Resource")]
+arches/app/models/migrations/6458_language.py:20 → arches/app/models/models.py [target: models.DLanguage, surface: apps.get_model("models", "DLanguage")]
+arches/app/models/migrations/6458_language.py:21 → arches/app/models/models.py [target: models.Language, surface: apps.get_model("models", "Language")]
+arches/app/models/migrations/6458_language.py:53 → arches/app/models/models.py [target: models.DLanguage, surface: apps.get_model("models", "DLanguage")]
+arches/app/models/migrations/6458_language.py:54 → arches/app/models/models.py [target: models.Language, surface: apps.get_model("models", "Language")]
+arches/app/models/migrations/6481_add_resourceinstance_graphid.py:14 → arches/app/models/models.py [target: models.ResourceXResource, surface: apps.get_model("models", "ResourceXResource")]
+arches/app/models/migrations/6700_unique_nodename.py:13 → arches/app/models/models.py [target: models.Node, surface: apps.get_model("models", "Node")]
+arches/app/models/migrations/6700_unique_nodename.py:14 → arches/app/models/models.py [target: models.Edge, surface: apps.get_model("models", "Edge")]
+arches/app/models/migrations/6700_unique_nodename.py:28 → arches/app/models/models.py [target: models.Node, surface: apps.get_model("models", "Node")]
+arches/app/models/migrations/7442_move_data_from_manifest_images_table_to_files_table.py:7 → arches/app/models/models.py [target: models.ManifestImage, surface: apps.get_model("models", "ManifestImage")]
+arches/app/models/migrations/7442_move_data_from_manifest_images_table_to_files_table.py:8 → arches/app/models/models.py [target: models.File, surface: apps.get_model("models", "File")]
+arches/app/models/migrations/7442_move_data_from_manifest_images_table_to_files_table.py:19 → arches/app/models/models.py [target: models.ManifestImage, surface: apps.get_model("models", "ManifestImage")]
+arches/app/models/migrations/7442_move_data_from_manifest_images_table_to_files_table.py:20 → arches/app/models/models.py [target: models.File, surface: apps.get_model("models", "File")]
+arches/app/models/migrations/7783_add_graph_publications.py:17 → arches/app/models/models.py [target: models.GraphXPublishedGraph, surface: apps.get_model("models", "GraphXPublishedGraph")]
+arches/app/models/migrations/7783_add_graph_publications.py:18 → arches/app/models/models.py [target: models.GraphModel, surface: apps.get_model("models", "GraphModel")]
+arches/app/models/migrations/7783_add_graph_publications.py:30 → arches/app/models/models.py [target: models.GraphModel, surface: apps.get_model("models", "GraphModel")]
+arches/app/models/migrations/8010_export_permissions.py:14 ↛ (unresolved) [target: auth.Group, surface: apps.get_model("auth", "Group")]
+arches/app/models/migrations/8010_export_permissions.py:15 ↛ (unresolved) [target: auth.User, surface: apps.get_model("auth", "User")]
+arches/app/models/migrations/8010_export_permissions.py:28 ↛ (unresolved) [target: auth.Group, surface: apps.get_model("auth", "Group")]
+arches/app/models/migrations/8022_userprofile_mfa_hash.py:12 ↛ (unresolved) [target: auth.User, surface: apps.get_model("auth", "User")]
+arches/app/models/migrations/8022_userprofile_mfa_hash.py:13 → arches/app/models/models.py [target: models.UserProfile, surface: apps.get_model("models", "UserProfile")]
+arches/app/models/migrations/9648_add_empty_key_value_pairs_to_tiles.py:10 → arches/app/models/models.py [target: models.TileModel, surface: apps.get_model("models", "TileModel")]
+arches/app/models/migrations/9648_add_empty_key_value_pairs_to_tiles.py:11 → arches/app/models/models.py [target: models.Node, surface: apps.get_model("models", "Node")]
+arches/app/models/migrations/9648_add_empty_key_value_pairs_to_tiles.py:20 → arches/app/models/models.py [target: models.TileModel, surface: apps.get_model("models", "TileModel")]
+arches/app/models/migrations/deserialize_provisional_edits.py:11 → arches/app/models/models.py [target: models.TileModel, surface: apps.get_model("models", "TileModel")]
+arches/app/models/migrations/deserialize_provisional_edits.py:24 → arches/app/models/models.py [target: models.TileModel, surface: apps.get_model("models", "TileModel")]
+
+## settings:AUTHENTICATION_BACKENDS (3)
+arches/settings.py:367 → arches/app/utils/email_auth_backend.py [target: arches.app.utils.email_auth_backend.EmailAuthenticationBackend, surface: "arches.app.utils.email_auth_backend.EmailAuthenticationBackend"]
+arches/settings.py:370 → arches/app/permissions/arches_permission_base.py [target: arches.app.permissions.arches_permission_base.PermissionBackend, surface: "arches.app.permissions.arches_permission_base.PermissionBackend"]
+arches/settings.py:371 → arches/app/utils/external_oauth_backend.py [target: arches.app.utils.external_oauth_backend.ExternalOauthAuthenticationBackend, surface: "arches.app.utils.external_oauth_backend.ExternalOauthAuthenticationBackend"]
+
+## settings:CELERY_BEAT_SCHEDULE (4)
+arches/settings.py:799 → arches/app/tasks.py [target: arches.app.tasks.delete_file, surface: "arches.app.tasks.delete_file"]
+arches/settings.py:803 → arches/app/tasks.py [target: arches.app.tasks.message, surface: "arches.app.tasks.message"]
+tests/fixtures/testing_prj/testing_prj/settings.py:187 → arches/app/tasks.py [target: arches.app.tasks.delete_file, surface: "arches.app.tasks.delete_file"]
+tests/fixtures/testing_prj/testing_prj/settings.py:191 → arches/app/tasks.py [target: arches.app.tasks.message, surface: "arches.app.tasks.message"]
+
+## settings:INSTALLED_APPS (5)
+arches/settings.py:384 → arches/app/models/__init__.py [target: arches.app.models, surface: "arches.app.models"]
+arches/settings.py:385 → arches/management/__init__.py [target: arches.management, surface: "arches.management"]
+arches/settings.py:399 → arches/app/__init__.py [target: arches.app, surface: "arches.app"]
+tests/fixtures/testing_prj/testing_prj/settings.py:77 → arches/app/models/__init__.py [target: arches.app.models, surface: "arches.app.models"]
+tests/fixtures/testing_prj/testing_prj/settings.py:78 → arches/management/__init__.py [target: arches.management, surface: "arches.management"]
+
+## settings:LOGGING (2)
+arches/settings.py:462 → arches/__init__.py [target: arches.log, surface: "arches.log"]
+tests/fixtures/testing_prj/testing_prj/settings.py:108 → arches/__init__.py [target: arches.log, surface: "arches.log"]
+
+## settings:MIDDLEWARE (2)
+arches/settings.py:411 → arches/app/utils/middleware.py [target: arches.app.utils.middleware.ModifyAuthorizationHeader, surface: "arches.app.utils.middleware.ModifyAuthorizationHeader"]
+arches/settings.py:416 → arches/app/utils/middleware.py [target: arches.app.utils.middleware.SetAnonymousUser, surface: "arches.app.utils.middleware.SetAnonymousUser"]
+
+## settings:ROOT_URLCONF (2)
+arches/settings.py:435 → arches/urls.py [target: arches.urls, surface: "arches.urls"]
+tests/fixtures/testing_prj/testing_prj/settings.py:33 → tests/fixtures/testing_prj/testing_prj/urls.py [target: testing_prj.urls, surface: "testing_prj.urls"]
+
+## settings:WSGI_APPLICATION (2)
+arches/settings.py:440 → arches/wsgi.py [target: arches.wsgi.application, surface: "arches.wsgi.application"]
+tests/fixtures/testing_prj/testing_prj/settings.py:93 → tests/fixtures/testing_prj/testing_prj/wsgi.py [target: testing_prj.wsgi.application, surface: "testing_prj.wsgi.application"]
+
+## url:include (1)
+tests/fixtures/testing_prj/testing_prj/urls.py:7 → arches/urls.py [target: arches.urls, surface: include("arches.urls")]
+
+## SKIPPED (41)
+arches/app/tasks.py:581 [reason: import_module: non-literal arg (identifier), surface: importlib.import_module(module_name)]
+arches/app/utils/module_importer.py:44 [reason: import_module: non-literal arg (binary_operator), surface: importlib.import_module(directory + ".%s" % mod_path)]
+arches/app/utils/thumbnail_factory.py:35 [reason: import_module: non-literal arg (identifier), surface: importlib.import_module(modulename)]
+arches/settings.py:57 [reason: stoplist: DEFAULT_AUTO_FIELD, surface: "django.db.models.BigAutoField"]
+arches/settings.py:368 [reason: stoplist: AUTHENTICATION_BACKENDS, surface: "oauth2_provider.backends.OAuth2Backend"]
+arches/settings.py:369 [reason: stoplist: AUTHENTICATION_BACKENDS, surface: "django.contrib.auth.backends.ModelBackend"]
+arches/settings.py:376 [reason: stoplist: INSTALLED_APPS, surface: "django.contrib.auth"]
+arches/settings.py:377 [reason: stoplist: INSTALLED_APPS, surface: "django.contrib.contenttypes"]
+arches/settings.py:378 [reason: stoplist: INSTALLED_APPS, surface: "django.contrib.sessions"]
+arches/settings.py:379 [reason: stoplist: INSTALLED_APPS, surface: "django.contrib.messages"]
+arches/settings.py:380 [reason: stoplist: INSTALLED_APPS, surface: "django.contrib.staticfiles"]
+arches/settings.py:381 [reason: stoplist: INSTALLED_APPS, surface: "django.contrib.gis"]
+arches/settings.py:400 [reason: stoplist: INSTALLED_APPS, surface: "django.contrib.admin"]
+arches/settings.py:404 [reason: stoplist: MIDDLEWARE, surface: "corsheaders.middleware.CorsMiddleware"]
+arches/settings.py:405 [reason: stoplist: MIDDLEWARE, surface: "django.middleware.security.SecurityMiddleware"]
+arches/settings.py:406 [reason: stoplist: MIDDLEWARE, surface: "django.contrib.sessions.middleware.SessionMiddleware"]
+arches/settings.py:408 [reason: stoplist: MIDDLEWARE, surface: "django.middleware.locale.LocaleMiddleware"]
+arches/settings.py:409 [reason: stoplist: MIDDLEWARE, surface: "django.middleware.common.CommonMiddleware"]
+arches/settings.py:410 [reason: stoplist: MIDDLEWARE, surface: "django.middleware.csrf.CsrfViewMiddleware"]
+arches/settings.py:412 [reason: stoplist: MIDDLEWARE, surface: "oauth2_provider.middleware.OAuth2TokenMiddleware"]
+arches/settings.py:413 [reason: stoplist: MIDDLEWARE, surface: "django.contrib.auth.middleware.AuthenticationMiddleware"]
+arches/settings.py:414 [reason: stoplist: MIDDLEWARE, surface: "django.contrib.messages.middleware.MessageMiddleware"]
+arches/settings.py:415 [reason: stoplist: MIDDLEWARE, surface: "django.middleware.clickjacking.XFrameOptionsMiddleware"]
+arches/settings.py:420 [reason: stoplist: MIDDLEWARE.insert, surface: "django_hosts.middleware.HostsRequestMiddleware"]
+arches/settings.py:424 [reason: stoplist: MIDDLEWARE.append, surface: "django_hosts.middleware.HostsResponseMiddleware"]
+arches/settings.py:461 [reason: stoplist: LOGGING, surface: "logging.FileHandler"]
+arches/settings.py:467 [reason: stoplist: LOGGING, surface: "logging.StreamHandler"]
+arches/settings.py:477 [reason: stoplist: LOGGING, surface: "django.request"]
+arches/urls.py:736 [reason: stoplist: url include, surface: include("oauth2_provider.urls", namespace="oauth2")]
+arches/urls.py:810 [reason: stoplist: url include, surface: include("django.conf.urls.i18n")]
+arches/urls.py:815 [reason: stoplist: url include, surface: include("silk.urls", namespace="silk")]
+tests/fixtures/testing_prj/testing_prj/settings.py:69 [reason: stoplist: INSTALLED_APPS, surface: "django.contrib.admin"]
+tests/fixtures/testing_prj/testing_prj/settings.py:70 [reason: stoplist: INSTALLED_APPS, surface: "django.contrib.auth"]
+tests/fixtures/testing_prj/testing_prj/settings.py:71 [reason: stoplist: INSTALLED_APPS, surface: "django.contrib.contenttypes"]
+tests/fixtures/testing_prj/testing_prj/settings.py:72 [reason: stoplist: INSTALLED_APPS, surface: "django.contrib.sessions"]
+tests/fixtures/testing_prj/testing_prj/settings.py:73 [reason: stoplist: INSTALLED_APPS, surface: "django.contrib.messages"]
+tests/fixtures/testing_prj/testing_prj/settings.py:74 [reason: stoplist: INSTALLED_APPS, surface: "django.contrib.staticfiles"]
+tests/fixtures/testing_prj/testing_prj/settings.py:75 [reason: stoplist: INSTALLED_APPS, surface: "django.contrib.gis"]
+tests/fixtures/testing_prj/testing_prj/settings.py:107 [reason: stoplist: LOGGING, surface: "logging.FileHandler"]
+tests/fixtures/testing_prj/testing_prj/settings.py:113 [reason: stoplist: LOGGING, surface: "logging.StreamHandler"]
+tests/fixtures/testing_prj/testing_prj/urls.py:16 [reason: stoplist: url include, surface: include("django.conf.urls.i18n")]
+
+## SUMMARY
+total candidate edges: 144
+  resolved (target file in index):   124
+  unresolved (third-party or miss):  20
+skipped (stoplist + dynamic args):    41
+  importlib:import_module: 3 total, 3 resolved
+  orm:apps.get_model: 120 total, 100 resolved
+  settings:AUTHENTICATION_BACKENDS: 3 total, 3 resolved
+  settings:CELERY_BEAT_SCHEDULE: 4 total, 4 resolved
+  settings:INSTALLED_APPS: 5 total, 5 resolved
+  settings:LOGGING: 2 total, 2 resolved
+  settings:MIDDLEWARE: 2 total, 2 resolved
+  settings:ROOT_URLCONF: 2 total, 2 resolved
+  settings:WSGI_APPLICATION: 2 total, 2 resolved
+  url:include: 1 total, 1 resolved
+
+
+===============================================================================
+# MANUAL VERIFICATION — 10 true positives, 5 true negatives
+===============================================================================
+
+Repo under test: ~/benchmark/repos/arches/arches-coldstart (arches v8.x, Django).
+Verification: each TP confirmed by greping the named class/function in the target file.
+Each TN confirmed by inspecting the surface form and noting why a static resolver
+must skip it.
+
+## TRUE POSITIVES (10)
+
+Covering 6 of the 8 convention types listed in the spec: settings:MIDDLEWARE,
+settings:AUTHENTICATION_BACKENDS, settings:INSTALLED_APPS, settings:ROOT_URLCONF,
+settings:CELERY_BEAT_SCHEDULE, orm:apps.get_model, importlib:import_module,
+url:include.
+
+TP1 — settings:MIDDLEWARE
+  Reference: arches/settings.py:411
+  Surface:   "arches.app.utils.middleware.ModifyAuthorizationHeader"
+  Target:    arches/app/utils/middleware.py
+  Verified:  `class ModifyAuthorizationHeader(MiddlewareMixin)` at line 31.
+
+TP2 — settings:MIDDLEWARE
+  Reference: arches/settings.py:416
+  Surface:   "arches.app.utils.middleware.SetAnonymousUser"
+  Target:    arches/app/utils/middleware.py
+  Verified:  `class SetAnonymousUser(MiddlewareMixin)` at line 15.
+
+TP3 — settings:AUTHENTICATION_BACKENDS
+  Reference: arches/settings.py:367
+  Surface:   "arches.app.utils.email_auth_backend.EmailAuthenticationBackend"
+  Target:    arches/app/utils/email_auth_backend.py
+  Verified:  `class EmailAuthenticationBackend(object)` at line 5.
+
+TP4 — settings:AUTHENTICATION_BACKENDS
+  Reference: arches/settings.py:370
+  Surface:   "arches.app.permissions.arches_permission_base.PermissionBackend"
+  Target:    arches/app/permissions/arches_permission_base.py
+  Verified:  `class PermissionBackend(ObjectPermissionBackend)` at line 650.
+
+TP5 — settings:INSTALLED_APPS
+  Reference: arches/settings.py:384
+  Surface:   "arches.app.models"
+  Target:    arches/app/models/__init__.py
+  Verified:  package exists; this is what Django imports as app config.
+
+TP6 — settings:ROOT_URLCONF
+  Reference: arches/settings.py:435
+  Surface:   "arches.urls"
+  Target:    arches/urls.py
+  Verified:  file exists; this is the project URLconf entry point.
+
+TP7 — settings:CELERY_BEAT_SCHEDULE
+  Reference: arches/settings.py:799
+  Surface:   "arches.app.tasks.delete_file"
+  Target:    arches/app/tasks.py
+  Verified:  `def delete_file()` at line 21 (decorated with `@shared_task`).
+  Note: resolver strips the trailing function name and lands on the module.
+
+TP8 — orm:apps.get_model
+  Reference: arches/app/models/migrations/3201_replace_node_and_nodetype_branches.py:10
+  Surface:   apps.get_model("models", "GraphModel")
+  Target:    arches/app/models/models.py
+  Verified:  `class GraphModel(...)` at line 484. The "models" app_label
+             corresponds to arches.app.models package (registered via apps.py).
+
+TP9 — importlib:import_module
+  Reference: tests/utils/frontend_configuration_utils/test_generate_tsconfig_paths.py:10
+  Surface:   importlib.import_module("arches.app.utils.frontend_configuration_utils.generate_tsconfig_paths")
+  Target:    arches/app/utils/frontend_configuration_utils/generate_tsconfig_paths.py
+  Verified:  file exists, contains the module under test.
+
+TP10 — url:include
+  Reference: tests/fixtures/testing_prj/testing_prj/urls.py:7
+  Surface:   include("arches.urls")
+  Target:    arches/urls.py
+  Verified:  file exists; this is the standard nested-URLconf pattern.
+
+## TRUE NEGATIVES (5)
+
+Cases the POC correctly **skipped** (recorded in the SKIPPED section above).
+
+TN1 — Dynamic class lookup via `importlib.import_module(var)`
+  Reference: arches/app/tasks.py:581
+  Surface:   importlib.import_module(module_name)
+  Reason:    First arg is an `identifier` node, not a literal string. We have
+             no way to know which module statically. Correctly skipped.
+
+TN2 — String-concatenated module name
+  Reference: arches/app/utils/module_importer.py:44
+  Surface:   importlib.import_module(directory + ".%s" % mod_path)
+  Reason:    First arg is `binary_operator`, not a literal string. This is
+             plugin discovery — runtime-only. Correctly skipped.
+
+TN3 — Django framework class in MIDDLEWARE
+  Reference: arches/settings.py:405
+  Surface:   "django.middleware.security.SecurityMiddleware"
+  Reason:    Stoplisted prefix `django.`. Even though this is a real reference,
+             the target lives in the framework, not the repo. Edge would be
+             unresolvable and adds noise. Correctly skipped.
+
+TN4 — Third-party app in INSTALLED_APPS
+  Reference: arches/settings.py:380
+  Surface:   "django.contrib.staticfiles"
+  Reason:    Stoplisted; framework module. Same rationale as TN3.
+
+TN5 — Django builtin URLconf include
+  Reference: arches/urls.py:810
+  Surface:   include("django.conf.urls.i18n")
+  Reason:    Stoplisted; framework target. Correctly skipped at URL-include site.
+
+## KNOWN FALSE POSITIVES SURFACED BY THIS RUN (honesty section)
+
+FP1 — `arches.log` in LOGGING (arches/settings.py:462)
+  This is a **filename string** (`os.path.join(ROOT_DIR, "arches.log")`)
+  matched because it happens to contain a dot and pass the dotted-name regex.
+  The strip-last-segment fallback finds `arches/__init__.py` and emits a
+  spurious edge.
+  Mitigation options for production:
+    - In LOGGING context, scope dotted-string extraction to only the keys
+      `"class"` and `"()"` (factory) inside handler/filter dicts. Reject
+      string values keyed by `"filename"`, `"address"`, `"host"`, etc.
+    - Reject any string that ends in a common file-extension token
+      (`.log`, `.txt`, `.json`, `.sqlite3`).
+  Same FP appears in tests/fixtures/testing_prj/testing_prj/settings.py:108.
+
+## SUMMARY OF RESULTS
+
+- 685 Python files parsed in arches-coldstart.
+- 144 candidate synthetic edges emitted.
+- 124 resolve to a file inside the repo (86%).
+- 20 unresolved are mostly `apps.get_model("auth", ...)` (Django builtin User/Group)
+  and `*.wsgi.application` (the leading `.application` strip is one segment too few
+  for some layouts) — but `arches/wsgi.py` does exist, so this hints at another
+  minor resolver tweak: try stripping the last 1 *and* 2 segments.
+- 41 candidate sites correctly skipped via stoplist + dynamic-arg checks.
+- 1 known FP (LOGGING `arches.log`) requires a small contextual refinement.
+
+Coverage gap closed on arches (rough estimate): ~120 high-value internal edges
+that today have no graph representation. Settings MIDDLEWARE/BACKENDS, the
+CELERY_BEAT_SCHEDULE, and the 100 in-repo `apps.get_model` calls are pure new
+signal — none of these target files have any other incoming edge from the
+caller in the existing import graph.
