@@ -17,10 +17,12 @@ Requires Node.js 18+.
 **Run once from inside your project:**
 
 ```bash
-npx -y coldstart-mcp@latest init
+npm --legacy-peer-deps exec -y coldstart-mcp@latest -- init
 ```
 
 This installs coldstart-mcp into `~/.coldstart/versions/<version>/` and writes a `.mcp.json` pointing directly at it. After that, every MCP startup is a direct `node` invocation — fast, no per-session npm overhead.
+
+> **Why `npm exec` instead of `npx`?** Several tree-sitter grammar packages declare conservative peer-dep ranges that conflict with each other under npm's default strict resolver, causing `npx` to hang indefinitely on a fresh machine. The `--legacy-peer-deps` flag tells npm to skip strict peer resolution. All grammars are verified to work correctly at runtime.
 
 coldstart detects your IDE (Claude Code or Cursor) and writes the right files automatically:
 
@@ -38,7 +40,7 @@ If your `.mcp.json` was written by an earlier release and uses `"command": "npx"
 
 1. **Re-run init** (recommended):
    ```bash
-   npx -y coldstart-mcp@latest init
+   npm --legacy-peer-deps exec -y coldstart-mcp@latest -- init
    ```
 
 2. **Automatic on next launch**: starting in v1.4.0, coldstart-mcp detects legacy `npx`-style entries in `.mcp.json` at startup and rewrites them to use direct `node` (with a backup file). The current session keeps running on the slow path; the next session is fast.
