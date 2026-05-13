@@ -1,0 +1,226 @@
+# scanned: 47 java, 3 config files in /tmp/spring-petclinic
+
+# indexes: 47 classes, 10 beans, 6 entities, 8 interfaces
+# edges:   16 total
+#   DI           12
+#   JPA          0
+#   JPA-SAMEPKG  4
+#   CONFIG       0
+
+## DI
+  src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java:55  →  src/main/java/org/springframework/samples/petclinic/owner/OwnerRepository.java
+      OwnerController(OwnerRepository owners)  →  org.springframework.samples.petclinic.owner.OwnerRepository [interface]
+  src/main/java/org/springframework/samples/petclinic/owner/PetController.java:56  →  src/main/java/org/springframework/samples/petclinic/owner/OwnerRepository.java
+      PetController(OwnerRepository owners)  →  org.springframework.samples.petclinic.owner.OwnerRepository [interface]
+  src/main/java/org/springframework/samples/petclinic/owner/PetController.java:56  →  src/main/java/org/springframework/samples/petclinic/owner/PetTypeRepository.java
+      PetController(PetTypeRepository types)  →  org.springframework.samples.petclinic.owner.PetTypeRepository [interface]
+  src/main/java/org/springframework/samples/petclinic/owner/PetTypeFormatter.java:41  →  src/main/java/org/springframework/samples/petclinic/owner/PetTypeRepository.java
+      PetTypeFormatter(PetTypeRepository types)  →  org.springframework.samples.petclinic.owner.PetTypeRepository [interface]
+  src/main/java/org/springframework/samples/petclinic/owner/VisitController.java:46  →  src/main/java/org/springframework/samples/petclinic/owner/OwnerRepository.java
+      VisitController(OwnerRepository owners)  →  org.springframework.samples.petclinic.owner.OwnerRepository [interface]
+  src/main/java/org/springframework/samples/petclinic/vet/VetController.java:40  →  src/main/java/org/springframework/samples/petclinic/vet/VetRepository.java
+      VetController(VetRepository vetRepository)  →  org.springframework.samples.petclinic.vet.VetRepository [interface]
+  src/test/java/org/springframework/samples/petclinic/MySqlIntegrationTests.java:55  →  src/main/java/org/springframework/samples/petclinic/vet/VetRepository.java
+      @Autowired VetRepository vets  →  org.springframework.samples.petclinic.vet.VetRepository
+  src/test/java/org/springframework/samples/petclinic/PetClinicIntegrationTests.java:40  →  src/main/java/org/springframework/samples/petclinic/vet/VetRepository.java
+      @Autowired VetRepository vets  →  org.springframework.samples.petclinic.vet.VetRepository
+  src/test/java/org/springframework/samples/petclinic/PostgresIntegrationTests.java:60  →  src/main/java/org/springframework/samples/petclinic/vet/VetRepository.java
+      @Autowired VetRepository vets  →  org.springframework.samples.petclinic.vet.VetRepository
+  src/test/java/org/springframework/samples/petclinic/service/ClinicServiceTests.java:76  →  src/main/java/org/springframework/samples/petclinic/owner/OwnerRepository.java
+      @Autowired OwnerRepository owners  →  org.springframework.samples.petclinic.owner.OwnerRepository
+  src/test/java/org/springframework/samples/petclinic/service/ClinicServiceTests.java:79  →  src/main/java/org/springframework/samples/petclinic/owner/PetTypeRepository.java
+      @Autowired PetTypeRepository types  →  org.springframework.samples.petclinic.owner.PetTypeRepository
+  src/test/java/org/springframework/samples/petclinic/service/ClinicServiceTests.java:82  →  src/main/java/org/springframework/samples/petclinic/vet/VetRepository.java
+      @Autowired VetRepository vets  →  org.springframework.samples.petclinic.vet.VetRepository
+
+## JPA-SAMEPKG
+  src/main/java/org/springframework/samples/petclinic/owner/Owner.java:64  →  src/main/java/org/springframework/samples/petclinic/owner/Pet.java
+      @OneToMany List pets  →  org.springframework.samples.petclinic.owner.Pet
+  src/main/java/org/springframework/samples/petclinic/owner/Pet.java:52  →  src/main/java/org/springframework/samples/petclinic/owner/PetType.java
+      @ManyToOne PetType type  →  org.springframework.samples.petclinic.owner.PetType
+  src/main/java/org/springframework/samples/petclinic/owner/Pet.java:56  →  src/main/java/org/springframework/samples/petclinic/owner/Visit.java
+      @OneToMany Set visits  →  org.springframework.samples.petclinic.owner.Visit
+  src/main/java/org/springframework/samples/petclinic/vet/Vet.java:47  →  src/main/java/org/springframework/samples/petclinic/vet/Specialty.java
+      @ManyToMany Set specialties  →  org.springframework.samples.petclinic.vet.Specialty
+
+
+================================================================================
+MANUAL VERIFICATION
+================================================================================
+
+Repo: /tmp/spring-petclinic (Spring Boot 3.x, JPA, no @ConfigurationProperties,
+      no XML beans, 47 java files, 10 stereotype-annotated beans, 6 @Entity classes).
+
+Convention types covered: DI (interface + concrete bean), JPA (@OneToMany,
+@ManyToOne, @ManyToMany), same-package JPA references.
+CONFIG (@ConfigurationProperties) coverage NOT EXERCISED — petclinic has none.
+        The code path is there (search for "@ConfigurationProperties" in poc.ts)
+        but unverified against a real corpus. Flagged as a gap.
+
+--- TRUE POSITIVES (10) -----------------------------------------------------
+
+TP1  [DI / interface→Spring-Data-repo]
+  Site: src/main/java/.../owner/OwnerController.java:55
+        public OwnerController(OwnerRepository owners) { ... }
+  Edge: → src/main/java/.../owner/OwnerRepository.java
+  Verify: OwnerRepository is "public interface OwnerRepository extends
+          JpaRepository<Owner, Integer>". No user-code impl class exists; Spring
+          Data synthesises one at runtime. POC correctly emits an edge to the
+          interface file itself ("[interface]" marker in output line 12).
+          Without this synthetic edge, OwnerController has zero import for
+          OwnerRepository visible to coldstart (same package).
+
+TP2  [DI / two interface params in one ctor]
+  Site: src/main/java/.../owner/PetController.java:56
+        public PetController(OwnerRepository owners, PetTypeRepository types)
+  Edge: → OwnerRepository.java AND PetTypeRepository.java (two edges, lines 13-16)
+  Verify: Both are JpaRepository-derived interfaces. Confirms multi-param ctor
+          DI emits one edge per parameter.
+
+TP3  [DI / @Component class with ctor injection]
+  Site: src/main/java/.../owner/PetTypeFormatter.java:41
+        @Component
+        public class PetTypeFormatter implements Formatter<PetType> { ...
+        public PetTypeFormatter(PetTypeRepository types) { ... } }
+  Edge: → PetTypeRepository.java (line 17)
+  Verify: Confirms (a) ctor-injection works on @Component-stereotyped classes,
+          not just @Controller, and (b) PetTypeFormatter is itself a discovered
+          bean (in indexes: "10 beans" line).
+
+TP4  [DI / single-param ctor]
+  Site: src/main/java/.../owner/VisitController.java:46
+        public VisitController(OwnerRepository owners)
+  Edge: → OwnerRepository.java (line 19)
+  Verify: Cross-feature: VisitController is in same package as OwnerRepository
+          (no import statement). Synthetic-import path picks it up via the
+          same-package resolution rule.
+
+TP5  [DI / cross-package would normally need import; here same-package]
+  Site: src/main/java/.../vet/VetController.java:40
+        public VetController(VetRepository vetRepository)
+  Edge: → src/main/java/.../vet/VetRepository.java (line 21)
+  Verify: VetController and VetRepository both in .../petclinic/vet/. Same-
+          package rule fires. (Note: petclinic uses single-package-per-feature
+          so all DI we see in this repo is same-package. A cross-package
+          benchmark is still needed; flagged as a gap.)
+
+TP6  [DI / @Autowired field injection in test class]
+  Site: src/test/java/.../service/ClinicServiceTests.java:76
+        @Autowired protected OwnerRepository owners;
+  Edge: → src/main/java/.../owner/OwnerRepository.java (line 29)
+  Verify: @Autowired field path (distinct code branch from ctor injection).
+          Test source root crossing main source root — POC's FQCN index treats
+          both alike. Three sibling @Autowired fields in this class produce
+          three edges (lines 29-34) → confirms per-field emission.
+
+TP7  [JPA / @OneToMany on List<Pet> with collection generic argument]
+  Site: src/main/java/.../owner/Owner.java:64
+        @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+        @JoinColumn(name = "owner_id")
+        private final List<Pet> pets = new ArrayList<>();
+  Edge: → src/main/java/.../owner/Pet.java (line 37-38)
+  Verify: Extracts inner type "Pet" from List<Pet>, not raw "List". Pet has
+          @Entity so the precision filter keeps the edge. No "import Pet" in
+          Owner.java (same package) — pure synthetic.
+
+TP8  [JPA / @ManyToOne on direct type]
+  Site: src/main/java/.../owner/Pet.java:52
+        @ManyToOne
+        @JoinColumn(name = "type_id")
+        private PetType type;
+  Edge: → src/main/java/.../owner/PetType.java (line 39-40)
+  Verify: Bare type (no generic) path. PetType is an @Entity. Same package,
+          no explicit import — synthetic edge does the work.
+
+TP9  [JPA / @OneToMany on Set<Visit>]
+  Site: src/main/java/.../owner/Pet.java:56
+        @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+        @JoinColumn(name = "pet_id")
+        @OrderBy("date ASC")
+        private Set<Visit> visits = new LinkedHashSet<>();
+  Edge: → src/main/java/.../owner/Visit.java (line 41-42)
+  Verify: Set<T> generic extraction works the same as List<T>.
+
+TP10 [JPA / @ManyToMany across simple type ref + same-package]
+  Site: src/main/java/.../vet/Vet.java:47
+        @ManyToMany(fetch = FetchType.EAGER)
+        @JoinTable(name = "vet_specialties", ...)
+        private Set<Specialty> specialties;
+  Edge: → src/main/java/.../vet/Specialty.java (line 43-44)
+  Verify: @ManyToMany annotation supported. Note that Vet also has a custom
+          getter "public List<Specialty> getSpecialties()" — only the
+          @ManyToMany-annotated FIELD emits an edge, the method does not (one
+          edge, not two). Precision check passes.
+
+
+--- TRUE NEGATIVES (5) ------------------------------------------------------
+
+Verified by NOT appearing in the output (no false-positive edges).
+
+TN1  [stoplist / jakarta.persistence.* annotation types]
+  Site: Owner.java imports jakarta.persistence.{Entity,Column,CascadeType,...}
+  Expected: NO synthetic edges to jakarta.persistence files.
+  Observed: Edge count for "jakarta" → grep "jakarta" poc-output.txt → zero.
+  Reason: STOPLIST_PACKAGE_PREFIXES contains "jakarta." — annotation FQCN
+          lookups short-circuit. Even if they reached the index, none of those
+          classes are in /tmp/spring-petclinic/src so byFqcn wouldn't contain
+          them.
+
+TN2  [stoplist / primitives in JPA fields]
+  Site: Owner.java:53  @Column @NotBlank private String address;
+  Expected: No edge. String is in PRIMITIVE_OR_BUILTIN.
+  Observed: zero edges from Owner.java:53. Confirmed.
+  Reason: The injection/JPA scan skips String / Integer / etc. via
+          PRIMITIVE_OR_BUILTIN shortname check before any index lookup.
+
+TN3  [generic-collection raw type is NOT followed]
+  Site: Owner.java:64 List<Pet> pets — the raw type "List" is ignored, only
+        the inner argument "Pet" produces an edge.
+  Expected: Exactly one edge (Owner → Pet), zero edges (Owner → java.util.List).
+  Observed: Confirmed — line 37-38 shows one edge to Pet.java, no java.util.*
+            edges anywhere in output.
+
+TN4  [non-bean classes do NOT emit DI edges from method params]
+  Site: BaseEntity.java, Person.java, PetClinicApplication.java — none have
+        constructors that look like DI sites (no params, or only primitive).
+  Expected: zero edges originating from these files.
+  Observed: grep output for these file names → no DI edges. Confirmed.
+
+TN5  [JpaRepository<Owner, Integer> generic arg "Owner" is NOT emitted as
+       a JPA edge from OwnerRepository.java]
+  Site: OwnerRepository.java
+        public interface OwnerRepository extends JpaRepository<Owner, Integer>
+  Expected: No JPA edge (this is interface inheritance, not @OneToMany).
+  Observed: zero edges originating from OwnerRepository.java. Confirmed.
+  Reason: The JPA scan only triggers on fields carrying @OneToMany /
+          @ManyToOne / @OneToOne / @ManyToMany. Interface generic args don't
+          touch that code path.
+
+
+--- KNOWN GAPS (not bugs in POC, but spec items to verify later) ------------
+
+G1  No @ConfigurationProperties in petclinic. Code path is implemented (string-
+    match prefix against config file contents) but unverified. Need a corpus
+    repo. Liya-hai (Spring 4.x) probably has some — private.
+
+G2  No cross-package DI in petclinic. Every controller/service/repository is
+    in the same package. Stoplist + FQCN index should cope with cross-package
+    fine (resolveType tries fully-qualified before short-name) but unexercised.
+
+G3  No XML bean defs. Spring 4.x apps need this. Deferred per spec
+    prioritisation §8.
+
+G4  Kotlin not exercised — tree-sitter-kotlin grammar is present in coldstart
+    but no Kotlin+Spring corpus available.
+
+G5  No @Qualifier in petclinic. The narrowing code is sketched in spec but
+    not in the POC (would be a few lines: read @Qualifier value, filter
+    impls list by bean name).
+
+G6  @Query / JPQL not exercised — petclinic uses Spring Data method-name
+    derivation, not @Query strings. Spec covers the parser hook
+    (FROM <EntityName>) but POC doesn't implement it.
+
+G7  @Bean factory methods not in POC. petclinic has 3 @Bean uses
+    (per grep) but none expose a custom-class bean to the DI graph; they're
+    framework-internal helpers.
