@@ -1,0 +1,241 @@
+================================================================================
+POC run output — JS/TS framework-convention edge extraction
+================================================================================
+
+Command shape:
+  npx tsx docs/resolver-specs/js-ts/poc.ts <repo-path>
+
+Repos exercised:
+  1. ~/benchmark/repos/cal/cal.com-coldstart          (Next.js 16 + NestJS)
+  2. /tmp/sveltekit-realworld                         (SvelteKit)
+  3. /tmp/nest-typescript-starter                     (Nest starter)
+  4. ~/benchmark/repos/terraforming-mars/...          (Vue 3 + bespoke server) — TN control
+
+--------------------------------------------------------------------------------
+RUN 1 — cal.com (Next.js + NestJS monorepo)
+--------------------------------------------------------------------------------
+
+# POC scan: /Users/akashgoenka/benchmark/repos/cal/cal.com-coldstart
+
+detected: next=4 sveltekit=0 nest=2 nuxt=0
+  next pkg: apps/docs
+  next pkg: apps/web
+  next pkg: example-apps/credential-sync
+  next pkg: packages/platform/examples/base
+  nest pkg: apps/api/v2
+  nest pkg: packages/platform/types
+
+## edge summary
+  nest:module-providers            382
+  next:page-to-layout              250
+  next:page-to-sibling              21
+  next:pages-to-app                 16
+  next:pages-to-document            16
+  TOTAL                            685
+
+(Full sample edge list captured in the bash transcript during this session;
+abbreviated below to the manually-verified set.)
+
+--------------------------------------------------------------------------------
+RUN 2 — sveltekit-realworld
+--------------------------------------------------------------------------------
+
+# POC scan: /tmp/sveltekit-realworld
+
+detected: next=0 sveltekit=1 nest=0 nuxt=0
+  sveltekit pkg: .
+
+## edge summary
+  sveltekit:page-to-layout          24
+  sveltekit:page-to-server-load      9
+  sveltekit:page-to-sibling          2
+  TOTAL                             35
+
+## sample edges (subset)
+  [sveltekit:page-to-server-load] src/routes/+page.svelte               -> src/routes/+page.server.js
+  [sveltekit:page-to-sibling]     src/routes/+page.svelte               -> src/routes/+error.svelte
+  [sveltekit:page-to-layout]      src/routes/+page.svelte               -> src/routes/+layout.svelte
+  [sveltekit:page-to-layout]      src/routes/article/[slug]/+page.svelte -> src/routes/+layout.svelte
+  [sveltekit:page-to-layout]      src/routes/profile/@[user]/+page.svelte -> src/routes/profile/@[user]/+layout.svelte
+  [sveltekit:page-to-layout]      src/routes/profile/@[user]/+page.svelte -> src/routes/+layout.svelte
+
+--------------------------------------------------------------------------------
+RUN 3 — nest-typescript-starter
+--------------------------------------------------------------------------------
+
+# POC scan: /tmp/nest-typescript-starter
+
+detected: next=0 sveltekit=0 nest=1 nuxt=0
+  nest pkg: .
+
+## edge summary
+  nest:module-providers              1
+  TOTAL                              1
+
+## sample edges
+  [nest:module-providers] src/app.module.ts  ->  [AppController -> AppService]
+    (module scope, identifier-only; POC stops at name extraction)
+
+--------------------------------------------------------------------------------
+RUN 4 — terraforming-mars (TN control)
+--------------------------------------------------------------------------------
+
+# POC scan: /Users/akashgoenka/benchmark/repos/terraforming-mars/terraforming-mars-coldstart
+
+detected: next=0 sveltekit=0 nest=0 nuxt=0
+
+## edge summary
+  TOTAL                              0
+
+(Vue 3 + bespoke server — no Next/SvelteKit/Nest. No glob-loaded dirs:
+ routes are imported individually in src/server/server/requestProcessor.ts.
+ Template-side <Award> refs are already covered by existing script-extraction.)
+
+================================================================================
+MANUALLY-VERIFIED TRUE POSITIVES (10, spanning 4 categories)
+================================================================================
+
+Each line: (1) the proposed synthetic edge from the POC, (2) ls/grep evidence
+that both endpoints exist and the relation is real.
+
+--- Category A: Next.js app router (cal) ---
+
+TP1  [next:page-to-layout]
+     apps/web/app/page.tsx  ->  apps/web/app/layout.tsx
+     VERIFIED: both files exist
+       -rw-r--r-- ... apps/web/app/page.tsx
+       -rw-r--r-- ... apps/web/app/layout.tsx
+     Root app-router page wraps in the root layout (canonical Next.js rule).
+
+TP2  [next:page-to-sibling]
+     apps/web/app/page.tsx  ->  apps/web/app/error.tsx
+     VERIFIED: both exist. Root error boundary is the sibling error.tsx in app/.
+
+TP3  [next:page-to-sibling]
+     apps/web/app/page.tsx  ->  apps/web/app/not-found.tsx
+     VERIFIED: both exist.
+
+TP4  [next:page-to-layout]
+     apps/web/app/(use-page-wrapper)/(main-nav)/event-types/page.tsx
+       -> apps/web/app/(use-page-wrapper)/(main-nav)/layout.tsx
+       -> apps/web/app/(use-page-wrapper)/layout.tsx
+       -> apps/web/app/layout.tsx
+     VERIFIED: all 4 files exist. Demonstrates correct handling of TWO route-
+     group segments `(use-page-wrapper)` and `(main-nav)` — these are
+     transparent for URL but each contributes a layout. The POC walks up
+     through both groups and emits 3 layout edges (the file's own layout +
+     two ancestors). All real, all wrap rendering.
+
+TP5  [next:page-to-sibling]
+     apps/web/app/(use-page-wrapper)/refer/page.tsx
+       -> apps/web/app/(use-page-wrapper)/refer/loading.tsx
+     VERIFIED: both files exist. The page has a sibling loading state which
+     Next.js uses for suspense — invisible to import-only analysis.
+
+TP6  [next:page-to-layout, note=layout-to-ancestor-layout]
+     apps/web/app/(booking-page-wrapper)/layout.tsx  ->  apps/web/app/layout.tsx
+     VERIFIED: both exist. Layout-to-ancestor-layout case: nested layouts also
+     compose. (Self-loop guarded — POC starts ancestor walk one dir up.)
+
+--- Category B: Next.js pages router (cal) ---
+
+TP7  [next:pages-to-app] + [next:pages-to-document]
+     apps/web/pages/router/index.tsx  ->  apps/web/pages/_app.tsx
+     apps/web/pages/router/index.tsx  ->  apps/web/pages/_document.tsx
+     VERIFIED: _app.tsx and _document.tsx exist at apps/web/pages/. Every
+     non-underscore pages-router file wraps in _app and shares _document.
+
+--- Category C: SvelteKit FS routing ---
+
+TP8  [sveltekit:page-to-server-load]
+     src/routes/+page.svelte  ->  src/routes/+page.server.js
+     VERIFIED: both at /tmp/sveltekit-realworld. The +page.svelte/+page.server
+     pair is the canonical SvelteKit page+server-load coupling.
+
+TP9  [sveltekit:page-to-layout]
+     src/routes/profile/@[user]/+page.svelte
+       -> src/routes/profile/@[user]/+layout.svelte
+       -> src/routes/+layout.svelte
+     VERIFIED: all three exist. Nested layout walk works across the named-
+     param-with-prefix dir (`@[user]`).
+
+--- Category D: NestJS module providers ---
+
+TP10 [nest:module-providers]
+     apps/api/v2/src/modules/api-keys/api-keys.module.ts
+       -> [ApiKeysController -> ApiKeysRepository]
+       -> [ApiKeysController -> ApiKeysService]
+     VERIFIED: source contains
+       providers: [ApiKeysRepository, ApiKeysService],
+       controllers: [ApiKeysController],
+     POC correctly extracts the wiring. Note this is identifier-only — production
+     resolution would walk the same file's `import` lines to map each identifier
+     to a file. (For Nest this often duplicates what the explicit import already
+     produced, hence the LOW priority assigned in spec.md.)
+
+================================================================================
+MANUALLY-VERIFIED TRUE NEGATIVES (5)
+================================================================================
+
+TN1  Non-special .tsx co-located in app/ dir
+     apps/web/app/AppRouterI18nProvider.tsx — exists, but stem
+     "AppRouterI18nProvider" is not in NEXT_SPECIAL. POC emits no synthetic
+     edges *from* this file (correct — it's a normal component, referenced
+     via import from page/layout files; existing TS resolver handles it).
+
+TN2  Underscore-prefixed file in pages/
+     apps/web/pages/_app.tsx and apps/web/pages/_error.tsx are skipped by the
+     nextPagesRouterEdges loop (`if (base.startsWith('_')) continue`).
+     Correct: _app and _document are TARGETS, not sources; _error is the
+     deliberately-omitted blanket-error route (would explode edge count if
+     emitted to every page — flagged in spec.md edge cases).
+
+TN3  pages/api/* skipped
+     apps/web/pages/api/**/*.ts files are skipped. Correct — API handlers
+     don't wrap in _app.tsx; no view layer. POC checks
+     `if (f.startsWith(pagesDir + '/api/'))`.
+
+TN4  terraforming-mars: zero edges
+     detected: next=0 sveltekit=0 nest=0 nuxt=0
+     Repo uses Vue 3 + bespoke server; no FS-routing framework dependency.
+     POC correctly emits no edges. Routes ARE imported (verified —
+     `src/server/server/requestProcessor.ts` has explicit
+     `import {ApiCloneableGame} from '../routes/ApiCloneableGame'` etc.),
+     so coldstart's existing TS resolver already covers them.
+
+TN5  Glob-loading: zero detections in any scanned repo
+     None of cal, terraforming-mars, sveltekit-realworld, or
+     nest-typescript-starter contain `fs.readdirSync(__dirname)`-style
+     auto-loaders. POC's `globLoadEdges` returns []. Correct (no false
+     positives from incidental readdirSync calls — POC requires the
+     forEach/map + require/import combination per spec).
+
+================================================================================
+NOTES / CAVEATS
+================================================================================
+
+1. The POC `nest:module-providers` output stops at identifier names because
+   resolving identifier->file requires re-using coldstart's import-resolver.
+   The 382 edges from cal's `apps/api/v2` overstate the real synthetic-edge
+   yield: most pairs are also linked via the controller's own imports
+   (controller imports the services it injects). Genuine new edges would be
+   the cross-module case (consumer imports neither the token nor the
+   provider, only the module). Production wiring would dedupe against
+   already-resolved imports — see spec.md section 4.
+
+2. cal/apps/docs has only one app-router page (the catch-all `[[...mdxPath]]`)
+   wrapped by app/layout.tsx — one TP edge, correctly emitted.
+
+3. Parallel-slot `@slot` dirs: searched cal's app/ subtree — NONE present.
+   `next:parallel-fallback` count is 0 in the run, which is correct.
+   SvelteKit uses `@[user]` differently (named parameter prefix, not a slot)
+   and the POC handles those as ordinary route dirs.
+
+4. `(group)` segments: the POC treats them as ordinary dirs for nesting
+   purposes (correct per Next.js spec — layouts inside groups wrap children
+   of that dir; URL skips the group name but layout tree does not).
+
+5. The full cal sample-edges block (capped at 40 per kind for readability)
+   showed every Next.js TP type firing across multiple distinct subtrees in
+   apps/web and packages/platform/examples/base, suggesting the rules
+   generalize without subtree-specific tuning.
