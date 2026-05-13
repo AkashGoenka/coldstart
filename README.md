@@ -14,13 +14,16 @@ Agents are already good at reading code, tracing logic, and reasoning about stru
 
 Requires Node.js 18+.
 
-**Run once from inside your project:**
+**Install globally, then run init once from inside your project:**
 
 ```bash
-npx -y coldstart-mcp@latest init
+npm install -g coldstart-mcp --legacy-peer-deps
+coldstart-mcp init
 ```
 
-This installs coldstart-mcp into `~/.coldstart/versions/<version>/` and writes a `.mcp.json` pointing directly at it. After that, every MCP startup is a direct `node` invocation — fast, no per-session npm overhead.
+`init` copies the global install into `~/.coldstart/versions/<version>/` and writes a `.mcp.json` pointing directly at that path. After that, every MCP startup is a direct `node` invocation — fast, no per-session npm overhead.
+
+> **Why `--legacy-peer-deps`?** The tree-sitter grammar packages under-declare their peer-dep ranges (some say `^0.21.x`, others say `^0.22.x`). Without the flag, npm's strict resolver enters a long retry loop on fresh installs and can appear to hang. The flag tells npm to use our declared versions as-is — exactly what we test against. We can't set this from inside the package (npm reads install config only from the user's environment, never from the package being installed).
 
 coldstart detects your IDE (Claude Code or Cursor) and writes the right files automatically:
 
@@ -32,14 +35,20 @@ coldstart detects your IDE (Claude Code or Cursor) and writes the right files au
 
 Re-running `init` is safe — it never duplicates entries.
 
+### Upgrading
+
+```bash
+npm install -g coldstart-mcp@latest --legacy-peer-deps
+coldstart-mcp init
+```
+
+The second command re-runs init from the new install, which rewrites `.mcp.json` to point at the new versioned path under `~/.coldstart/versions/`. The version-stamped lockfile then triggers the old daemon to shut down on the next tool call and a fresh daemon spawns from the new binary.
+
 ### Migrating from a previous version
 
 If your `.mcp.json` was written by an earlier release and uses `"command": "npx"`, you have two options:
 
-1. **Re-run init** (recommended):
-   ```bash
-   npx -y coldstart-mcp@latest init
-   ```
+1. **Re-run init** (recommended) — see the install/upgrade commands above.
 
 2. **Automatic on next launch**: starting in v1.4.0, coldstart-mcp detects legacy `npx`-style entries in `.mcp.json` at startup and rewrites them to use direct `node` (with a backup file). The current session keeps running on the slow path; the next session is fast.
 
@@ -70,10 +79,10 @@ AI client ──stdio──> coldstart bridge ──HTTP──> coldstart daemon
 **Daemon management:**
 
 ```bash
-npx coldstart-mcp doctor          # is the current project's daemon healthy?
-npx coldstart-mcp status          # list every daemon on the machine
-npx coldstart-mcp restart         # kill the current project's daemon (next tool call respawns)
-npx coldstart-mcp restart --all   # kill every running daemon
+coldstart-mcp doctor          # is the current project's daemon healthy?
+coldstart-mcp status          # list every daemon on the machine
+coldstart-mcp restart         # kill the current project's daemon (next tool call respawns)
+coldstart-mcp restart --all   # kill every running daemon
 ```
 
 `doctor` exits 0 on PASS and 1 on FAIL — easy to wire into scripts. `restart` is the right answer when *anything* feels off; a fresh daemon loads the disk cache (or rebuilds if missing). Upgrading the package is automatic — the bridge version-checks the running daemon and respawns it from your new binary; you don't need to restart anything by hand.
