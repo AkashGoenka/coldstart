@@ -225,4 +225,4 @@ When reporting a daemon-related issue, please include:
 - Stderr from the AI client / bridge
 - Approximate repo size (file count) and language mix
 
-Issues: https://github.com/akashgoenka/coldstart-mcp/issues
+Issues: https://github.com/akashgoenka/coldstart/issues
