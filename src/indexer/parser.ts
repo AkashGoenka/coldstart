@@ -169,6 +169,7 @@ export async function parseFile(
       lineCount,
       tokenEstimate,
       symbols: pythonResult.symbols,
+      djangoConventionRefs: pythonResult.djangoConventionRefs,
     };
   }
 

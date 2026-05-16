@@ -23,6 +23,7 @@ import { resolveImports } from './indexer/resolvers/index.js';
 import { addRailsSyntheticEdges } from './indexer/rails-synthetic.js';
 import { addLaravelSyntheticEdges } from './indexer/laravel-synthetic.js';
 import { addCSharpSyntheticEdges } from './indexer/csharp-synthetic.js';
+import { addDjangoSyntheticEdges } from './indexer/django-synthetic.js';
 import { buildGraph } from './indexer/graph.js';
 import { buildFileDomains, isTestPath } from './indexer/tokenize.js';
 import { buildSymbolEdges } from './indexer/symbol-edges.js';
@@ -163,6 +164,7 @@ export async function buildIndex(
             partialDeclarations: parsed.partialDeclarations,
             eloquentRelations: parsed.eloquentRelations,
             containerResolutions: parsed.containerResolutions,
+            djangoConventionRefs: parsed.djangoConventionRefs,
           };
           indexedFiles.push(file);
           langCount[wf.language] = (langCount[wf.language] ?? 0) + 1;
@@ -191,6 +193,7 @@ export async function buildIndex(
   await addRailsSyntheticEdges(indexedFiles, edges, fullFileIdSet, rootDir);
   await addLaravelSyntheticEdges(indexedFiles, edges, fullFileIdSet, rootDir);
   await addCSharpSyntheticEdges(indexedFiles, edges, fullFileIdSet, rootDir);
+  await addDjangoSyntheticEdges(indexedFiles, edges, fullFileIdSet, rootDir);
   if (!quiet) {
     const langById = new Map(indexedFiles.map(f => [f.id, f.language]));
     const stats: Record<string, { r: number; u: number }> = {};
@@ -326,6 +329,7 @@ async function runProbe(rootDir: string, excludes: string[], includes: string[])
           partialDeclarations: parsed.partialDeclarations,
           eloquentRelations: parsed.eloquentRelations,
           containerResolutions: parsed.containerResolutions,
+          djangoConventionRefs: parsed.djangoConventionRefs,
         });
       } catch { /* skip parse errors */ }
     }));
@@ -362,6 +366,7 @@ async function runProbe(rootDir: string, excludes: string[], includes: string[])
   await addRailsSyntheticEdges(indexedFiles, edges, fullFileIdSet, rootDir);
   await addLaravelSyntheticEdges(indexedFiles, edges, fullFileIdSet, rootDir);
   await addCSharpSyntheticEdges(indexedFiles, edges, fullFileIdSet, rootDir);
+  await addDjangoSyntheticEdges(indexedFiles, edges, fullFileIdSet, rootDir);
 
   const langById = new Map(indexedFiles.map(f => [f.id, f.language]));
   const fileById = new Map(indexedFiles.map(f => [f.id, f.relativePath]));

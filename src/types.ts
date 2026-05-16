@@ -90,6 +90,7 @@ export interface IndexedFile {
   partialDeclarations?: Array<{ kind: 'class' | 'struct' | 'interface' | 'record'; name: string; namespace?: string }>;  // C# only: partial type declarations
   eloquentRelations?: Array<{ targetClass: string; line: number }>;  // PHP only: Eloquent relationship class references
   containerResolutions?: Array<{ targetClass: string; line: number }>;  // PHP only: DI container class references
+  djangoConventionRefs?: Array<{ kind: string; value: string }>;  // Python only: Django convention string refs (middleware, auth backends, etc.)
 }
 
 export interface Edge {
@@ -130,6 +131,7 @@ export interface ParsedFile {
   partialDeclarations?: Array<{ kind: 'class' | 'struct' | 'interface' | 'record'; name: string; namespace?: string }>;  // C# only: partial type declarations
   eloquentRelations?: Array<{ targetClass: string; line: number }>;  // PHP only: Eloquent relationship class references
   containerResolutions?: Array<{ targetClass: string; line: number }>;  // PHP only: DI container class references
+  djangoConventionRefs?: Array<{ kind: string; value: string }>;  // Python only: Django convention string refs
 }
 
 export interface CacheMeta {
