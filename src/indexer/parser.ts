@@ -488,7 +488,9 @@ export async function parseFile(
     };
   }
 
-  // Unsupported language (swift, dart)
+  // Token-only template formats (erb, haml, slim) and unsupported languages
+  // (swift, dart): no AST parsing, but the file is indexed so path/filename
+  // tokens feed domainMap and it can be the target of synthetic edges.
   return {
     imports: [],
     exports: [],

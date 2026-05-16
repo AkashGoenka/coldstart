@@ -24,7 +24,10 @@ export type Language =
   | 'toml'
   | 'env'
   | 'xml'
-  | 'groovy';
+  | 'groovy'
+  | 'erb'
+  | 'haml'
+  | 'slim';
 
 export type EdgeType =
   | 'import'
