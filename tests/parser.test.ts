@@ -103,7 +103,7 @@ describe('parser — nested function extraction (TSX)', () => {
     const handleClose = result!.symbols.find(s => s.name === 'SettingsMenu.handleClose');
     expect(handleClose).toBeDefined();
     const expectedTarget = `${fileId}#SettingsMenu.handleError`;
-    expect(handleClose!.calls).toContain(expectedTarget);
+    expect(handleClose!.calls.map(c => c.name)).toContain(expectedTarget);
   });
 });
 
@@ -128,7 +128,8 @@ describe('cross-file call resolution', () => {
     // Run the same resolution logic as buildIndex
     const resolvedCalls: string[] = [];
     for (const sym of callerResult!.symbols) {
-      for (const callee of sym.calls) {
+      for (const callSite of sym.calls) {
+        const callee = callSite.name;
         if (callee.includes('#')) {
           resolvedCalls.push(callee);
           continue;
@@ -164,7 +165,8 @@ describe('cross-file call resolution', () => {
 
     const resolvedCalls: string[] = [];
     for (const sym of callerResult!.symbols) {
-      for (const callee of sym.calls) {
+      for (const callSite of sym.calls) {
+        const callee = callSite.name;
         if (callee.includes('#')) { resolvedCalls.push(callee); continue; }
         let resolved: string | null = null;
         for (const importedId of outEdges.get('typescript/auth.ts') ?? []) {

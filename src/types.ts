@@ -41,6 +41,13 @@ export type SymbolKind = 'function' | 'class' | 'interface' | 'type' | 'constant
 
 export type SymbolEdgeType = 'calls' | 'extends' | 'implements' | 'exports';
 
+/** A call site: a callee name (post-resolution, may be a symbolId) and the line in the caller where it appears.
+ *  line === 0 means the line is unknown (older index, or an extractor that has not yet been backfilled). */
+export interface CallSite {
+  name: string;
+  line: number;
+}
+
 export interface SymbolNode {
   id: string;               // fileId + '#' + name, e.g. "src/auth.ts#AuthService"
   name: string;
@@ -48,7 +55,7 @@ export interface SymbolNode {
   startLine: number;
   endLine: number;
   isExported: boolean;
-  calls: string[];          // names called within body (identifier-level, intra-file resolved to full IDs)
+  calls: CallSite[];        // call sites within body (intra-file resolved to full IDs in .name)
   extendsName?: string;     // class only: parent class name
   implementsNames: string[]; // class only: interface names
   annotations?: string[];   // Java only: annotation names attached to this symbol
@@ -58,6 +65,7 @@ export interface SymbolEdge {
   from: string;         // symbolId or fileId
   to: string;           // symbolId or fileId
   type: SymbolEdgeType;
+  line?: number;        // call-site line in the `from` symbol's file (calls edges only; 0/undefined = unknown)
 }
 
 export interface IndexedFile {

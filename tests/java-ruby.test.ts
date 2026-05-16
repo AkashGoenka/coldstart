@@ -418,6 +418,35 @@ describe('ruby-parser — symbol extraction (direct)', () => {
     expect(method!.kind).toBe('method');
   });
 
+  it('records the AST start line for each call site in .calls', () => {
+    // Lines are 1-indexed, and the leading newline in the template string is line 1.
+    // Layout:
+    //   line 1: (blank, from the leading "\n")
+    //   line 2: "class AuthService"
+    //   line 3: "  def login(email, password)"
+    //   line 4: "    verify(password)"
+    //   line 5: "    audit_log('login attempt')"
+    //   line 6: "  end"
+    //   line 7: "end"
+    const src = `
+class AuthService
+  def login(email, password)
+    verify(password)
+    audit_log('login attempt')
+  end
+end
+`;
+    const result = parseRubyContent(src, 'src/auth_service.rb');
+    const method = result.symbols.find(s => s.name === 'AuthService.login');
+    expect(method).toBeDefined();
+    const verifyCall = method!.calls.find(c => c.name === 'verify' || c.name.endsWith('#verify'));
+    const auditCall = method!.calls.find(c => c.name === 'audit_log');
+    expect(verifyCall).toBeDefined();
+    expect(verifyCall!.line).toBe(4);
+    expect(auditCall).toBeDefined();
+    expect(auditCall!.line).toBe(5);
+  });
+
   it('extracts singleton (class) methods', () => {
     const src = `
       class AuthService

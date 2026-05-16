@@ -7,7 +7,7 @@
  */
 import { createRequire } from 'node:module';
 import { dirname, resolve, basename } from 'node:path';
-import type { SymbolNode } from '../../types.js';
+import type { SymbolNode, CallSite } from '../../types.js';
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -46,22 +46,35 @@ function firstChildOfTypes(node: TSNode, types: string[]): TSNode | null {
   return node.namedChildren.find((c: TSNode) => types.includes(c.type)) ?? null;
 }
 
-/** Collect all call node method names in a subtree */
-function collectCalls(node: TSNode, results: Set<string>): void {
+/** Collect all call node method names + first-seen line in a subtree */
+function collectCalls(node: TSNode, results: Map<string, number>): void {
   if (node.type === 'call') {
     // call grammar: field('receiver', ...) '.' field('method', identifier|constant) field('arguments', ...)?
     // Use the field accessor — `find(...)` returns the receiver when it's a bare
     // identifier/constant, not the method name.
     const methodNode = node.childForFieldName('method');
-    if (methodNode) results.add(methodNode.text);
+    if (methodNode && !results.has(methodNode.text)) {
+      results.set(methodNode.text, node.startPosition.row + 1);
+    }
   } else if (node.type === 'method_call' || node.type === 'command') {
     // bare method call: method_name args
     const methodNode = node.namedChildren[0];
-    if (methodNode?.type === 'identifier') results.add(methodNode.text);
+    if (methodNode?.type === 'identifier' && !results.has(methodNode.text)) {
+      results.set(methodNode.text, node.startPosition.row + 1);
+    }
   }
   for (const child of node.namedChildren) {
     collectCalls(child, results);
   }
+}
+
+function callsFromMap(calls: Map<string, number>, exclude?: string): CallSite[] {
+  const out: CallSite[] = [];
+  for (const [name, line] of calls) {
+    if (exclude && name === exclude) continue;
+    out.push({ name, line });
+  }
+  return out;
 }
 
 /** Get constant name from a scope_resolution or constant node */
@@ -610,7 +623,7 @@ function extractMethod(
       : `${parentName}.${methodName}`
     : methodName;
 
-  const calls = new Set<string>();
+  const calls = new Map<string, number>();
   const body = firstChildOfTypes(node, ['body_statement', 'do_block']);
   if (body) collectCalls(body, calls);
   // also scan the whole node for calls
@@ -623,7 +636,7 @@ function extractMethod(
     startLine,
     endLine,
     isExported: !parentName, // top-level methods are "exported" by default in Ruby
-    calls: [...calls].filter(c => c !== methodName),
+    calls: callsFromMap(calls, methodName),
     implementsNames: [],
   };
 }
@@ -1084,7 +1097,7 @@ export function parseRubyContent(
   const symbolIdByName = new Map<string, string>(rawSymbols.map(s => [s.name, s.id]));
   const resolvedSymbols = rawSymbols.map(sym => ({
     ...sym,
-    calls: sym.calls.map(name => symbolIdByName.get(name) ?? name),
+    calls: sym.calls.map(c => ({ name: symbolIdByName.get(c.name) ?? c.name, line: c.line })),
   }));
 
   return {
