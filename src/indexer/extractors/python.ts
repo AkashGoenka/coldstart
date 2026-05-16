@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import type { SymbolNode } from '../../types.js';
+import type { SymbolNode, CallSite } from '../../types.js';
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -53,6 +53,44 @@ function extractAllList(node: TSNode): string[] {
     }
   }
   return results;
+}
+
+// ---------------------------------------------------------------------------
+// Call-site helpers
+// ---------------------------------------------------------------------------
+
+/** Recursively walk a node and collect call expression callee names + first-seen line.
+ *  For bare calls (`foo(x)`) the callee is the identifier text.
+ *  For attribute calls (`self.bar(x)`, `obj.method()`) the callee is the last
+ *  identifier in the attribute chain (the method name, not the receiver). */
+function collectCalls(node: TSNode, results: Map<string, number>): void {
+  if (node.type === 'call') {
+    const fnNode = node.childForFieldName('function');
+    if (fnNode) {
+      let name: string | undefined;
+      if (fnNode.type === 'identifier') {
+        name = fnNode.text;
+      } else if (fnNode.type === 'attribute') {
+        // attribute: receiver '.' method — last named child is the method identifier
+        const children: TSNode[] = fnNode.namedChildren;
+        name = children[children.length - 1]?.text;
+      }
+      if (name && !results.has(name)) {
+        results.set(name, node.startPosition.row + 1);
+      }
+    }
+  }
+  for (const child of node.namedChildren) {
+    collectCalls(child, results);
+  }
+}
+
+function callsFromMap(calls: Map<string, number>): CallSite[] {
+  const out: CallSite[] = [];
+  for (const [name, line] of calls) {
+    out.push({ name, line });
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -191,6 +229,9 @@ export function parsePythonContent(
             if (!fnNode) continue;
             const fnName = firstChildOfType(fnNode, 'identifier');
             if (!fnName) continue;
+            const methodBodyNode = firstChildOfType(fnNode, 'block');
+            const callMap = new Map<string, number>();
+            if (methodBodyNode) collectCalls(methodBodyNode, callMap);
             symbols.push({
               id: `${fileId}#${className}.${fnName.text}`,
               name: `${className}.${fnName.text}`,
@@ -198,7 +239,7 @@ export function parsePythonContent(
               startLine: member.startPosition.row + 1,
               endLine: member.endPosition.row + 1,
               isExported: false,
-              calls: [],
+              calls: callsFromMap(callMap),
               implementsNames: [],
             });
           }
@@ -216,6 +257,9 @@ export function parsePythonContent(
       const nameNode = firstChildOfType(fnNode, 'identifier');
       if (!nameNode) continue;
       const fnName = nameNode.text;
+      const fnBodyNode = firstChildOfType(fnNode, 'block');
+      const callMap = new Map<string, number>();
+      if (fnBodyNode) collectCalls(fnBodyNode, callMap);
       symbols.push({
         id: `${fileId}#${fnName}`,
         name: fnName,
@@ -223,7 +267,7 @@ export function parsePythonContent(
         startLine: node.startPosition.row + 1,
         endLine: node.endPosition.row + 1,
         isExported: isPublicName(fnName),
-        calls: [],
+        calls: callsFromMap(callMap),
         implementsNames: [],
       });
       continue;

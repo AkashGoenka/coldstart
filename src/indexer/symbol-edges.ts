@@ -61,10 +61,12 @@ export function buildSymbolEdges(
       }
 
       // calls: resolve bare name → qualified id where possible
-      for (const callee of sym.calls) {
+      for (const callSite of sym.calls) {
+        const callee = callSite.name;
+        const line = callSite.line;
         // Already qualified (intra-file resolution in ts-parser produces "fileId#name")
         if (callee.includes('#')) {
-          edges.push({ from: sym.id, to: callee, type: 'calls' });
+          edges.push({ from: sym.id, to: callee, type: 'calls', line });
           continue;
         }
         // Try to resolve against imported files.
@@ -100,7 +102,7 @@ export function buildSymbolEdges(
         // never match and just bloat the symInEdges reverse-adjacency map.
         // 'extends' / 'implements' bare-name edges are kept (queryable by class name).
         if (resolved) {
-          edges.push({ from: sym.id, to: resolved, type: 'calls' });
+          edges.push({ from: sym.id, to: resolved, type: 'calls', line });
         }
       }
 

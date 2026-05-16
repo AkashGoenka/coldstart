@@ -101,7 +101,7 @@ async function buildTestIndex(rootDir: string): Promise<CodebaseIndex> {
   for (const file of indexedFiles) {
     for (const sym of file.symbols) {
       if (sym.isExported) allSymbolEdges.push({ from: file.id, to: sym.id, type: 'exports' });
-      for (const callee of sym.calls) allSymbolEdges.push({ from: sym.id, to: callee, type: 'calls' });
+      for (const callee of sym.calls) allSymbolEdges.push({ from: sym.id, to: callee.name, type: 'calls', line: callee.line });
       if (sym.extendsName) allSymbolEdges.push({ from: sym.id, to: sym.extendsName, type: 'extends' });
       for (const iface of sym.implementsNames) allSymbolEdges.push({ from: sym.id, to: iface, type: 'implements' });
     }

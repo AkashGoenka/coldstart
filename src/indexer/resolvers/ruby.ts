@@ -1,5 +1,6 @@
-import { dirname, resolve, join } from 'node:path';
-import { readFile } from 'node:fs/promises';
+import { dirname, resolve, join, basename, sep } from 'node:path';
+import { readFile, readdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { tryResolveBase } from './shared.js';
 
 /**
@@ -98,3 +99,96 @@ export async function resolveRuby(
 
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// Rails autoload constant resolution (v1: constants + render)
+// ---------------------------------------------------------------------------
+
+/** underscore conversion matching ActiveSupport::Inflector */
+function underscore(s: string): string {
+  return s
+    .replace(/::/g, '/')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
+    .replace(/([a-z\d])([A-Z])/g, '$1_$2')
+    .toLowerCase();
+}
+
+/** Walk dir tree collecting files (used once per app root) */
+async function walkRbFiles(dir: string): Promise<string[]> {
+  const files: string[] = [];
+  async function walk(d: string): Promise<void> {
+    let entries;
+    try { entries = await readdir(d, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const p = join(d, e.name);
+      if (e.isDirectory()) await walk(p);
+      else if (e.isFile() && e.name.endsWith('.rb')) files.push(p);
+    }
+  }
+  await walk(dir);
+  return files;
+}
+
+/** Build FQCN index: snake_case_path → absolute .rb file path. Built once per Rails app. */
+export async function buildRailsFqcnIndex(
+  appRoot: string,
+  fileIdSet: Set<string>,
+): Promise<Map<string, string>> {
+  const idx = new Map<string, string>();
+
+  // Discover autoload roots: app/<category>/, app/<category>/concerns/, and optionally lib/
+  const appDir = join(appRoot, 'app');
+  if (!existsSync(appDir)) return idx;
+
+  const autoloadRoots: string[] = [];
+  try {
+    const entries = await readdir(appDir, { withFileTypes: true });
+    for (const e of entries) {
+      if (!e.isDirectory()) continue;
+      const name = e.name;
+      if (name === 'views' || name === 'javascript' || name === 'assets') continue;
+      autoloadRoots.push(join(appDir, name));
+      // concerns/ is a sub-root
+      const concerns = join(appDir, name, 'concerns');
+      if (existsSync(concerns)) autoloadRoots.push(concerns);
+    }
+  } catch { /* no app/ */ }
+
+  // Optional: lib/ — check config/application.rb for autoload_lib or autoload_paths
+  const libRoot = join(appRoot, 'lib');
+  if (existsSync(libRoot)) {
+    try {
+      const appConfig = await readFile(join(appRoot, 'config', 'application.rb'), 'utf-8');
+      if (/config\.autoload(?:_lib|_paths)/.test(appConfig)) {
+        autoloadRoots.push(libRoot);
+      }
+    } catch { /* no config, skip lib */ }
+  }
+
+  // Index each root
+  for (const root of autoloadRoots) {
+    const rbFiles = await walkRbFiles(root);
+    for (const f of rbFiles) {
+      let rel = f.slice(root.length + 1).slice(0, -3); // relative path without .rb
+      // Strip concerns/ segment if present (Visibility in app/models/concerns → "visibility", not "concerns/visibility")
+      if (rel.startsWith('concerns' + sep) || rel.startsWith('concerns/')) {
+        rel = rel.slice('concerns/'.length);
+      }
+      const key = rel.split(sep).join('/');
+      // First root wins (app/models before app/models/concerns, etc.)
+      if (!idx.has(key)) idx.set(key, f);
+    }
+  }
+
+  return idx;
+}
+
+/** Resolve a constant FQCN to a file path using the Rails autoload index */
+export function resolveRailsConstant(
+  fqcn: string,
+  fqcnIndex: Map<string, string>,
+): string | null {
+  const key = underscore(fqcn);
+  return fqcnIndex.get(key) ?? null;
+}
+

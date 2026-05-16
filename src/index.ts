@@ -20,7 +20,8 @@ import { fileURLToPath } from 'node:url';
 import { walkDirectory } from './indexer/walker.js';
 import { parseFile, buildFileId } from './indexer/parser.js';
 import { resolveImports } from './indexer/resolvers/index.js';
-import { buildGraph, addRailsControllerViewEdges } from './indexer/graph.js';
+import { addRailsSyntheticEdges } from './indexer/rails-synthetic.js';
+import { buildGraph } from './indexer/graph.js';
 import { buildFileDomains, isTestPath } from './indexer/tokenize.js';
 import { buildSymbolEdges } from './indexer/symbol-edges.js';
 import { getGitHead } from './indexer/git.js';
@@ -156,6 +157,7 @@ export async function buildIndex(
             isTestFile: isTestPath(wf.relativePath),
             symbols: parsed.symbols,
             reexportRatio: parsed.reexportRatio,
+            constantReferences: parsed.constantReferences,
           };
           indexedFiles.push(file);
           langCount[wf.language] = (langCount[wf.language] ?? 0) + 1;
@@ -179,6 +181,9 @@ export async function buildIndex(
   log(quiet, '[coldstart] Resolving imports...');
   const { edges, unresolved } = await resolveImports(indexedFiles, rootDir);
   log(quiet, `[coldstart] Resolved ${edges.length} edges (${unresolved.length} unresolved)`);
+
+  const fullFileIdSet = new Set(indexedFiles.map(f => f.id));
+  await addRailsSyntheticEdges(indexedFiles, edges, fullFileIdSet, rootDir);
   if (!quiet) {
     const langById = new Map(indexedFiles.map(f => [f.id, f.language]));
     const stats: Record<string, { r: number; u: number }> = {};
@@ -194,8 +199,6 @@ export async function buildIndex(
   log(quiet, '[coldstart] Building graph...');
   const nodeIds = indexedFiles.map(f => f.id);
   const { outEdges, inEdges } = buildGraph(nodeIds, edges);
-
-  addRailsControllerViewEdges(new Set(nodeIds), outEdges, inEdges);
 
   for (const file of indexedFiles) {
     file.importedByCount = inEdges.get(file.id)?.length ?? 0;
@@ -299,6 +302,7 @@ async function runProbe(rootDir: string, excludes: string[], includes: string[])
           isTestFile: false,
           symbols: parsed.symbols,
           reexportRatio: parsed.reexportRatio,
+          constantReferences: parsed.constantReferences,
         });
       } catch { /* skip parse errors */ }
     }));
@@ -331,6 +335,8 @@ async function runProbe(rootDir: string, excludes: string[], includes: string[])
   const edges = allEdges;
   const unresolved = allUnresolved;
   const tResolve = Date.now() - tResolveStart;
+
+  await addRailsSyntheticEdges(indexedFiles, edges, fullFileIdSet, rootDir);
 
   const langById = new Map(indexedFiles.map(f => [f.id, f.language]));
   const fileById = new Map(indexedFiles.map(f => [f.id, f.relativePath]));

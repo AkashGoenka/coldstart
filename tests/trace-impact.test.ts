@@ -21,7 +21,7 @@ function makeSymbol(
     startLine: 1,
     endLine: 10,
     isExported: true,
-    calls,
+    calls: calls.map(n => ({ name: n, line: 0 })),
     extendsName,
     implementsNames,
   };

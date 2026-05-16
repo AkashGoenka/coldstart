@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import type { SymbolNode } from '../../types.js';
+import type { SymbolNode, CallSite } from '../../types.js';
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -28,6 +28,47 @@ function getParser(): any {
 
 function firstChildOfType(node: TSNode, type: string): TSNode | null {
   return node.namedChildren.find((c: TSNode) => c.type === type) ?? null;
+}
+
+/** Recursively walk a node and collect call_expression callee names + first-seen line.
+ *
+ * Kotlin call_expression shapes:
+ *   - Simple call:   simple_identifier  call_suffix
+ *                    e.g. verifyPassword(...)  → name = "verifyPassword"
+ *   - Member call:   navigation_expression  call_suffix
+ *                    navigation_expression = receiver  navigation_suffix(.methodName)
+ *                    e.g. tokenService.sign(...) → name = "sign"
+ */
+function collectCalls(node: TSNode, results: Map<string, number>): void {
+  if (node.type === 'call_expression') {
+    const callee = node.namedChildren[0];
+    let name: string | undefined;
+    if (callee?.type === 'simple_identifier') {
+      name = callee.text;
+    } else if (callee?.type === 'navigation_expression') {
+      // last named child of navigation_expression is navigation_suffix
+      const suffix = callee.namedChildren[callee.namedChildren.length - 1];
+      if (suffix?.type === 'navigation_suffix') {
+        const id = suffix.namedChildren.find((c: TSNode) => c.type === 'simple_identifier');
+        if (id) name = id.text;
+      }
+    }
+    if (name && !results.has(name)) {
+      results.set(name, node.startPosition.row + 1);
+    }
+  }
+  for (const child of node.namedChildren) {
+    collectCalls(child, results);
+  }
+}
+
+function callsFromMap(calls: Map<string, number>, exclude?: string): CallSite[] {
+  const out: CallSite[] = [];
+  for (const [name, line] of calls) {
+    if (exclude && name === exclude) continue;
+    out.push({ name, line });
+  }
+  return out;
 }
 
 /** In Kotlin, declarations are public by default unless explicitly private/protected/internal */
@@ -193,6 +234,11 @@ export function parseKotlinContent(
             const mPub = isEffectivelyPublic(member);
             const mName = firstChildOfType(member, 'simple_identifier');
             if (!mName) continue;
+            const mCalls = new Map<string, number>();
+            const mBody = member.namedChildren.find(
+              (c: TSNode) => c.type === 'function_body' || c.type === 'block',
+            );
+            if (mBody) collectCalls(mBody, mCalls);
             symbols.push({
               id: `${fileId}#${className}.${mName.text}`,
               name: `${className}.${mName.text}`,
@@ -200,7 +246,7 @@ export function parseKotlinContent(
               startLine: member.startPosition.row + 1,
               endLine: member.endPosition.row + 1,
               isExported: mPub,
-              calls: [],
+              calls: callsFromMap(mCalls, mName.text),
               implementsNames: [],
             });
           }
@@ -256,6 +302,11 @@ export function parseKotlinContent(
       const nameNode = firstChildOfType(node, 'simple_identifier');
       if (!nameNode) continue;
       const fnName = nameNode.text;
+      const fnCalls = new Map<string, number>();
+      const fnBody = node.namedChildren.find(
+        (c: TSNode) => c.type === 'function_body' || c.type === 'block',
+      );
+      if (fnBody) collectCalls(fnBody, fnCalls);
       symbols.push({
         id: `${fileId}#${fnName}`,
         name: fnName,
@@ -263,7 +314,7 @@ export function parseKotlinContent(
         startLine,
         endLine,
         isExported: pub,
-        calls: [],
+        calls: callsFromMap(fnCalls, fnName),
         implementsNames: [],
       });
       if (pub) exports.push(fnName);

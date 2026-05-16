@@ -39,6 +39,9 @@ export const EXTENSION_TO_LANGUAGE: Record<string, Language> = {
   ".xml": "xml",
   ".gradle": "groovy",
   ".groovy": "groovy",
+  ".erb": "erb",
+  ".haml": "haml",
+  ".slim": "slim",
 };
 
 // ---------------------------------------------------------------------------
@@ -80,7 +83,7 @@ export const DEFAULT_EXCLUDES = new Set([
 ]);
 
 // Cache version — bump when index schema changes to force re-index
-export const CACHE_VERSION = "16.2.0";
+export const CACHE_VERSION = "16.4.0";
 
 // IDF threshold for "rare" token: log(20) ≈ 3.0 — tokens appearing in < 5% of files
 export const IDF_RARITY_THRESHOLD = Math.log(20);
