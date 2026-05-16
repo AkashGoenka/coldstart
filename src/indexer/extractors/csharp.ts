@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import type { SymbolNode } from '../../types.js';
+import type { SymbolNode, CallSite } from '../../types.js';
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -40,6 +40,40 @@ function hasPublicModifier(node: TSNode): boolean {
   return node.namedChildren.some(
     (c: TSNode) => c.type === 'modifier' && c.text === 'public',
   );
+}
+
+/** Recursively walk a node and collect invocation_expression callee names + first-seen line. */
+function collectCalls(node: TSNode, results: Map<string, number>): void {
+  if (node.type === 'invocation_expression') {
+    // invocation_expression: field('function', identifier | member_access_expression) field('arguments', ...)
+    const funcNode = node.childForFieldName('function');
+    if (funcNode) {
+      let methodName: string | undefined;
+      if (funcNode.type === 'identifier') {
+        // Bare call: DoSomething()
+        methodName = funcNode.text;
+      } else if (funcNode.type === 'member_access_expression') {
+        // Member call: obj.Method() — use field 'name' for the method name
+        const nameNode = funcNode.childForFieldName('name');
+        if (nameNode) methodName = nameNode.text;
+      }
+      if (methodName && !results.has(methodName)) {
+        results.set(methodName, node.startPosition.row + 1);
+      }
+    }
+  }
+  for (const child of node.namedChildren) {
+    collectCalls(child, results);
+  }
+}
+
+function callsFromMap(calls: Map<string, number>, exclude?: string): CallSite[] {
+  const out: CallSite[] = [];
+  for (const [name, line] of calls) {
+    if (exclude && name === exclude) continue;
+    out.push({ name, line });
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -161,6 +195,9 @@ function extractTypeSymbols(
           .filter((c: TSNode) => c.type === 'identifier');
         const mName = identsBefore[identsBefore.length - 1];
         if (!mName) continue;
+        const calls = new Map<string, number>();
+        const methodBody = firstChildOfType(child, 'block');
+        if (methodBody) collectCalls(methodBody, calls);
         members.push({
           id: `${fileId}#${name}.${mName.text}`,
           name: `${name}.${mName.text}`,
@@ -168,13 +205,16 @@ function extractTypeSymbols(
           startLine: child.startPosition.row + 1,
           endLine: child.endPosition.row + 1,
           isExported: mPub,
-          calls: [],
+          calls: callsFromMap(calls, mName.text),
           implementsNames: [],
         });
       } else if (child.type === 'constructor_declaration') {
         const mPub = hasPublicModifier(child);
         const mName = firstChildOfType(child, 'identifier');
         if (!mName) continue;
+        const calls = new Map<string, number>();
+        const ctorBody = firstChildOfType(child, 'block');
+        if (ctorBody) collectCalls(ctorBody, calls);
         members.push({
           id: `${fileId}#${name}.${mName.text}`,
           name: `${name}.${mName.text}`,
@@ -182,7 +222,7 @@ function extractTypeSymbols(
           startLine: child.startPosition.row + 1,
           endLine: child.endPosition.row + 1,
           isExported: mPub,
-          calls: [],
+          calls: callsFromMap(calls),
           implementsNames: [],
         });
       }

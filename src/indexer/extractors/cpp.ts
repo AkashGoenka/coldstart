@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import type { SymbolNode } from '../../types.js';
+import type { SymbolNode, CallSite } from '../../types.js';
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -24,6 +24,42 @@ function getParser(): any {
 
 function firstChildOfType(node: TSNode, type: string): TSNode | null {
   return node.namedChildren.find((c: TSNode) => c.type === type) ?? null;
+}
+
+/** Recursively collect call_expression callee names + first-seen line in a subtree. */
+function collectCalls(node: TSNode, results: Map<string, number>): void {
+  if (node.type === 'call_expression') {
+    const fn = node.namedChildren[0];
+    let calleeName: string | null = null;
+    if (fn) {
+      if (fn.type === 'identifier') {
+        // plain call: helper(x)
+        calleeName = fn.text;
+      } else if (fn.type === 'field_expression') {
+        // member call: obj.method(args) — field_identifier is the method name
+        const fieldId = fn.namedChildren.find((c: TSNode) => c.type === 'field_identifier');
+        if (fieldId) calleeName = fieldId.text;
+      } else if (fn.type === 'qualified_identifier') {
+        // namespace call: ns::func(args) — last child is the identifier
+        const last = fn.namedChildren.at(-1);
+        if (last?.type === 'identifier') calleeName = last.text;
+      }
+    }
+    if (calleeName && !results.has(calleeName)) {
+      results.set(calleeName, node.startPosition.row + 1);
+    }
+  }
+  for (const child of node.namedChildren) {
+    collectCalls(child, results);
+  }
+}
+
+function callsFromMap(calls: Map<string, number>): CallSite[] {
+  const out: CallSite[] = [];
+  for (const [name, line] of calls) {
+    out.push({ name, line });
+  }
+  return out;
 }
 
 export interface CppParseResult {
@@ -188,6 +224,9 @@ export function parseCppContent(content: string, fileId: string): CppParseResult
         const name = extractName(declarator);
         if (name) {
           const qualName = scope ? `${scope}::${name}` : name;
+          const callsMap = new Map<string, number>();
+          const body = firstChildOfType(node, 'compound_statement');
+          if (body) collectCalls(body, callsMap);
           symbols.push({
             id: `${fileId}#${qualName}`,
             name: qualName,
@@ -195,7 +234,7 @@ export function parseCppContent(content: string, fileId: string): CppParseResult
             startLine,
             endLine,
             isExported: true,
-            calls: [],
+            calls: callsFromMap(callsMap),
             implementsNames: [],
           });
           if (!scope) exports.push(name);
@@ -215,10 +254,15 @@ export function parseCppContent(content: string, fileId: string): CppParseResult
       return;
     }
 
-    // extern "C" { ... } — recurse without new scope
+    // extern "C" { ... } or extern "C" single-decl — recurse without new scope
     if (node.type === 'linkage_specification') {
       const body = firstChildOfType(node, 'declaration_list');
-      if (body) for (const child of body.namedChildren) visit(child, scope);
+      if (body) {
+        for (const child of body.namedChildren) visit(child, scope);
+      } else {
+        // extern "C" fn(...) { ... } — single function_definition, no braces
+        for (const child of node.namedChildren) visit(child, scope);
+      }
       return;
     }
   }

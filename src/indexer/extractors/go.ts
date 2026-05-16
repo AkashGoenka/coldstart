@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import type { SymbolNode } from '../../types.js';
+import type { SymbolNode, CallSite } from '../../types.js';
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -33,6 +33,42 @@ function firstChildOfType(node: TSNode, type: string): TSNode | null {
 /** In Go, exported identifiers begin with an uppercase letter. */
 function isExported(name: string): boolean {
   return name.length > 0 && name[0] === name[0].toUpperCase() && name[0] !== name[0].toLowerCase();
+}
+
+/** Recursively collect call_expression callee names + first-seen line in a subtree. */
+function collectCalls(node: TSNode, results: Map<string, number>): void {
+  if (node.type === 'call_expression') {
+    // call_expression grammar: field('function', ...) field('arguments', ...)
+    // The function field may be:
+    //   - identifier           → bare call: foo(...)
+    //   - selector_expression  → member call: pkg.Foo(...) — use the field 'field' child
+    const fnNode = node.childForFieldName('function');
+    if (fnNode) {
+      let calleeName: string | null = null;
+      if (fnNode.type === 'identifier') {
+        calleeName = fnNode.text;
+      } else if (fnNode.type === 'selector_expression') {
+        // selector_expression: field('operand', ...) '.' field('field', field_identifier)
+        const fieldNode = fnNode.childForFieldName('field');
+        if (fieldNode) calleeName = fieldNode.text;
+      }
+      if (calleeName && !results.has(calleeName)) {
+        results.set(calleeName, node.startPosition.row + 1);
+      }
+    }
+  }
+  for (const child of node.namedChildren) {
+    collectCalls(child, results);
+  }
+}
+
+function callsFromMap(calls: Map<string, number>, exclude?: string): CallSite[] {
+  const out: CallSite[] = [];
+  for (const [name, line] of calls) {
+    if (exclude && name === exclude) continue;
+    out.push({ name, line });
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -108,6 +144,9 @@ export function parseGoContent(
       if (!nameNode) continue;
       const fnName = nameNode.text;
       const exp = isExported(fnName);
+      const calls = new Map<string, number>();
+      const body = firstChildOfType(node, 'block');
+      if (body) collectCalls(body, calls);
       symbols.push({
         id: `${fileId}#${fnName}`,
         name: fnName,
@@ -115,7 +154,7 @@ export function parseGoContent(
         startLine: node.startPosition.row + 1,
         endLine: node.endPosition.row + 1,
         isExported: exp,
-        calls: [],
+        calls: callsFromMap(calls, fnName),
         implementsNames: [],
       });
       if (exp) exports.push(fnName);
@@ -145,6 +184,9 @@ export function parseGoContent(
         }
       }
       const fullName = receiverType ? `${receiverType}.${fnName}` : fnName;
+      const calls = new Map<string, number>();
+      const body = firstChildOfType(node, 'block');
+      if (body) collectCalls(body, calls);
       symbols.push({
         id: `${fileId}#${fullName}`,
         name: fullName,
@@ -152,7 +194,7 @@ export function parseGoContent(
         startLine: node.startPosition.row + 1,
         endLine: node.endPosition.row + 1,
         isExported: exp,
-        calls: [],
+        calls: callsFromMap(calls, fnName),
         implementsNames: [],
       });
       continue;

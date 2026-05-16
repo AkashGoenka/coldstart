@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import type { SymbolNode } from '../../types.js';
+import type { SymbolNode, CallSite } from '../../types.js';
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -33,6 +33,47 @@ function firstChildOfType(node: TSNode, type: string): TSNode | null {
 function hasVisibilityPub(node: TSNode): boolean {
   // In tree-sitter-rust, `pub` appears as a visibility_modifier named child
   return node.namedChildren.some((c: TSNode) => c.type === 'visibility_modifier');
+}
+
+/** Recursively walk a node and collect call_expression callee names + first-seen line.
+ *
+ *  call_expression grammar has three callee shapes:
+ *    foo()           → identifier              → text is the name
+ *    baz::qux()      → scoped_identifier       → last :: segment is the name
+ *    obj.method()    → field_expression        → field_identifier child is the name
+ */
+function collectCalls(node: TSNode, results: Map<string, number>): void {
+  if (node.type === 'call_expression') {
+    const callee = node.namedChildren[0];
+    if (callee) {
+      let name: string | null = null;
+      if (callee.type === 'identifier') {
+        name = callee.text;
+      } else if (callee.type === 'scoped_identifier') {
+        // last segment after '::'
+        const segs = (callee.text as string).split('::');
+        name = segs[segs.length - 1];
+      } else if (callee.type === 'field_expression') {
+        const fieldId = callee.namedChildren.find((c: TSNode) => c.type === 'field_identifier');
+        if (fieldId) name = fieldId.text;
+      }
+      if (name && !results.has(name)) {
+        results.set(name, node.startPosition.row + 1);
+      }
+    }
+  }
+  for (const child of node.namedChildren) {
+    collectCalls(child, results);
+  }
+}
+
+function callsFromMap(calls: Map<string, number>, exclude?: string): CallSite[] {
+  const out: CallSite[] = [];
+  for (const [name, line] of calls) {
+    if (exclude && name === exclude) continue;
+    out.push({ name, line });
+  }
+  return out;
 }
 
 // In-crate prefixes — these resolve to symbols within the current crate's
@@ -171,6 +212,9 @@ export function parseRustContent(
       const nameNode = firstChildOfType(node, 'identifier');
       if (!nameNode) return;
       const fnName = parentName ? `${parentName}::${nameNode.text}` : nameNode.text;
+      const callsMap = new Map<string, number>();
+      const body = firstChildOfType(node, 'block');
+      if (body) collectCalls(body, callsMap);
       symbols.push({
         id: `${fileId}#${fnName}`,
         name: fnName,
@@ -178,7 +222,7 @@ export function parseRustContent(
         startLine,
         endLine,
         isExported: pub,
-        calls: [],
+        calls: callsFromMap(callsMap, nameNode.text),
         implementsNames: [],
       });
       if (pub && !parentName) exports.push(nameNode.text);

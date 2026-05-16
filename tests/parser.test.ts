@@ -3,6 +3,10 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseFile } from '../src/indexer/parser.js';
 import { parseTsContent } from '../src/indexer/ts-parser.js';
+import { parseCSharpContent } from '../src/indexer/extractors/csharp.js';
+import { parseRustContent } from '../src/indexer/extractors/rust.js';
+import { parsePhpContent } from '../src/indexer/extractors/php.js';
+import { parseCppContent } from '../src/indexer/extractors/cpp.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(__dirname, 'fixtures');
@@ -313,6 +317,49 @@ BAR = 2
     const x = result.symbols.find(s => s.name === 'X' && s.kind === 'constant');
     expect(x).toBeUndefined();
   });
+
+  it('records the AST start line for each call site in .calls', async () => {
+    // Lines are 1-indexed, and the leading newline in the template string is line 1.
+    // Layout:
+    //   line 1: (blank, from the leading "\n")
+    //   line 2: "class AuthService:"
+    //   line 3: "    def login(self, email, password):"
+    //   line 4: "        verify_password(password)"
+    //   line 5: "        self.audit_log('login attempt')"
+    //   line 6: "    def logout(self):"
+    //   line 7: "        self.cleanup()"
+    //   line 8: "        notify()"
+    const src = `
+class AuthService:
+    def login(self, email, password):
+        verify_password(password)
+        self.audit_log('login attempt')
+    def logout(self):
+        self.cleanup()
+        notify()
+`;
+    const { parsePythonContent } = await import(
+      '../src/indexer/extractors/python.js'
+    );
+    const result = parsePythonContent(src, 'src/auth_service.py');
+    const login = result.symbols.find(s => s.name === 'AuthService.login');
+    expect(login).toBeDefined();
+    const verifyCall = login!.calls.find(c => c.name === 'verify_password');
+    const auditCall = login!.calls.find(c => c.name === 'audit_log');
+    expect(verifyCall).toBeDefined();
+    expect(verifyCall!.line).toBe(4);
+    expect(auditCall).toBeDefined();
+    expect(auditCall!.line).toBe(5);
+
+    const logout = result.symbols.find(s => s.name === 'AuthService.logout');
+    expect(logout).toBeDefined();
+    const cleanupCall = logout!.calls.find(c => c.name === 'cleanup');
+    const notifyCall = logout!.calls.find(c => c.name === 'notify');
+    expect(cleanupCall).toBeDefined();
+    expect(cleanupCall!.line).toBe(7);
+    expect(notifyCall).toBeDefined();
+    expect(notifyCall!.line).toBe(8);
+  });
 });
 
 describe('parser — Go', () => {
@@ -358,6 +405,35 @@ describe('parser — Go', () => {
     const result = await parseFile(join(FIXTURES, 'go/auth.go'), 'go');
     expect(result!.hash).toMatch(/^[a-f0-9]{32}$/);
     expect(result!.lineCount).toBeGreaterThan(5);
+  });
+
+  it('records the AST start line for each call site in .calls', async () => {
+    // Lines are 1-indexed. Layout:
+    //   line 1:  "package auth"
+    //   line 2:  ""
+    //   line 3:  "func ProcessLogin(req LoginRequest) error {"
+    //   line 4:  "\tvalidate(req)"
+    //   line 5:  "\tauditLog(req.Email)"
+    //   line 6:  "\treturn nil"
+    //   line 7:  "}"
+    const src = `package auth
+
+func ProcessLogin(req LoginRequest) error {
+\tvalidate(req)
+\tauditLog(req.Email)
+\treturn nil
+}
+`;
+    const { parseGoContent } = await import('../src/indexer/extractors/go.js');
+    const result = parseGoContent(src, 'src/auth.go');
+    const fn = result.symbols.find(s => s.name === 'ProcessLogin');
+    expect(fn).toBeDefined();
+    const validateCall = fn!.calls.find(c => c.name === 'validate');
+    const auditCall = fn!.calls.find(c => c.name === 'auditLog');
+    expect(validateCall).toBeDefined();
+    expect(validateCall!.line).toBe(4);
+    expect(auditCall).toBeDefined();
+    expect(auditCall!.line).toBe(5);
   });
 });
 
@@ -412,6 +488,32 @@ describe('parser — Rust', () => {
     expect(result!.hash).toMatch(/^[a-f0-9]{32}$/);
     expect(result!.lineCount).toBeGreaterThan(5);
   });
+
+  it('records the AST start line for each call site in .calls', () => {
+    // Lines are 1-indexed.  Layout:
+    //   line 1: (blank, from leading "\n")
+    //   line 2: "fn process(input: &str) -> String {"
+    //   line 3: "    let trimmed = trim_whitespace(input);"
+    //   line 4: "    let encoded = base64_encode(trimmed);"
+    //   line 5: "    encoded.to_uppercase()"
+    //   line 6: "}"
+    const src = `
+fn process(input: &str) -> String {
+    let trimmed = trim_whitespace(input);
+    let encoded = base64_encode(trimmed);
+    encoded.to_uppercase()
+}
+`;
+    const result = parseRustContent(src, 'src/util.rs');
+    const fn_ = result.symbols.find(s => s.name === 'process');
+    expect(fn_).toBeDefined();
+    const trimCall = fn_!.calls.find(c => c.name === 'trim_whitespace');
+    const encodeCall = fn_!.calls.find(c => c.name === 'base64_encode');
+    expect(trimCall).toBeDefined();
+    expect(trimCall!.line).toBe(3);
+    expect(encodeCall).toBeDefined();
+    expect(encodeCall!.line).toBe(4);
+  });
 });
 
 describe('parser — C#', () => {
@@ -463,6 +565,35 @@ describe('parser — C#', () => {
     expect(result!.hash).toMatch(/^[a-f0-9]{32}$/);
     expect(result!.lineCount).toBeGreaterThan(5);
   });
+
+  it('records the AST start line for each call site in .calls', () => {
+    // Lines are 1-indexed, and the leading newline in the template string is line 1.
+    // Layout:
+    //   line 1: (blank, from the leading "\n")
+    //   line 2: "public class AuthService {"
+    //   line 3: "  public void Login() {"
+    //   line 4: "    VerifyPassword();"
+    //   line 5: "    _repo.FindByEmail(email);"
+    //   line 6: "  }"
+    //   line 7: "}"
+    const src = `
+public class AuthService {
+  public void Login() {
+    VerifyPassword();
+    _repo.FindByEmail(email);
+  }
+}
+`;
+    const result = parseCSharpContent(src, 'src/AuthService.cs');
+    const method = result.symbols.find(s => s.name === 'AuthService.Login');
+    expect(method).toBeDefined();
+    const verifyCall = method!.calls.find(c => c.name === 'VerifyPassword');
+    const findCall = method!.calls.find(c => c.name === 'FindByEmail');
+    expect(verifyCall).toBeDefined();
+    expect(verifyCall!.line).toBe(4);
+    expect(findCall).toBeDefined();
+    expect(findCall!.line).toBe(5);
+  });
 });
 
 describe('parser — PHP', () => {
@@ -512,6 +643,39 @@ describe('parser — PHP', () => {
     const result = await parseFile(join(FIXTURES, 'php/AuthService.php'), 'php');
     expect(result!.hash).toMatch(/^[a-f0-9]{32}$/);
     expect(result!.lineCount).toBeGreaterThan(5);
+  });
+
+  it('records the AST start line for each call site in .calls', () => {
+    // Lines are 1-indexed, and the leading newline in the template string is line 1.
+    // Layout:
+    //   line 1: (blank, from the leading "\n")
+    //   line 2: "<?php"
+    //   line 3: "class AuthService {"
+    //   line 4: "    public function login($request): string"
+    //   line 5: "    {"
+    //   line 6: "        $user = $this->userRepository->findByEmail($request->email);"
+    //   line 7: "        $token = $this->tokenService->sign(['userId' => $user->id]);"
+    //   line 8: "    }"
+    //   line 9: "}"
+    const src = `
+<?php
+class AuthService {
+    public function login($request): string
+    {
+        $user = $this->userRepository->findByEmail($request->email);
+        $token = $this->tokenService->sign(['userId' => $user->id]);
+    }
+}
+`;
+    const result = parsePhpContent(src, 'php/AuthService.php');
+    const method = result.symbols.find((s) => s.name === 'AuthService.login');
+    expect(method).toBeDefined();
+    const findByEmailCall = method!.calls.find((c) => c.name === 'findByEmail');
+    const signCall = method!.calls.find((c) => c.name === 'sign');
+    expect(findByEmailCall).toBeDefined();
+    expect(findByEmailCall!.line).toBe(6);
+    expect(signCall).toBeDefined();
+    expect(signCall!.line).toBe(7);
   });
 });
 
@@ -698,6 +862,32 @@ describe('parser — C++', () => {
     const result = await parseFile(join(FIXTURES, 'cpp/auth.cpp'), 'cpp');
     expect(result!.hash).toMatch(/^[a-f0-9]{32}$/);
     expect(result!.lineCount).toBeGreaterThan(5);
+  });
+
+  it('records the AST start line for each call site in .calls', () => {
+    // Lines are 1-indexed. Layout:
+    //   line 1: (blank, from the leading "\n")
+    //   line 2: "bool AuthService::login(const std::string& email) {"
+    //   line 3: "  validate(email);"
+    //   line 4: "  obj.hash(email);"
+    //   line 5: "  return true;"
+    //   line 6: "}"
+    const src = `
+bool AuthService::login(const std::string& email) {
+  validate(email);
+  obj.hash(email);
+  return true;
+}
+`;
+    const result = parseCppContent(src, 'src/auth.cpp');
+    const fn = result.symbols.find(s => s.name === 'login');
+    expect(fn).toBeDefined();
+    const validateCall = fn!.calls.find(c => c.name === 'validate');
+    const hashCall = fn!.calls.find(c => c.name === 'hash');
+    expect(validateCall).toBeDefined();
+    expect(validateCall!.line).toBe(3);
+    expect(hashCall).toBeDefined();
+    expect(hashCall!.line).toBe(4);
   });
 });
 

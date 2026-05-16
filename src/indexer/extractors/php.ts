@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import type { SymbolNode } from '../../types.js';
+import type { SymbolNode, CallSite } from '../../types.js';
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -43,6 +43,37 @@ function hasPublicModifier(node: TSNode): boolean {
       (c.type === 'modifier' && c.text === 'public') ||
       c.type === 'public',
   );
+}
+
+/** Recursively collect call site names + first-seen line in a subtree.
+ *  Handles two PHP call node types:
+ *  - member_call_expression  ($obj->method())  — name via field 'name'
+ *  - function_call_expression (someFunc())      — function via field 'function'
+ */
+function collectCalls(node: TSNode, results: Map<string, number>): void {
+  if (node.type === 'member_call_expression') {
+    const nameNode = node.childForFieldName('name');
+    if (nameNode && !results.has(nameNode.text)) {
+      results.set(nameNode.text, node.startPosition.row + 1);
+    }
+  } else if (node.type === 'function_call_expression') {
+    const funcNode = node.childForFieldName('function');
+    if (funcNode && !results.has(funcNode.text)) {
+      results.set(funcNode.text, node.startPosition.row + 1);
+    }
+  }
+  for (const child of node.namedChildren) {
+    collectCalls(child, results);
+  }
+}
+
+function callsFromMap(calls: Map<string, number>, exclude?: string): CallSite[] {
+  const out: CallSite[] = [];
+  for (const [name, line] of calls) {
+    if (exclude && name === exclude) continue;
+    out.push({ name, line });
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -188,6 +219,9 @@ export function parsePhpContent(
             const mName = firstChildOfType(member, 'name');
             if (!mName) continue;
             if (pub) exports.push(`${className}.${mName.text}`);
+            const mCalls = new Map<string, number>();
+            const mBody = firstChildOfType(member, 'compound_statement');
+            if (mBody) collectCalls(mBody, mCalls);
             symbols.push({
               id: `${fileId}#${className}.${mName.text}`,
               name: `${className}.${mName.text}`,
@@ -195,7 +229,7 @@ export function parsePhpContent(
               startLine: member.startPosition.row + 1,
               endLine: member.endPosition.row + 1,
               isExported: pub,
-              calls: [],
+              calls: callsFromMap(mCalls, mName.text),
               implementsNames: [],
             });
           }
@@ -209,6 +243,9 @@ export function parsePhpContent(
       const nameNode = firstChildOfType(node, 'name');
       if (!nameNode) return;
       const fnName = nameNode.text;
+      const fnCalls = new Map<string, number>();
+      const fnBody = firstChildOfType(node, 'compound_statement');
+      if (fnBody) collectCalls(fnBody, fnCalls);
       symbols.push({
         id: `${fileId}#${fnName}`,
         name: fnName,
@@ -216,7 +253,7 @@ export function parsePhpContent(
         startLine,
         endLine,
         isExported: true,
-        calls: [],
+        calls: callsFromMap(fnCalls, fnName),
         implementsNames: [],
       });
       exports.push(fnName);
