@@ -1,5 +1,3 @@
-import { relative } from 'node:path';
-import { buildFileId } from './parser.js';
 import { resolvePython } from './resolvers/python.js';
 import type { Edge, IndexedFile } from '../types.js';
 
@@ -29,11 +27,19 @@ export async function addDjangoSyntheticEdges(
     if (!f.djangoConventionRefs?.length) continue;
 
     for (const ref of f.djangoConventionRefs) {
-      // ref.value is a dotted string like 'django.middleware.locale.LocaleMiddleware'
-      const targetFile = await resolvePython(ref.value, f.path, fullFileIdSet, rootDir, new Map());
-      if (!targetFile || targetFile === f.path) continue;
+      // ref.value is a dotted string like 'django.middleware.locale.LocaleMiddleware'.
+      // resolvePython returns a fileId (relative path) directly, not an absolute path.
+      // If full path doesn't resolve, retry with the trailing segment stripped (so
+      // 'django.middleware.locale.LocaleMiddleware' falls back to 'django.middleware.locale').
+      let targetId = await resolvePython(ref.value, f.path, fullFileIdSet, rootDir, new Map());
+      if (!targetId) {
+        const lastDot = ref.value.lastIndexOf('.');
+        if (lastDot > 0) {
+          targetId = await resolvePython(ref.value.slice(0, lastDot), f.path, fullFileIdSet, rootDir, new Map());
+        }
+      }
+      if (!targetId || targetId === f.id) continue;
 
-      const targetId = buildFileId(relative(rootDir, targetFile));
       const key = `${f.id}|${targetId}`;
       if (seen.has(key) || !fullFileIdSet.has(targetId)) continue;
 
