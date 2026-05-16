@@ -251,6 +251,7 @@ export async function parseFile(
       lineCount,
       tokenEstimate,
       symbols: csharpResult.symbols,
+      partialDeclarations: csharpResult.partialDeclarations,
     };
   }
 
@@ -274,6 +275,8 @@ export async function parseFile(
       lineCount,
       tokenEstimate,
       symbols: phpResult.symbols,
+      eloquentRelations: phpResult.eloquentRelations,
+      containerResolutions: phpResult.containerResolutions,
     };
   }
 

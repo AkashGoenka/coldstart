@@ -76,6 +76,142 @@ function callsFromMap(calls: Map<string, number>, exclude?: string): CallSite[] 
   return out;
 }
 
+/** Extract class::class references from call arguments and class constant accesses.
+ *  Returns fully-qualified class names after resolving via imports and namespace context. */
+function extractClassStringReferences(
+  node: TSNode,
+  imports: Map<string, string>,
+  currentNamespace: string,
+): Array<{ className: string; line: number }> {
+  const results: Array<{ className: string; line: number }> = [];
+
+  function resolveClassName(name: string): string {
+    // Already an import (fully qualified via use statement)
+    if (imports.has(name)) return imports.get(name)!;
+    // Already fully qualified (contains backslash)
+    if (name.includes('\\')) return name;
+    // Relative to current namespace
+    if (currentNamespace) return `${currentNamespace}\\${name}`;
+    // Bare name (likely builtin or resolved in current namespace)
+    return name;
+  }
+
+  function walk(n: TSNode): void {
+    // class_constant_access_expression: Foo::class → name is "Foo"
+    if (n.type === 'class_constant_access_expression') {
+      const nameNode = firstChildOfType(n, 'name');
+      if (nameNode) {
+        const simpleName = nameNode.text;
+        const fqn = resolveClassName(simpleName);
+        results.push({ className: fqn, line: n.startPosition.row + 1 });
+      }
+    }
+    // qualified_name: "App\Models\User" (direct reference without ::class)
+    else if (n.type === 'qualified_name') {
+      const text = n.text;
+      if (text.includes('\\') || imports.has(text)) {
+        const fqn = resolveClassName(text);
+        results.push({ className: fqn, line: n.startPosition.row + 1 });
+      }
+    }
+
+    for (const child of n.namedChildren) {
+      walk(child);
+    }
+  }
+
+  walk(node);
+  return results;
+}
+
+/** Extract eloquent relationships from $this->hasMany(...) etc calls within a method.
+ *  Only matches deterministic pattern: hasMany/belongsTo/hasOne/hasAndBelongsToMany
+ *  with a single class string argument. */
+function extractEloquentRelations(
+  methodNode: TSNode,
+  imports: Map<string, string>,
+  currentNamespace: string,
+): Array<{ targetClass: string; line: number }> {
+  const results: Array<{ targetClass: string; line: number }> = [];
+
+  function walkForCalls(n: TSNode): void {
+    // member_call_expression: $this->hasMany(...)
+    if (n.type === 'member_call_expression') {
+      const nameNode = n.childForFieldName('name');
+      const methodName = nameNode?.text;
+
+      // Check if this is an eloquent relationship method
+      if (methodName && ['hasMany', 'belongsTo', 'hasOne', 'belongsToMany',
+                          'morphTo', 'morphMany', 'morphOne', 'morphByMany'].includes(methodName)) {
+        const argsNode = n.childForFieldName('arguments');
+        if (argsNode) {
+          // Extract all class string refs from arguments
+          const refs = extractClassStringReferences(argsNode, imports, currentNamespace);
+          for (const ref of refs) {
+            results.push({ targetClass: ref.className, line: n.startPosition.row + 1 });
+          }
+        }
+      }
+    }
+
+    for (const child of n.namedChildren) {
+      walkForCalls(child);
+    }
+  }
+
+  walkForCalls(methodNode);
+  return results;
+}
+
+/** Extract container resolution patterns: app(Foo::class), resolve(Bar::class), etc. */
+function extractContainerResolutions(
+  node: TSNode,
+  imports: Map<string, string>,
+  currentNamespace: string,
+): Array<{ targetClass: string; line: number }> {
+  const results: Array<{ targetClass: string; line: number }> = [];
+
+  function walk(n: TSNode): void {
+    // function_call_expression: app(...), resolve(...), etc
+    if (n.type === 'function_call_expression') {
+      const funcNode = n.childForFieldName('function');
+      const funcName = funcNode?.text;
+
+      if (funcName && ['app', 'resolve', 'container'].includes(funcName)) {
+        const argsNode = n.childForFieldName('arguments');
+        if (argsNode) {
+          const refs = extractClassStringReferences(argsNode, imports, currentNamespace);
+          for (const ref of refs) {
+            results.push({ targetClass: ref.className, line: n.startPosition.row + 1 });
+          }
+        }
+      }
+    }
+    // member_call_expression: $container->make(...), bind(...), singleton(...)
+    else if (n.type === 'member_call_expression') {
+      const nameNode = n.childForFieldName('name');
+      const methodName = nameNode?.text;
+
+      if (methodName && ['make', 'bind', 'singleton'].includes(methodName)) {
+        const argsNode = n.childForFieldName('arguments');
+        if (argsNode) {
+          const refs = extractClassStringReferences(argsNode, imports, currentNamespace);
+          for (const ref of refs) {
+            results.push({ targetClass: ref.className, line: n.startPosition.row + 1 });
+          }
+        }
+      }
+    }
+
+    for (const child of n.namedChildren) {
+      walk(child);
+    }
+  }
+
+  walk(node);
+  return results;
+}
+
 // ---------------------------------------------------------------------------
 // Result type
 // ---------------------------------------------------------------------------
@@ -85,6 +221,8 @@ export interface PhpParseResult {
   exports: string[];
   hasDefaultExport: false;
   symbols: SymbolNode[];
+  eloquentRelations?: Array<{ targetClass: string; line: number }>;
+  containerResolutions?: Array<{ targetClass: string; line: number }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -118,13 +256,28 @@ export function parsePhpContent(
   const root: TSNode = tree.rootNode;
 
   const imports: string[] = [];
+  const importMap = new Map<string, string>(); // shortName → FQCN
   const symbols: SymbolNode[] = [];
   const exports: string[] = [];
+  const eloquentRelations: Array<{ targetClass: string; line: number }> = [];
+  const containerResolutions: Array<{ targetClass: string; line: number }> = [];
+  let currentNamespace = ''; // Track the current PHP namespace
 
   // Walk the PHP document (which may have a program child)
   const program = firstChildOfType(root, 'program') ?? root;
 
   for (const node of program.namedChildren) {
+    // Capture namespace declarations before processing
+    if (node.type === 'namespace_definition') {
+      const nsNameNode = firstChildOfType(node, 'namespace_name');
+      if (nsNameNode) {
+        // namespace_name can be a qualified_name or have children that are names
+        const nameNode = firstChildOfType(nsNameNode, 'qualified_name') ?? nsNameNode;
+        if (nameNode) {
+          currentNamespace = nameNode.text;
+        }
+      }
+    }
     visitTopLevel(node);
   }
 
@@ -138,9 +291,18 @@ export function parsePhpContent(
         if (clause.type === 'use_clause' || clause.type === 'namespace_use_clause') {
           const name = firstChildOfType(clause, 'qualified_name') ??
             firstChildOfType(clause, 'name');
-          if (name) imports.push(name.text);
+          if (name) {
+            const fqcn = name.text;
+            imports.push(fqcn);
+            // Map short name (last segment) → FQCN
+            const shortName = fqcn.split('\\').pop() || fqcn;
+            importMap.set(shortName, fqcn);
+          }
         } else if (clause.type === 'qualified_name' || clause.type === 'name') {
-          imports.push(clause.text);
+          const fqcn = clause.text;
+          imports.push(fqcn);
+          const shortName = fqcn.split('\\').pop() || fqcn;
+          importMap.set(shortName, fqcn);
         }
       }
       return;
@@ -221,7 +383,15 @@ export function parsePhpContent(
             if (pub) exports.push(`${className}.${mName.text}`);
             const mCalls = new Map<string, number>();
             const mBody = firstChildOfType(member, 'compound_statement');
-            if (mBody) collectCalls(mBody, mCalls);
+            if (mBody) {
+              collectCalls(mBody, mCalls);
+              // Extract eloquent relationships from the method body
+              const relations = extractEloquentRelations(mBody, importMap, currentNamespace);
+              eloquentRelations.push(...relations);
+              // Extract container resolutions from the method body
+              const containers = extractContainerResolutions(mBody, importMap, currentNamespace);
+              containerResolutions.push(...containers);
+            }
             symbols.push({
               id: `${fileId}#${className}.${mName.text}`,
               name: `${className}.${mName.text}`,
@@ -235,6 +405,11 @@ export function parsePhpContent(
           }
         }
       }
+
+      // Also extract container resolutions from top-level class body statements
+      const classContainers = extractContainerResolutions(body || node, importMap, currentNamespace);
+      containerResolutions.push(...classContainers);
+
       return;
     }
 
@@ -269,5 +444,7 @@ export function parsePhpContent(
     exports: [...new Set(exports)],
     hasDefaultExport: false,
     symbols,
+    eloquentRelations: eloquentRelations.length > 0 ? eloquentRelations : undefined,
+    containerResolutions: containerResolutions.length > 0 ? containerResolutions : undefined,
   };
 }
