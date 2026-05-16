@@ -15,11 +15,12 @@
  * Internal (spawned automatically):
  *   coldstart-mcp --root . --daemon       # background index daemon
  */
-import { resolve } from 'node:path';
+import { resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { walkDirectory } from './indexer/walker.js';
 import { parseFile, buildFileId } from './indexer/parser.js';
 import { resolveImports } from './indexer/resolvers/index.js';
+import { buildRailsFqcnIndex, resolveRailsConstant, resolveRailsView } from './indexer/resolvers/ruby.js';
 import { buildGraph, addRailsControllerViewEdges } from './indexer/graph.js';
 import { buildFileDomains, isTestPath } from './indexer/tokenize.js';
 import { buildSymbolEdges } from './indexer/symbol-edges.js';
@@ -32,7 +33,56 @@ import { IndexManager } from './index-manager.js';
 import { readLock, writeLock, deleteLock, isDaemonAlive, getCurrentVersion, watchOwnLockfile } from './daemon-lock.js';
 import { attachDaemonLogger } from './daemon-log.js';
 import { migrateLegacyMcpConfig } from './migrate.js';
-import type { CodebaseIndex, IndexedFile, SymbolEdge } from './types.js';
+import type { CodebaseIndex, IndexedFile, SymbolEdge, Edge } from './types.js';
+
+// ---------------------------------------------------------------------------
+// Rails synthetic edges (constant references + render calls)
+// ---------------------------------------------------------------------------
+async function addRailsSyntheticEdges(
+  indexedFiles: IndexedFile[],
+  edges: Edge[],
+  fullFileIdSet: Set<string>,
+  rootDir: string,
+): Promise<void> {
+  const rubyFiles = indexedFiles.filter(f => f.language === 'ruby');
+  if (rubyFiles.length === 0) return;
+
+  let appRoot: string | null = null;
+  for (const f of rubyFiles) {
+    const idx = f.path.lastIndexOf('/app/');
+    if (idx >= 0) { appRoot = f.path.substring(0, idx); break; }
+  }
+  if (!appRoot) return;
+
+  const fqcnIndex = await buildRailsFqcnIndex(appRoot, fullFileIdSet);
+  const seen = new Set<string>();
+  for (const e of edges) seen.add(`${e.from}|${e.to}`);
+
+  for (const f of rubyFiles) {
+    if (f.constantReferences?.length) {
+      for (const ref of f.constantReferences) {
+        const targetFile = resolveRailsConstant(ref, fqcnIndex);
+        if (!targetFile || targetFile === f.path) continue;
+        const targetId = buildFileId(relative(rootDir, targetFile));
+        const key = `${f.id}|${targetId}`;
+        if (seen.has(key) || !fullFileIdSet.has(targetId)) continue;
+        seen.add(key);
+        edges.push({ from: f.id, to: targetId, type: 'import', specifier: `const:${ref}` });
+      }
+    }
+    if (f.renderTargets?.length) {
+      for (const rt of f.renderTargets) {
+        const targetFile = await resolveRailsView(rt.kind, rt.name, f.path, appRoot);
+        if (!targetFile) continue;
+        const targetId = buildFileId(relative(rootDir, targetFile));
+        const key = `${f.id}|${targetId}`;
+        if (seen.has(key) || !fullFileIdSet.has(targetId)) continue;
+        seen.add(key);
+        edges.push({ from: f.id, to: targetId, type: 'import', specifier: `render:${rt.kind}:${rt.name}` });
+      }
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Argument parsing
@@ -156,6 +206,8 @@ export async function buildIndex(
             isTestFile: isTestPath(wf.relativePath),
             symbols: parsed.symbols,
             reexportRatio: parsed.reexportRatio,
+            constantReferences: parsed.constantReferences,
+            renderTargets: parsed.renderTargets,
           };
           indexedFiles.push(file);
           langCount[wf.language] = (langCount[wf.language] ?? 0) + 1;
@@ -179,6 +231,9 @@ export async function buildIndex(
   log(quiet, '[coldstart] Resolving imports...');
   const { edges, unresolved } = await resolveImports(indexedFiles, rootDir);
   log(quiet, `[coldstart] Resolved ${edges.length} edges (${unresolved.length} unresolved)`);
+
+  const fullFileIdSet = new Set(indexedFiles.map(f => f.id));
+  await addRailsSyntheticEdges(indexedFiles, edges, fullFileIdSet, rootDir);
   if (!quiet) {
     const langById = new Map(indexedFiles.map(f => [f.id, f.language]));
     const stats: Record<string, { r: number; u: number }> = {};
@@ -299,6 +354,8 @@ async function runProbe(rootDir: string, excludes: string[], includes: string[])
           isTestFile: false,
           symbols: parsed.symbols,
           reexportRatio: parsed.reexportRatio,
+          constantReferences: parsed.constantReferences,
+          renderTargets: parsed.renderTargets,
         });
       } catch { /* skip parse errors */ }
     }));
@@ -331,6 +388,8 @@ async function runProbe(rootDir: string, excludes: string[], includes: string[])
   const edges = allEdges;
   const unresolved = allUnresolved;
   const tResolve = Date.now() - tResolveStart;
+
+  await addRailsSyntheticEdges(indexedFiles, edges, fullFileIdSet, rootDir);
 
   const langById = new Map(indexedFiles.map(f => [f.id, f.language]));
   const fileById = new Map(indexedFiles.map(f => [f.id, f.relativePath]));

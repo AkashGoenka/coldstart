@@ -83,6 +83,58 @@ const RAILS_ASSOCIATION_METHODS = new Set(['has_many', 'has_one', 'belongs_to', 
 const RAILS_CALLBACK_METHODS = new Set(['before_action', 'after_action', 'around_action', 'before_filter', 'after_filter', 'validates', 'validate']);
 const RAILS_DSL_METHODS = new Set(['attr_accessor', 'attr_reader', 'attr_writer', 'delegate', 'scope', 'attribute', 'enum']);
 
+// Stoplist for Rails autoload constant resolution — framework/stdlib constants we never resolve
+const CONSTANT_STOPLIST_TOP_LEVEL = new Set([
+  // Ruby builtins
+  'Object', 'Kernel', 'Module', 'Class', 'BasicObject', 'Proc', 'Method', 'UnboundMethod',
+  'String', 'Symbol', 'Integer', 'Float', 'Numeric', 'Rational', 'Complex',
+  'TrueClass', 'FalseClass', 'NilClass', 'Array', 'Hash', 'Set', 'Range',
+  'Regexp', 'MatchData', 'Time', 'Date', 'DateTime', 'IO', 'File', 'Dir',
+  'Pathname', 'URI', 'Tempfile', 'Struct', 'OpenStruct', 'Comparable',
+  'Enumerable', 'Enumerator', 'StandardError', 'RuntimeError', 'ArgumentError',
+  'TypeError', 'NameError', 'NoMethodError', 'NotImplementedError', 'IOError',
+  'EOFError', 'SystemCallError', 'ZeroDivisionError', 'FloatDomainError',
+  'IndexError', 'KeyError', 'RangeError', 'StopIteration', 'ThreadError',
+  'FiberError', 'LocalJumpError', 'SignalException', 'Errno', 'Encoding',
+  'Thread', 'Fiber', 'Mutex', 'Queue', 'ConditionVariable', 'GC',
+  'ObjectSpace', 'Process', 'Signal', 'Math', 'Random', 'JSON', 'YAML',
+  'CSV', 'Base64', 'Digest', 'OpenSSL', 'Net', 'ERB', 'CGI', 'Logger',
+  'SecureRandom', 'FileUtils', 'Forwardable', 'Singleton', 'BigDecimal',
+  'Marshal',
+  // Rails framework
+  'Rails', 'ActiveRecord', 'ActiveModel', 'ActiveSupport', 'ActionController',
+  'ActionView', 'ActionDispatch', 'ActionMailer', 'ActionCable', 'ActionPack',
+  'ActiveJob', 'ActiveStorage', 'ActionText', 'ActionMailbox',
+  'Concern', 'Mime', 'MIME', 'I18n', 'Migration', 'Schema', 'Devise',
+  'Doorkeeper', 'Sidekiq', 'Paperclip', 'CarrierWave', 'Pundit', 'Kaminari',
+  'WillPaginate', 'RSpec', 'Minitest', 'Faker', 'FactoryBot', 'Webpacker',
+  'RSolr', 'Redis', 'Memcached', 'Resque', 'GoodJob', 'Que', 'DelayedJob',
+  'Aws', 'Azure', 'Google', 'GraphQL', 'Stripe', 'Twilio', 'Twitter',
+  'OmniAuth', 'Bundler', 'Gem', 'Rake', 'Rack', 'Sprockets',
+  'Mail', 'Nokogiri', 'HTTP', 'HTTParty', 'Faraday', 'Chewy', 'Elasticsearch',
+]);
+
+const CONSTANT_STOPLIST_PREFIXES = [
+  'ActiveRecord::', 'ActiveModel::', 'ActiveSupport::', 'ActionController::',
+  'ActionView::', 'ActionDispatch::', 'ActionMailer::', 'ActionCable::',
+  'ActiveJob::', 'ActiveStorage::', 'Rails::', 'Concern::',
+  'Devise::', 'Doorkeeper::', 'Sidekiq::', 'Pundit::', 'Kaminari::',
+  'OmniAuth::', 'OAuth::', 'OAuth2::', 'JWT::', 'OpenSSL::', 'Net::',
+  'URI::', 'Errno::', 'Encoding::', 'Process::', 'Math::', 'File::',
+  'IO::', 'Dir::', 'Thread::', 'JSON::', 'YAML::', 'CSV::', 'ERB::',
+  'Digest::', 'Base64::', 'Mime::', 'MIME::', 'I18n::', 'Aws::',
+  'Google::', 'GraphQL::', 'Stripe::', 'Mail::', 'Nokogiri::',
+  'HTTP::', 'HTTParty::', 'Faraday::', 'Chewy::', 'Sprockets::',
+  'Bundler::', 'Gem::', 'Rake::', 'Rack::', 'Logger::', 'FactoryBot::', 'RSpec::', 'Minitest::',
+];
+
+function isConstantStoplisted(fqcn: string): boolean {
+  const head = fqcn.split('::')[0];
+  if (CONSTANT_STOPLIST_TOP_LEVEL.has(head)) return true;
+  for (const p of CONSTANT_STOPLIST_PREFIXES) if (fqcn.startsWith(p)) return true;
+  return false;
+}
+
 /** Convert snake_case association name to CamelCase model name */
 function associationToModel(name: string): string {
   // has_many :comments → Comment; has_one :profile → Profile
@@ -825,6 +877,147 @@ export function resolveRubyRequire(
 }
 
 // ---------------------------------------------------------------------------
+// Constant and render collection (Rails autoload + render)
+// ---------------------------------------------------------------------------
+
+function isConstantDefinitionContext(node: TSNode): boolean {
+  // True if this constant is a definition (class/module name, assignment LHS), not a reference.
+  const p = node.parent;
+  if (!p) return false;
+  // class Foo / module Foo — constant is first named child, don't resolve
+  if ((p.type === 'class' || p.type === 'module') && p.namedChildren[0] === node) return true;
+  // Assignment LHS (FOO = 1) — don't resolve
+  if (p.type === 'assignment' && p.namedChildren[0] === node) return true;
+  return false;
+}
+
+function shouldSkipConstantContext(node: TSNode): boolean {
+  // Skip if we're inside include/extend/prepend (already handled) or has_many/etc.
+  let p = node.parent;
+  while (p) {
+    if (p.type === 'call' || p.type === 'command') {
+      const mNode = p.type === 'call'
+        ? p.childForFieldName?.('method')
+        : p.namedChildren[0];
+      const m = mNode?.text;
+      if (m === 'include' || m === 'extend' || m === 'prepend') return true;
+    }
+    // Don't walk past statement boundaries
+    if (p.type === 'body_statement' || p.type === 'program' || p.type === 'method' || p.type === 'class' || p.type === 'module') break;
+    p = p.parent;
+  }
+  return false;
+}
+
+function collectConstantReferences(root: TSNode): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  function visit(node: TSNode): void {
+    if (node.type === 'constant' || node.type === 'scope_resolution') {
+      if (node.type === 'scope_resolution') {
+        // Don't descend into scope_resolution children — we want the full path
+        if (!isConstantDefinitionContext(node) && !shouldSkipConstantContext(node)) {
+          const txt = node.text;
+          if (!seen.has(txt) && !isConstantStoplisted(txt)) {
+            seen.add(txt);
+            out.push(txt);
+          }
+        }
+        return;
+      }
+      // Bare constant
+      if (!isConstantDefinitionContext(node) && !shouldSkipConstantContext(node)) {
+        const txt = node.text;
+        if (!seen.has(txt) && !isConstantStoplisted(txt)) {
+          seen.add(txt);
+          out.push(txt);
+        }
+      }
+    }
+    for (const c of node.namedChildren) visit(c);
+  }
+  visit(root);
+  return out;
+}
+
+function collectRenderCalls(root: TSNode): Array<{ kind: 'view' | 'partial' | 'layout' | 'template'; name: string }> {
+  const out: Array<{ kind: 'view' | 'partial' | 'layout' | 'template'; name: string }> = [];
+  const seen = new Set<string>();
+  function visit(node: TSNode): void {
+    if (node.type === 'call' || node.type === 'command') {
+      const mNode = node.type === 'call'
+        ? node.childForFieldName?.('method')
+        : node.namedChildren[0];
+      if (mNode?.type === 'identifier' && mNode.text === 'render') {
+        // Collect render args
+        let argNodes: TSNode[] = [];
+        if (node.type === 'command') {
+          argNodes = node.namedChildren.slice(1);
+        } else {
+          const args = firstChildOfType(node, 'argument_list') ?? firstChildOfType(node, 'arguments');
+          if (args) argNodes = args.namedChildren;
+        }
+        if (argNodes.length === 0) {
+          for (const c of node.namedChildren) visit(c);
+          return;
+        }
+        const first = argNodes[0];
+        // render 'foo' or render :foo
+        if (first.type === 'string' || first.type === 'string_literal') {
+          const sc = firstChildOfType(first, 'string_content');
+          const txt = sc?.text ?? first.text.replace(/^['"]|['"]$/g, '');
+          if (txt) {
+            const key = `view:${txt}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              out.push({ kind: 'view', name: txt });
+            }
+          }
+        } else if (first.type === 'simple_symbol') {
+          const txt = first.text.replace(/^:/, '');
+          const key = `view:${txt}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            out.push({ kind: 'view', name: txt });
+          }
+        } else {
+          // Hash form: render template: '...', partial: '...', layout: '...'
+          const walkPairs = (n: TSNode): void => {
+            if (n.type === 'pair' && n.namedChildren.length >= 2) {
+              const k = n.namedChildren[0];
+              const v = n.namedChildren[1];
+              const keyText = (k.type === 'hash_key_symbol' ? k.text : k.text.replace(/^:/, '')).replace(/:$/, '');
+              if (['template', 'partial', 'layout'].includes(keyText)) {
+                let vText: string | null = null;
+                if (v.type === 'string' || v.type === 'string_literal') {
+                  const sc = firstChildOfType(v, 'string_content');
+                  vText = sc?.text ?? v.text.replace(/^['"]|['"]$/g, '');
+                } else if (v.type === 'simple_symbol') {
+                  vText = v.text.replace(/^:/, '');
+                }
+                if (vText) {
+                  const kind = keyText === 'template' ? 'template' : keyText === 'partial' ? 'partial' : 'layout';
+                  const key = `${kind}:${vText}`;
+                  if (!seen.has(key)) {
+                    seen.add(key);
+                    out.push({ kind: kind as 'view' | 'partial' | 'layout' | 'template', name: vText });
+                  }
+                }
+              }
+            }
+            for (const c of n.namedChildren) walkPairs(c);
+          };
+          for (const a of argNodes) walkPairs(a);
+        }
+      }
+    }
+    for (const c of node.namedChildren) visit(c);
+  }
+  visit(root);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -833,6 +1026,8 @@ export interface RubyParseResult {
   exports: string[];
   hasDefaultExport: false;
   symbols: SymbolNode[];
+  constantReferences?: string[];  // FQCNs to resolve via Rails autoload
+  renderTargets?: Array<{ kind: 'view' | 'partial' | 'layout' | 'template'; name: string }>;  // render() targets
 }
 
 const RUBY_MAX_STRING = 32000;
@@ -960,6 +1155,15 @@ export function parseRubyContent(
     }
   }
 
+  // Collect Rails autoload constant references
+  const constantReferences = collectConstantReferences(root);
+
+  // Collect render calls (only if in controller/mailer/view)
+  const isController = fileId.includes('app/controllers/');
+  const isMailer = fileId.includes('app/mailers/');
+  const isView = fileId.includes('app/views/');
+  const renderTargets = (isController || isMailer || isView) ? collectRenderCalls(root) : [];
+
   // Resolve intra-file calls: replace plain names with full IDs
   const symbolIdByName = new Map<string, string>(rawSymbols.map(s => [s.name, s.id]));
   const resolvedSymbols = rawSymbols.map(sym => ({
@@ -972,5 +1176,7 @@ export function parseRubyContent(
     exports: [...new Set(exports)],
     hasDefaultExport: false,
     symbols: resolvedSymbols,
+    constantReferences: constantReferences.length > 0 ? constantReferences : undefined,
+    renderTargets: renderTargets.length > 0 ? renderTargets : undefined,
   };
 }

@@ -145,6 +145,8 @@ export async function parseFile(
       lineCount,
       tokenEstimate,
       symbols: rubyResult.symbols,
+      constantReferences: rubyResult.constantReferences,
+      renderTargets: rubyResult.renderTargets,
     };
   }
 
