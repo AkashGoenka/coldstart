@@ -940,83 +940,6 @@ function collectConstantReferences(root: TSNode): string[] {
   return out;
 }
 
-function collectRenderCalls(root: TSNode): Array<{ kind: 'view' | 'partial' | 'layout' | 'template'; name: string }> {
-  const out: Array<{ kind: 'view' | 'partial' | 'layout' | 'template'; name: string }> = [];
-  const seen = new Set<string>();
-  function visit(node: TSNode): void {
-    if (node.type === 'call' || node.type === 'command') {
-      const mNode = node.type === 'call'
-        ? node.childForFieldName?.('method')
-        : node.namedChildren[0];
-      if (mNode?.type === 'identifier' && mNode.text === 'render') {
-        // Collect render args
-        let argNodes: TSNode[] = [];
-        if (node.type === 'command') {
-          argNodes = node.namedChildren.slice(1);
-        } else {
-          const args = firstChildOfType(node, 'argument_list') ?? firstChildOfType(node, 'arguments');
-          if (args) argNodes = args.namedChildren;
-        }
-        if (argNodes.length === 0) {
-          for (const c of node.namedChildren) visit(c);
-          return;
-        }
-        const first = argNodes[0];
-        // render 'foo' or render :foo
-        if (first.type === 'string' || first.type === 'string_literal') {
-          const sc = firstChildOfType(first, 'string_content');
-          const txt = sc?.text ?? first.text.replace(/^['"]|['"]$/g, '');
-          if (txt) {
-            const key = `view:${txt}`;
-            if (!seen.has(key)) {
-              seen.add(key);
-              out.push({ kind: 'view', name: txt });
-            }
-          }
-        } else if (first.type === 'simple_symbol') {
-          const txt = first.text.replace(/^:/, '');
-          const key = `view:${txt}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            out.push({ kind: 'view', name: txt });
-          }
-        } else {
-          // Hash form: render template: '...', partial: '...', layout: '...'
-          const walkPairs = (n: TSNode): void => {
-            if (n.type === 'pair' && n.namedChildren.length >= 2) {
-              const k = n.namedChildren[0];
-              const v = n.namedChildren[1];
-              const keyText = (k.type === 'hash_key_symbol' ? k.text : k.text.replace(/^:/, '')).replace(/:$/, '');
-              if (['template', 'partial', 'layout'].includes(keyText)) {
-                let vText: string | null = null;
-                if (v.type === 'string' || v.type === 'string_literal') {
-                  const sc = firstChildOfType(v, 'string_content');
-                  vText = sc?.text ?? v.text.replace(/^['"]|['"]$/g, '');
-                } else if (v.type === 'simple_symbol') {
-                  vText = v.text.replace(/^:/, '');
-                }
-                if (vText) {
-                  const kind = keyText === 'template' ? 'template' : keyText === 'partial' ? 'partial' : 'layout';
-                  const key = `${kind}:${vText}`;
-                  if (!seen.has(key)) {
-                    seen.add(key);
-                    out.push({ kind: kind as 'view' | 'partial' | 'layout' | 'template', name: vText });
-                  }
-                }
-              }
-            }
-            for (const c of n.namedChildren) walkPairs(c);
-          };
-          for (const a of argNodes) walkPairs(a);
-        }
-      }
-    }
-    for (const c of node.namedChildren) visit(c);
-  }
-  visit(root);
-  return out;
-}
-
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -1027,7 +950,6 @@ export interface RubyParseResult {
   hasDefaultExport: false;
   symbols: SymbolNode[];
   constantReferences?: string[];  // FQCNs to resolve via Rails autoload
-  renderTargets?: Array<{ kind: 'view' | 'partial' | 'layout' | 'template'; name: string }>;  // render() targets
 }
 
 const RUBY_MAX_STRING = 32000;
@@ -1158,12 +1080,6 @@ export function parseRubyContent(
   // Collect Rails autoload constant references
   const constantReferences = collectConstantReferences(root);
 
-  // Collect render calls (only if in controller/mailer/view)
-  const isController = fileId.includes('app/controllers/');
-  const isMailer = fileId.includes('app/mailers/');
-  const isView = fileId.includes('app/views/');
-  const renderTargets = (isController || isMailer || isView) ? collectRenderCalls(root) : [];
-
   // Resolve intra-file calls: replace plain names with full IDs
   const symbolIdByName = new Map<string, string>(rawSymbols.map(s => [s.name, s.id]));
   const resolvedSymbols = rawSymbols.map(sym => ({
@@ -1177,6 +1093,5 @@ export function parseRubyContent(
     hasDefaultExport: false,
     symbols: resolvedSymbols,
     constantReferences: constantReferences.length > 0 ? constantReferences : undefined,
-    renderTargets: renderTargets.length > 0 ? renderTargets : undefined,
   };
 }

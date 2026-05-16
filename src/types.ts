@@ -79,7 +79,6 @@ export interface IndexedFile {
   symbols: SymbolNode[];    // symbol-level nodes within this file (TS/JS only)
   reexportRatio?: number;   // TS/JS only: ratio of re-export statements to total export statements
   constantReferences?: string[];  // Ruby only: FQCNs to resolve via autoload
-  renderTargets?: Array<{ kind: 'view' | 'partial' | 'layout' | 'template'; name: string }>;  // Ruby only: render() targets
 }
 
 export interface Edge {
@@ -117,7 +116,6 @@ export interface ParsedFile {
   symbols: SymbolNode[];    // symbol-level nodes (TS/JS only, empty for other languages)
   reexportRatio?: number;   // TS/JS only
   constantReferences?: string[];  // Ruby only: FQCNs to resolve via autoload
-  renderTargets?: Array<{ kind: 'view' | 'partial' | 'layout' | 'template'; name: string }>;  // Ruby only: render() targets
 }
 
 export interface CacheMeta {
