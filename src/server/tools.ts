@@ -400,12 +400,12 @@ export function handleTraceImpact(
   // Step 2: Build symbol-level reverse adjacency map (inEdges)
   // Exclude 'exports' edges — a file exporting a symbol is not impacted by it
   // -------------------------------------------------------------------------
-  const symInEdges = new Map<string, Array<{ from: string; type: string }>>();
+  const symInEdges = new Map<string, Array<{ from: string; type: string; line?: number }>>();
 
   for (const edge of index.symbolEdges) {
     if (edge.type === 'exports') continue;
     if (!symInEdges.has(edge.to)) symInEdges.set(edge.to, []);
-    symInEdges.get(edge.to)!.push({ from: edge.from, type: edge.type });
+    symInEdges.get(edge.to)!.push({ from: edge.from, type: edge.type, line: edge.line });
   }
 
   // -------------------------------------------------------------------------
@@ -416,32 +416,33 @@ export function handleTraceImpact(
     depth: number;
     path: string[];     // symbolIds from target → this node
     relationship: string;
+    callLine?: number;  // line in the caller's file where the call to its callee occurs (calls edges)
   };
 
   const visited = new Set<string>([target.id]);
   const impacted: ImpactEntry[] = [];
 
-  // Queue items: [symbolId, depth, pathSoFar, relationship]
-  const queue: Array<{ id: string; depth: number; path: string[]; rel: string }> = [];
+  // Queue items
+  const queue: Array<{ id: string; depth: number; path: string[]; rel: string; line?: number }> = [];
 
   for (const inc of symInEdges.get(target.id) ?? []) {
     if (!visited.has(inc.from)) {
-      queue.push({ id: inc.from, depth: 1, path: [target.id, inc.from], rel: inc.type });
+      queue.push({ id: inc.from, depth: 1, path: [target.id, inc.from], rel: inc.type, line: inc.line });
     }
   }
 
   while (queue.length > 0) {
-    const { id, depth, path, rel } = queue.shift()!;
+    const { id, depth, path, rel, line } = queue.shift()!;
     if (visited.has(id)) continue;
     visited.add(id);
 
-    impacted.push({ symbolId: id, depth, path, relationship: rel });
+    impacted.push({ symbolId: id, depth, path, relationship: rel, callLine: line });
 
     if (depth >= maxDepth) continue;
 
     for (const inc of symInEdges.get(id) ?? []) {
       if (!visited.has(inc.from)) {
-        queue.push({ id: inc.from, depth: depth + 1, path: [...path, inc.from], rel: inc.type });
+        queue.push({ id: inc.from, depth: depth + 1, path: [...path, inc.from], rel: inc.type, line: inc.line });
       }
     }
   }
@@ -506,9 +507,17 @@ export function handleTraceImpact(
     },
     impacted: displayImpacted.map(entry => {
       const info = resolveId(entry.symbolId);
+      // Format: "file:line (in callerSymbol)" when line is known, else "file (in callerSymbol)".
+      // Graceful fallback for older indexes / extractors that have not been backfilled.
+      const hasLine = typeof entry.callLine === 'number' && entry.callLine > 0;
+      const location = hasLine
+        ? `${info.file}:${entry.callLine} (in ${info.name})`
+        : `${info.file} (in ${info.name})`;
       return {
         symbol: info.name,
         file: info.file,
+        ...(hasLine ? { line: entry.callLine } : {}),
+        location,
         type: info.kind,
         relationship: entry.relationship,
         depth: entry.depth,

@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { walkDirectory } from '../src/indexer/walker.js';
 import { parseFile, buildFileId } from '../src/indexer/parser.js';
 import { resolveImports } from '../src/indexer/resolvers/index.js';
-import { buildGraph, addRailsControllerViewEdges } from '../src/indexer/graph.js';
+import { buildGraph } from '../src/indexer/graph.js';
+import { addRailsSyntheticEdges } from '../src/indexer/rails-synthetic.js';
 import { buildFileDomains, isTestPath } from '../src/indexer/tokenize.js';
 import type { CodebaseIndex, IndexedFile } from '../src/types.js';
 
@@ -51,9 +52,10 @@ async function buildRailsTestIndex(rootDir: string): Promise<CodebaseIndex> {
   );
 
   const { edges } = await resolveImports(indexedFiles, rootDir);
+  const fullFileIdSet = new Set(indexedFiles.map(f => f.id));
+  await addRailsSyntheticEdges(indexedFiles, edges, fullFileIdSet, rootDir);
   const nodeIds = indexedFiles.map(f => f.id);
   const { outEdges, inEdges } = buildGraph(nodeIds, edges);
-  addRailsControllerViewEdges(new Set(nodeIds), outEdges, inEdges);
 
   for (const file of indexedFiles) {
     file.importedByCount = inEdges.get(file.id)?.length ?? 0;

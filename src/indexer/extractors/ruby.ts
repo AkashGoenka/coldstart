@@ -7,7 +7,7 @@
  */
 import { createRequire } from 'node:module';
 import { dirname, resolve, basename } from 'node:path';
-import type { SymbolNode } from '../../types.js';
+import type { SymbolNode, CallSite } from '../../types.js';
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -46,22 +46,35 @@ function firstChildOfTypes(node: TSNode, types: string[]): TSNode | null {
   return node.namedChildren.find((c: TSNode) => types.includes(c.type)) ?? null;
 }
 
-/** Collect all call node method names in a subtree */
-function collectCalls(node: TSNode, results: Set<string>): void {
+/** Collect all call node method names + first-seen line in a subtree */
+function collectCalls(node: TSNode, results: Map<string, number>): void {
   if (node.type === 'call') {
     // call grammar: field('receiver', ...) '.' field('method', identifier|constant) field('arguments', ...)?
     // Use the field accessor — `find(...)` returns the receiver when it's a bare
     // identifier/constant, not the method name.
     const methodNode = node.childForFieldName('method');
-    if (methodNode) results.add(methodNode.text);
+    if (methodNode && !results.has(methodNode.text)) {
+      results.set(methodNode.text, node.startPosition.row + 1);
+    }
   } else if (node.type === 'method_call' || node.type === 'command') {
     // bare method call: method_name args
     const methodNode = node.namedChildren[0];
-    if (methodNode?.type === 'identifier') results.add(methodNode.text);
+    if (methodNode?.type === 'identifier' && !results.has(methodNode.text)) {
+      results.set(methodNode.text, node.startPosition.row + 1);
+    }
   }
   for (const child of node.namedChildren) {
     collectCalls(child, results);
   }
+}
+
+function callsFromMap(calls: Map<string, number>, exclude?: string): CallSite[] {
+  const out: CallSite[] = [];
+  for (const [name, line] of calls) {
+    if (exclude && name === exclude) continue;
+    out.push({ name, line });
+  }
+  return out;
 }
 
 /** Get constant name from a scope_resolution or constant node */
@@ -82,6 +95,58 @@ function getConstantName(node: TSNode): string | null {
 const RAILS_ASSOCIATION_METHODS = new Set(['has_many', 'has_one', 'belongs_to', 'has_and_belongs_to_many']);
 const RAILS_CALLBACK_METHODS = new Set(['before_action', 'after_action', 'around_action', 'before_filter', 'after_filter', 'validates', 'validate']);
 const RAILS_DSL_METHODS = new Set(['attr_accessor', 'attr_reader', 'attr_writer', 'delegate', 'scope', 'attribute', 'enum']);
+
+// Stoplist for Rails autoload constant resolution — framework/stdlib constants we never resolve
+const CONSTANT_STOPLIST_TOP_LEVEL = new Set([
+  // Ruby builtins
+  'Object', 'Kernel', 'Module', 'Class', 'BasicObject', 'Proc', 'Method', 'UnboundMethod',
+  'String', 'Symbol', 'Integer', 'Float', 'Numeric', 'Rational', 'Complex',
+  'TrueClass', 'FalseClass', 'NilClass', 'Array', 'Hash', 'Set', 'Range',
+  'Regexp', 'MatchData', 'Time', 'Date', 'DateTime', 'IO', 'File', 'Dir',
+  'Pathname', 'URI', 'Tempfile', 'Struct', 'OpenStruct', 'Comparable',
+  'Enumerable', 'Enumerator', 'StandardError', 'RuntimeError', 'ArgumentError',
+  'TypeError', 'NameError', 'NoMethodError', 'NotImplementedError', 'IOError',
+  'EOFError', 'SystemCallError', 'ZeroDivisionError', 'FloatDomainError',
+  'IndexError', 'KeyError', 'RangeError', 'StopIteration', 'ThreadError',
+  'FiberError', 'LocalJumpError', 'SignalException', 'Errno', 'Encoding',
+  'Thread', 'Fiber', 'Mutex', 'Queue', 'ConditionVariable', 'GC',
+  'ObjectSpace', 'Process', 'Signal', 'Math', 'Random', 'JSON', 'YAML',
+  'CSV', 'Base64', 'Digest', 'OpenSSL', 'Net', 'ERB', 'CGI', 'Logger',
+  'SecureRandom', 'FileUtils', 'Forwardable', 'Singleton', 'BigDecimal',
+  'Marshal',
+  // Rails framework
+  'Rails', 'ActiveRecord', 'ActiveModel', 'ActiveSupport', 'ActionController',
+  'ActionView', 'ActionDispatch', 'ActionMailer', 'ActionCable', 'ActionPack',
+  'ActiveJob', 'ActiveStorage', 'ActionText', 'ActionMailbox',
+  'Concern', 'Mime', 'MIME', 'I18n', 'Migration', 'Schema', 'Devise',
+  'Doorkeeper', 'Sidekiq', 'Paperclip', 'CarrierWave', 'Pundit', 'Kaminari',
+  'WillPaginate', 'RSpec', 'Minitest', 'Faker', 'FactoryBot', 'Webpacker',
+  'RSolr', 'Redis', 'Memcached', 'Resque', 'GoodJob', 'Que', 'DelayedJob',
+  'Aws', 'Azure', 'Google', 'GraphQL', 'Stripe', 'Twilio', 'Twitter',
+  'OmniAuth', 'Bundler', 'Gem', 'Rake', 'Rack', 'Sprockets',
+  'Mail', 'Nokogiri', 'HTTP', 'HTTParty', 'Faraday', 'Chewy', 'Elasticsearch',
+]);
+
+const CONSTANT_STOPLIST_PREFIXES = [
+  'ActiveRecord::', 'ActiveModel::', 'ActiveSupport::', 'ActionController::',
+  'ActionView::', 'ActionDispatch::', 'ActionMailer::', 'ActionCable::',
+  'ActiveJob::', 'ActiveStorage::', 'Rails::', 'Concern::',
+  'Devise::', 'Doorkeeper::', 'Sidekiq::', 'Pundit::', 'Kaminari::',
+  'OmniAuth::', 'OAuth::', 'OAuth2::', 'JWT::', 'OpenSSL::', 'Net::',
+  'URI::', 'Errno::', 'Encoding::', 'Process::', 'Math::', 'File::',
+  'IO::', 'Dir::', 'Thread::', 'JSON::', 'YAML::', 'CSV::', 'ERB::',
+  'Digest::', 'Base64::', 'Mime::', 'MIME::', 'I18n::', 'Aws::',
+  'Google::', 'GraphQL::', 'Stripe::', 'Mail::', 'Nokogiri::',
+  'HTTP::', 'HTTParty::', 'Faraday::', 'Chewy::', 'Sprockets::',
+  'Bundler::', 'Gem::', 'Rake::', 'Rack::', 'Logger::', 'FactoryBot::', 'RSpec::', 'Minitest::',
+];
+
+function isConstantStoplisted(fqcn: string): boolean {
+  const head = fqcn.split('::')[0];
+  if (CONSTANT_STOPLIST_TOP_LEVEL.has(head)) return true;
+  for (const p of CONSTANT_STOPLIST_PREFIXES) if (fqcn.startsWith(p)) return true;
+  return false;
+}
 
 /** Convert snake_case association name to CamelCase model name */
 function associationToModel(name: string): string {
@@ -558,7 +623,7 @@ function extractMethod(
       : `${parentName}.${methodName}`
     : methodName;
 
-  const calls = new Set<string>();
+  const calls = new Map<string, number>();
   const body = firstChildOfTypes(node, ['body_statement', 'do_block']);
   if (body) collectCalls(body, calls);
   // also scan the whole node for calls
@@ -571,7 +636,7 @@ function extractMethod(
     startLine,
     endLine,
     isExported: !parentName, // top-level methods are "exported" by default in Ruby
-    calls: [...calls].filter(c => c !== methodName),
+    calls: callsFromMap(calls, methodName),
     implementsNames: [],
   };
 }
@@ -825,6 +890,70 @@ export function resolveRubyRequire(
 }
 
 // ---------------------------------------------------------------------------
+// Constant and render collection (Rails autoload + render)
+// ---------------------------------------------------------------------------
+
+function isConstantDefinitionContext(node: TSNode): boolean {
+  // True if this constant is a definition (class/module name, assignment LHS), not a reference.
+  const p = node.parent;
+  if (!p) return false;
+  // class Foo / module Foo — constant is first named child, don't resolve
+  if ((p.type === 'class' || p.type === 'module') && p.namedChildren[0] === node) return true;
+  // Assignment LHS (FOO = 1) — don't resolve
+  if (p.type === 'assignment' && p.namedChildren[0] === node) return true;
+  return false;
+}
+
+function shouldSkipConstantContext(node: TSNode): boolean {
+  // Skip if we're inside include/extend/prepend (already handled) or has_many/etc.
+  let p = node.parent;
+  while (p) {
+    if (p.type === 'call' || p.type === 'command') {
+      const mNode = p.type === 'call'
+        ? p.childForFieldName?.('method')
+        : p.namedChildren[0];
+      const m = mNode?.text;
+      if (m === 'include' || m === 'extend' || m === 'prepend') return true;
+    }
+    // Don't walk past statement boundaries
+    if (p.type === 'body_statement' || p.type === 'program' || p.type === 'method' || p.type === 'class' || p.type === 'module') break;
+    p = p.parent;
+  }
+  return false;
+}
+
+function collectConstantReferences(root: TSNode): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  function visit(node: TSNode): void {
+    if (node.type === 'constant' || node.type === 'scope_resolution') {
+      if (node.type === 'scope_resolution') {
+        // Don't descend into scope_resolution children — we want the full path
+        if (!isConstantDefinitionContext(node) && !shouldSkipConstantContext(node)) {
+          const txt = node.text;
+          if (!seen.has(txt) && !isConstantStoplisted(txt)) {
+            seen.add(txt);
+            out.push(txt);
+          }
+        }
+        return;
+      }
+      // Bare constant
+      if (!isConstantDefinitionContext(node) && !shouldSkipConstantContext(node)) {
+        const txt = node.text;
+        if (!seen.has(txt) && !isConstantStoplisted(txt)) {
+          seen.add(txt);
+          out.push(txt);
+        }
+      }
+    }
+    for (const c of node.namedChildren) visit(c);
+  }
+  visit(root);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -833,6 +962,7 @@ export interface RubyParseResult {
   exports: string[];
   hasDefaultExport: false;
   symbols: SymbolNode[];
+  constantReferences?: string[];  // FQCNs to resolve via Rails autoload
 }
 
 const RUBY_MAX_STRING = 32000;
@@ -960,11 +1090,14 @@ export function parseRubyContent(
     }
   }
 
+  // Collect Rails autoload constant references
+  const constantReferences = collectConstantReferences(root);
+
   // Resolve intra-file calls: replace plain names with full IDs
   const symbolIdByName = new Map<string, string>(rawSymbols.map(s => [s.name, s.id]));
   const resolvedSymbols = rawSymbols.map(sym => ({
     ...sym,
-    calls: sym.calls.map(name => symbolIdByName.get(name) ?? name),
+    calls: sym.calls.map(c => ({ name: symbolIdByName.get(c.name) ?? c.name, line: c.line })),
   }));
 
   return {
@@ -972,5 +1105,6 @@ export function parseRubyContent(
     exports: [...new Set(exports)],
     hasDefaultExport: false,
     symbols: resolvedSymbols,
+    constantReferences: constantReferences.length > 0 ? constantReferences : undefined,
   };
 }

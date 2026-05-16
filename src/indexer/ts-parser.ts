@@ -6,7 +6,7 @@
  * This supplements the regex parser in parser.ts for TS/JS files only.
  */
 import { createRequire } from 'node:module';
-import type { SymbolNode, SymbolKind } from '../types.js';
+import type { SymbolNode, SymbolKind, CallSite } from '../types.js';
 
 // Native addons need createRequire in an ESM context
 const require = createRequire(import.meta.url);
@@ -88,7 +88,7 @@ function extractNestedFunctions(
       const nameNode = firstChildOfType(child, 'identifier');
       if (!nameNode) continue;
       const innerName = nameNode.text;
-      const calls = new Set<string>();
+      const calls = new Map<string, number>();
       const innerBody = firstChildOfType(child, 'statement_block');
       if (innerBody) collectCalls(innerBody, calls);
       nested.push({
@@ -98,7 +98,7 @@ function extractNestedFunctions(
         startLine: child.startPosition.row + 1,
         endLine: child.endPosition.row + 1,
         isExported: false,
-        calls: [...calls].filter(c => c !== innerName),
+        calls: callsFromMap(calls, innerName),
         implementsNames: [],
       });
       continue;
@@ -115,7 +115,7 @@ function extractNestedFunctions(
           (c: TSNode) => c.type === 'arrow_function' || c.type === 'function_expression',
         );
         if (!value) continue;
-        const calls = new Set<string>();
+        const calls = new Map<string, number>();
         const innerBody = firstChildOfType(value, 'statement_block');
         if (innerBody) collectCalls(innerBody, calls);
         nested.push({
@@ -125,7 +125,7 @@ function extractNestedFunctions(
           startLine: child.startPosition.row + 1,
           endLine: child.endPosition.row + 1,
           isExported: false,
-          calls: [...calls].filter(c => c !== innerName),
+          calls: callsFromMap(calls, innerName),
           implementsNames: [],
         });
       }
@@ -136,22 +136,34 @@ function extractNestedFunctions(
 }
 
 // ---------------------------------------------------------------------------
-// Walk a subtree and collect all call_expression callee names
+// Walk a subtree and collect all call_expression callee names + their lines.
+// Keeps the first-seen line per callee name (sufficient for the
+// trace-impact "go to first call site" use case).
 // ---------------------------------------------------------------------------
-function collectCalls(node: TSNode, results: Set<string>): void {
+function collectCalls(node: TSNode, results: Map<string, number>): void {
   if (node.type === 'call_expression') {
     const callee = node.namedChildren[0];
+    const line = node.startPosition.row + 1;
     if (callee?.type === 'identifier') {
-      results.add(callee.text);
+      if (!results.has(callee.text)) results.set(callee.text, line);
     } else if (callee?.type === 'member_expression') {
       // e.g. this.hashPassword(...) — take property name only
       const prop = callee.namedChildren.find((c: TSNode) => c.type === 'property_identifier');
-      if (prop) results.add(prop.text);
+      if (prop && !results.has(prop.text)) results.set(prop.text, line);
     }
   }
   for (const child of node.namedChildren) {
     collectCalls(child, results);
   }
+}
+
+function callsFromMap(calls: Map<string, number>, exclude?: string): CallSite[] {
+  const out: CallSite[] = [];
+  for (const [name, line] of calls) {
+    if (exclude && name === exclude) continue;
+    out.push({ name, line });
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -172,7 +184,7 @@ function extractFromDeclaration(
       const namePart = firstChildOfType(decl, 'identifier');
       if (!namePart) return null;
       const name = namePart.text;
-      const calls = new Set<string>();
+      const calls = new Map<string, number>();
       const body = firstChildOfType(decl, 'statement_block');
       if (body) collectCalls(body, calls);
       const parent: SymbolNode = {
@@ -182,7 +194,7 @@ function extractFromDeclaration(
         startLine,
         endLine,
         isExported,
-        calls: [...calls].filter(c => c !== name), // exclude self-recursion
+        calls: callsFromMap(calls, name), // exclude self-recursion
         implementsNames: [],
       };
       const nested = body ? extractNestedFunctions(body, fileId, name) : [];
@@ -236,7 +248,7 @@ function extractFromDeclaration(
           if (child.type === 'method_definition') {
             const methodName = firstChildOfType(child, 'property_identifier');
             if (!methodName || methodName.text === 'constructor') continue;
-            const calls = new Set<string>();
+            const calls = new Map<string, number>();
             const methodBody = firstChildOfType(child, 'statement_block');
             if (methodBody) collectCalls(methodBody, calls);
             symbols.push({
@@ -246,7 +258,7 @@ function extractFromDeclaration(
               startLine: child.startPosition.row + 1,
               endLine: child.endPosition.row + 1,
               isExported: false, // methods are not directly exported
-              calls: [...calls],
+              calls: callsFromMap(calls),
               implementsNames: [],
             });
           }
@@ -301,7 +313,7 @@ function extractFromDeclaration(
           (c: TSNode) => c.type === 'arrow_function' || c.type === 'function_expression',
         );
         const body = value ? firstChildOfType(value, 'statement_block') : null;
-        const calls = new Set<string>();
+        const calls = new Map<string, number>();
         if (body) collectCalls(body, calls);
         nodes.push({
           id: `${fileId}#${name}`,
@@ -310,7 +322,7 @@ function extractFromDeclaration(
           startLine,
           endLine,
           isExported,
-          calls: [...calls].filter(c => c !== name),
+          calls: callsFromMap(calls, name),
           implementsNames: [],
         });
         if (body) {
@@ -496,15 +508,15 @@ export function parseTsContent(
     const parentPrefix = dotIdx !== -1 ? sym.name.slice(0, dotIdx) : null;
     return {
       ...sym,
-      calls: sym.calls.map(name => {
-        if (symbolIdByName.has(name)) return symbolIdByName.get(name)!;
+      calls: sym.calls.map(c => {
+        if (symbolIdByName.has(c.name)) return { name: symbolIdByName.get(c.name)!, line: c.line };
         // Nested sibling resolution: bare call inside a nested function resolved
         // against parent-scoped symbol (e.g. "handleError" → "Parent.handleError")
         if (parentPrefix !== null) {
-          const scoped = `${parentPrefix}.${name}`;
-          if (symbolIdByName.has(scoped)) return symbolIdByName.get(scoped)!;
+          const scoped = `${parentPrefix}.${c.name}`;
+          if (symbolIdByName.has(scoped)) return { name: symbolIdByName.get(scoped)!, line: c.line };
         }
-        return name;
+        return c;
       }),
     };
   });

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { parseFile } from '../src/indexer/parser.js';
 import { parseJavaContent } from '../src/indexer/extractors/java.js';
 import { parseRubyContent } from '../src/indexer/extractors/ruby.js';
+import { parseKotlinContent } from '../src/indexer/extractors/kotlin.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(__dirname, 'fixtures');
@@ -418,6 +419,35 @@ describe('ruby-parser — symbol extraction (direct)', () => {
     expect(method!.kind).toBe('method');
   });
 
+  it('records the AST start line for each call site in .calls', () => {
+    // Lines are 1-indexed, and the leading newline in the template string is line 1.
+    // Layout:
+    //   line 1: (blank, from the leading "\n")
+    //   line 2: "class AuthService"
+    //   line 3: "  def login(email, password)"
+    //   line 4: "    verify(password)"
+    //   line 5: "    audit_log('login attempt')"
+    //   line 6: "  end"
+    //   line 7: "end"
+    const src = `
+class AuthService
+  def login(email, password)
+    verify(password)
+    audit_log('login attempt')
+  end
+end
+`;
+    const result = parseRubyContent(src, 'src/auth_service.rb');
+    const method = result.symbols.find(s => s.name === 'AuthService.login');
+    expect(method).toBeDefined();
+    const verifyCall = method!.calls.find(c => c.name === 'verify' || c.name.endsWith('#verify'));
+    const auditCall = method!.calls.find(c => c.name === 'audit_log');
+    expect(verifyCall).toBeDefined();
+    expect(verifyCall!.line).toBe(4);
+    expect(auditCall).toBeDefined();
+    expect(auditCall!.line).toBe(5);
+  });
+
   it('extracts singleton (class) methods', () => {
     const src = `
       class AuthService
@@ -637,5 +667,64 @@ describe('ruby-parser — symbol extraction (direct)', () => {
     expect(result.symbols.find(s => s.name === 'Post.title=')).toBeDefined();
     expect(result.symbols.find(s => s.name === 'Post.author')).toBeDefined();
     expect(result.symbols.find(s => s.name === 'Post.email')).toBeDefined();
+  });
+});
+
+// =============================================================================
+// Kotlin — call-site line numbers
+// =============================================================================
+
+describe('kotlin-extractor — call-site line numbers', () => {
+  it('records the AST start line for each call site in .calls (method body)', () => {
+    // Lines are 1-indexed; leading newline is line 1.
+    // Layout:
+    //   line 1: (blank)
+    //   line 2: "class AuthService {"
+    //   line 3: "    fun doWork() {"
+    //   line 4: "        helperOne()"
+    //   line 5: "        receiver.helperTwo()"
+    //   line 6: "    }"
+    //   line 7: "}"
+    const src = `
+class AuthService {
+    fun doWork() {
+        helperOne()
+        receiver.helperTwo()
+    }
+}
+`;
+    const result = parseKotlinContent(src, 'src/AuthService.kt');
+    const method = result.symbols.find(s => s.name === 'AuthService.doWork');
+    expect(method).toBeDefined();
+    const callOne = method!.calls.find(c => c.name === 'helperOne');
+    const callTwo = method!.calls.find(c => c.name === 'helperTwo');
+    expect(callOne).toBeDefined();
+    expect(callOne!.line).toBe(4);
+    expect(callTwo).toBeDefined();
+    expect(callTwo!.line).toBe(5);
+  });
+
+  it('records the AST start line for call sites in a top-level function', () => {
+    // Layout:
+    //   line 1: (blank)
+    //   line 2: "fun process(input: String): String {"
+    //   line 3: "    val cleaned = sanitize(input)"
+    //   line 4: "    return formatter.format(cleaned)"
+    //   line 5: "}"
+    const src = `
+fun process(input: String): String {
+    val cleaned = sanitize(input)
+    return formatter.format(cleaned)
+}
+`;
+    const result = parseKotlinContent(src, 'src/util.kt');
+    const fn = result.symbols.find(s => s.name === 'process');
+    expect(fn).toBeDefined();
+    const sanitizeCall = fn!.calls.find(c => c.name === 'sanitize');
+    const formatCall = fn!.calls.find(c => c.name === 'format');
+    expect(sanitizeCall).toBeDefined();
+    expect(sanitizeCall!.line).toBe(3);
+    expect(formatCall).toBeDefined();
+    expect(formatCall!.line).toBe(4);
   });
 });

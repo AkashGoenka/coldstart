@@ -6,7 +6,7 @@
  * Follows the same interface and patterns as ts-parser.ts.
  */
 import { createRequire } from 'node:module';
-import type { SymbolNode, SymbolKind } from '../../types.js';
+import type { SymbolNode, SymbolKind, CallSite } from '../../types.js';
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -46,19 +46,30 @@ function firstChildOfTypes(node: TSNode, types: string[]): TSNode | null {
   return node.namedChildren.find((c: TSNode) => types.includes(c.type)) ?? null;
 }
 
-/** Recursively walk a node and collect method_invocation callee names */
-function collectCalls(node: TSNode, results: Set<string>): void {
+/** Recursively walk a node and collect method_invocation callee names + first-seen line. */
+function collectCalls(node: TSNode, results: Map<string, number>): void {
   if (node.type === 'method_invocation') {
     // method_invocation grammar: field('object', ...)? field('name', identifier) field('arguments', ...)
     // Use the field accessor — `find(c.type === 'identifier')` returns the receiver
     // identifier when the object is a bare variable (`dispatcher.notifyMessagePost(x)`),
     // not the method name. That made every member-call invisible to trace-impact.
     const nameNode = node.childForFieldName('name');
-    if (nameNode) results.add(nameNode.text);
+    if (nameNode && !results.has(nameNode.text)) {
+      results.set(nameNode.text, node.startPosition.row + 1);
+    }
   }
   for (const child of node.namedChildren) {
     collectCalls(child, results);
   }
+}
+
+function callsFromMap(calls: Map<string, number>, exclude?: string): CallSite[] {
+  const out: CallSite[] = [];
+  for (const [name, line] of calls) {
+    if (exclude && name === exclude) continue;
+    out.push({ name, line });
+  }
+  return out;
 }
 
 /** Strip generic type parameters: List<String> → List */
@@ -140,7 +151,7 @@ function extractClassMembers(
       const nameNode = firstChildOfType(child, 'identifier');
       if (!nameNode) continue;
       const methodName = nameNode.text;
-      const calls = new Set<string>();
+      const calls = new Map<string, number>();
       const methodBody = firstChildOfType(child, 'block');
       if (methodBody) collectCalls(methodBody, calls);
       const annotations = getAnnotations(child);
@@ -151,7 +162,7 @@ function extractClassMembers(
         startLine,
         endLine,
         isExported: isPublic(child),
-        calls: [...calls].filter(c => c !== methodName),
+        calls: callsFromMap(calls, methodName),
         implementsNames: [],
       };
       if (annotations.length > 0) symbol.annotations = annotations;
@@ -160,7 +171,7 @@ function extractClassMembers(
       const nameNode = firstChildOfType(child, 'identifier');
       if (!nameNode) continue;
       const ctorName = nameNode.text;
-      const calls = new Set<string>();
+      const calls = new Map<string, number>();
       const ctorBody = firstChildOfType(child, 'constructor_body');
       if (ctorBody) collectCalls(ctorBody, calls);
       const annotations = getAnnotations(child);
@@ -171,7 +182,7 @@ function extractClassMembers(
         startLine,
         endLine,
         isExported: isPublic(child),
-        calls: [...calls],
+        calls: callsFromMap(calls),
         implementsNames: [],
       };
       if (annotations.length > 0) symbol.annotations = annotations;
@@ -478,7 +489,7 @@ export function parseJavaContent(
   const symbolIdByName = new Map<string, string>(rawSymbols.map(s => [s.name, s.id]));
   const resolvedSymbols = rawSymbols.map(sym => ({
     ...sym,
-    calls: sym.calls.map(name => symbolIdByName.get(name) ?? name),
+    calls: sym.calls.map(c => ({ name: symbolIdByName.get(c.name) ?? c.name, line: c.line })),
   }));
 
   return {
