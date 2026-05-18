@@ -21,6 +21,9 @@ import { walkDirectory } from './indexer/walker.js';
 import { parseFile, buildFileId } from './indexer/parser.js';
 import { resolveImports } from './indexer/resolvers/index.js';
 import { addRailsSyntheticEdges } from './indexer/rails-synthetic.js';
+import { addLaravelSyntheticEdges } from './indexer/laravel-synthetic.js';
+import { addCSharpSyntheticEdges } from './indexer/csharp-synthetic.js';
+import { addDjangoSyntheticEdges } from './indexer/django-synthetic.js';
 import { buildGraph } from './indexer/graph.js';
 import { buildFileDomains, isTestPath } from './indexer/tokenize.js';
 import { buildSymbolEdges } from './indexer/symbol-edges.js';
@@ -158,6 +161,10 @@ export async function buildIndex(
             symbols: parsed.symbols,
             reexportRatio: parsed.reexportRatio,
             constantReferences: parsed.constantReferences,
+            partialDeclarations: parsed.partialDeclarations,
+            eloquentRelations: parsed.eloquentRelations,
+            containerResolutions: parsed.containerResolutions,
+            djangoConventionRefs: parsed.djangoConventionRefs,
           };
           indexedFiles.push(file);
           langCount[wf.language] = (langCount[wf.language] ?? 0) + 1;
@@ -184,6 +191,9 @@ export async function buildIndex(
 
   const fullFileIdSet = new Set(indexedFiles.map(f => f.id));
   await addRailsSyntheticEdges(indexedFiles, edges, fullFileIdSet, rootDir);
+  await addLaravelSyntheticEdges(indexedFiles, edges, fullFileIdSet, rootDir);
+  await addCSharpSyntheticEdges(indexedFiles, edges, fullFileIdSet, rootDir);
+  await addDjangoSyntheticEdges(indexedFiles, edges, fullFileIdSet, rootDir);
   if (!quiet) {
     const langById = new Map(indexedFiles.map(f => [f.id, f.language]));
     const stats: Record<string, { r: number; u: number }> = {};
@@ -264,6 +274,19 @@ export async function buildIndex(
   };
 }
 
+// Bucket an edge specifier into a coarse key for --probe output.
+// - synthetic prefixes like `const:Foo` / `partial:UserService` → `const:*` / `partial:*`
+//   (last segment is class-like, generalize it)
+// - `convention:django:middleware` → keep as-is (categorical, not class-specific)
+// - regular imports (file paths, package names, no colon) → `regular`
+function bucketSpecifier(spec: string): string {
+  if (!spec.includes(':')) return 'regular';
+  const parts = spec.split(':');
+  const last = parts[parts.length - 1];
+  if (/^[A-Z]/.test(last)) return parts.slice(0, -1).join(':') + ':*';
+  return spec;
+}
+
 // ---------------------------------------------------------------------------
 // Probe mode: walk → parse → resolve, emit JSON stats to stdout, exit.
 // Per-language: total imports, resolved, unresolved, plus top-N unresolved
@@ -303,6 +326,10 @@ async function runProbe(rootDir: string, excludes: string[], includes: string[])
           symbols: parsed.symbols,
           reexportRatio: parsed.reexportRatio,
           constantReferences: parsed.constantReferences,
+          partialDeclarations: parsed.partialDeclarations,
+          eloquentRelations: parsed.eloquentRelations,
+          containerResolutions: parsed.containerResolutions,
+          djangoConventionRefs: parsed.djangoConventionRefs,
         });
       } catch { /* skip parse errors */ }
     }));
@@ -337,6 +364,9 @@ async function runProbe(rootDir: string, excludes: string[], includes: string[])
   const tResolve = Date.now() - tResolveStart;
 
   await addRailsSyntheticEdges(indexedFiles, edges, fullFileIdSet, rootDir);
+  await addLaravelSyntheticEdges(indexedFiles, edges, fullFileIdSet, rootDir);
+  await addCSharpSyntheticEdges(indexedFiles, edges, fullFileIdSet, rootDir);
+  await addDjangoSyntheticEdges(indexedFiles, edges, fullFileIdSet, rootDir);
 
   const langById = new Map(indexedFiles.map(f => [f.id, f.language]));
   const fileById = new Map(indexedFiles.map(f => [f.id, f.relativePath]));
@@ -368,6 +398,15 @@ async function runProbe(rootDir: string, excludes: string[], includes: string[])
     else b.unresolvedBySpec.set(u.specifier, { count: 1, sampleFrom: fileById.get(u.from) ?? '' });
   }
 
+  const edgesBySpecifier: Record<string, number> = {};
+  for (const e of edges) {
+    const bucket = bucketSpecifier(e.specifier);
+    edgesBySpecifier[bucket] = (edgesBySpecifier[bucket] ?? 0) + 1;
+  }
+  const sortedEdgesBySpecifier = Object.fromEntries(
+    Object.entries(edgesBySpecifier).sort((a, b) => b[1] - a[1]),
+  );
+
   const out = {
     rootDir,
     totalFiles: indexedFiles.length,
@@ -375,6 +414,7 @@ async function runProbe(rootDir: string, excludes: string[], includes: string[])
     totalUnresolved: unresolved.length,
     elapsedMs: Date.now() - start,
     phaseMs: { walk: tWalk, parse: tParse, resolve: tResolve, resolveByLang: langTimes },
+    edgesBySpecifier: sortedEdgesBySpecifier,
     languages: Object.fromEntries(
       [...byLang.entries()]
         .sort((a, b) => b[1].totalImports - a[1].totalImports)
