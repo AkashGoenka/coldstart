@@ -112,6 +112,76 @@ function isStaticFinal(node: TSNode): boolean {
   return mods.includes('static') && mods.includes('final');
 }
 
+// ---------------------------------------------------------------------------
+// Same-package short-name qualification
+// ---------------------------------------------------------------------------
+// Java permits referencing types in the same package without an explicit import.
+// The extractor walks the AST for bare type-identifier references and qualifies
+// them as `<packageName>.<bareName>` before pushing into imports[]. The resolver
+// then looks them up against the FQCN index — same path as explicit imports.
+// See coldstart/docs/jvm-same-package-spec.md.
+
+const JAVA_LANG_SHORTLIST = new Set([
+  // java.lang types
+  'String', 'Object', 'Integer', 'Long', 'Boolean', 'Double', 'Float',
+  'Character', 'Byte', 'Short', 'Void', 'Number', 'Math', 'System',
+  'Thread', 'Runnable', 'Exception', 'RuntimeException', 'Throwable',
+  'Error', 'Class', 'Enum', 'Iterable', 'Comparable', 'CharSequence',
+  'StringBuilder', 'StringBuffer', 'AutoCloseable',
+  // common java.lang annotations
+  'Override', 'Deprecated', 'SuppressWarnings', 'SafeVarargs',
+  'FunctionalInterface',
+  // java.util — extremely common in JDK/Spring code; never project-local
+  'List', 'Map', 'Set', 'Collection', 'Iterator', 'Optional', 'Arrays',
+  'Collections', 'Objects', 'ArrayList', 'LinkedList', 'HashMap',
+  'LinkedHashMap', 'TreeMap', 'HashSet', 'LinkedHashSet', 'TreeSet',
+  'Queue', 'Deque', 'ArrayDeque', 'Stack', 'Vector', 'Properties',
+  'Date', 'Calendar', 'TimeZone', 'UUID', 'Random', 'Locale',
+  'Comparator', 'Scanner', 'EnumSet', 'EnumMap', 'BitSet',
+  // java.util.function
+  'Function', 'BiFunction', 'Predicate', 'BiPredicate', 'Consumer',
+  'BiConsumer', 'Supplier', 'UnaryOperator', 'BinaryOperator',
+  // java.util.stream
+  'Stream', 'IntStream', 'LongStream', 'DoubleStream', 'Collectors',
+  // java.io commons
+  'File', 'IOException', 'InputStream', 'OutputStream', 'Reader',
+  'Writer', 'BufferedReader', 'BufferedWriter', 'PrintWriter',
+  'FileNotFoundException', 'Serializable',
+  // java.time
+  'Instant', 'LocalDate', 'LocalDateTime', 'LocalTime', 'Duration',
+  'Period', 'ZoneId', 'ZoneOffset', 'ZonedDateTime', 'OffsetDateTime',
+  'OffsetTime', 'Clock', 'DayOfWeek', 'Month', 'Year', 'YearMonth',
+  // java.util.concurrent
+  'CompletableFuture', 'CompletionStage', 'Future', 'ExecutorService',
+  'Executor', 'Executors', 'TimeUnit', 'ConcurrentHashMap',
+  'ConcurrentMap', 'AtomicInteger', 'AtomicLong', 'AtomicBoolean',
+  'AtomicReference',
+]);
+
+/** Pull a bare type name from a type-node and add to the same-package set,
+ *  if it's a single-segment identifier. Generic args inside are skipped (v1).
+ */
+function addBareTypeName(bareRefs: Set<string>, typeNode: TSNode | null | undefined): void {
+  if (!typeNode) return;
+  const stripped = stripGenerics(typeNode.text);
+  if (stripped && !stripped.includes('.')) bareRefs.add(stripped);
+}
+
+/** Add all annotation names found on a modifiers-bearing node. */
+function addAnnotationsToBareRefs(bareRefs: Set<string>, node: TSNode): void {
+  for (const child of node.namedChildren) {
+    if (child.type !== 'modifiers') continue;
+    for (const mod of (child.children ?? child.namedChildren)) {
+      if (mod.type === 'marker_annotation' || mod.type === 'annotation') {
+        const nameNode = mod.childForFieldName('name');
+        if (nameNode && !nameNode.text.includes('.')) {
+          bareRefs.add(nameNode.text);
+        }
+      }
+    }
+  }
+}
+
 function getAnnotations(node: TSNode): string[] {
   const annotations: string[] = [];
   for (const child of node.namedChildren) {
@@ -140,6 +210,7 @@ function extractClassMembers(
   body: TSNode,
   fileId: string,
   parentName: string,
+  bareRefs?: Set<string>,
 ): SymbolNode[] {
   const members: SymbolNode[] = [];
 
@@ -155,6 +226,21 @@ function extractClassMembers(
       const methodBody = firstChildOfType(child, 'block');
       if (methodBody) collectCalls(methodBody, calls);
       const annotations = getAnnotations(child);
+
+      // Same-package: return type, parameter types, annotations.
+      if (bareRefs) {
+        addBareTypeName(bareRefs, child.childForFieldName('type'));
+        const params = firstChildOfType(child, 'formal_parameters');
+        if (params) {
+          for (const p of params.namedChildren) {
+            if (p.type === 'formal_parameter') {
+              addBareTypeName(bareRefs, p.childForFieldName('type'));
+              addAnnotationsToBareRefs(bareRefs, p);
+            }
+          }
+        }
+        addAnnotationsToBareRefs(bareRefs, child);
+      }
       const symbol: SymbolNode = {
         id: `${fileId}#${parentName}.${methodName}`,
         name: `${parentName}.${methodName}`,
@@ -175,6 +261,20 @@ function extractClassMembers(
       const ctorBody = firstChildOfType(child, 'constructor_body');
       if (ctorBody) collectCalls(ctorBody, calls);
       const annotations = getAnnotations(child);
+
+      // Same-package: parameter types + annotations (constructors have no return type).
+      if (bareRefs) {
+        const params = firstChildOfType(child, 'formal_parameters');
+        if (params) {
+          for (const p of params.namedChildren) {
+            if (p.type === 'formal_parameter') {
+              addBareTypeName(bareRefs, p.childForFieldName('type'));
+              addAnnotationsToBareRefs(bareRefs, p);
+            }
+          }
+        }
+        addAnnotationsToBareRefs(bareRefs, child);
+      }
       const symbol: SymbolNode = {
         id: `${fileId}#${parentName}.${ctorName}`,
         name: `${parentName}.${ctorName}`,
@@ -188,7 +288,12 @@ function extractClassMembers(
       if (annotations.length > 0) symbol.annotations = annotations;
       members.push(symbol);
     } else if (child.type === 'field_declaration') {
-      // Only extract static final fields (constants)
+      // Same-package: field type + annotations (applies to all fields, not just constants).
+      if (bareRefs) {
+        addBareTypeName(bareRefs, child.childForFieldName('type'));
+        addAnnotationsToBareRefs(bareRefs, child);
+      }
+      // Symbol extraction is restricted to static final fields (constants).
       if (!isStaticFinal(child)) continue;
       const declarators = childrenOfType(child, 'variable_declarator');
       const annotations = getAnnotations(child);
@@ -215,7 +320,7 @@ function extractClassMembers(
       child.type === 'record_declaration'
     ) {
       // Inner class — extract with parent prefix
-      const inner = extractTypeDeclaration(child, fileId, `${parentName}.`);
+      const inner = extractTypeDeclaration(child, fileId, `${parentName}.`, bareRefs);
       if (inner) members.push(...(Array.isArray(inner) ? inner : [inner]));
     }
   }
@@ -231,6 +336,7 @@ function extractTypeDeclaration(
   node: TSNode,
   fileId: string,
   namePrefix = '',
+  bareRefs?: Set<string>,
 ): SymbolNode | SymbolNode[] | null {
   const startLine = node.startPosition.row + 1;
   const endLine = node.endPosition.row + 1;
@@ -250,6 +356,7 @@ function extractTypeDeclaration(
         const typeNode = firstChildOfTypes(superclass, ['type_identifier', 'generic_type']);
         if (typeNode) extendsName = stripGenerics(typeNode.text);
       }
+      if (bareRefs && extendsName && !extendsName.includes('.')) bareRefs.add(extendsName);
 
       // implements
       const implementsNames: string[] = [];
@@ -262,12 +369,15 @@ function extractTypeDeclaration(
           : superInterfaces.namedChildren;
         for (const t of types) {
           if (t.type === 'type_identifier' || t.type === 'generic_type') {
-            implementsNames.push(stripGenerics(t.text));
+            const stripped = stripGenerics(t.text);
+            implementsNames.push(stripped);
+            if (bareRefs && !stripped.includes('.')) bareRefs.add(stripped);
           }
         }
       }
 
       const annotations = getAnnotations(node);
+      if (bareRefs) addAnnotationsToBareRefs(bareRefs, node);
       const classSymbol: SymbolNode = {
         id: `${fileId}#${name}`,
         name,
@@ -286,7 +396,7 @@ function extractTypeDeclaration(
       // Extract members from body
       const body = firstChildOfTypes(node, ['class_body', 'record_body']);
       if (body) {
-        symbols.push(...extractClassMembers(body, fileId, name));
+        symbols.push(...extractClassMembers(body, fileId, name, bareRefs));
       }
 
       return symbols;
@@ -305,12 +415,15 @@ function extractTypeDeclaration(
         const types = typeList ? typeList.namedChildren : extendsInterfaces.namedChildren;
         for (const t of types) {
           if (t.type === 'type_identifier' || t.type === 'generic_type') {
-            implementsNames.push(stripGenerics(t.text));
+            const stripped = stripGenerics(t.text);
+            implementsNames.push(stripped);
+            if (bareRefs && !stripped.includes('.')) bareRefs.add(stripped);
           }
         }
       }
 
       const annotations = getAnnotations(node);
+      if (bareRefs) addAnnotationsToBareRefs(bareRefs, node);
       const ifaceSymbol: SymbolNode = {
         id: `${fileId}#${name}`,
         name,
@@ -333,6 +446,20 @@ function extractTypeDeclaration(
           if (child.type === 'method_declaration' || child.type === 'interface_method_declaration') {
             const mName = firstChildOfType(child, 'identifier');
             if (!mName) continue;
+            // Same-package: interface method return type + param types + annotations.
+            if (bareRefs) {
+              addBareTypeName(bareRefs, child.childForFieldName('type'));
+              const params = firstChildOfType(child, 'formal_parameters');
+              if (params) {
+                for (const p of params.namedChildren) {
+                  if (p.type === 'formal_parameter') {
+                    addBareTypeName(bareRefs, p.childForFieldName('type'));
+                    addAnnotationsToBareRefs(bareRefs, p);
+                  }
+                }
+              }
+              addAnnotationsToBareRefs(bareRefs, child);
+            }
             symbols.push({
               id: `${fileId}#${name}.${mName.text}`,
               name: `${name}.${mName.text}`,
@@ -362,12 +489,15 @@ function extractTypeDeclaration(
         const types = typeList ? typeList.namedChildren : superInterfaces.namedChildren;
         for (const t of types) {
           if (t.type === 'type_identifier' || t.type === 'generic_type') {
-            implementsNames.push(stripGenerics(t.text));
+            const stripped = stripGenerics(t.text);
+            implementsNames.push(stripped);
+            if (bareRefs && !stripped.includes('.')) bareRefs.add(stripped);
           }
         }
       }
 
       const annotations = getAnnotations(node);
+      if (bareRefs) addAnnotationsToBareRefs(bareRefs, node);
       const enumSymbol: SymbolNode = {
         id: `${fileId}#${name}`,
         name,
@@ -384,7 +514,7 @@ function extractTypeDeclaration(
 
       const body = firstChildOfType(node, 'enum_body');
       if (body) {
-        symbols.push(...extractClassMembers(body, fileId, name));
+        symbols.push(...extractClassMembers(body, fileId, name, bareRefs));
       }
 
       return symbols;
@@ -441,6 +571,9 @@ export function parseJavaContent(
   const exports: string[] = [];
   const rawSymbols: SymbolNode[] = [];
   let packageName = '';
+  // Bare-type-reference collector for same-package qualification. Populated
+  // inline by extractTypeDeclaration / extractClassMembers as they walk.
+  const bareRefs = new Set<string>();
 
   for (const node of root.namedChildren) {
     // Package declaration
@@ -473,7 +606,7 @@ export function parseJavaContent(
     ) {
       if (node.type === 'annotation_type_declaration') continue; // skip
 
-      const result = extractTypeDeclaration(node, fileId);
+      const result = extractTypeDeclaration(node, fileId, '', bareRefs);
       if (!result) continue;
       const nodes = Array.isArray(result) ? result : [result];
       for (const sym of nodes) {
@@ -482,6 +615,26 @@ export function parseJavaContent(
           exports.push(sym.name);
         }
       }
+    }
+  }
+
+  // Same-package short-name qualification — Java permits referring to types in
+  // the same package without an explicit import. bareRefs is populated inline
+  // by the symbol-extraction walk above. Exclude names shadowed by an explicit
+  // import or in the JDK shortlist, then push qualified FQCNs into imports[].
+  if (packageName) {
+    const importedBasenames = new Set<string>();
+    for (const fqcn of imports) {
+      const last = fqcn.split('.').pop();
+      if (last) importedBasenames.add(last);
+    }
+    for (const name of bareRefs) {
+      if (!name) continue;
+      const first = name.charCodeAt(0);
+      if (first < 65 || first > 90) continue; // not A-Z
+      if (JAVA_LANG_SHORTLIST.has(name)) continue;
+      if (importedBasenames.has(name)) continue;
+      imports.push(`${packageName}.${name}`);
     }
   }
 
