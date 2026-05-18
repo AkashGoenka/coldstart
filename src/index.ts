@@ -161,6 +161,8 @@ export async function buildIndex(
             reexportRatio: parsed.reexportRatio,
             constantReferences: parsed.constantReferences,
             partialDeclarations: parsed.partialDeclarations,
+            eloquentRelations: parsed.eloquentRelations,
+            containerResolutions: parsed.containerResolutions,
           };
           indexedFiles.push(file);
           langCount[wf.language] = (langCount[wf.language] ?? 0) + 1;
@@ -322,6 +324,8 @@ async function runProbe(rootDir: string, excludes: string[], includes: string[])
           reexportRatio: parsed.reexportRatio,
           constantReferences: parsed.constantReferences,
           partialDeclarations: parsed.partialDeclarations,
+          eloquentRelations: parsed.eloquentRelations,
+          containerResolutions: parsed.containerResolutions,
         });
       } catch { /* skip parse errors */ }
     }));
