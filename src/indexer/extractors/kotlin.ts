@@ -123,6 +123,7 @@ export function parseKotlinContent(
   const imports: string[] = [];
   const symbols: SymbolNode[] = [];
   const exports: string[] = [];
+  let packageName = '';
 
   function captureImport(importHeader: TSNode): void {
     const identifier = importHeader.namedChildren.find(
@@ -136,6 +137,17 @@ export function parseKotlinContent(
     }
   }
 
+  function capturePackage(header: TSNode): void {
+    const identifier = header.namedChildren.find(
+      (c: TSNode) => c.type === 'identifier',
+    );
+    if (identifier) {
+      packageName = identifier.text;
+    } else if (header.text) {
+      packageName = header.text.replace(/^package\s+/, '').trim();
+    }
+  }
+
   /** Check if a class_declaration node is actually an interface (has 'interface' keyword). */
   function isInterface(node: TSNode): boolean {
     // Anonymous keyword nodes appear in .children, not .namedChildren
@@ -145,6 +157,12 @@ export function parseKotlinContent(
   for (const node of root.namedChildren) {
     const startLine = node.startPosition.row + 1;
     const endLine = node.endPosition.row + 1;
+
+    // package_header — top-level, before imports
+    if (node.type === 'package_header') {
+      capturePackage(node);
+      continue;
+    }
 
     // import_list contains import_header children
     if (node.type === 'import_list') {
@@ -322,10 +340,100 @@ export function parseKotlinContent(
     }
   }
 
+  // Same-package short-name qualification (mirror of Java extractor).
+  // Kotlin shares Java package semantics — see coldstart/docs/jvm-same-package-spec.md.
+  if (packageName) {
+    const importedBasenames = new Set<string>();
+    for (const fqcn of imports) {
+      const last = fqcn.split('.').pop();
+      if (last) importedBasenames.add(last);
+    }
+    const bareRefs = collectBareKotlinTypeReferences(root);
+    for (const name of bareRefs) {
+      if (!name) continue;
+      const first = name.charCodeAt(0);
+      if (first < 65 || first > 90) continue; // not A-Z
+      if (JVM_SHORTLIST.has(name)) continue;
+      if (importedBasenames.has(name)) continue;
+      imports.push(`${packageName}.${name}`);
+    }
+  }
+
   return {
     imports: [...new Set(imports)],
     exports: [...new Set(exports)],
     hasDefaultExport: false,
     symbols,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Same-package short-name qualification
+// ---------------------------------------------------------------------------
+
+const JVM_SHORTLIST = new Set([
+  // java.lang types
+  'String', 'Object', 'Integer', 'Long', 'Boolean', 'Double', 'Float',
+  'Character', 'Byte', 'Short', 'Void', 'Number', 'Math', 'System',
+  'Thread', 'Runnable', 'Exception', 'RuntimeException', 'Throwable',
+  'Error', 'Class', 'Enum', 'Iterable', 'Comparable', 'CharSequence',
+  'StringBuilder', 'StringBuffer', 'AutoCloseable',
+  // common java.lang annotations
+  'Override', 'Deprecated', 'SuppressWarnings', 'SafeVarargs',
+  'FunctionalInterface',
+  // java.util — also commonly used from Kotlin
+  'List', 'Map', 'Set', 'Collection', 'Iterator', 'Optional', 'Arrays',
+  'Collections', 'Objects', 'ArrayList', 'LinkedList', 'HashMap',
+  'LinkedHashMap', 'TreeMap', 'HashSet', 'LinkedHashSet', 'TreeSet',
+  'Queue', 'Deque', 'ArrayDeque', 'Stack', 'Vector', 'Properties',
+  'Date', 'Calendar', 'TimeZone', 'UUID', 'Random', 'Locale',
+  'Comparator', 'Scanner', 'EnumSet', 'EnumMap', 'BitSet',
+  // java.util.function / stream / io / time / concurrent
+  'Function', 'BiFunction', 'Predicate', 'BiPredicate', 'Consumer',
+  'BiConsumer', 'Supplier', 'UnaryOperator', 'BinaryOperator',
+  'Stream', 'IntStream', 'LongStream', 'DoubleStream', 'Collectors',
+  'File', 'IOException', 'InputStream', 'OutputStream', 'Reader',
+  'Writer', 'BufferedReader', 'BufferedWriter', 'PrintWriter',
+  'FileNotFoundException', 'Serializable',
+  'Instant', 'LocalDate', 'LocalDateTime', 'LocalTime', 'Duration',
+  'Period', 'ZoneId', 'ZoneOffset', 'ZonedDateTime', 'OffsetDateTime',
+  'CompletableFuture', 'CompletionStage', 'Future', 'ExecutorService',
+  'Executor', 'Executors', 'TimeUnit', 'ConcurrentHashMap',
+  'ConcurrentMap', 'AtomicInteger', 'AtomicLong', 'AtomicBoolean',
+  'AtomicReference',
+  // kotlin built-ins commonly used as bare names
+  'Any', 'Unit', 'Nothing', 'Int', 'MutableList',
+  'MutableMap', 'MutableSet', 'Array', 'Pair', 'Triple', 'Result',
+  'Sequence',
+  // common kotlin annotations
+  'JvmStatic', 'JvmField', 'JvmOverloads', 'Throws', 'Target', 'Retention',
+]);
+
+function collectBareKotlinTypeReferences(root: TSNode): Set<string> {
+  const bare = new Set<string>();
+  function visit(node: TSNode): void {
+    // Skip function/constructor bodies — same-package refs only from signatures (perf).
+    if (node.type === 'function_body' || node.type === 'getter' || node.type === 'setter') {
+      return;
+    }
+    if (node.type === 'user_type') {
+      const id = node.namedChildren.find(
+        (c: TSNode) => c.type === 'simple_identifier' || c.type === 'type_identifier',
+      );
+      if (id && !node.text.includes('.')) bare.add(id.text);
+    } else if (node.type === 'type_identifier') {
+      bare.add(node.text);
+    } else if (node.type === 'annotation') {
+      const userType = node.namedChildren.find((c: TSNode) => c.type === 'user_type');
+      if (userType && !userType.text.includes('.')) {
+        const id = userType.namedChildren.find(
+          (c: TSNode) => c.type === 'simple_identifier' || c.type === 'type_identifier',
+        );
+        if (id) bare.add(id.text);
+      }
+    }
+    for (const child of node.namedChildren) visit(child);
+  }
+  visit(root);
+  return bare;
 }
