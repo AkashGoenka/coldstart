@@ -94,6 +94,181 @@ function callsFromMap(calls: Map<string, number>): CallSite[] {
 }
 
 // ---------------------------------------------------------------------------
+// Django convention reference extraction
+// ---------------------------------------------------------------------------
+
+/** Extract string values from a list literal (for MIDDLEWARE, AUTHENTICATION_BACKENDS, etc.). */
+function extractStringListLiterals(node: TSNode): string[] {
+  const results: string[] = [];
+  if (!node) return results;
+
+  // Handle list/tuple literals: [ ... ] or ( ... )
+  for (const child of node.namedChildren) {
+    if (child.type === 'string') {
+      const text = child.text.replace(/^['"]|['"]$/g, '');
+      if (text) results.push(text);
+    }
+  }
+  return results;
+}
+
+/** Extract string values from nested dict literals (for LOGGING, TEMPLATES config). */
+function extractDictStringValues(node: TSNode): string[] {
+  const results: string[] = [];
+  if (!node) return results;
+
+  function visit(n: TSNode): void {
+    // When we find a string at any level, add it
+    if (n.type === 'string') {
+      const text = n.text.replace(/^['"]|['"]$/g, '');
+      if (text) results.push(text);
+    }
+    // Recurse into dict values and list children
+    for (const child of n.namedChildren) {
+      visit(child);
+    }
+  }
+  visit(node);
+  return results;
+}
+
+/** Extract settings.py Django convention references. */
+function collectDjangoConventionRefs(root: TSNode): Array<{ kind: string; value: string }> {
+  const out: Array<{ kind: string; value: string }> = [];
+  const seen = new Set<string>();
+
+  for (const node of root.namedChildren) {
+    // Look for assignment: MIDDLEWARE = [...] or ROOT_URLCONF = "..."
+    if (node.type === 'expression_statement') {
+      const assign = firstChildOfType(node, 'assignment');
+      if (!assign) continue;
+
+      const lhs = assign.namedChildren[0];
+      if (!lhs || lhs.type !== 'identifier') continue;
+
+      const varName = lhs.text;
+      const rhs = assign.namedChildren[assign.namedChildren.length - 1];
+      if (!rhs) continue;
+
+      let refs: string[] = [];
+      let kind = '';
+
+      // Single string assignment: ROOT_URLCONF = "..."
+      if (varName === 'ROOT_URLCONF' || varName === 'WSGI_APPLICATION' || varName === 'ASGI_APPLICATION') {
+        kind = 'urlconf';
+        if (rhs.type === 'string') {
+          refs = [rhs.text.replace(/^['"]|['"]$/g, '')];
+        }
+      }
+      // List assignments: MIDDLEWARE, AUTHENTICATION_BACKENDS, etc.
+      else if (varName === 'MIDDLEWARE' || varName === 'AUTHENTICATION_BACKENDS') {
+        kind = varName.toLowerCase().replace(/_/g, '');
+        refs = extractStringListLiterals(rhs);
+      }
+      // TEMPLATES is a list of dicts
+      else if (varName === 'TEMPLATES') {
+        kind = 'templates';
+        refs = extractDictStringValues(rhs);
+      }
+      // LOGGING is a dict
+      else if (varName === 'LOGGING') {
+        kind = 'logging';
+        refs = extractDictStringValues(rhs);
+      }
+
+      // Add non-duplicate refs
+      if (kind) {
+        for (const ref of refs) {
+          const key = `${kind}:${ref}`;
+          if (ref && !seen.has(key)) {
+            seen.add(key);
+            out.push({ kind, value: ref });
+          }
+        }
+      }
+    }
+  }
+
+  // Also look for include() calls in urls.py
+  if (root.namedChildren) {
+    collectUrlsIncludes(root, out, seen);
+  }
+
+  // Look for importlib.import_module() calls with literal strings
+  collectImportlibCalls(root, out, seen);
+
+  return out;
+}
+
+/** Extract include("...") calls from urls.py. */
+function collectUrlsIncludes(root: TSNode, out: Array<{ kind: string; value: string }>, seen: Set<string>): void {
+  function visit(node: TSNode): void {
+    // Match: call( function=identifier("include"), arguments=argument_list(...) )
+    if (node.type === 'call') {
+      const fnNode = node.childForFieldName('function');
+      if (fnNode?.type === 'identifier' && fnNode.text === 'include') {
+        // Get argument list
+        const argList = firstChildOfType(node, 'argument_list');
+        if (argList) {
+          for (const arg of argList.namedChildren) {
+            if (arg.type === 'string') {
+              const text = arg.text.replace(/^['"]|['"]$/g, '');
+              const key = `urlconf:${text}`;
+              if (text && !seen.has(key)) {
+                seen.add(key);
+                out.push({ kind: 'urlconf', value: text });
+              }
+            }
+          }
+        }
+      }
+    }
+    for (const child of node.namedChildren) {
+      visit(child);
+    }
+  }
+  visit(root);
+}
+
+/** Extract importlib.import_module("...") calls with literal strings. */
+function collectImportlibCalls(root: TSNode, out: Array<{ kind: string; value: string }>, seen: Set<string>): void {
+  function visit(node: TSNode): void {
+    // Match: call where the function is an attribute
+    if (node.type === 'call') {
+      const fnNode = node.childForFieldName?.('function') ?? node.namedChildren[0];
+      if (fnNode?.type === 'attribute') {
+        // Attribute structure: [object, '.', attr]
+        const children = fnNode.namedChildren;
+        if (children.length >= 2) {
+          const objNode = children[0];
+          const attrNode = children[children.length - 1];
+          if (objNode?.text === 'importlib' && attrNode?.text === 'import_module') {
+            // Get argument list
+            const argList = firstChildOfType(node, 'argument_list');
+            if (argList) {
+              for (const arg of argList.namedChildren) {
+                if (arg.type === 'string') {
+                  const text = arg.text.replace(/^['"]|['"]$/g, '');
+                  const key = `importlib:${text}`;
+                  if (text && !seen.has(key)) {
+                    seen.add(key);
+                    out.push({ kind: 'importlib', value: text });
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    for (const child of node.namedChildren) {
+      visit(child);
+    }
+  }
+  visit(root);
+}
+
+// ---------------------------------------------------------------------------
 // Result type
 // ---------------------------------------------------------------------------
 
@@ -102,6 +277,7 @@ export interface PythonParseResult {
   exports: string[];
   hasDefaultExport: false;
   symbols: SymbolNode[];
+  djangoConventionRefs?: Array<{ kind: string; value: string }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -294,11 +470,15 @@ export function parsePythonContent(
     }
   }
 
+  // Collect Django convention references (settings.py, urls.py, etc.)
+  const djangoConventionRefs = collectDjangoConventionRefs(root);
+
   return {
     imports: [...new Set(imports)],
     exports: [...new Set(exports)],
     hasDefaultExport: false,
     symbols,
+    djangoConventionRefs: djangoConventionRefs.length > 0 ? djangoConventionRefs : undefined,
   };
 }
 

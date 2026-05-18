@@ -80,11 +80,18 @@ function callsFromMap(calls: Map<string, number>, exclude?: string): CallSite[] 
 // Result type
 // ---------------------------------------------------------------------------
 
+export interface PartialDeclaration {
+  kind: 'class' | 'struct' | 'interface' | 'record';
+  name: string;
+  namespace?: string;
+}
+
 export interface CSharpParseResult {
   imports: string[];
   exports: string[];
   hasDefaultExport: false;
   symbols: SymbolNode[];
+  partialDeclarations?: PartialDeclaration[];
 }
 
 // ---------------------------------------------------------------------------
@@ -232,6 +239,72 @@ function extractTypeSymbols(
   return { sym, members };
 }
 
+/** Check if a type node has the 'partial' modifier */
+function isPartialType(node: TSNode): boolean {
+  return node.namedChildren.some(
+    (c: TSNode) => c.type === 'modifier' && c.text === 'partial',
+  );
+}
+
+/** Extract namespace name from a namespace_declaration node */
+function getNamespaceFromParent(node: TSNode): string | undefined {
+  // Walk up parent chain in the provided context — we need to track during recursion
+  // For now, we'll pass this context through visitChildren
+  return undefined;
+}
+
+/** Collect all partial type declarations (class/struct/interface/record) */
+function collectPartialDeclarations(root: TSNode, currentNamespace?: string): PartialDeclaration[] {
+  const out: PartialDeclaration[] = [];
+
+  function visit(node: TSNode, namespace?: string): void {
+    // Track namespace context as we descend
+    if (node.type === 'namespace_declaration' || node.type === 'file_scoped_namespace_declaration') {
+      const nameNode = firstChildOfType(node, 'identifier') ?? firstChildOfType(node, 'qualified_name');
+      const newNamespace = nameNode?.text;
+      const body = firstChildOfType(node, 'declaration_list') ?? node;
+      for (const child of body.namedChildren) {
+        visit(child, newNamespace);
+      }
+      return;
+    }
+
+    // Check for partial type declarations
+    const typeNodeTypes = [
+      'class_declaration',
+      'struct_declaration',
+      'interface_declaration',
+      'record_declaration',
+    ];
+
+    if (typeNodeTypes.includes(node.type) && isPartialType(node)) {
+      const nameNode = firstChildOfType(node, 'identifier');
+      if (nameNode) {
+        const kind = node.type === 'class_declaration'
+          ? 'class'
+          : node.type === 'struct_declaration'
+          ? 'struct'
+          : node.type === 'interface_declaration'
+          ? 'interface'
+          : 'record';
+        out.push({
+          kind,
+          name: nameNode.text,
+          namespace,
+        });
+      }
+    }
+
+    // Continue recursing into children
+    for (const child of node.namedChildren) {
+      visit(child, namespace);
+    }
+  }
+
+  visit(root, currentNamespace);
+  return out;
+}
+
 export function parseCSharpContent(
   content: string,
   fileId: string,
@@ -306,11 +379,15 @@ export function parseCSharpContent(
     }
   }
 
+  // Collect partial type declarations
+  const partialDeclarations = collectPartialDeclarations(root);
+
   return {
     imports: [...new Set(imports)],
     exports: [...new Set(exports)],
     hasDefaultExport: false,
     symbols,
+    partialDeclarations: partialDeclarations.length > 0 ? partialDeclarations : undefined,
   };
 }
 

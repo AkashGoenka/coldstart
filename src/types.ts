@@ -87,6 +87,10 @@ export interface IndexedFile {
   symbols: SymbolNode[];    // symbol-level nodes within this file (TS/JS only)
   reexportRatio?: number;   // TS/JS only: ratio of re-export statements to total export statements
   constantReferences?: string[];  // Ruby only: FQCNs to resolve via autoload
+  partialDeclarations?: Array<{ kind: 'class' | 'struct' | 'interface' | 'record'; name: string; namespace?: string }>;  // C# only: partial type declarations
+  eloquentRelations?: Array<{ targetClass: string; line: number }>;  // PHP only: Eloquent relationship class references
+  containerResolutions?: Array<{ targetClass: string; line: number }>;  // PHP only: DI container class references
+  djangoConventionRefs?: Array<{ kind: string; value: string }>;  // Python only: Django convention string refs (middleware, auth backends, etc.)
 }
 
 export interface Edge {
@@ -124,6 +128,10 @@ export interface ParsedFile {
   symbols: SymbolNode[];    // symbol-level nodes (TS/JS only, empty for other languages)
   reexportRatio?: number;   // TS/JS only
   constantReferences?: string[];  // Ruby only: FQCNs to resolve via autoload
+  partialDeclarations?: Array<{ kind: 'class' | 'struct' | 'interface' | 'record'; name: string; namespace?: string }>;  // C# only: partial type declarations
+  eloquentRelations?: Array<{ targetClass: string; line: number }>;  // PHP only: Eloquent relationship class references
+  containerResolutions?: Array<{ targetClass: string; line: number }>;  // PHP only: DI container class references
+  djangoConventionRefs?: Array<{ kind: string; value: string }>;  // Python only: Django convention string refs
 }
 
 export interface CacheMeta {
