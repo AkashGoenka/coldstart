@@ -269,6 +269,19 @@ export async function buildIndex(
   };
 }
 
+// Bucket an edge specifier into a coarse key for --probe output.
+// - synthetic prefixes like `const:Foo` / `partial:UserService` → `const:*` / `partial:*`
+//   (last segment is class-like, generalize it)
+// - `convention:django:middleware` → keep as-is (categorical, not class-specific)
+// - regular imports (file paths, package names, no colon) → `regular`
+function bucketSpecifier(spec: string): string {
+  if (!spec.includes(':')) return 'regular';
+  const parts = spec.split(':');
+  const last = parts[parts.length - 1];
+  if (/^[A-Z]/.test(last)) return parts.slice(0, -1).join(':') + ':*';
+  return spec;
+}
+
 // ---------------------------------------------------------------------------
 // Probe mode: walk → parse → resolve, emit JSON stats to stdout, exit.
 // Per-language: total imports, resolved, unresolved, plus top-N unresolved
@@ -376,6 +389,15 @@ async function runProbe(rootDir: string, excludes: string[], includes: string[])
     else b.unresolvedBySpec.set(u.specifier, { count: 1, sampleFrom: fileById.get(u.from) ?? '' });
   }
 
+  const edgesBySpecifier: Record<string, number> = {};
+  for (const e of edges) {
+    const bucket = bucketSpecifier(e.specifier);
+    edgesBySpecifier[bucket] = (edgesBySpecifier[bucket] ?? 0) + 1;
+  }
+  const sortedEdgesBySpecifier = Object.fromEntries(
+    Object.entries(edgesBySpecifier).sort((a, b) => b[1] - a[1]),
+  );
+
   const out = {
     rootDir,
     totalFiles: indexedFiles.length,
@@ -383,6 +405,7 @@ async function runProbe(rootDir: string, excludes: string[], includes: string[])
     totalUnresolved: unresolved.length,
     elapsedMs: Date.now() - start,
     phaseMs: { walk: tWalk, parse: tParse, resolve: tResolve, resolveByLang: langTimes },
+    edgesBySpecifier: sortedEdgesBySpecifier,
     languages: Object.fromEntries(
       [...byLang.entries()]
         .sort((a, b) => b[1].totalImports - a[1].totalImports)
