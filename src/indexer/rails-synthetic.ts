@@ -1,5 +1,3 @@
-import { relative } from 'node:path';
-import { buildFileId } from './parser.js';
 import { buildRailsFqcnIndex, resolveRailsConstant } from './resolvers/ruby.js';
 import type { Edge, IndexedFile } from '../types.js';
 
@@ -27,18 +25,17 @@ export async function addRailsSyntheticEdges(
   }
   if (!appRoot) return;
 
-  const fqcnIndex = await buildRailsFqcnIndex(appRoot, fullFileIdSet);
+  const fqcnIndex = await buildRailsFqcnIndex(appRoot, fullFileIdSet, rootDir);
   const seen = new Set<string>();
   for (const e of edges) seen.add(`${e.from}|${e.to}`);
 
   for (const f of rubyFiles) {
     if (!f.constantReferences?.length) continue;
     for (const ref of f.constantReferences) {
-      const targetFile = resolveRailsConstant(ref, fqcnIndex);
-      if (!targetFile || targetFile === f.path) continue;
-      const targetId = buildFileId(relative(rootDir, targetFile));
+      const targetId = resolveRailsConstant(ref, fqcnIndex);
+      if (!targetId || targetId === f.id) continue;
       const key = `${f.id}|${targetId}`;
-      if (seen.has(key) || !fullFileIdSet.has(targetId)) continue;
+      if (seen.has(key)) continue;
       seen.add(key);
       edges.push({ from: f.id, to: targetId, type: 'import', specifier: `const:${ref}` });
     }

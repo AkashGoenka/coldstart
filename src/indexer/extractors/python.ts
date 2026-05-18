@@ -153,9 +153,9 @@ function collectDjangoConventionRefs(root: TSNode): Array<{ kind: string; value:
       let refs: string[] = [];
       let kind = '';
 
-      // Single string assignment: ROOT_URLCONF = "..."
+      // Single string assignment: ROOT_URLCONF / WSGI_APPLICATION / ASGI_APPLICATION = "..."
       if (varName === 'ROOT_URLCONF' || varName === 'WSGI_APPLICATION' || varName === 'ASGI_APPLICATION') {
-        kind = 'urlconf';
+        kind = varName === 'ROOT_URLCONF' ? 'urlconf' : varName === 'WSGI_APPLICATION' ? 'wsgi' : 'asgi';
         if (rhs.type === 'string') {
           refs = [rhs.text.replace(/^['"]|['"]$/g, '')];
         }
@@ -170,10 +170,11 @@ function collectDjangoConventionRefs(root: TSNode): Array<{ kind: string; value:
         kind = 'templates';
         refs = extractDictStringValues(rhs);
       }
-      // LOGGING is a dict
+      // LOGGING is a dict — only dotted strings can be module paths (e.g. 'logging.FileHandler');
+      // bare strings ('DEBUG', 'verbose', handler nicknames, dict keys) are not importable.
       else if (varName === 'LOGGING') {
         kind = 'logging';
-        refs = extractDictStringValues(rhs);
+        refs = extractDictStringValues(rhs).filter(s => s.includes('.'));
       }
 
       // Add non-duplicate refs

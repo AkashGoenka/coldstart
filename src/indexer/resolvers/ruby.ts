@@ -1,7 +1,8 @@
-import { dirname, resolve, join, basename, sep } from 'node:path';
+import { dirname, resolve, join, basename, relative, sep } from 'node:path';
 import { readFile, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tryResolveBase } from './shared.js';
+import { buildFileId } from '../parser.js';
 
 /**
  * Ruby resolver: handles relative requires and load-path requires.
@@ -129,10 +130,11 @@ async function walkRbFiles(dir: string): Promise<string[]> {
   return files;
 }
 
-/** Build FQCN index: snake_case_path → absolute .rb file path. Built once per Rails app. */
+/** Build FQCN index: snake_case_path → fileId (relative to rootDir). Built once per Rails app. */
 export async function buildRailsFqcnIndex(
   appRoot: string,
   fileIdSet: Set<string>,
+  rootDir: string,
 ): Promise<Map<string, string>> {
   const idx = new Map<string, string>();
 
@@ -176,14 +178,17 @@ export async function buildRailsFqcnIndex(
       }
       const key = rel.split(sep).join('/');
       // First root wins (app/models before app/models/concerns, etc.)
-      if (!idx.has(key)) idx.set(key, f);
+      if (!idx.has(key)) {
+        const fileId = buildFileId(relative(rootDir, f));
+        if (fileIdSet.has(fileId)) idx.set(key, fileId);
+      }
     }
   }
 
   return idx;
 }
 
-/** Resolve a constant FQCN to a file path using the Rails autoload index */
+/** Resolve a constant FQCN to a fileId using the Rails autoload index */
 export function resolveRailsConstant(
   fqcn: string,
   fqcnIndex: Map<string, string>,
