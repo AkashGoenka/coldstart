@@ -1,0 +1,536 @@
+{
+  "schemaVersion": 1,
+  "query": "media upload attachment",
+  "repo": "/tmp/mastodon",
+  "coldstartCommit": "0580f80f934a763b66a3020cca538b9ffaa18f26",
+  "fileCount": 4936,
+  "indexedAt": "2026-05-19T08:24:40.506Z",
+  "goMeta": {
+    "fallback": false,
+    "truncated": true,
+    "excluded_test_files": 46,
+    "note": null
+  },
+  "K": 20,
+  "candidates": [
+    {
+      "rank": 1,
+      "path": "db/migrate/20160905150353_create_media_attachments.rb",
+      "fileId": "db/migrate/20160905150353_create_media_attachments.rb",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 2,
+      "path": "db/migrate/20170304202101_add_type_to_media_attachments.rb",
+      "fileId": "db/migrate/20170304202101_add_type_to_media_attachments.rb",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [
+        "app/models/application_record.rb"
+      ],
+      "inEdgesCount": 0,
+      "outEdgesCount": 1
+    },
+    {
+      "rank": 3,
+      "path": "db/migrate/20190420025523_add_blurhash_to_media_attachments.rb",
+      "fileId": "db/migrate/20190420025523_add_blurhash_to_media_attachments.rb",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 4,
+      "path": "db/migrate/20170927215609_add_description_to_media_attachments.rb",
+      "fileId": "db/migrate/20170927215609_add_description_to_media_attachments.rb",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 5,
+      "path": "db/migrate/20200306035625_add_processing_to_media_attachments.rb",
+      "fileId": "db/migrate/20200306035625_add_processing_to_media_attachments.rb",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 6,
+      "path": "db/migrate/20170105224407_add_shortcode_to_media_attachments.rb",
+      "fileId": "db/migrate/20170105224407_add_shortcode_to_media_attachments.rb",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [
+        "app/models/application_record.rb"
+      ],
+      "inEdgesCount": 0,
+      "outEdgesCount": 1
+    },
+    {
+      "rank": 7,
+      "path": "db/migrate/20200627125810_add_thumbnail_columns_to_media_attachments.rb",
+      "fileId": "db/migrate/20200627125810_add_thumbnail_columns_to_media_attachments.rb",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 8,
+      "path": "db/migrate/20190103124754_add_scheduled_status_id_to_media_attachments.rb",
+      "fileId": "db/migrate/20190103124754_add_scheduled_status_id_to_media_attachments.rb",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 9,
+      "path": "db/post_migrate/20220303203437_remove_media_attachments_changed_from_status_edits.rb",
+      "fileId": "db/post_migrate/20220303203437_remove_media_attachments_changed_from_status_edits.rb",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 10,
+      "path": "app/lib/admin/metrics/measure/instance_media_attachments_measure.rb",
+      "fileId": "app/lib/admin/metrics/measure/instance_media_attachments_measure.rb",
+      "isTestFile": false,
+      "inEdges": [
+        "spec/lib/admin/metrics/measure/instance_media_attachments_measure_spec.rb"
+      ],
+      "outEdges": [
+        "app/lib/admin/metrics/measure/base_measure.rb",
+        "app/models/instance.rb",
+        "app/models/media_attachment.rb",
+        "app/models/account.rb"
+      ],
+      "inEdgesCount": 1,
+      "outEdgesCount": 4
+    },
+    {
+      "rank": 11,
+      "path": "app/services/update_media_attachments_permissions_service.rb",
+      "fileId": "app/services/update_media_attachments_permissions_service.rb",
+      "isTestFile": false,
+      "inEdges": [
+        "app/services/remove_status_service.rb",
+        "app/services/suspend_account_service.rb",
+        "app/services/unsuspend_account_service.rb"
+      ],
+      "outEdges": [
+        "app/services/base_service.rb",
+        "app/models/media_attachment.rb",
+        "app/workers/cache_buster_worker.rb"
+      ],
+      "inEdgesCount": 3,
+      "outEdgesCount": 3
+    },
+    {
+      "rank": 12,
+      "path": "db/migrate/20200622213645_media_attachment_ids_to_timestamp_ids.rb",
+      "fileId": "db/migrate/20200622213645_media_attachment_ids_to_timestamp_ids.rb",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [
+        "lib/mastodon/snowflake.rb"
+      ],
+      "inEdgesCount": 0,
+      "outEdgesCount": 1
+    },
+    {
+      "rank": 13,
+      "path": "db/migrate/20170601210557_add_index_on_media_attachments_account_id.rb",
+      "fileId": "db/migrate/20170601210557_add_index_on_media_attachments_account_id.rb",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 14,
+      "path": "db/migrate/20220302232632_add_ordered_media_attachment_ids_to_statuses.rb",
+      "fileId": "db/migrate/20220302232632_add_ordered_media_attachment_ids_to_statuses.rb",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 15,
+      "path": "db/post_migrate/20220310060626_optimize_null_index_media_attachments_shortcode.rb",
+      "fileId": "db/post_migrate/20220310060626_optimize_null_index_media_attachments_shortcode.rb",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 16,
+      "path": "db/migrate/20220303000827_add_ordered_media_attachment_ids_to_status_edits.rb",
+      "fileId": "db/migrate/20220303000827_add_ordered_media_attachment_ids_to_status_edits.rb",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 17,
+      "path": "db/migrate/20210425135952_add_index_on_media_attachments_account_id_status_id.rb",
+      "fileId": "db/migrate/20210425135952_add_index_on_media_attachments_account_id_status_id.rb",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 18,
+      "path": "db/post_migrate/20220310060614_optimize_null_index_media_attachments_scheduled_status_id.rb",
+      "fileId": "db/post_migrate/20220310060614_optimize_null_index_media_attachments_scheduled_status_id.rb",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 19,
+      "path": "app/policies/media_attachment_policy.rb",
+      "fileId": "app/policies/media_attachment_policy.rb",
+      "isTestFile": false,
+      "inEdges": [
+        "spec/policies/media_attachment_policy_spec.rb"
+      ],
+      "outEdges": [
+        "app/policies/application_policy.rb",
+        "app/policies/status_policy.rb"
+      ],
+      "inEdgesCount": 1,
+      "outEdgesCount": 2
+    },
+    {
+      "rank": 20,
+      "path": "db/migrate/20170425131920_add_media_attachment_meta.rb",
+      "fileId": "db/migrate/20170425131920_add_media_attachment_meta.rb",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    }
+  ],
+  "pairwise": {
+    "2-6": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "app/models/application_record.rb"
+      ]
+    },
+    "10-11": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "app/models/media_attachment.rb"
+      ]
+    }
+  },
+  "bridgeRaw": {
+    "app/lib/admin/metrics/measure/base_measure.rb": {
+      "path": "app/lib/admin/metrics/measure/base_measure.rb",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        10
+      ]
+    },
+    "app/models/account.rb": {
+      "path": "app/models/account.rb",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        10
+      ]
+    },
+    "app/models/application_record.rb": {
+      "path": "app/models/application_record.rb",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 2,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        2,
+        6
+      ]
+    },
+    "app/models/instance.rb": {
+      "path": "app/models/instance.rb",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        10
+      ]
+    },
+    "app/models/media_attachment.rb": {
+      "path": "app/models/media_attachment.rb",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 2,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        10,
+        11
+      ]
+    },
+    "app/policies/application_policy.rb": {
+      "path": "app/policies/application_policy.rb",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        19
+      ]
+    },
+    "app/policies/status_policy.rb": {
+      "path": "app/policies/status_policy.rb",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        19
+      ]
+    },
+    "app/services/base_service.rb": {
+      "path": "app/services/base_service.rb",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        11
+      ]
+    },
+    "app/services/remove_status_service.rb": {
+      "path": "app/services/remove_status_service.rb",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        11
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/services/suspend_account_service.rb": {
+      "path": "app/services/suspend_account_service.rb",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        11
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/services/unsuspend_account_service.rb": {
+      "path": "app/services/unsuspend_account_service.rb",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        11
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/workers/cache_buster_worker.rb": {
+      "path": "app/workers/cache_buster_worker.rb",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        11
+      ]
+    },
+    "lib/mastodon/snowflake.rb": {
+      "path": "lib/mastodon/snowflake.rb",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        12
+      ]
+    },
+    "spec/lib/admin/metrics/measure/instance_media_attachments_measure_spec.rb": {
+      "path": "spec/lib/admin/metrics/measure/instance_media_attachments_measure_spec.rb",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        10
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "spec/policies/media_attachment_policy_spec.rb": {
+      "path": "spec/policies/media_attachment_policy_spec.rb",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        19
+      ],
+      "whichCandidatesImportIt": []
+    }
+  },
+  "tokenDocFreqSnap": {
+    "db": 598,
+    "migrate": 586,
+    "20160905150353": 1,
+    "create": 153,
+    "media": 154,
+    "attachments": 100,
+    "20160905150353_create_media_attachments": 1,
+    "createmediaattachments": 1,
+    "attachment": 127,
+    "20160905150353_create_media_attachment": 1,
+    "createmediaattachment": 1,
+    "20170304202101": 1,
+    "add": 311,
+    "20170304202101_add_type_to_media_attachments": 1,
+    "addtypetomediaattachments": 1,
+    "attachments::migration": 2,
+    "addtypetomediaattachments::migrationmediaattachment": 1,
+    "attachment::image": 2,
+    "mime": 10,
+    "types": 52,
+    "addtypetomediaattachments::migrationmediaattachment::image_mime_types": 1,
+    "attachment::video": 2,
+    "addtypetomediaattachments::migrationmediaattachment::video_mime_types": 1,
+    "20170304202101_add_type_to_media_attachment": 1,
+    "addtypetomediaattachment": 1,
+    "addtypetomediaattachments::migrationmediaattachment::image_mime_typ": 1,
+    "addtypetomediaattachments::migrationmediaattachment::video_mime_typ": 1,
+    "20190420025523": 1,
+    "blurhash": 7,
+    "20190420025523_add_blurhash_to_media_attachments": 1,
+    "addblurhashtomediaattachments": 1,
+    "20190420025523_add_blurhash_to_media_attachment": 1,
+    "addblurhashtomediaattachment": 1,
+    "20170927215609": 1,
+    "description": 22,
+    "20170927215609_add_description_to_media_attachments": 1,
+    "adddescriptiontomediaattachments": 1,
+    "20170927215609_add_description_to_media_attachment": 1,
+    "adddescriptiontomediaattachment": 1,
+    "20200306035625": 1,
+    "processing": 6,
+    "20200306035625_add_processing_to_media_attachments": 1,
+    "addprocessingtomediaattachments": 1,
+    "20200306035625_add_processing_to_media_attachment": 1,
+    "addprocessingtomediaattachment": 1,
+    "20170105224407": 1,
+    "shortcode": 5,
+    "20170105224407_add_shortcode_to_media_attachments": 1,
+    "addshortcodetomediaattachments": 1,
+    "addshortcodetomediaattachments::migrationmediaattachment": 1,
+    "20170105224407_add_shortcode_to_media_attachment": 1,
+    "addshortcodetomediaattachment": 1,
+    "20200627125810": 1,
+    "thumbnail": 6,
+    "columns": 16,
+    "20200627125810_add_thumbnail_columns_to_media_attachments": 1,
+    "addthumbnailcolumnstomediaattachments": 1,
+    "column": 61,
+    "20200627125810_add_thumbnail_columns_to_media_attachment": 1,
+    "addthumbnailcolumnstomediaattachment": 1,
+    "20190103124754": 1,
+    "scheduled": 88,
+    "status": 467,
+    "id": 96,
+    "20190103124754_add_scheduled_status_id_to_media_attachments": 1,
+    "addscheduledstatusidtomediaattachments": 1,
+    "statu": 209,
+    "20190103124754_add_scheduled_status_id_to_media_attachment": 1,
+    "addscheduledstatusidtomediaattachment": 1,
+    "post": 89,
+    "20220303203437": 1,
+    "remove": 82,
+    "changed": 7,
+    "edits": 4,
+    "20220303203437_remove_media_attachments_changed_from_status_edits": 1,
+    "removemediaattachmentschangedfromstatusedits": 1,
+    "edit": 112,
+    "20220303203437_remove_media_attachments_changed_from_status_edit": 1,
+    "removemediaattachmentschangedfromstatusedit": 1,
+    "admin": 644,
+    "metrics": 57,
+    "measure": 34,
+    "instance": 46,
+    "instance_media_attachments_measure": 1,
+    "admin::metrics::measure::instance": 6,
+    "admin::metrics::measure::instancemediaattachmentsmeasure": 1,
+    "metric": 57,
+    "services": 192,
+    "update": 78,
+    "permissions": 5,
+    "service": 292,
+    "update_media_attachments_permissions_service": 1,
+    "updatemediaattachmentspermissionsservice": 1,
+    "servic": 192,
+    "permission": 15,
+    "20200622213645": 1,
+    "ids": 14,
+    "timestamp": 11,
+    "20200622213645_media_attachment_ids_to_timestamp_ids": 1,
+    "mediaattachmentidstotimestampids": 1,
+    "20200622213645_media_attachment_ids_to_timestamp_id": 1,
+    "mediaattachmentidstotimestampid": 1,
+    "20170601210557": 1,
+    "account": 639,
+    "20170601210557_add_index_on_media_attachments_account_id": 1,
+    "addindexonmediaattachmentsaccountid": 1,
+    "20220302232632": 1,
+    "ordered": 3,
+    "statuses": 272,
+    "20220302232632_add_ordered_media_attachment_ids_to_statuses": 1,
+    "addorderedmediaattachmentidstostatuses": 1,
+    "20220302232632_add_ordered_media_attachment_ids_to_status": 1,
+    "addorderedmediaattachmentidstostatus": 1,
+    "20220310060626": 1,
+    "optimize": 19,
+    "null": 53,
+    "20220310060626_optimize_null_index_media_attachments_shortcode": 1,
+    "optimizenullindexmediaattachmentsshortcode": 1,
+    "20220303000827": 1,
+    "20220303000827_add_ordered_media_attachment_ids_to_status_edits": 1,
+    "addorderedmediaattachmentidstostatusedits": 1,
+    "20220303000827_add_ordered_media_attachment_ids_to_status_edit": 1,
+    "addorderedmediaattachmentidstostatusedit": 1,
+    "20210425135952": 1,
+    "20210425135952_add_index_on_media_attachments_account_id_status_id": 1,
+    "addindexonmediaattachmentsaccountidstatusid": 1,
+    "20220310060614": 1,
+    "20220310060614_optimize_null_index_media_attachments_scheduled_status_id": 1,
+    "optimizenullindexmediaattachmentsscheduledstatusid": 1,
+    "policies": 108,
+    "policy": 211,
+    "media_attachment_policy": 1,
+    "mediaattachmentpolicy": 1,
+    "polici": 108,
+    "20170425131920": 1,
+    "meta": 41,
+    "20170425131920_add_media_attachment_meta": 1,
+    "addmediaattachmentmeta": 1
+  }
+}

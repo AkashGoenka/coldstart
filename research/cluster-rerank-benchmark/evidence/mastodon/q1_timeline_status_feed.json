@@ -1,0 +1,3240 @@
+{
+  "schemaVersion": 1,
+  "query": "timeline status feed",
+  "repo": "/tmp/mastodon",
+  "coldstartCommit": "0580f80f934a763b66a3020cca538b9ffaa18f26",
+  "fileCount": 4936,
+  "indexedAt": "2026-05-19T08:24:40.362Z",
+  "goMeta": {
+    "fallback": false,
+    "truncated": true,
+    "excluded_test_files": 136,
+    "note": null
+  },
+  "K": 20,
+  "candidates": [
+    {
+      "rank": 1,
+      "path": "app/javascript/mastodon/reducers/status_lists.js",
+      "fileId": "app/javascript/mastodon/reducers/status_lists.js",
+      "isTestFile": false,
+      "inEdges": [
+        "app/javascript/mastodon/reducers/index.ts"
+      ],
+      "outEdges": [
+        "app/javascript/mastodon/actions/accounts.js",
+        "app/javascript/mastodon/actions/bookmarks.js",
+        "app/javascript/mastodon/actions/favourites.js",
+        "app/javascript/mastodon/actions/interactions.js",
+        "app/javascript/mastodon/actions/interactions_typed.ts",
+        "app/javascript/mastodon/actions/pin_statuses.js",
+        "app/javascript/mastodon/actions/trends.js"
+      ],
+      "inEdgesCount": 1,
+      "outEdgesCount": 7
+    },
+    {
+      "rank": 2,
+      "path": "app/javascript/mastodon/actions/timelines_typed.ts",
+      "fileId": "app/javascript/mastodon/actions/timelines_typed.ts",
+      "isTestFile": false,
+      "inEdges": [
+        "app/javascript/mastodon/actions/interactions.js",
+        "app/javascript/mastodon/actions/timelines.test.ts",
+        "app/javascript/mastodon/actions/timelines.js",
+        "app/javascript/mastodon/features/account_timeline/hooks/usePinned.ts",
+        "app/javascript/mastodon/features/account_timeline/index.tsx",
+        "app/javascript/mastodon/features/ui/containers/status_list_container.js",
+        "app/javascript/mastodon/reducers/statuses.js",
+        "app/javascript/mastodon/reducers/compose.js",
+        "app/javascript/mastodon/reducers/contexts.ts",
+        "app/javascript/mastodon/reducers/modal.ts",
+        "app/javascript/mastodon/reducers/picture_in_picture.ts",
+        "app/javascript/mastodon/reducers/notification_groups.ts",
+        "app/javascript/mastodon/selectors/timelines.ts",
+        "app/javascript/mastodon/reducers/timelines.js"
+      ],
+      "outEdges": [
+        "app/javascript/mastodon/initial_state.ts",
+        "app/javascript/mastodon/models/status.ts",
+        "app/javascript/mastodon/store/typed_functions.ts",
+        "app/javascript/mastodon/actions/timelines.js"
+      ],
+      "inEdgesCount": 14,
+      "outEdgesCount": 4
+    },
+    {
+      "rank": 3,
+      "path": "app/javascript/mastodon/actions/timelines.js",
+      "fileId": "app/javascript/mastodon/actions/timelines.js",
+      "isTestFile": false,
+      "inEdges": [
+        "app/javascript/mastodon/actions/compose.js",
+        "app/javascript/mastodon/actions/timelines_typed.ts",
+        "app/javascript/mastodon/actions/statuses.js",
+        "app/javascript/mastodon/actions/streaming.js",
+        "app/javascript/mastodon/components/featured_carousel.tsx",
+        "app/javascript/mastodon/components/status_list.jsx",
+        "app/javascript/mastodon/features/account_timeline/hooks/usePinned.ts",
+        "app/javascript/mastodon/features/account_gallery/index.tsx",
+        "app/javascript/mastodon/features/community_timeline/index.jsx",
+        "app/javascript/mastodon/features/link_timeline/index.tsx",
+        "app/javascript/mastodon/features/hashtag_timeline/index.jsx",
+        "app/javascript/mastodon/features/firehose/index.jsx",
+        "app/javascript/mastodon/features/list_timeline/index.jsx",
+        "app/javascript/mastodon/features/home_timeline/index.jsx",
+        "app/javascript/mastodon/features/onboarding/follows.tsx",
+        "app/javascript/mastodon/features/public_timeline/index.jsx",
+        "app/javascript/mastodon/features/ui/containers/status_list_container.js",
+        "app/javascript/mastodon/features/ui/components/report_modal.jsx",
+        "app/javascript/mastodon/features/ui/index.jsx",
+        "app/javascript/mastodon/reducers/contexts.ts",
+        "app/javascript/mastodon/reducers/timelines.js"
+      ],
+      "outEdges": [
+        "app/javascript/mastodon/api.ts",
+        "app/javascript/mastodon/compare_id.ts",
+        "app/javascript/mastodon/initial_state.ts",
+        "app/javascript/mastodon/actions/importer/index.js",
+        "app/javascript/mastodon/actions/markers.ts",
+        "app/javascript/mastodon/actions/timelines_typed.ts"
+      ],
+      "inEdgesCount": 21,
+      "outEdgesCount": 6
+    },
+    {
+      "rank": 4,
+      "path": "app/javascript/mastodon/initial_state.ts",
+      "fileId": "app/javascript/mastodon/initial_state.ts",
+      "isTestFile": false,
+      "inEdges": [
+        "app/javascript/mastodon/actions/interactions.js",
+        "app/javascript/mastodon/actions/importer/normalizer.js",
+        "app/javascript/mastodon/actions/pin_statuses.js",
+        "app/javascript/mastodon/actions/markers.ts",
+        "app/javascript/mastodon/actions/accounts.js",
+        "app/javascript/mastodon/actions/notification_groups.ts",
+        "app/javascript/mastodon/actions/push_notifications/registerer.js",
+        "app/javascript/mastodon/actions/timelines_typed.ts",
+        "app/javascript/mastodon/api.ts",
+        "app/javascript/mastodon/actions/timelines.js",
+        "app/javascript/mastodon/components/avatar_overlay.tsx",
+        "app/javascript/mastodon/components/animated_number.tsx",
+        "app/javascript/mastodon/components/avatar_composite.jsx",
+        "app/javascript/mastodon/components/avatar.tsx",
+        "app/javascript/mastodon/components/account_header/index.tsx",
+        "app/javascript/mastodon/components/account_list_item/index.tsx",
+        "app/javascript/mastodon/components/account/index.tsx",
+        "app/javascript/mastodon/components/emoji/context.tsx",
+        "app/javascript/mastodon/components/error_boundary.jsx",
+        "app/javascript/mastodon/components/familiar_followers/use_fetch_familiar_followers.ts",
+        "app/javascript/mastodon/components/gif.tsx",
+        "app/javascript/mastodon/components/limited_account_hint.tsx",
+        "app/javascript/mastodon/components/follow_button.tsx",
+        "app/javascript/mastodon/components/hover_card_account.tsx",
+        "app/javascript/mastodon/components/status/boost_button.tsx",
+        "app/javascript/mastodon/components/status_quoted.tsx",
+        "app/javascript/mastodon/components/server_banner.jsx",
+        "app/javascript/mastodon/components/media_gallery.jsx",
+        "app/javascript/mastodon/components/status_content.jsx",
+        "app/javascript/mastodon/components/status.jsx",
+        "app/javascript/mastodon/components/status_action_bar/index.jsx",
+        "app/javascript/mastodon/containers/compose_container.jsx",
+        "app/javascript/mastodon/features/account_gallery/components/media_item.tsx",
+        "app/javascript/mastodon/containers/mastodon.jsx",
+        "app/javascript/mastodon/features/account_edit/index.tsx",
+        "app/javascript/mastodon/containers/status_container.jsx",
+        "app/javascript/mastodon/features/account_featured/index.tsx",
+        "app/javascript/mastodon/features/annual_report/percentile.tsx",
+        "app/javascript/mastodon/features/collections/components/share_modal.tsx",
+        "app/javascript/mastodon/features/closed_registrations_modal/index.jsx",
+        "app/javascript/mastodon/features/collections/detail/revoke_collection_inclusion_modal.tsx",
+        "app/javascript/mastodon/features/collections/editor/index.tsx",
+        "app/javascript/mastodon/features/collections/editor/details.tsx",
+        "app/javascript/mastodon/features/compose/components/compose_form.jsx",
+        "app/javascript/mastodon/features/collections/components/collection_lockup.tsx",
+        "app/javascript/mastodon/features/community_timeline/index.jsx",
+        "app/javascript/mastodon/features/collections/components/collection_menu.tsx",
+        "app/javascript/mastodon/features/collections/detail/accounts_list.tsx",
+        "app/javascript/mastodon/features/annual_report/archetype.tsx",
+        "app/javascript/mastodon/features/compose/components/language_dropdown.tsx",
+        "app/javascript/mastodon/features/audio/index.tsx",
+        "app/javascript/mastodon/features/alt_text_modal/index.tsx",
+        "app/javascript/mastodon/features/collections/editor/accounts.tsx",
+        "app/javascript/mastodon/features/collections/detail/index.tsx",
+        "app/javascript/mastodon/features/emoji/index.ts",
+        "app/javascript/mastodon/features/emoji/picker.ts",
+        "app/javascript/mastodon/features/compose/components/warning.tsx",
+        "app/javascript/mastodon/features/compose/containers/compose_form_container.js",
+        "app/javascript/mastodon/features/compose/components/navigation_bar.tsx",
+        "app/javascript/mastodon/features/directory/components/account_card.tsx",
+        "app/javascript/mastodon/features/compose/components/search.tsx",
+        "app/javascript/mastodon/features/compose/index.tsx",
+        "app/javascript/mastodon/features/home_timeline/components/critical_update_banner.tsx",
+        "app/javascript/mastodon/features/home_timeline/components/announcements/index.tsx",
+        "app/javascript/mastodon/features/followers/index.tsx",
+        "app/javascript/mastodon/features/explore/components/card.tsx",
+        "app/javascript/mastodon/features/interaction_modal/index.tsx",
+        "app/javascript/mastodon/features/follow_requests/index.jsx",
+        "app/javascript/mastodon/features/firehose/index.jsx",
+        "app/javascript/mastodon/features/hashtag_timeline/index.jsx",
+        "app/javascript/mastodon/features/home_timeline/components/inline_follow_suggestions.tsx",
+        "app/javascript/mastodon/features/lists/members.tsx",
+        "app/javascript/mastodon/features/notifications_v2/components/notification_poll.tsx",
+        "app/javascript/mastodon/features/navigation_panel/components/sign_in_banner.tsx",
+        "app/javascript/mastodon/features/navigation_panel/components/disabled_account_banner.tsx",
+        "app/javascript/mastodon/features/notifications_v2/components/notification_mention.tsx",
+        "app/javascript/mastodon/features/notifications/components/relationships_severance_event.jsx",
+        "app/javascript/mastodon/features/navigation_panel/components/trends.tsx",
+        "app/javascript/mastodon/features/notifications_v2/components/notification_follow.tsx",
+        "app/javascript/mastodon/features/notifications/components/notification.jsx",
+        "app/javascript/mastodon/features/navigation_panel/index.tsx",
+        "app/javascript/mastodon/features/ui/components/confirmation_modals/delete_collection.tsx",
+        "app/javascript/mastodon/features/standalone/status/index.tsx",
+        "app/javascript/mastodon/features/public_timeline/index.jsx",
+        "app/javascript/mastodon/features/quotes/index.tsx",
+        "app/javascript/mastodon/features/status/components/card.tsx",
+        "app/javascript/mastodon/features/subscribed_languages_modal/index.jsx",
+        "app/javascript/mastodon/features/onboarding/profile.tsx",
+        "app/javascript/mastodon/features/status/components/action_bar.jsx",
+        "app/javascript/mastodon/features/status/index.jsx",
+        "app/javascript/mastodon/features/ui/components/link_footer.tsx",
+        "app/javascript/mastodon/features/ui/components/confirmation_modals/hide_featured_tab.tsx",
+        "app/javascript/mastodon/features/ui/containers/status_list_container.js",
+        "app/javascript/mastodon/features/ui/components/navigation_bar.tsx",
+        "app/javascript/mastodon/features/ui/index.jsx",
+        "app/javascript/mastodon/is_mobile.ts",
+        "app/javascript/mastodon/identity_context.tsx",
+        "app/javascript/mastodon/main.tsx",
+        "app/javascript/mastodon/features/video/index.tsx",
+        "app/javascript/mastodon/selectors/accounts.ts",
+        "app/javascript/mastodon/reducers/slices/annual_report.ts",
+        "app/javascript/mastodon/reducers/accounts_map.ts",
+        "app/javascript/mastodon/reducers/slices/collections.ts",
+        "app/javascript/mastodon/reducers/accounts.ts",
+        "app/javascript/mastodon/reducers/compose.js",
+        "app/javascript/mastodon/reducers/notification_groups.ts",
+        "app/javascript/mastodon/utils/environment.ts",
+        "app/javascript/mastodon/stream.js",
+        "app/javascript/mastodon/selectors/index.js"
+      ],
+      "outEdges": [
+        "app/javascript/mastodon/api/annual_report.ts",
+        "app/javascript/mastodon/api_types/accounts.ts"
+      ],
+      "inEdgesCount": 109,
+      "outEdgesCount": 2
+    },
+    {
+      "rank": 5,
+      "path": "app/javascript/mastodon/features/account_timeline/components/pinned_statuses.tsx",
+      "fileId": "app/javascript/mastodon/features/account_timeline/components/pinned_statuses.tsx",
+      "isTestFile": false,
+      "inEdges": [
+        "app/javascript/mastodon/components/status_list.jsx",
+        "app/javascript/mastodon/features/account_timeline/index.tsx"
+      ],
+      "outEdges": [
+        "app/javascript/mastodon/components/badge/index.tsx",
+        "app/javascript/mastodon/components/button/index.tsx",
+        "app/javascript/mastodon/components/icon.tsx",
+        "app/javascript/mastodon/components/status/header.tsx",
+        "app/javascript/mastodon/features/account_timeline/hooks/useAccountContext.ts"
+      ],
+      "inEdgesCount": 2,
+      "outEdgesCount": 5
+    },
+    {
+      "rank": 6,
+      "path": "app/javascript/mastodon/selectors/statuses.ts",
+      "fileId": "app/javascript/mastodon/selectors/statuses.ts",
+      "isTestFile": false,
+      "inEdges": [
+        "app/javascript/mastodon/selectors/index.js"
+      ],
+      "outEdges": [
+        "app/javascript/mastodon/store/index.ts"
+      ],
+      "inEdgesCount": 1,
+      "outEdgesCount": 1
+    },
+    {
+      "rank": 7,
+      "path": "app/javascript/mastodon/features/ui/containers/status_list_container.js",
+      "fileId": "app/javascript/mastodon/features/ui/containers/status_list_container.js",
+      "isTestFile": false,
+      "inEdges": [
+        "app/javascript/mastodon/features/community_timeline/index.jsx",
+        "app/javascript/mastodon/features/link_timeline/index.tsx",
+        "app/javascript/mastodon/features/hashtag_timeline/index.jsx",
+        "app/javascript/mastodon/features/firehose/index.jsx",
+        "app/javascript/mastodon/features/home_timeline/index.jsx",
+        "app/javascript/mastodon/features/list_timeline/index.jsx",
+        "app/javascript/mastodon/features/public_timeline/index.jsx"
+      ],
+      "outEdges": [
+        "app/javascript/mastodon/actions/timelines.js",
+        "app/javascript/mastodon/actions/timelines_typed.ts",
+        "app/javascript/mastodon/components/status_list.jsx",
+        "app/javascript/mastodon/initial_state.ts"
+      ],
+      "inEdgesCount": 7,
+      "outEdgesCount": 4
+    },
+    {
+      "rank": 8,
+      "path": "app/javascript/mastodon/components/status_list.jsx",
+      "fileId": "app/javascript/mastodon/components/status_list.jsx",
+      "isTestFile": false,
+      "inEdges": [
+        "app/javascript/mastodon/features/account_timeline/index.tsx",
+        "app/javascript/mastodon/features/bookmarked_statuses/index.tsx",
+        "app/javascript/mastodon/features/favourited_statuses/index.tsx",
+        "app/javascript/mastodon/features/explore/statuses.jsx",
+        "app/javascript/mastodon/features/quotes/index.tsx",
+        "app/javascript/mastodon/features/pinned_statuses/index.jsx",
+        "app/javascript/mastodon/features/ui/containers/status_list_container.js"
+      ],
+      "outEdges": [
+        "app/javascript/mastodon/actions/timelines.js",
+        "app/javascript/mastodon/components/regeneration_indicator.tsx",
+        "app/javascript/mastodon/features/home_timeline/components/inline_follow_suggestions.tsx",
+        "app/javascript/mastodon/features/account_timeline/components/pinned_statuses.tsx",
+        "app/javascript/mastodon/components/status_quoted.tsx",
+        "app/javascript/mastodon/components/load_gap.tsx",
+        "app/javascript/mastodon/components/scrollable_list/index.jsx"
+      ],
+      "inEdgesCount": 7,
+      "outEdgesCount": 7
+    },
+    {
+      "rank": 9,
+      "path": "app/views/statuses/_attachment_list.html.haml",
+      "fileId": "app/views/statuses/_attachment_list.html.haml",
+      "isTestFile": false,
+      "inEdges": [
+        "app/controllers/statuses_controller.rb"
+      ],
+      "outEdges": [],
+      "inEdgesCount": 1,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 10,
+      "path": "streaming/database.js",
+      "fileId": "streaming/database.js",
+      "isTestFile": false,
+      "inEdges": [
+        "streaming/index.js"
+      ],
+      "outEdges": [
+        "streaming/utils.js"
+      ],
+      "inEdgesCount": 1,
+      "outEdgesCount": 1
+    },
+    {
+      "rank": 11,
+      "path": "streaming/errors.js",
+      "fileId": "streaming/errors.js",
+      "isTestFile": false,
+      "inEdges": [
+        "streaming/index.js"
+      ],
+      "outEdges": [],
+      "inEdgesCount": 1,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 12,
+      "path": "app/javascript/mastodon/features/ui/util/async-components.js",
+      "fileId": "app/javascript/mastodon/features/ui/util/async-components.js",
+      "isTestFile": false,
+      "inEdges": [
+        "app/javascript/mastodon/components/media_attachments.jsx",
+        "app/javascript/mastodon/components/status.jsx",
+        "app/javascript/mastodon/features/compose/components/emoji_picker_dropdown.jsx",
+        "app/javascript/mastodon/features/alt_text_modal/index.tsx",
+        "app/javascript/mastodon/features/ui/components/columns_area.tsx",
+        "app/javascript/mastodon/features/ui/components/modal_root.jsx",
+        "app/javascript/mastodon/features/ui/index.jsx"
+      ],
+      "outEdges": [],
+      "inEdgesCount": 7,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 13,
+      "path": "app/javascript/mastodon/features/account_timeline/hooks/usePinned.ts",
+      "fileId": "app/javascript/mastodon/features/account_timeline/hooks/usePinned.ts",
+      "isTestFile": false,
+      "inEdges": [
+        "app/javascript/mastodon/features/account_timeline/index.tsx"
+      ],
+      "outEdges": [
+        "app/javascript/mastodon/actions/timelines.js",
+        "app/javascript/mastodon/actions/timelines_typed.ts",
+        "app/javascript/mastodon/selectors/timelines.ts",
+        "app/javascript/mastodon/store/index.ts",
+        "app/javascript/mastodon/features/account_timeline/hooks/useAccountContext.ts"
+      ],
+      "inEdgesCount": 1,
+      "outEdgesCount": 5
+    },
+    {
+      "rank": 14,
+      "path": "config/locales/sk.yml",
+      "fileId": "config/locales/sk.yml",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 15,
+      "path": "config/locales/my.yml",
+      "fileId": "config/locales/my.yml",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 16,
+      "path": "config/locales/ms.yml",
+      "fileId": "config/locales/ms.yml",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 17,
+      "path": "config/locales/io.yml",
+      "fileId": "config/locales/io.yml",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 18,
+      "path": "config/locales/ie.yml",
+      "fileId": "config/locales/ie.yml",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 19,
+      "path": "config/locales/sr.yml",
+      "fileId": "config/locales/sr.yml",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 20,
+      "path": "config/locales/lv.yml",
+      "fileId": "config/locales/lv.yml",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    }
+  ],
+  "pairwise": {
+    "2-3": {
+      "sharedImporters": [
+        "app/javascript/mastodon/features/account_timeline/hooks/usePinned.ts",
+        "app/javascript/mastodon/features/ui/containers/status_list_container.js",
+        "app/javascript/mastodon/reducers/contexts.ts",
+        "app/javascript/mastodon/reducers/timelines.js"
+      ],
+      "sharedImportees": [
+        "app/javascript/mastodon/initial_state.ts"
+      ]
+    },
+    "2-4": {
+      "sharedImporters": [
+        "app/javascript/mastodon/actions/interactions.js",
+        "app/javascript/mastodon/actions/timelines.js",
+        "app/javascript/mastodon/features/ui/containers/status_list_container.js",
+        "app/javascript/mastodon/reducers/compose.js",
+        "app/javascript/mastodon/reducers/notification_groups.ts"
+      ],
+      "sharedImportees": []
+    },
+    "2-5": {
+      "sharedImporters": [
+        "app/javascript/mastodon/features/account_timeline/index.tsx"
+      ],
+      "sharedImportees": []
+    },
+    "2-7": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "app/javascript/mastodon/actions/timelines.js",
+        "app/javascript/mastodon/initial_state.ts"
+      ]
+    },
+    "2-8": {
+      "sharedImporters": [
+        "app/javascript/mastodon/features/account_timeline/index.tsx",
+        "app/javascript/mastodon/features/ui/containers/status_list_container.js"
+      ],
+      "sharedImportees": [
+        "app/javascript/mastodon/actions/timelines.js"
+      ]
+    },
+    "2-13": {
+      "sharedImporters": [
+        "app/javascript/mastodon/features/account_timeline/index.tsx"
+      ],
+      "sharedImportees": [
+        "app/javascript/mastodon/actions/timelines.js"
+      ]
+    },
+    "3-4": {
+      "sharedImporters": [
+        "app/javascript/mastodon/actions/timelines_typed.ts",
+        "app/javascript/mastodon/features/community_timeline/index.jsx",
+        "app/javascript/mastodon/features/firehose/index.jsx",
+        "app/javascript/mastodon/features/hashtag_timeline/index.jsx",
+        "app/javascript/mastodon/features/public_timeline/index.jsx",
+        "app/javascript/mastodon/features/ui/containers/status_list_container.js",
+        "app/javascript/mastodon/features/ui/index.jsx"
+      ],
+      "sharedImportees": []
+    },
+    "3-5": {
+      "sharedImporters": [
+        "app/javascript/mastodon/components/status_list.jsx"
+      ],
+      "sharedImportees": []
+    },
+    "3-7": {
+      "sharedImporters": [
+        "app/javascript/mastodon/features/community_timeline/index.jsx",
+        "app/javascript/mastodon/features/link_timeline/index.tsx",
+        "app/javascript/mastodon/features/hashtag_timeline/index.jsx",
+        "app/javascript/mastodon/features/firehose/index.jsx",
+        "app/javascript/mastodon/features/home_timeline/index.jsx",
+        "app/javascript/mastodon/features/list_timeline/index.jsx",
+        "app/javascript/mastodon/features/public_timeline/index.jsx"
+      ],
+      "sharedImportees": [
+        "app/javascript/mastodon/actions/timelines_typed.ts",
+        "app/javascript/mastodon/initial_state.ts"
+      ]
+    },
+    "3-8": {
+      "sharedImporters": [
+        "app/javascript/mastodon/features/ui/containers/status_list_container.js"
+      ],
+      "sharedImportees": []
+    },
+    "3-12": {
+      "sharedImporters": [
+        "app/javascript/mastodon/features/ui/index.jsx"
+      ],
+      "sharedImportees": []
+    },
+    "3-13": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "app/javascript/mastodon/actions/timelines_typed.ts"
+      ]
+    },
+    "4-6": {
+      "sharedImporters": [
+        "app/javascript/mastodon/selectors/index.js"
+      ],
+      "sharedImportees": []
+    },
+    "4-7": {
+      "sharedImporters": [
+        "app/javascript/mastodon/features/community_timeline/index.jsx",
+        "app/javascript/mastodon/features/hashtag_timeline/index.jsx",
+        "app/javascript/mastodon/features/firehose/index.jsx",
+        "app/javascript/mastodon/features/public_timeline/index.jsx"
+      ],
+      "sharedImportees": []
+    },
+    "4-8": {
+      "sharedImporters": [
+        "app/javascript/mastodon/features/quotes/index.tsx",
+        "app/javascript/mastodon/features/ui/containers/status_list_container.js"
+      ],
+      "sharedImportees": []
+    },
+    "4-12": {
+      "sharedImporters": [
+        "app/javascript/mastodon/components/status.jsx",
+        "app/javascript/mastodon/features/alt_text_modal/index.tsx",
+        "app/javascript/mastodon/features/ui/index.jsx"
+      ],
+      "sharedImportees": []
+    },
+    "5-8": {
+      "sharedImporters": [
+        "app/javascript/mastodon/features/account_timeline/index.tsx"
+      ],
+      "sharedImportees": []
+    },
+    "5-13": {
+      "sharedImporters": [
+        "app/javascript/mastodon/features/account_timeline/index.tsx"
+      ],
+      "sharedImportees": [
+        "app/javascript/mastodon/features/account_timeline/hooks/useAccountContext.ts"
+      ]
+    },
+    "6-13": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "app/javascript/mastodon/store/index.ts"
+      ]
+    },
+    "7-8": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "app/javascript/mastodon/actions/timelines.js"
+      ]
+    },
+    "7-13": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "app/javascript/mastodon/actions/timelines.js",
+        "app/javascript/mastodon/actions/timelines_typed.ts"
+      ]
+    },
+    "8-13": {
+      "sharedImporters": [
+        "app/javascript/mastodon/features/account_timeline/index.tsx"
+      ],
+      "sharedImportees": [
+        "app/javascript/mastodon/actions/timelines.js"
+      ]
+    },
+    "10-11": {
+      "sharedImporters": [
+        "streaming/index.js"
+      ],
+      "sharedImportees": []
+    }
+  },
+  "bridgeRaw": {
+    "app/controllers/statuses_controller.rb": {
+      "path": "app/controllers/statuses_controller.rb",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        9
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/actions/accounts.js": {
+      "path": "app/javascript/mastodon/actions/accounts.js",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": [
+        1
+      ]
+    },
+    "app/javascript/mastodon/actions/bookmarks.js": {
+      "path": "app/javascript/mastodon/actions/bookmarks.js",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        1
+      ]
+    },
+    "app/javascript/mastodon/actions/compose.js": {
+      "path": "app/javascript/mastodon/actions/compose.js",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        3
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/actions/favourites.js": {
+      "path": "app/javascript/mastodon/actions/favourites.js",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        1
+      ]
+    },
+    "app/javascript/mastodon/actions/importer/index.js": {
+      "path": "app/javascript/mastodon/actions/importer/index.js",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        3
+      ]
+    },
+    "app/javascript/mastodon/actions/interactions.js": {
+      "path": "app/javascript/mastodon/actions/interactions.js",
+      "importsHowManyCandidates": 2,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [
+        2,
+        4
+      ],
+      "whichCandidatesImportIt": [
+        1
+      ]
+    },
+    "app/javascript/mastodon/actions/markers.ts": {
+      "path": "app/javascript/mastodon/actions/markers.ts",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": [
+        3
+      ]
+    },
+    "app/javascript/mastodon/actions/importer/normalizer.js": {
+      "path": "app/javascript/mastodon/actions/importer/normalizer.js",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/actions/interactions_typed.ts": {
+      "path": "app/javascript/mastodon/actions/interactions_typed.ts",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        1
+      ]
+    },
+    "app/javascript/mastodon/actions/notification_groups.ts": {
+      "path": "app/javascript/mastodon/actions/notification_groups.ts",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/actions/pin_statuses.js": {
+      "path": "app/javascript/mastodon/actions/pin_statuses.js",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": [
+        1
+      ]
+    },
+    "app/javascript/mastodon/actions/push_notifications/registerer.js": {
+      "path": "app/javascript/mastodon/actions/push_notifications/registerer.js",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/actions/statuses.js": {
+      "path": "app/javascript/mastodon/actions/statuses.js",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        3
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/actions/streaming.js": {
+      "path": "app/javascript/mastodon/actions/streaming.js",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        3
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/actions/timelines.test.ts": {
+      "path": "app/javascript/mastodon/actions/timelines.test.ts",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/actions/trends.js": {
+      "path": "app/javascript/mastodon/actions/trends.js",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        1
+      ]
+    },
+    "app/javascript/mastodon/api/annual_report.ts": {
+      "path": "app/javascript/mastodon/api/annual_report.ts",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        4
+      ]
+    },
+    "app/javascript/mastodon/api.ts": {
+      "path": "app/javascript/mastodon/api.ts",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": [
+        3
+      ]
+    },
+    "app/javascript/mastodon/api_types/accounts.ts": {
+      "path": "app/javascript/mastodon/api_types/accounts.ts",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        4
+      ]
+    },
+    "app/javascript/mastodon/compare_id.ts": {
+      "path": "app/javascript/mastodon/compare_id.ts",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        3
+      ]
+    },
+    "app/javascript/mastodon/components/account/index.tsx": {
+      "path": "app/javascript/mastodon/components/account/index.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/components/account_header/index.tsx": {
+      "path": "app/javascript/mastodon/components/account_header/index.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/components/account_list_item/index.tsx": {
+      "path": "app/javascript/mastodon/components/account_list_item/index.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/components/animated_number.tsx": {
+      "path": "app/javascript/mastodon/components/animated_number.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/components/avatar.tsx": {
+      "path": "app/javascript/mastodon/components/avatar.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/components/avatar_overlay.tsx": {
+      "path": "app/javascript/mastodon/components/avatar_overlay.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/components/avatar_composite.jsx": {
+      "path": "app/javascript/mastodon/components/avatar_composite.jsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/components/badge/index.tsx": {
+      "path": "app/javascript/mastodon/components/badge/index.tsx",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        5
+      ]
+    },
+    "app/javascript/mastodon/components/button/index.tsx": {
+      "path": "app/javascript/mastodon/components/button/index.tsx",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        5
+      ]
+    },
+    "app/javascript/mastodon/components/emoji/context.tsx": {
+      "path": "app/javascript/mastodon/components/emoji/context.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/components/error_boundary.jsx": {
+      "path": "app/javascript/mastodon/components/error_boundary.jsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/components/familiar_followers/use_fetch_familiar_followers.ts": {
+      "path": "app/javascript/mastodon/components/familiar_followers/use_fetch_familiar_followers.ts",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/components/featured_carousel.tsx": {
+      "path": "app/javascript/mastodon/components/featured_carousel.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        3
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/components/follow_button.tsx": {
+      "path": "app/javascript/mastodon/components/follow_button.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/components/gif.tsx": {
+      "path": "app/javascript/mastodon/components/gif.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/components/hover_card_account.tsx": {
+      "path": "app/javascript/mastodon/components/hover_card_account.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/components/icon.tsx": {
+      "path": "app/javascript/mastodon/components/icon.tsx",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        5
+      ]
+    },
+    "app/javascript/mastodon/components/limited_account_hint.tsx": {
+      "path": "app/javascript/mastodon/components/limited_account_hint.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/components/load_gap.tsx": {
+      "path": "app/javascript/mastodon/components/load_gap.tsx",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        8
+      ]
+    },
+    "app/javascript/mastodon/components/media_attachments.jsx": {
+      "path": "app/javascript/mastodon/components/media_attachments.jsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        12
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/components/media_gallery.jsx": {
+      "path": "app/javascript/mastodon/components/media_gallery.jsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/components/regeneration_indicator.tsx": {
+      "path": "app/javascript/mastodon/components/regeneration_indicator.tsx",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        8
+      ]
+    },
+    "app/javascript/mastodon/components/scrollable_list/index.jsx": {
+      "path": "app/javascript/mastodon/components/scrollable_list/index.jsx",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        8
+      ]
+    },
+    "app/javascript/mastodon/components/server_banner.jsx": {
+      "path": "app/javascript/mastodon/components/server_banner.jsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/components/status/boost_button.tsx": {
+      "path": "app/javascript/mastodon/components/status/boost_button.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/components/status/header.tsx": {
+      "path": "app/javascript/mastodon/components/status/header.tsx",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        5
+      ]
+    },
+    "app/javascript/mastodon/components/status.jsx": {
+      "path": "app/javascript/mastodon/components/status.jsx",
+      "importsHowManyCandidates": 2,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4,
+        12
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/components/status_action_bar/index.jsx": {
+      "path": "app/javascript/mastodon/components/status_action_bar/index.jsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/components/status_content.jsx": {
+      "path": "app/javascript/mastodon/components/status_content.jsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/components/status_quoted.tsx": {
+      "path": "app/javascript/mastodon/components/status_quoted.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": [
+        8
+      ]
+    },
+    "app/javascript/mastodon/containers/compose_container.jsx": {
+      "path": "app/javascript/mastodon/containers/compose_container.jsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/containers/mastodon.jsx": {
+      "path": "app/javascript/mastodon/containers/mastodon.jsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/containers/status_container.jsx": {
+      "path": "app/javascript/mastodon/containers/status_container.jsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/account_edit/index.tsx": {
+      "path": "app/javascript/mastodon/features/account_edit/index.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/account_gallery/index.tsx": {
+      "path": "app/javascript/mastodon/features/account_gallery/index.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        3
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/account_featured/index.tsx": {
+      "path": "app/javascript/mastodon/features/account_featured/index.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/account_gallery/components/media_item.tsx": {
+      "path": "app/javascript/mastodon/features/account_gallery/components/media_item.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/account_timeline/index.tsx": {
+      "path": "app/javascript/mastodon/features/account_timeline/index.tsx",
+      "importsHowManyCandidates": 4,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2,
+        5,
+        8,
+        13
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/account_timeline/hooks/useAccountContext.ts": {
+      "path": "app/javascript/mastodon/features/account_timeline/hooks/useAccountContext.ts",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 2,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        5,
+        13
+      ]
+    },
+    "app/javascript/mastodon/features/alt_text_modal/index.tsx": {
+      "path": "app/javascript/mastodon/features/alt_text_modal/index.tsx",
+      "importsHowManyCandidates": 2,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4,
+        12
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/annual_report/archetype.tsx": {
+      "path": "app/javascript/mastodon/features/annual_report/archetype.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/annual_report/percentile.tsx": {
+      "path": "app/javascript/mastodon/features/annual_report/percentile.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/audio/index.tsx": {
+      "path": "app/javascript/mastodon/features/audio/index.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/bookmarked_statuses/index.tsx": {
+      "path": "app/javascript/mastodon/features/bookmarked_statuses/index.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        8
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/closed_registrations_modal/index.jsx": {
+      "path": "app/javascript/mastodon/features/closed_registrations_modal/index.jsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/collections/components/collection_lockup.tsx": {
+      "path": "app/javascript/mastodon/features/collections/components/collection_lockup.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/collections/components/collection_menu.tsx": {
+      "path": "app/javascript/mastodon/features/collections/components/collection_menu.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/collections/components/share_modal.tsx": {
+      "path": "app/javascript/mastodon/features/collections/components/share_modal.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/collections/detail/accounts_list.tsx": {
+      "path": "app/javascript/mastodon/features/collections/detail/accounts_list.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/collections/detail/index.tsx": {
+      "path": "app/javascript/mastodon/features/collections/detail/index.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/collections/detail/revoke_collection_inclusion_modal.tsx": {
+      "path": "app/javascript/mastodon/features/collections/detail/revoke_collection_inclusion_modal.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/collections/editor/index.tsx": {
+      "path": "app/javascript/mastodon/features/collections/editor/index.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/collections/editor/details.tsx": {
+      "path": "app/javascript/mastodon/features/collections/editor/details.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/collections/editor/accounts.tsx": {
+      "path": "app/javascript/mastodon/features/collections/editor/accounts.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/community_timeline/index.jsx": {
+      "path": "app/javascript/mastodon/features/community_timeline/index.jsx",
+      "importsHowManyCandidates": 3,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        3,
+        4,
+        7
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/compose/components/compose_form.jsx": {
+      "path": "app/javascript/mastodon/features/compose/components/compose_form.jsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/compose/components/emoji_picker_dropdown.jsx": {
+      "path": "app/javascript/mastodon/features/compose/components/emoji_picker_dropdown.jsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        12
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/compose/components/language_dropdown.tsx": {
+      "path": "app/javascript/mastodon/features/compose/components/language_dropdown.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/compose/components/navigation_bar.tsx": {
+      "path": "app/javascript/mastodon/features/compose/components/navigation_bar.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/compose/components/search.tsx": {
+      "path": "app/javascript/mastodon/features/compose/components/search.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/compose/components/warning.tsx": {
+      "path": "app/javascript/mastodon/features/compose/components/warning.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/compose/containers/compose_form_container.js": {
+      "path": "app/javascript/mastodon/features/compose/containers/compose_form_container.js",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/compose/index.tsx": {
+      "path": "app/javascript/mastodon/features/compose/index.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/directory/components/account_card.tsx": {
+      "path": "app/javascript/mastodon/features/directory/components/account_card.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/emoji/index.ts": {
+      "path": "app/javascript/mastodon/features/emoji/index.ts",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/emoji/picker.ts": {
+      "path": "app/javascript/mastodon/features/emoji/picker.ts",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/explore/components/card.tsx": {
+      "path": "app/javascript/mastodon/features/explore/components/card.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/explore/statuses.jsx": {
+      "path": "app/javascript/mastodon/features/explore/statuses.jsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        8
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/favourited_statuses/index.tsx": {
+      "path": "app/javascript/mastodon/features/favourited_statuses/index.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        8
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/firehose/index.jsx": {
+      "path": "app/javascript/mastodon/features/firehose/index.jsx",
+      "importsHowManyCandidates": 3,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        3,
+        4,
+        7
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/follow_requests/index.jsx": {
+      "path": "app/javascript/mastodon/features/follow_requests/index.jsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/followers/index.tsx": {
+      "path": "app/javascript/mastodon/features/followers/index.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/hashtag_timeline/index.jsx": {
+      "path": "app/javascript/mastodon/features/hashtag_timeline/index.jsx",
+      "importsHowManyCandidates": 3,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        3,
+        4,
+        7
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/home_timeline/components/announcements/index.tsx": {
+      "path": "app/javascript/mastodon/features/home_timeline/components/announcements/index.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/home_timeline/components/critical_update_banner.tsx": {
+      "path": "app/javascript/mastodon/features/home_timeline/components/critical_update_banner.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/home_timeline/index.jsx": {
+      "path": "app/javascript/mastodon/features/home_timeline/index.jsx",
+      "importsHowManyCandidates": 2,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        3,
+        7
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/home_timeline/components/inline_follow_suggestions.tsx": {
+      "path": "app/javascript/mastodon/features/home_timeline/components/inline_follow_suggestions.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": [
+        8
+      ]
+    },
+    "app/javascript/mastodon/features/interaction_modal/index.tsx": {
+      "path": "app/javascript/mastodon/features/interaction_modal/index.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/link_timeline/index.tsx": {
+      "path": "app/javascript/mastodon/features/link_timeline/index.tsx",
+      "importsHowManyCandidates": 2,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        3,
+        7
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/list_timeline/index.jsx": {
+      "path": "app/javascript/mastodon/features/list_timeline/index.jsx",
+      "importsHowManyCandidates": 2,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        3,
+        7
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/lists/members.tsx": {
+      "path": "app/javascript/mastodon/features/lists/members.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/navigation_panel/components/disabled_account_banner.tsx": {
+      "path": "app/javascript/mastodon/features/navigation_panel/components/disabled_account_banner.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/navigation_panel/components/sign_in_banner.tsx": {
+      "path": "app/javascript/mastodon/features/navigation_panel/components/sign_in_banner.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/navigation_panel/components/trends.tsx": {
+      "path": "app/javascript/mastodon/features/navigation_panel/components/trends.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/navigation_panel/index.tsx": {
+      "path": "app/javascript/mastodon/features/navigation_panel/index.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/notifications/components/notification.jsx": {
+      "path": "app/javascript/mastodon/features/notifications/components/notification.jsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/notifications/components/relationships_severance_event.jsx": {
+      "path": "app/javascript/mastodon/features/notifications/components/relationships_severance_event.jsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/notifications_v2/components/notification_follow.tsx": {
+      "path": "app/javascript/mastodon/features/notifications_v2/components/notification_follow.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/notifications_v2/components/notification_poll.tsx": {
+      "path": "app/javascript/mastodon/features/notifications_v2/components/notification_poll.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/notifications_v2/components/notification_mention.tsx": {
+      "path": "app/javascript/mastodon/features/notifications_v2/components/notification_mention.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/onboarding/follows.tsx": {
+      "path": "app/javascript/mastodon/features/onboarding/follows.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        3
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/pinned_statuses/index.jsx": {
+      "path": "app/javascript/mastodon/features/pinned_statuses/index.jsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        8
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/onboarding/profile.tsx": {
+      "path": "app/javascript/mastodon/features/onboarding/profile.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/public_timeline/index.jsx": {
+      "path": "app/javascript/mastodon/features/public_timeline/index.jsx",
+      "importsHowManyCandidates": 3,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        3,
+        4,
+        7
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/quotes/index.tsx": {
+      "path": "app/javascript/mastodon/features/quotes/index.tsx",
+      "importsHowManyCandidates": 2,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4,
+        8
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/standalone/status/index.tsx": {
+      "path": "app/javascript/mastodon/features/standalone/status/index.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/status/components/card.tsx": {
+      "path": "app/javascript/mastodon/features/status/components/card.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/status/components/action_bar.jsx": {
+      "path": "app/javascript/mastodon/features/status/components/action_bar.jsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/subscribed_languages_modal/index.jsx": {
+      "path": "app/javascript/mastodon/features/subscribed_languages_modal/index.jsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/status/index.jsx": {
+      "path": "app/javascript/mastodon/features/status/index.jsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/ui/components/columns_area.tsx": {
+      "path": "app/javascript/mastodon/features/ui/components/columns_area.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        12
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/ui/components/confirmation_modals/delete_collection.tsx": {
+      "path": "app/javascript/mastodon/features/ui/components/confirmation_modals/delete_collection.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/ui/components/confirmation_modals/hide_featured_tab.tsx": {
+      "path": "app/javascript/mastodon/features/ui/components/confirmation_modals/hide_featured_tab.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/ui/components/link_footer.tsx": {
+      "path": "app/javascript/mastodon/features/ui/components/link_footer.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/ui/components/modal_root.jsx": {
+      "path": "app/javascript/mastodon/features/ui/components/modal_root.jsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        12
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/ui/components/navigation_bar.tsx": {
+      "path": "app/javascript/mastodon/features/ui/components/navigation_bar.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/ui/components/report_modal.jsx": {
+      "path": "app/javascript/mastodon/features/ui/components/report_modal.jsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        3
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/ui/index.jsx": {
+      "path": "app/javascript/mastodon/features/ui/index.jsx",
+      "importsHowManyCandidates": 3,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        3,
+        4,
+        12
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/features/video/index.tsx": {
+      "path": "app/javascript/mastodon/features/video/index.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/is_mobile.ts": {
+      "path": "app/javascript/mastodon/is_mobile.ts",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/identity_context.tsx": {
+      "path": "app/javascript/mastodon/identity_context.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/main.tsx": {
+      "path": "app/javascript/mastodon/main.tsx",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/models/status.ts": {
+      "path": "app/javascript/mastodon/models/status.ts",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        2
+      ]
+    },
+    "app/javascript/mastodon/reducers/accounts.ts": {
+      "path": "app/javascript/mastodon/reducers/accounts.ts",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/reducers/accounts_map.ts": {
+      "path": "app/javascript/mastodon/reducers/accounts_map.ts",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/reducers/compose.js": {
+      "path": "app/javascript/mastodon/reducers/compose.js",
+      "importsHowManyCandidates": 2,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2,
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/reducers/contexts.ts": {
+      "path": "app/javascript/mastodon/reducers/contexts.ts",
+      "importsHowManyCandidates": 2,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2,
+        3
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/reducers/index.ts": {
+      "path": "app/javascript/mastodon/reducers/index.ts",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        1
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/reducers/modal.ts": {
+      "path": "app/javascript/mastodon/reducers/modal.ts",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/reducers/notification_groups.ts": {
+      "path": "app/javascript/mastodon/reducers/notification_groups.ts",
+      "importsHowManyCandidates": 2,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2,
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/reducers/picture_in_picture.ts": {
+      "path": "app/javascript/mastodon/reducers/picture_in_picture.ts",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/reducers/slices/annual_report.ts": {
+      "path": "app/javascript/mastodon/reducers/slices/annual_report.ts",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/reducers/slices/collections.ts": {
+      "path": "app/javascript/mastodon/reducers/slices/collections.ts",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/reducers/statuses.js": {
+      "path": "app/javascript/mastodon/reducers/statuses.js",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/selectors/accounts.ts": {
+      "path": "app/javascript/mastodon/selectors/accounts.ts",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/reducers/timelines.js": {
+      "path": "app/javascript/mastodon/reducers/timelines.js",
+      "importsHowManyCandidates": 2,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2,
+        3
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/selectors/index.js": {
+      "path": "app/javascript/mastodon/selectors/index.js",
+      "importsHowManyCandidates": 2,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4,
+        6
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/selectors/timelines.ts": {
+      "path": "app/javascript/mastodon/selectors/timelines.ts",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": [
+        13
+      ]
+    },
+    "app/javascript/mastodon/store/index.ts": {
+      "path": "app/javascript/mastodon/store/index.ts",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 2,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        6,
+        13
+      ]
+    },
+    "app/javascript/mastodon/store/typed_functions.ts": {
+      "path": "app/javascript/mastodon/store/typed_functions.ts",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        2
+      ]
+    },
+    "app/javascript/mastodon/stream.js": {
+      "path": "app/javascript/mastodon/stream.js",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "app/javascript/mastodon/utils/environment.ts": {
+      "path": "app/javascript/mastodon/utils/environment.ts",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "streaming/index.js": {
+      "path": "streaming/index.js",
+      "importsHowManyCandidates": 2,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        10,
+        11
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "streaming/utils.js": {
+      "path": "streaming/utils.js",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        10
+      ]
+    }
+  },
+  "tokenDocFreqSnap": {
+    "javascript": 820,
+    "mastodon": 860,
+    "reducers": 41,
+    "status": 467,
+    "lists": 86,
+    "status_lists": 1,
+    "statuslists": 1,
+    "reducer": 41,
+    "statu": 209,
+    "list": 135,
+    "status_list": 2,
+    "statuslist": 1,
+    "actions": 78,
+    "timelines": 17,
+    "typed": 11,
+    "timelines_typed": 1,
+    "expand": 14,
+    "timeline": 45,
+    "by": 27,
+    "key": 30,
+    "expandtimelinebykey": 1,
+    "expandtimelinebyparams": 1,
+    "account": 639,
+    "accounttimelineparams": 1,
+    "public": 31,
+    "server": 19,
+    "publictimelineserver": 1,
+    "publictimelineparams": 1,
+    "home": 19,
+    "hometimelineparams": 1,
+    "timelineparams": 1,
+    "timelinekey": 1,
+    "parse": 3,
+    "parsetimelinekey": 1,
+    "pinned": 7,
+    "istimelinekeypinned": 1,
+    "non": 7,
+    "id": 96,
+    "isnonstatusid": 1,
+    "disconnect": 2,
+    "disconnecttimeline": 2,
+    "delete": 42,
+    "timelinedelete": 1,
+    "timelinedeletestatus": 1,
+    "insert": 7,
+    "into": 2,
+    "insertpinnedstatusintotimelines": 1,
+    "remove": 82,
+    "removepinnedstatusfromtimelines": 1,
+    "action": 116,
+    "timelin": 17,
+    "expandtimelinebyparam": 1,
+    "accounttimelineparam": 1,
+    "publictimelineparam": 1,
+    "hometimelineparam": 1,
+    "timelineparam": 1,
+    "timelinedeletestatu": 1,
+    "insertpinnedstatusintotimelin": 1,
+    "removepinnedstatusfromtimelin": 1,
+    "update": 78,
+    "timeline_update": 1,
+    "clear": 17,
+    "timeline_clear": 1,
+    "request": 378,
+    "timeline_expand_request": 1,
+    "success": 22,
+    "timeline_expand_success": 1,
+    "fail": 20,
+    "timeline_expand_fail": 1,
+    "scroll": 9,
+    "top": 7,
+    "timeline_scroll_top": 1,
+    "load": 13,
+    "pending": 10,
+    "timeline_load_pending": 1,
+    "connect": 4,
+    "timeline_connect": 1,
+    "mark": 4,
+    "as": 4,
+    "partial": 3,
+    "timeline_mark_as_partial": 1,
+    "timeline_insert": 1,
+    "suggestions": 27,
+    "timeline_suggestions": 1,
+    "gap": 5,
+    "timeline_gap": 1,
+    "view": 4,
+    "all": 10,
+    "timeline_pinned_view_all": 1,
+    "markers": 8,
+    "timeline_non_status_markers": 1,
+    "loadpending": 3,
+    "updatetimeline": 1,
+    "deletefromtimelines": 1,
+    "cleartimeline": 1,
+    "expandtimeline": 1,
+    "fill": 3,
+    "gaps": 1,
+    "filltimelinegaps": 1,
+    "expandhometimeline": 1,
+    "expandpublictimeline": 1,
+    "community": 6,
+    "expandcommunitytimeline": 1,
+    "expandaccounttimeline": 1,
+    "featured": 140,
+    "expandaccountfeaturedtimeline": 1,
+    "media": 154,
+    "expandaccountmediatimeline": 1,
+    "expandlisttimeline": 1,
+    "link": 121,
+    "expandlinktimeline": 1,
+    "hashtag": 37,
+    "expandhashtagtimeline": 1,
+    "fillhometimelinegaps": 1,
+    "fillpublictimelinegaps": 1,
+    "fillcommunitytimelinegaps": 1,
+    "filllisttimelinegaps": 1,
+    "expandtimelinerequest": 1,
+    "expandtimelinesuccess": 1,
+    "expandtimelinefail": 1,
+    "scrolltoptimeline": 1,
+    "connecttimeline": 1,
+    "markaspartial": 1,
+    "insertintotimeline": 1,
+    "succes": 22,
+    "timeline_expand_succes": 1,
+    "suggestion": 30,
+    "timeline_suggestion": 1,
+    "marker": 15,
+    "timeline_non_status_marker": 1,
+    "deletefromtimelin": 1,
+    "filltimelinegap": 1,
+    "fillhometimelinegap": 1,
+    "fillpublictimelinegap": 1,
+    "fillcommunitytimelinegap": 1,
+    "filllisttimelinegap": 1,
+    "expandtimelinesucces": 1,
+    "initial": 6,
+    "initial_state": 1,
+    "initialstate": 1,
+    "multi": 2,
+    "column": 61,
+    "path": 5,
+    "hasmulticolumnpath": 1,
+    "activity": 169,
+    "api": 329,
+    "enabled": 13,
+    "activityapienabled": 1,
+    "auto": 5,
+    "play": 1,
+    "gif": 3,
+    "autoplaygif": 1,
+    "boost": 6,
+    "modal": 69,
+    "boostmodal": 2,
+    "quick": 2,
+    "boosting": 1,
+    "quickboosting": 1,
+    "deletemodal": 1,
+    "missing": 6,
+    "alt": 8,
+    "text": 73,
+    "missingalttextmodal": 1,
+    "disable": 1,
+    "swiping": 1,
+    "disableswiping": 1,
+    "hover": 3,
+    "cards": 23,
+    "disablehovercards": 1,
+    "disabled": 17,
+    "disabledaccountid": 1,
+    "display": 10,
+    "displaymedia": 1,
+    "domain": 157,
+    "emoji": 148,
+    "style": 2,
+    "emojistyle": 1,
+    "spoilers": 2,
+    "expandspoilers": 1,
+    "force": 1,
+    "single": 3,
+    "forcesinglecolumn": 1,
+    "limited": 4,
+    "federation": 4,
+    "mode": 10,
+    "limitedfederationmode": 1,
+    "mascot": 1,
+    "me": 3,
+    "moved": 3,
+    "movedtoaccountid": 1,
+    "owner": 6,
+    "profile": 86,
+    "directory": 8,
+    "profile_directory": 1,
+    "reduce": 1,
+    "motion": 1,
+    "reducemotion": 1,
+    "registrations": 26,
+    "open": 9,
+    "registrationsopen": 1,
+    "repository": 1,
+    "search": 58,
+    "searchenabled": 1,
+    "trends": 75,
+    "trendsenabled": 1,
+    "show": 65,
+    "showtrends": 1,
+    "user": 242,
+    "singleusermode": 1,
+    "source": 16,
+    "url": 27,
+    "source_url": 1,
+    "local": 551,
+    "live": 4,
+    "feed": 24,
+    "access": 23,
+    "locallivefeedaccess": 1,
+    "remote": 104,
+    "remotelivefeedaccess": 1,
+    "topic": 3,
+    "localtopicfeedaccess": 1,
+    "remotetopicfeedaccess": 1,
+    "title": 6,
+    "landing": 4,
+    "page": 18,
+    "landingpage": 1,
+    "use": 47,
+    "blurhash": 7,
+    "useblurhash": 1,
+    "items": 15,
+    "usependingitems": 1,
+    "version": 19,
+    "critical": 3,
+    "updates": 8,
+    "criticalupdatespending": 1,
+    "statuspageurl": 1,
+    "sso": 1,
+    "redirect": 76,
+    "sso_redirect": 1,
+    "terms": 102,
+    "of": 112,
+    "service": 292,
+    "termsofserviceenabled": 1,
+    "wrapstodon": 51,
+    "languages": 23,
+    "token": 31,
+    "getaccesstoken": 1,
+    "card": 75,
+    "disablehovercard": 1,
+    "spoiler": 6,
+    "expandspoiler": 1,
+    "registration": 29,
+    "trend": 88,
+    "showtrend": 1,
+    "acces": 23,
+    "locallivefeedacces": 1,
+    "remotelivefeedacces": 1,
+    "localtopicfeedacces": 1,
+    "remotetopicfeedacces": 1,
+    "item": 65,
+    "usependingitem": 1,
+    "updat": 8,
+    "term": 103,
+    "languag": 23,
+    "statuses": 272,
+    "pinned_statuses": 2,
+    "render": 9,
+    "header": 43,
+    "renderpinnedstatusheader": 1,
+    "button": 38,
+    "pinnedshowallbutton": 1,
+    "pinned_status": 2,
+    "selectors": 10,
+    "getstatuslist": 2,
+    "selector": 16,
+    "ui": 65,
+    "containers": 27,
+    "container": 29,
+    "status_list_container": 1,
+    "attachment": 127,
+    "html": 319,
+    "_attachment_list.html": 1,
+    "streaming": 18,
+    "database": 12,
+    "env": 8,
+    "configfromenv": 2,
+    "pool": 9,
+    "getpool": 1,
+    "errors": 171,
+    "unexpected": 1,
+    "error": 202,
+    "message": 14,
+    "unexpected_error_message": 1,
+    "extract": 2,
+    "and": 19,
+    "extractstatusandmessage": 1,
+    "requesterror": 1,
+    "authentication": 108,
+    "authenticationerror": 1,
+    "async": 10,
+    "components": 4,
+    "async-components": 1,
+    "picker": 8,
+    "emojipicker": 1,
+    "compose": 39,
+    "notifications": 176,
+    "hometimeline": 1,
+    "publictimeline": 1,
+    "communitytimeline": 1,
+    "firehose": 2,
+    "hashtagtimeline": 1,
+    "direct": 6,
+    "directtimeline": 2,
+    "listtimeline": 1,
+    "collections": 52,
+    "collection": 134,
+    "detail": 11,
+    "collectiondetail": 2,
+    "editor": 6,
+    "collectionseditor": 1,
+    "getting": 2,
+    "started": 2,
+    "gettingstarted": 2,
+    "keyboard": 4,
+    "shortcuts": 2,
+    "keyboardshortcuts": 1,
+    "pinnedstatuses": 1,
+    "accounttimeline": 2,
+    "gallery": 4,
+    "accountgallery": 2,
+    "accountfeatured": 2,
+    "edit": 112,
+    "accountedit": 2,
+    "tags": 162,
+    "accounteditfeaturedtags": 2,
+    "followers": 38,
+    "following": 17,
+    "reblogs": 8,
+    "favourites": 13,
+    "quotes": 10,
+    "follow": 180,
+    "requests": 281,
+    "followrequests": 1,
+    "favourited": 5,
+    "favouritedstatuses": 1,
+    "followed": 8,
+    "followedtags": 2,
+    "bookmarked": 3,
+    "bookmarkedstatuses": 1,
+    "blocks": 86,
+    "domainblocks": 1,
+    "mutes": 12,
+    "mute": 22,
+    "mutemodal": 1,
+    "block": 164,
+    "blockmodal": 1,
+    "domainblockmodal": 2,
+    "report": 193,
+    "reportmodal": 1,
+    "reportcollectionmodal": 2,
+    "ignore": 4,
+    "ignorenotificationsmodal": 2,
+    "mediagallery": 1,
+    "video": 6,
+    "embed": 13,
+    "embedmodal": 2,
+    "adder": 2,
+    "listadder": 2,
+    "tesseract": 2,
+    "audio": 6,
+    "onboarding": 4,
+    "onboardingprofile": 1,
+    "follows": 14,
+    "onboardingfollows": 1,
+    "compare": 4,
+    "history": 9,
+    "comparehistorymodal": 1,
+    "explore": 9,
+    "filter": 187,
+    "filtermodal": 1,
+    "interaction": 28,
+    "interactionmodal": 2,
+    "subscribed": 2,
+    "subscribedlanguagesmodal": 1,
+    "closed": 3,
+    "closedregistrationsmodal": 1,
+    "about": 101,
+    "privacy": 93,
+    "policy": 211,
+    "privacypolicy": 3,
+    "termsofservice": 3,
+    "notification": 263,
+    "notificationrequests": 1,
+    "notificationrequest": 3,
+    "linktimeline": 2,
+    "annual": 49,
+    "annualreportmodal": 2,
+    "listedit": 1,
+    "members": 2,
+    "listmembers": 2,
+    "async-component": 1,
+    "shortcut": 2,
+    "keyboardshortcut": 1,
+    "pinnedstatus": 1,
+    "accounteditfeaturedtag": 2,
+    "follower": 45,
+    "reblog": 23,
+    "favourit": 13,
+    "quot": 10,
+    "followrequest": 2,
+    "favouritedstatus": 1,
+    "followedtag": 2,
+    "bookmarkedstatus": 1,
+    "domainblock": 2,
+    "onboardingfollow": 1,
+    "member": 2,
+    "listmember": 2,
+    "hooks": 29,
+    "usepinned": 1,
+    "ids": 14,
+    "usepinnedstatusids": 1,
+    "hook": 29,
+    "usepinnedstatusid": 1,
+    "locales": 539,
+    "sk": 5,
+    "sk.about": 1,
+    "accounts": 269,
+    "sk.accounts": 1,
+    "admin": 644,
+    "sk.admin": 1,
+    "mailer": 184,
+    "sk.admin_mailer": 1,
+    "aliases": 79,
+    "sk.aliases": 1,
+    "appearance": 85,
+    "sk.appearance": 1,
+    "application": 132,
+    "sk.application_mailer": 1,
+    "applications": 91,
+    "sk.applications": 1,
+    "auth": 135,
+    "sk.auth": 1,
+    "author": 62,
+    "attribution": 60,
+    "sk.author_attribution": 1,
+    "challenge": 79,
+    "sk.challenge": 1,
+    "datetime": 82,
+    "sk.datetime": 1,
+    "deletes": 84,
+    "sk.deletes": 1,
+    "disputes": 90,
+    "sk.disputes": 1,
+    "sk.edit_profile": 1,
+    "sk.errors": 2,
+    "existing": 75,
+    "username": 93,
+    "validator": 110,
+    "sk.existing_username_validator": 1,
+    "exports": 98,
+    "sk.exports": 1,
+    "sk.featured_tags": 1,
+    "filters": 122,
+    "sk.filters": 1,
+    "generic": 82,
+    "sk.generic": 1,
+    "imports": 93,
+    "sk.imports": 1,
+    "invites": 97,
+    "sk.invites": 1,
+    "sk.lists": 1,
+    "login": 86,
+    "activities": 81,
+    "sk.login_activities": 1,
+    "attachments": 100,
+    "sk.media_attachments": 1,
+    "migrations": 86,
+    "sk.migrations": 1,
+    "moderation": 106,
+    "sk.moderation": 1,
+    "move": 81,
+    "sk.move_handler": 1,
+    "sk.notification_mailer": 1,
+    "sk.notifications": 1,
+    "otp": 83,
+    "sk.otp_authentication": 1,
+    "pagination": 80,
+    "sk.pagination": 1,
+    "polls": 88,
+    "sk.polls": 1,
+    "preferences": 97,
+    "sk.preferences": 1,
+    "sk.privacy": 1,
+    "sk.privacy_policy": 1,
+    "reactions": 77,
+    "sk.reactions": 1,
+    "redirects": 66,
+    "sk.redirects": 1,
+    "relationships": 113,
+    "sk.relationships": 1,
+    "sk.remote_follow": 1,
+    "rss": 74,
+    "sk.rss": 1,
+    "scheduled": 88,
+    "sk.scheduled_statuses": 1,
+    "sessions": 94,
+    "sk.sessions": 1,
+    "settings": 268,
+    "sk.settings": 1,
+    "severed": 73,
+    "sk.severed_relationships": 1,
+    "sk.statuses": 1,
+    "cleanup": 103,
+    "sk.statuses_cleanup": 1,
+    "stream": 84,
+    "entries": 81,
+    "sk.stream_entries": 1,
+    "sk.tags": 1,
+    "time": 92,
+    "sk.time": 1,
+    "translation": 82,
+    "sk.translation": 1,
+    "two": 120,
+    "factor": 119,
+    "sk.two_factor_authentication": 1,
+    "sk.user_mailer": 1,
+    "users": 121,
+    "sk.users": 1,
+    "verification": 84,
+    "sk.verification": 1,
+    "sk.account": 1,
+    "alias": 84,
+    "sk.alias": 1,
+    "sk.application": 1,
+    "delet": 84,
+    "sk.delet": 1,
+    "disput": 90,
+    "sk.disput": 1,
+    "sk.error": 2,
+    "sk.export": 1,
+    "sk.featured_tag": 1,
+    "sk.filter": 1,
+    "sk.import": 1,
+    "invit": 97,
+    "sk.invit": 1,
+    "sk.list": 1,
+    "activiti": 81,
+    "sk.login_activiti": 1,
+    "sk.media_attachment": 1,
+    "migration": 101,
+    "sk.migration": 1,
+    "sk.notification": 1,
+    "poll": 130,
+    "sk.poll": 1,
+    "preferenc": 97,
+    "sk.preferenc": 1,
+    "reaction": 89,
+    "sk.reaction": 1,
+    "sk.redirect": 1,
+    "relationship": 135,
+    "sk.relationship": 1,
+    "sk.rs": 1,
+    "sk.scheduled_status": 1,
+    "session": 107,
+    "sk.session": 1,
+    "setting": 279,
+    "sk.setting": 1,
+    "sk.severed_relationship": 1,
+    "sk.status": 1,
+    "entri": 81,
+    "sk.stream_entri": 1,
+    "sk.tag": 1,
+    "sk.user": 1,
+    "my": 5,
+    "my.about": 1,
+    "my.accounts": 1,
+    "my.admin": 1,
+    "my.admin_mailer": 1,
+    "my.aliases": 1,
+    "my.appearance": 1,
+    "my.application_mailer": 1,
+    "my.applications": 1,
+    "my.auth": 1,
+    "my.challenge": 1,
+    "crypto": 71,
+    "my.crypto": 1,
+    "date": 82,
+    "my.date": 1,
+    "my.datetime": 1,
+    "my.deletes": 1,
+    "my.disputes": 1,
+    "my.edit_profile": 1,
+    "my.errors": 2,
+    "my.existing_username_validator": 1,
+    "my.exports": 1,
+    "my.featured_tags": 1,
+    "my.filters": 1,
+    "my.generic": 1,
+    "my.imports": 1,
+    "my.invites": 1,
+    "my.lists": 1,
+    "my.login_activities": 1,
+    "my.media_attachments": 1,
+    "my.migrations": 1,
+    "my.moderation": 1,
+    "my.move_handler": 1,
+    "navigation": 79,
+    "my.navigation": 1,
+    "my.notification_mailer": 1,
+    "my.notifications": 1,
+    "number": 85,
+    "my.number": 1,
+    "my.otp_authentication": 1,
+    "my.pagination": 1,
+    "my.polls": 1,
+    "my.preferences": 1,
+    "my.privacy": 1,
+    "my.privacy_policy": 1,
+    "my.reactions": 1,
+    "my.relationships": 1,
+    "my.remote_follow": 1,
+    "reports": 108,
+    "my.reports": 1,
+    "my.rss": 1,
+    "my.scheduled_statuses": 1,
+    "self": 68,
+    "destruct": 67,
+    "my.self_destruct": 1,
+    "my.sessions": 1,
+    "my.settings": 1,
+    "my.statuses": 1,
+    "my.statuses_cleanup": 1,
+    "my.stream_entries": 1,
+    "strikes": 70,
+    "my.strikes": 1,
+    "my.tags": 1,
+    "my.time": 1,
+    "my.translation": 1,
+    "my.two_factor_authentication": 1,
+    "my.user_mailer": 1,
+    "my.users": 1,
+    "my.verification": 1,
+    "webauthn": 94,
+    "credentials": 85,
+    "my.webauthn_credentials": 1,
+    "my.account": 1,
+    "my.alias": 1,
+    "my.application": 1,
+    "my.delet": 1,
+    "my.disput": 1,
+    "my.error": 2,
+    "my.export": 1,
+    "my.featured_tag": 1,
+    "my.filter": 1,
+    "my.import": 1,
+    "my.invit": 1,
+    "my.list": 1,
+    "my.login_activiti": 1,
+    "my.media_attachment": 1,
+    "my.migration": 1,
+    "my.notification": 1,
+    "my.poll": 1,
+    "my.preferenc": 1,
+    "my.reaction": 1,
+    "my.relationship": 1,
+    "my.report": 1,
+    "my.rs": 1,
+    "my.scheduled_status": 1,
+    "my.session": 1,
+    "my.setting": 1,
+    "my.status": 1,
+    "my.stream_entri": 1,
+    "strik": 70,
+    "my.strik": 1,
+    "my.tag": 1,
+    "my.user": 1,
+    "credential": 95,
+    "my.webauthn_credential": 1,
+    "ms": 5,
+    "ms.about": 1,
+    "ms.accounts": 1,
+    "ms.admin": 1,
+    "ms.admin_mailer": 1,
+    "ms.aliases": 1,
+    "ms.appearance": 1,
+    "ms.application_mailer": 1,
+    "ms.applications": 1,
+    "ms.auth": 1,
+    "ms.challenge": 1,
+    "ms.crypto": 1,
+    "ms.date": 1,
+    "ms.datetime": 1,
+    "ms.deletes": 1,
+    "ms.disputes": 1,
+    "ms.edit_profile": 1,
+    "ms.errors": 2,
+    "ms.existing_username_validator": 1,
+    "ms.exports": 1,
+    "ms.featured_tags": 1,
+    "ms.filters": 1,
+    "ms.generic": 1,
+    "ms.imports": 1,
+    "ms.invites": 1,
+    "ms.lists": 1,
+    "ms.login_activities": 1,
+    "ms.media_attachments": 1,
+    "ms.migrations": 1,
+    "ms.moderation": 1,
+    "ms.move_handler": 1,
+    "ms.navigation": 1,
+    "ms.notification_mailer": 1,
+    "ms.notifications": 1,
+    "ms.number": 1,
+    "ms.otp_authentication": 1,
+    "ms.pagination": 1,
+    "ms.polls": 1,
+    "ms.preferences": 1,
+    "ms.privacy": 1,
+    "ms.privacy_policy": 1,
+    "ms.reactions": 1,
+    "ms.relationships": 1,
+    "ms.remote_follow": 1,
+    "ms.reports": 1,
+    "ms.rss": 1,
+    "ms.scheduled_statuses": 1,
+    "ms.self_destruct": 1,
+    "ms.sessions": 1,
+    "ms.settings": 1,
+    "ms.statuses": 1,
+    "ms.statuses_cleanup": 1,
+    "ms.stream_entries": 1,
+    "ms.strikes": 1,
+    "ms.tags": 1,
+    "ms.time": 1,
+    "ms.translation": 1,
+    "ms.two_factor_authentication": 1,
+    "ms.user_mailer": 1,
+    "ms.users": 1,
+    "ms.verification": 1,
+    "ms.webauthn_credentials": 1,
+    "ms.account": 1,
+    "ms.alias": 1,
+    "ms.application": 1,
+    "ms.delet": 1,
+    "ms.disput": 1,
+    "ms.error": 2,
+    "ms.export": 1,
+    "ms.featured_tag": 1,
+    "ms.filter": 1,
+    "ms.import": 1,
+    "ms.invit": 1,
+    "ms.list": 1,
+    "ms.login_activiti": 1,
+    "ms.media_attachment": 1,
+    "ms.migration": 1,
+    "ms.notification": 1,
+    "ms.poll": 1,
+    "ms.preferenc": 1,
+    "ms.reaction": 1,
+    "ms.relationship": 1,
+    "ms.report": 1,
+    "ms.rs": 1,
+    "ms.scheduled_status": 1,
+    "ms.session": 1,
+    "ms.setting": 1,
+    "ms.status": 1,
+    "ms.stream_entri": 1,
+    "ms.strik": 1,
+    "ms.tag": 1,
+    "ms.user": 1,
+    "ms.webauthn_credential": 1,
+    "io": 5,
+    "io.about": 1,
+    "io.accounts": 1,
+    "io.admin": 1,
+    "io.admin_mailer": 1,
+    "io.aliases": 1,
+    "io.appearance": 1,
+    "io.application_mailer": 1,
+    "io.applications": 1,
+    "io.auth": 1,
+    "io.author_attribution": 1,
+    "io.challenge": 1,
+    "io.crypto": 1,
+    "io.date": 1,
+    "io.datetime": 1,
+    "io.deletes": 1,
+    "io.disputes": 1,
+    "io.edit_profile": 1,
+    "io.errors": 2,
+    "io.existing_username_validator": 1,
+    "io.exports": 1,
+    "io.featured_tags": 1,
+    "io.filters": 1,
+    "io.generic": 1,
+    "io.imports": 1,
+    "io.invites": 1,
+    "io.lists": 1,
+    "io.login_activities": 1,
+    "io.media_attachments": 1,
+    "io.migrations": 1,
+    "io.moderation": 1,
+    "io.move_handler": 1,
+    "io.navigation": 1,
+    "io.notification_mailer": 1,
+    "io.notifications": 1,
+    "io.number": 1,
+    "io.otp_authentication": 1,
+    "io.pagination": 1,
+    "io.polls": 1,
+    "io.preferences": 1,
+    "io.privacy": 1,
+    "io.privacy_policy": 1,
+    "io.reactions": 1,
+    "io.relationships": 1,
+    "io.remote_follow": 1,
+    "io.reports": 1,
+    "io.rss": 1,
+    "io.scheduled_statuses": 1,
+    "io.self_destruct": 1,
+    "io.sessions": 1,
+    "io.settings": 1,
+    "io.severed_relationships": 1,
+    "io.statuses": 1,
+    "io.statuses_cleanup": 1,
+    "io.stream_entries": 1,
+    "io.strikes": 1,
+    "io.tags": 1,
+    "io.time": 1,
+    "io.two_factor_authentication": 1,
+    "io.user_mailer": 1,
+    "io.users": 1,
+    "io.verification": 1,
+    "io.webauthn_credentials": 1,
+    "io.account": 1,
+    "io.alias": 1,
+    "io.application": 1,
+    "io.delet": 1,
+    "io.disput": 1,
+    "io.error": 2,
+    "io.export": 1,
+    "io.featured_tag": 1,
+    "io.filter": 1,
+    "io.import": 1,
+    "io.invit": 1,
+    "io.list": 1,
+    "io.login_activiti": 1,
+    "io.media_attachment": 1,
+    "io.migration": 1,
+    "io.notification": 1,
+    "io.poll": 1,
+    "io.preferenc": 1,
+    "io.reaction": 1,
+    "io.relationship": 1,
+    "io.report": 1,
+    "io.rs": 1,
+    "io.scheduled_status": 1,
+    "io.session": 1,
+    "io.setting": 1,
+    "io.severed_relationship": 1,
+    "io.status": 1,
+    "io.stream_entri": 1,
+    "io.strik": 1,
+    "io.tag": 1,
+    "io.user": 1,
+    "io.webauthn_credential": 1,
+    "ie": 5,
+    "ie.about": 1,
+    "ie.accounts": 1,
+    "ie.admin": 1,
+    "ie.admin_mailer": 1,
+    "ie.aliases": 1,
+    "ie.appearance": 1,
+    "ie.application_mailer": 1,
+    "ie.applications": 1,
+    "ie.auth": 1,
+    "ie.challenge": 1,
+    "ie.crypto": 1,
+    "ie.date": 1,
+    "ie.datetime": 1,
+    "ie.deletes": 1,
+    "ie.disputes": 1,
+    "ie.edit_profile": 1,
+    "ie.errors": 2,
+    "ie.existing_username_validator": 1,
+    "ie.exports": 1,
+    "ie.featured_tags": 1,
+    "ie.filters": 1,
+    "ie.generic": 1,
+    "ie.imports": 1,
+    "ie.invites": 1,
+    "ie.lists": 1,
+    "ie.login_activities": 1,
+    "ie.media_attachments": 1,
+    "ie.migrations": 1,
+    "ie.moderation": 1,
+    "ie.move_handler": 1,
+    "ie.navigation": 1,
+    "ie.notification_mailer": 1,
+    "ie.notifications": 1,
+    "ie.number": 1,
+    "ie.otp_authentication": 1,
+    "ie.pagination": 1,
+    "ie.polls": 1,
+    "ie.preferences": 1,
+    "ie.privacy": 1,
+    "ie.privacy_policy": 1,
+    "ie.reactions": 1,
+    "ie.redirects": 1,
+    "ie.relationships": 1,
+    "ie.remote_follow": 1,
+    "ie.reports": 1,
+    "ie.rss": 1,
+    "ie.scheduled_statuses": 1,
+    "ie.self_destruct": 1,
+    "ie.sessions": 1,
+    "ie.settings": 1,
+    "ie.severed_relationships": 1,
+    "ie.statuses": 1,
+    "ie.statuses_cleanup": 1,
+    "ie.stream_entries": 1,
+    "ie.strikes": 1,
+    "ie.tags": 1,
+    "ie.time": 1,
+    "ie.translation": 1,
+    "ie.two_factor_authentication": 1,
+    "ie.user_mailer": 1,
+    "ie.users": 1,
+    "ie.verification": 1,
+    "ie.webauthn_credentials": 1,
+    "ie.account": 1,
+    "ie.alias": 1,
+    "ie.application": 1,
+    "ie.delet": 1,
+    "ie.disput": 1,
+    "ie.error": 2,
+    "ie.export": 1,
+    "ie.featured_tag": 1,
+    "ie.filter": 1,
+    "ie.import": 1,
+    "ie.invit": 1,
+    "ie.list": 1,
+    "ie.login_activiti": 1,
+    "ie.media_attachment": 1,
+    "ie.migration": 1,
+    "ie.notification": 1,
+    "ie.poll": 1,
+    "ie.preferenc": 1,
+    "ie.reaction": 1,
+    "ie.redirect": 1,
+    "ie.relationship": 1,
+    "ie.report": 1,
+    "ie.rs": 1,
+    "ie.scheduled_status": 1,
+    "ie.session": 1,
+    "ie.setting": 1,
+    "ie.severed_relationship": 1,
+    "ie.status": 1,
+    "ie.stream_entri": 1,
+    "ie.strik": 1,
+    "ie.tag": 1,
+    "ie.user": 1,
+    "ie.webauthn_credential": 1,
+    "sr": 10,
+    "sr.about": 1,
+    "sr.accounts": 1,
+    "sr.admin": 1,
+    "sr.admin_mailer": 1,
+    "sr.aliases": 1,
+    "sr.appearance": 1,
+    "sr.application_mailer": 1,
+    "sr.applications": 1,
+    "sr.auth": 1,
+    "sr.challenge": 1,
+    "sr.crypto": 1,
+    "sr.date": 1,
+    "sr.datetime": 1,
+    "sr.deletes": 1,
+    "sr.disputes": 1,
+    "sr.edit_profile": 1,
+    "sr.errors": 2,
+    "sr.existing_username_validator": 1,
+    "sr.exports": 1,
+    "sr.featured_tags": 1,
+    "sr.filters": 1,
+    "sr.generic": 1,
+    "sr.imports": 1,
+    "sr.invites": 1,
+    "sr.lists": 1,
+    "sr.login_activities": 1,
+    "sr.media_attachments": 1,
+    "sr.migrations": 1,
+    "sr.moderation": 1,
+    "sr.move_handler": 1,
+    "sr.navigation": 1,
+    "sr.notification_mailer": 1,
+    "sr.notifications": 1,
+    "sr.number": 1,
+    "sr.otp_authentication": 1,
+    "sr.pagination": 1,
+    "sr.polls": 1,
+    "sr.preferences": 1,
+    "sr.privacy": 1,
+    "sr.privacy_policy": 1,
+    "sr.reactions": 1,
+    "sr.redirects": 1,
+    "sr.relationships": 1,
+    "sr.remote_follow": 1,
+    "sr.reports": 1,
+    "sr.rss": 1,
+    "sr.scheduled_statuses": 1,
+    "sr.self_destruct": 1,
+    "sr.sessions": 1,
+    "sr.settings": 1,
+    "sr.severed_relationships": 1,
+    "sr.statuses": 1,
+    "sr.statuses_cleanup": 1,
+    "sr.stream_entries": 1,
+    "sr.strikes": 1,
+    "sr.tags": 1,
+    "sr.time": 1,
+    "sr.translation": 1,
+    "sr.two_factor_authentication": 1,
+    "sr.user_mailer": 1,
+    "sr.users": 1,
+    "sr.verification": 1,
+    "sr.webauthn_credentials": 1,
+    "sr.account": 1,
+    "sr.alias": 1,
+    "sr.application": 1,
+    "sr.delet": 1,
+    "sr.disput": 1,
+    "sr.error": 2,
+    "sr.export": 1,
+    "sr.featured_tag": 1,
+    "sr.filter": 1,
+    "sr.import": 1,
+    "sr.invit": 1,
+    "sr.list": 1,
+    "sr.login_activiti": 1,
+    "sr.media_attachment": 1,
+    "sr.migration": 1,
+    "sr.notification": 1,
+    "sr.poll": 1,
+    "sr.preferenc": 1,
+    "sr.reaction": 1,
+    "sr.redirect": 1,
+    "sr.relationship": 1,
+    "sr.report": 1,
+    "sr.rs": 1,
+    "sr.scheduled_status": 1,
+    "sr.session": 1,
+    "sr.setting": 1,
+    "sr.severed_relationship": 1,
+    "sr.status": 1,
+    "sr.stream_entri": 1,
+    "sr.strik": 1,
+    "sr.tag": 1,
+    "sr.user": 1,
+    "sr.webauthn_credential": 1,
+    "lv": 5,
+    "lv.about": 1,
+    "lv.accounts": 1,
+    "lv.admin": 1,
+    "lv.admin_mailer": 1,
+    "lv.aliases": 1,
+    "lv.appearance": 1,
+    "lv.application_mailer": 1,
+    "lv.applications": 1,
+    "lv.auth": 1,
+    "lv.author_attribution": 1,
+    "lv.challenge": 1,
+    "lv.crypto": 1,
+    "lv.date": 1,
+    "lv.datetime": 1,
+    "lv.deletes": 1,
+    "lv.disputes": 1,
+    "lv.edit_profile": 1,
+    "lv.errors": 2,
+    "lv.existing_username_validator": 1,
+    "lv.exports": 1,
+    "lv.featured_tags": 1,
+    "lv.filters": 1,
+    "lv.generic": 1,
+    "lv.imports": 1,
+    "lv.invites": 1,
+    "lv.lists": 1,
+    "lv.login_activities": 1,
+    "lv.media_attachments": 1,
+    "lv.migrations": 1,
+    "lv.moderation": 1,
+    "lv.move_handler": 1,
+    "lv.navigation": 1,
+    "lv.notification_mailer": 1,
+    "lv.notifications": 1,
+    "lv.number": 1,
+    "lv.otp_authentication": 1,
+    "lv.pagination": 1,
+    "lv.polls": 1,
+    "lv.preferences": 1,
+    "lv.privacy": 1,
+    "lv.privacy_policy": 1,
+    "lv.reactions": 1,
+    "lv.redirects": 1,
+    "lv.relationships": 1,
+    "lv.remote_follow": 1,
+    "lv.reports": 1,
+    "lv.rss": 1,
+    "lv.scheduled_statuses": 1,
+    "lv.self_destruct": 1,
+    "lv.sessions": 1,
+    "lv.settings": 1,
+    "lv.severed_relationships": 1,
+    "lv.statuses": 1,
+    "lv.statuses_cleanup": 1,
+    "lv.stream_entries": 1,
+    "lv.strikes": 1,
+    "lv.tags": 1,
+    "lv.terms_of_service": 1,
+    "interstitial": 50,
+    "lv.terms_of_service_interstitial": 1,
+    "lv.time": 1,
+    "lv.translation": 1,
+    "lv.two_factor_authentication": 1,
+    "lv.user_mailer": 1,
+    "lv.users": 1,
+    "lv.verification": 1,
+    "lv.webauthn_credentials": 1,
+    "lv.account": 1,
+    "lv.alias": 1,
+    "lv.application": 1,
+    "lv.delet": 1,
+    "lv.disput": 1,
+    "lv.error": 2,
+    "lv.export": 1,
+    "lv.featured_tag": 1,
+    "lv.filter": 1,
+    "lv.import": 1,
+    "lv.invit": 1,
+    "lv.list": 1,
+    "lv.login_activiti": 1,
+    "lv.media_attachment": 1,
+    "lv.migration": 1,
+    "lv.notification": 1,
+    "lv.poll": 1,
+    "lv.preferenc": 1,
+    "lv.reaction": 1,
+    "lv.redirect": 1,
+    "lv.relationship": 1,
+    "lv.report": 1,
+    "lv.rs": 1,
+    "lv.scheduled_status": 1,
+    "lv.session": 1,
+    "lv.setting": 1,
+    "lv.severed_relationship": 1,
+    "lv.status": 1,
+    "lv.stream_entri": 1,
+    "lv.strik": 1,
+    "lv.tag": 1,
+    "lv.user": 1,
+    "lv.webauthn_credential": 1
+  }
+}

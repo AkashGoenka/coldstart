@@ -1,0 +1,2544 @@
+{
+  "schemaVersion": 1,
+  "query": "ontology concept relationship",
+  "repo": "/tmp/arches",
+  "coldstartCommit": "0580f80f934a763b66a3020cca538b9ffaa18f26",
+  "fileCount": 1041,
+  "indexedAt": "2026-05-19T08:25:00.484Z",
+  "goMeta": {
+    "fallback": false,
+    "truncated": true,
+    "excluded_test_files": 14,
+    "note": null
+  },
+  "K": 20,
+  "candidates": [
+    {
+      "rank": 1,
+      "path": "arches/settings.py",
+      "fileId": "arches/settings.py",
+      "isTestFile": false,
+      "inEdges": [
+        "tests/test_settings.py"
+      ],
+      "outEdges": [
+        "arches/settings_utils.py",
+        "arches/app/utils/email_auth_backend.py",
+        "arches/app/permissions/arches_permission_base.py",
+        "arches/app/utils/external_oauth_backend.py",
+        "arches/app/utils/middleware.py",
+        "arches/urls.py",
+        "arches/wsgi.py",
+        "arches/__init__.py"
+      ],
+      "inEdgesCount": 1,
+      "outEdgesCount": 8
+    },
+    {
+      "rank": 2,
+      "path": "arches/app/models/models.py",
+      "fileId": "arches/app/models/models.py",
+      "isTestFile": false,
+      "inEdges": [
+        "arches/app/etl_modules/branch_excel_exporter.py",
+        "arches/app/etl_modules/tile_excel_exporter.py",
+        "arches/app/etl_modules/staging_to_tile.py",
+        "arches/app/etl_modules/base_excel_exporter.py",
+        "arches/app/etl_modules/bulk_edit_concept.py",
+        "arches/app/etl_modules/branch_excel_importer.py",
+        "arches/app/etl_modules/base_data_editor.py",
+        "arches/app/etl_modules/bulk_data_deletion.py",
+        "arches/app/etl_modules/tile_excel_importer.py",
+        "arches/app/etl_modules/import_single_csv.py",
+        "arches/app/etl_modules/jsonld_importer.py",
+        "arches/app/etl_modules/base_import_module.py",
+        "arches/app/models/migrations/0002_40b4.py",
+        "arches/app/models/migrations/5477_fix_makemigrations.py",
+        "arches/app/models/migrations/7853_add_timestamp_index.py",
+        "arches/app/models/migrations/8140_django_upgrade.py",
+        "arches/app/search/components/advanced_search.py",
+        "arches/app/search/components/search_results.py",
+        "arches/app/permissions/arches_default_deny.py",
+        "arches/app/search/components/base.py",
+        "arches/app/search/components/sort_results.py",
+        "arches/app/search/components/lifecycle_state_filter.py",
+        "arches/app/search/components/resource_type_filter.py",
+        "arches/app/search/components/base_search_view.py",
+        "arches/app/permissions/arches_default_allow.py",
+        "arches/app/models/resource.py",
+        "arches/app/permissions/arches_permission_base.py",
+        "arches/app/search/components/time_filter.py",
+        "arches/app/search/search_term.py",
+        "arches/app/utils/context_processors.py",
+        "arches/app/utils/data_management/resource_graphs/importer.py",
+        "arches/app/utils/data_management/sparql_providers/aat_provider.py",
+        "arches/app/utils/external_oauth_backend.py",
+        "arches/app/utils/data_management/resources/formats/format.py",
+        "arches/app/utils/data_management/resources/formats/htmlfile.py",
+        "arches/app/utils/data_management/resource_graphs/exporter.py",
+        "arches/app/utils/data_management/resources/formats/archesfile.py",
+        "arches/app/utils/data_management/resources/importer.py",
+        "arches/app/utils/data_management/resources/formats/csvfile.py",
+        "arches/app/utils/resource_relationship_utils.py",
+        "arches/app/utils/transaction.py",
+        "arches/app/utils/permission_backend.py",
+        "arches/app/utils/i18n.py",
+        "arches/app/views/file.py",
+        "arches/app/views/search.py",
+        "arches/app/views/etl_manager.py",
+        "arches/management/commands/etl_module.py",
+        "arches/management/commands/etl_template.py",
+        "arches/management/commands/etl.py",
+        "arches/management/commands/process_index_queue.py",
+        "arches/management/commands/load_jsonld.py",
+        "tests/bulkdata/single_csv_tests.py",
+        "tests/commands/test_etl_template.py",
+        "tests/commands/test_validate.py",
+        "tests/bulkdata/branch_excel_tests.py",
+        "tests/base_test.py",
+        "tests/bulkdata/staging_to_tile_tests.py",
+        "tests/bulkdata/jsonld_import_tests.py",
+        "tests/bulkdata/tile_excel_tests.py",
+        "tests/bulkdata/concept_edit_tests.py",
+        "tests/importer/concept_import_tests.py",
+        "tests/models/node_tests.py",
+        "tests/localization/field_tests.py",
+        "tests/models/relation_tests.py",
+        "tests/models/mapped_archesjson_import_tests.py",
+        "tests/permissions/permissions_arches_default_deny_tests.py",
+        "tests/permissions/permission_tests.py",
+        "tests/models/graph_x_published_graph_tests.py",
+        "tests/models/mapped_csv_import_tests.py",
+        "tests/permissions/permissions_arches_default_allow_tests.py",
+        "tests/models/relational_data_model_tests.py",
+        "tests/localization/po_file_tests.py",
+        "tests/utils/datatypes/non_localized_string_tests.py",
+        "tests/search/search_tests.py",
+        "tests/utils/datatypes/datatype_tests.py",
+        "tests/models/tile_model_tests.py",
+        "tests/models/spatialview_model_tests.py",
+        "tests/importer/jsonld_import_tests.py",
+        "tests/utils/activitystream.py",
+        "tests/views/etl_manager_tests.py",
+        "tests/utils/test_transactions.py",
+        "tests/views/user_preference_api_tests.py",
+        "tests/views/resource_tests.py",
+        "tests/views/workflow_tests.py",
+        "tests/views/api/test_permissions.py",
+        "tests/views/spatialview_api_tests.py",
+        "tests/views/auth_tests.py"
+      ],
+      "outEdges": [
+        "arches/app/const.py",
+        "arches/app/models/fields/i18n.py",
+        "arches/app/models/mixins.py",
+        "arches/app/models/query_expressions.py",
+        "arches/app/models/utils.py",
+        "arches/app/utils/betterJSONSerializer.py",
+        "arches/app/utils/module_importer.py",
+        "arches/app/utils/storage_filename_generator.py",
+        "arches/app/utils/thumbnail_factory.py",
+        "arches/app/models/card.py",
+        "arches/app/models/graph.py",
+        "arches/app/models/resource.py",
+        "arches/app/models/tile.py"
+      ],
+      "inEdgesCount": 87,
+      "outEdgesCount": 13
+    },
+    {
+      "rank": 3,
+      "path": "arches/app/datatypes/concept_types.py",
+      "fileId": "arches/app/datatypes/concept_types.py",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [
+        "arches/app/datatypes/base.py",
+        "arches/app/datatypes/datatypes.py",
+        "arches/app/models/__init__.py",
+        "arches/app/models/concept.py",
+        "arches/app/models/system_settings.py",
+        "arches/app/search/elasticsearch_dsl_builder.py",
+        "arches/app/utils/betterJSONSerializer.py",
+        "arches/app/utils/date_utils.py"
+      ],
+      "inEdgesCount": 0,
+      "outEdgesCount": 8
+    },
+    {
+      "rank": 4,
+      "path": "arches/app/utils/resource_relationship_utils.py",
+      "fileId": "arches/app/utils/resource_relationship_utils.py",
+      "isTestFile": false,
+      "inEdges": [
+        "arches/app/models/resource.py",
+        "arches/app/views/api/resource.py",
+        "tests/utils/test_resource_relationship_utils.py"
+      ],
+      "outEdges": [
+        "arches/app/models/models.py",
+        "arches/app/utils/i18n.py"
+      ],
+      "inEdgesCount": 3,
+      "outEdgesCount": 2
+    },
+    {
+      "rank": 5,
+      "path": "arches/app/search/concept_search.py",
+      "fileId": "arches/app/search/concept_search.py",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [
+        "arches/app/models/concept.py",
+        "arches/app/models/system_settings.py",
+        "arches/app/search/elasticsearch_dsl_builder.py",
+        "arches/app/search/search_engine_factory.py"
+      ],
+      "inEdgesCount": 0,
+      "outEdgesCount": 4
+    },
+    {
+      "rank": 6,
+      "path": "arches/app/media/js/viewmodels/concept-widget.js",
+      "fileId": "arches/app/media/js/viewmodels/concept-widget.js",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 7,
+      "path": "arches/app/media/js/viewmodels/concept-select.js",
+      "fileId": "arches/app/media/js/viewmodels/concept-select.js",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 8,
+      "path": "arches/app/etl_modules/bulk_edit_concept.py",
+      "fileId": "arches/app/etl_modules/bulk_edit_concept.py",
+      "isTestFile": false,
+      "inEdges": [
+        "tests/bulkdata/concept_edit_tests.py"
+      ],
+      "outEdges": [
+        "arches/app/etl_modules/base_data_editor.py",
+        "arches/app/etl_modules/decorators.py",
+        "arches/app/etl_modules/save.py",
+        "arches/app/models/models.py",
+        "arches/app/models/concept.py",
+        "arches/app/utils/db_utils.py",
+        "arches/app/views/search.py",
+        "arches/app/tasks.py",
+        "arches/app/search/mappings.py",
+        "arches/app/search/search_engine_factory.py",
+        "arches/app/search/elasticsearch_dsl_builder.py"
+      ],
+      "inEdgesCount": 1,
+      "outEdgesCount": 11
+    },
+    {
+      "rank": 9,
+      "path": "arches/app/utils/data_management/concepts/__init__.py",
+      "fileId": "arches/app/utils/data_management/concepts/__init__.py",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 10,
+      "path": "arches/app/models/concept.py",
+      "fileId": "arches/app/models/concept.py",
+      "isTestFile": false,
+      "inEdges": [
+        "arches/app/datatypes/concept_types.py",
+        "arches/app/etl_modules/bulk_edit_concept.py",
+        "arches/app/datatypes/datatypes.py",
+        "arches/app/models/migrations/0005_4_0_1.py",
+        "arches/app/models/migrations/0010_4_1_0.py",
+        "arches/app/search/components/term_filter.py",
+        "arches/app/search/concept_search.py",
+        "arches/app/search/search_term.py",
+        "arches/app/utils/data_management/concepts/exporter.py",
+        "arches/app/utils/data_management/resources/formats/format.py",
+        "arches/app/utils/data_management/sparql_providers/aat_provider.py",
+        "arches/app/utils/data_management/resource_graphs/exporter.py",
+        "arches/app/utils/data_management/resources/formats/rdffile.py",
+        "arches/app/utils/data_management/resources/formats/csvfile.py",
+        "arches/app/utils/skos.py",
+        "arches/app/views/api/concept.py",
+        "arches/app/views/search.py",
+        "arches/app/views/concept.py",
+        "tests/models/concept_model_tests.py",
+        "tests/views/concept_tests.py"
+      ],
+      "outEdges": [
+        "arches/app/models/__init__.py",
+        "arches/app/models/system_settings.py",
+        "arches/app/search/search_engine_factory.py",
+        "arches/app/search/elasticsearch_dsl_builder.py",
+        "arches/app/search/mappings.py",
+        "arches/app/utils/betterJSONSerializer.py",
+        "arches/app/utils/i18n.py"
+      ],
+      "inEdgesCount": 20,
+      "outEdgesCount": 7
+    },
+    {
+      "rank": 11,
+      "path": "arches/app/views/concept.py",
+      "fileId": "arches/app/views/concept.py",
+      "isTestFile": false,
+      "inEdges": [
+        "arches/app/views/resource.py",
+        "arches/urls.py",
+        "tests/views/auth_tests.py"
+      ],
+      "outEdges": [
+        "arches/app/models/__init__.py",
+        "arches/app/models/system_settings.py",
+        "arches/app/models/concept.py",
+        "arches/app/search/search_engine_factory.py",
+        "arches/app/search/elasticsearch_dsl_builder.py",
+        "arches/app/search/mappings.py",
+        "arches/app/utils/decorators.py",
+        "arches/app/utils/betterJSONSerializer.py",
+        "arches/app/utils/response.py",
+        "arches/app/utils/skos.py",
+        "arches/app/views/base.py"
+      ],
+      "inEdgesCount": 3,
+      "outEdgesCount": 11
+    },
+    {
+      "rank": 12,
+      "path": "arches/app/views/api/ontology.py",
+      "fileId": "arches/app/views/api/ontology.py",
+      "isTestFile": false,
+      "inEdges": [
+        "arches/app/views/api/__init__.py"
+      ],
+      "outEdges": [
+        "arches/app/models/__init__.py",
+        "arches/app/utils/response.py",
+        "arches/app/views/api/__init__.py"
+      ],
+      "inEdgesCount": 1,
+      "outEdgesCount": 3
+    },
+    {
+      "rank": 13,
+      "path": "arches/app/media/js/utils/ontology.js",
+      "fileId": "arches/app/media/js/utils/ontology.js",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 14,
+      "path": "arches/app/media/js/models/concept-parents.js",
+      "fileId": "arches/app/media/js/models/concept-parents.js",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 15,
+      "path": "arches/app/models/migrations/3693_ontology_in_pkgs.py",
+      "fileId": "arches/app/models/migrations/3693_ontology_in_pkgs.py",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 16,
+      "path": "arches/app/media/js/views/concept-search.js",
+      "fileId": "arches/app/media/js/views/concept-search.js",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 17,
+      "path": "arches/app/media/js/views/rdm/concept-report.js",
+      "fileId": "arches/app/media/js/views/rdm/concept-report.js",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 18,
+      "path": "arches/app/media/js/views/rdm/concept-tree.js",
+      "fileId": "arches/app/media/js/views/rdm/concept-tree.js",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    },
+    {
+      "rank": 19,
+      "path": "arches/management/commands/load_ontology.py",
+      "fileId": "arches/management/commands/load_ontology.py",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [
+        "arches/app/models/__init__.py",
+        "arches/app/models/system_settings.py"
+      ],
+      "inEdgesCount": 0,
+      "outEdgesCount": 2
+    },
+    {
+      "rank": 20,
+      "path": "arches/app/media/js/views/components/widgets/concept-radio.js",
+      "fileId": "arches/app/media/js/views/components/widgets/concept-radio.js",
+      "isTestFile": false,
+      "inEdges": [],
+      "outEdges": [],
+      "inEdgesCount": 0,
+      "outEdgesCount": 0
+    }
+  ],
+  "pairwise": {
+    "2-3": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "arches/app/utils/betterJSONSerializer.py"
+      ]
+    },
+    "2-4": {
+      "sharedImporters": [
+        "arches/app/models/resource.py"
+      ],
+      "sharedImportees": []
+    },
+    "2-8": {
+      "sharedImporters": [
+        "tests/bulkdata/concept_edit_tests.py"
+      ],
+      "sharedImportees": []
+    },
+    "2-10": {
+      "sharedImporters": [
+        "arches/app/etl_modules/bulk_edit_concept.py",
+        "arches/app/search/search_term.py",
+        "arches/app/utils/data_management/resources/formats/format.py",
+        "arches/app/utils/data_management/sparql_providers/aat_provider.py",
+        "arches/app/utils/data_management/resource_graphs/exporter.py",
+        "arches/app/utils/data_management/resources/formats/csvfile.py",
+        "arches/app/views/search.py"
+      ],
+      "sharedImportees": [
+        "arches/app/utils/betterJSONSerializer.py"
+      ]
+    },
+    "2-11": {
+      "sharedImporters": [
+        "tests/views/auth_tests.py"
+      ],
+      "sharedImportees": [
+        "arches/app/utils/betterJSONSerializer.py"
+      ]
+    },
+    "3-5": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "arches/app/models/concept.py",
+        "arches/app/models/system_settings.py",
+        "arches/app/search/elasticsearch_dsl_builder.py"
+      ]
+    },
+    "3-8": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "arches/app/models/concept.py",
+        "arches/app/search/elasticsearch_dsl_builder.py"
+      ]
+    },
+    "3-10": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "arches/app/models/__init__.py",
+        "arches/app/models/system_settings.py",
+        "arches/app/search/elasticsearch_dsl_builder.py",
+        "arches/app/utils/betterJSONSerializer.py"
+      ]
+    },
+    "3-11": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "arches/app/models/__init__.py",
+        "arches/app/models/system_settings.py",
+        "arches/app/models/concept.py",
+        "arches/app/search/elasticsearch_dsl_builder.py",
+        "arches/app/utils/betterJSONSerializer.py"
+      ]
+    },
+    "3-12": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "arches/app/models/__init__.py"
+      ]
+    },
+    "3-19": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "arches/app/models/__init__.py",
+        "arches/app/models/system_settings.py"
+      ]
+    },
+    "4-8": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "arches/app/models/models.py"
+      ]
+    },
+    "4-10": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "arches/app/utils/i18n.py"
+      ]
+    },
+    "5-8": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "arches/app/models/concept.py",
+        "arches/app/search/search_engine_factory.py",
+        "arches/app/search/elasticsearch_dsl_builder.py"
+      ]
+    },
+    "5-10": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "arches/app/models/system_settings.py",
+        "arches/app/search/search_engine_factory.py",
+        "arches/app/search/elasticsearch_dsl_builder.py"
+      ]
+    },
+    "5-11": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "arches/app/models/system_settings.py",
+        "arches/app/models/concept.py",
+        "arches/app/search/search_engine_factory.py",
+        "arches/app/search/elasticsearch_dsl_builder.py"
+      ]
+    },
+    "5-19": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "arches/app/models/system_settings.py"
+      ]
+    },
+    "8-10": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "arches/app/search/search_engine_factory.py",
+        "arches/app/search/elasticsearch_dsl_builder.py",
+        "arches/app/search/mappings.py"
+      ]
+    },
+    "8-11": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "arches/app/models/concept.py",
+        "arches/app/search/search_engine_factory.py",
+        "arches/app/search/elasticsearch_dsl_builder.py",
+        "arches/app/search/mappings.py"
+      ]
+    },
+    "10-11": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "arches/app/models/__init__.py",
+        "arches/app/models/system_settings.py",
+        "arches/app/search/search_engine_factory.py",
+        "arches/app/search/elasticsearch_dsl_builder.py",
+        "arches/app/search/mappings.py",
+        "arches/app/utils/betterJSONSerializer.py"
+      ]
+    },
+    "10-12": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "arches/app/models/__init__.py"
+      ]
+    },
+    "10-19": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "arches/app/models/__init__.py",
+        "arches/app/models/system_settings.py"
+      ]
+    },
+    "11-12": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "arches/app/models/__init__.py",
+        "arches/app/utils/response.py"
+      ]
+    },
+    "11-19": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "arches/app/models/__init__.py",
+        "arches/app/models/system_settings.py"
+      ]
+    },
+    "12-19": {
+      "sharedImporters": [],
+      "sharedImportees": [
+        "arches/app/models/__init__.py"
+      ]
+    }
+  },
+  "bridgeRaw": {
+    "arches/__init__.py": {
+      "path": "arches/__init__.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        1
+      ]
+    },
+    "arches/app/const.py": {
+      "path": "arches/app/const.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        2
+      ]
+    },
+    "arches/app/datatypes/base.py": {
+      "path": "arches/app/datatypes/base.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        3
+      ]
+    },
+    "arches/app/datatypes/datatypes.py": {
+      "path": "arches/app/datatypes/datatypes.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [
+        10
+      ],
+      "whichCandidatesImportIt": [
+        3
+      ]
+    },
+    "arches/app/etl_modules/base_data_editor.py": {
+      "path": "arches/app/etl_modules/base_data_editor.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": [
+        8
+      ]
+    },
+    "arches/app/etl_modules/base_excel_exporter.py": {
+      "path": "arches/app/etl_modules/base_excel_exporter.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/etl_modules/base_import_module.py": {
+      "path": "arches/app/etl_modules/base_import_module.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/etl_modules/branch_excel_exporter.py": {
+      "path": "arches/app/etl_modules/branch_excel_exporter.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/etl_modules/branch_excel_importer.py": {
+      "path": "arches/app/etl_modules/branch_excel_importer.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/etl_modules/bulk_data_deletion.py": {
+      "path": "arches/app/etl_modules/bulk_data_deletion.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/etl_modules/decorators.py": {
+      "path": "arches/app/etl_modules/decorators.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        8
+      ]
+    },
+    "arches/app/etl_modules/import_single_csv.py": {
+      "path": "arches/app/etl_modules/import_single_csv.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/etl_modules/jsonld_importer.py": {
+      "path": "arches/app/etl_modules/jsonld_importer.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/etl_modules/save.py": {
+      "path": "arches/app/etl_modules/save.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        8
+      ]
+    },
+    "arches/app/etl_modules/staging_to_tile.py": {
+      "path": "arches/app/etl_modules/staging_to_tile.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/etl_modules/tile_excel_exporter.py": {
+      "path": "arches/app/etl_modules/tile_excel_exporter.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/etl_modules/tile_excel_importer.py": {
+      "path": "arches/app/etl_modules/tile_excel_importer.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/models/__init__.py": {
+      "path": "arches/app/models/__init__.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 5,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        3,
+        10,
+        11,
+        12,
+        19
+      ]
+    },
+    "arches/app/models/card.py": {
+      "path": "arches/app/models/card.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        2
+      ]
+    },
+    "arches/app/models/fields/i18n.py": {
+      "path": "arches/app/models/fields/i18n.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        2
+      ]
+    },
+    "arches/app/models/graph.py": {
+      "path": "arches/app/models/graph.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        2
+      ]
+    },
+    "arches/app/models/migrations/0002_40b4.py": {
+      "path": "arches/app/models/migrations/0002_40b4.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/models/migrations/0005_4_0_1.py": {
+      "path": "arches/app/models/migrations/0005_4_0_1.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        10
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/models/migrations/0010_4_1_0.py": {
+      "path": "arches/app/models/migrations/0010_4_1_0.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        10
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/models/migrations/5477_fix_makemigrations.py": {
+      "path": "arches/app/models/migrations/5477_fix_makemigrations.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/models/migrations/7853_add_timestamp_index.py": {
+      "path": "arches/app/models/migrations/7853_add_timestamp_index.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/models/migrations/8140_django_upgrade.py": {
+      "path": "arches/app/models/migrations/8140_django_upgrade.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/models/mixins.py": {
+      "path": "arches/app/models/mixins.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        2
+      ]
+    },
+    "arches/app/models/query_expressions.py": {
+      "path": "arches/app/models/query_expressions.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        2
+      ]
+    },
+    "arches/app/models/system_settings.py": {
+      "path": "arches/app/models/system_settings.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 5,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        3,
+        5,
+        10,
+        11,
+        19
+      ]
+    },
+    "arches/app/models/resource.py": {
+      "path": "arches/app/models/resource.py",
+      "importsHowManyCandidates": 2,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [
+        2,
+        4
+      ],
+      "whichCandidatesImportIt": [
+        2
+      ]
+    },
+    "arches/app/models/tile.py": {
+      "path": "arches/app/models/tile.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        2
+      ]
+    },
+    "arches/app/models/utils.py": {
+      "path": "arches/app/models/utils.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        2
+      ]
+    },
+    "arches/app/permissions/arches_default_deny.py": {
+      "path": "arches/app/permissions/arches_default_deny.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/permissions/arches_default_allow.py": {
+      "path": "arches/app/permissions/arches_default_allow.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/permissions/arches_permission_base.py": {
+      "path": "arches/app/permissions/arches_permission_base.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": [
+        1
+      ]
+    },
+    "arches/app/search/components/advanced_search.py": {
+      "path": "arches/app/search/components/advanced_search.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/search/components/base_search_view.py": {
+      "path": "arches/app/search/components/base_search_view.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/search/components/lifecycle_state_filter.py": {
+      "path": "arches/app/search/components/lifecycle_state_filter.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/search/components/base.py": {
+      "path": "arches/app/search/components/base.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/search/components/resource_type_filter.py": {
+      "path": "arches/app/search/components/resource_type_filter.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/search/components/search_results.py": {
+      "path": "arches/app/search/components/search_results.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/search/components/sort_results.py": {
+      "path": "arches/app/search/components/sort_results.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/search/components/term_filter.py": {
+      "path": "arches/app/search/components/term_filter.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        10
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/search/components/time_filter.py": {
+      "path": "arches/app/search/components/time_filter.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/search/elasticsearch_dsl_builder.py": {
+      "path": "arches/app/search/elasticsearch_dsl_builder.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 5,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        3,
+        5,
+        8,
+        10,
+        11
+      ]
+    },
+    "arches/app/search/mappings.py": {
+      "path": "arches/app/search/mappings.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 3,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        8,
+        10,
+        11
+      ]
+    },
+    "arches/app/search/search_engine_factory.py": {
+      "path": "arches/app/search/search_engine_factory.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 4,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        5,
+        8,
+        10,
+        11
+      ]
+    },
+    "arches/app/search/search_term.py": {
+      "path": "arches/app/search/search_term.py",
+      "importsHowManyCandidates": 2,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2,
+        10
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/tasks.py": {
+      "path": "arches/app/tasks.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        8
+      ]
+    },
+    "arches/app/utils/context_processors.py": {
+      "path": "arches/app/utils/context_processors.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/utils/data_management/resource_graphs/exporter.py": {
+      "path": "arches/app/utils/data_management/resource_graphs/exporter.py",
+      "importsHowManyCandidates": 2,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2,
+        10
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/utils/data_management/concepts/exporter.py": {
+      "path": "arches/app/utils/data_management/concepts/exporter.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        10
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/utils/betterJSONSerializer.py": {
+      "path": "arches/app/utils/betterJSONSerializer.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 4,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        2,
+        3,
+        10,
+        11
+      ]
+    },
+    "arches/app/utils/data_management/resources/formats/archesfile.py": {
+      "path": "arches/app/utils/data_management/resources/formats/archesfile.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/utils/data_management/resource_graphs/importer.py": {
+      "path": "arches/app/utils/data_management/resource_graphs/importer.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/utils/data_management/resources/formats/format.py": {
+      "path": "arches/app/utils/data_management/resources/formats/format.py",
+      "importsHowManyCandidates": 2,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2,
+        10
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/utils/data_management/resources/formats/rdffile.py": {
+      "path": "arches/app/utils/data_management/resources/formats/rdffile.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        10
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/utils/data_management/resources/formats/csvfile.py": {
+      "path": "arches/app/utils/data_management/resources/formats/csvfile.py",
+      "importsHowManyCandidates": 2,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2,
+        10
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/utils/data_management/resources/formats/htmlfile.py": {
+      "path": "arches/app/utils/data_management/resources/formats/htmlfile.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/utils/data_management/resources/importer.py": {
+      "path": "arches/app/utils/data_management/resources/importer.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/utils/db_utils.py": {
+      "path": "arches/app/utils/db_utils.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        8
+      ]
+    },
+    "arches/app/utils/date_utils.py": {
+      "path": "arches/app/utils/date_utils.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        3
+      ]
+    },
+    "arches/app/utils/data_management/sparql_providers/aat_provider.py": {
+      "path": "arches/app/utils/data_management/sparql_providers/aat_provider.py",
+      "importsHowManyCandidates": 2,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2,
+        10
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/utils/decorators.py": {
+      "path": "arches/app/utils/decorators.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        11
+      ]
+    },
+    "arches/app/utils/email_auth_backend.py": {
+      "path": "arches/app/utils/email_auth_backend.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        1
+      ]
+    },
+    "arches/app/utils/external_oauth_backend.py": {
+      "path": "arches/app/utils/external_oauth_backend.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": [
+        1
+      ]
+    },
+    "arches/app/utils/i18n.py": {
+      "path": "arches/app/utils/i18n.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 2,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": [
+        4,
+        10
+      ]
+    },
+    "arches/app/utils/middleware.py": {
+      "path": "arches/app/utils/middleware.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        1
+      ]
+    },
+    "arches/app/utils/module_importer.py": {
+      "path": "arches/app/utils/module_importer.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        2
+      ]
+    },
+    "arches/app/utils/permission_backend.py": {
+      "path": "arches/app/utils/permission_backend.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/utils/response.py": {
+      "path": "arches/app/utils/response.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 2,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        11,
+        12
+      ]
+    },
+    "arches/app/utils/storage_filename_generator.py": {
+      "path": "arches/app/utils/storage_filename_generator.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        2
+      ]
+    },
+    "arches/app/utils/thumbnail_factory.py": {
+      "path": "arches/app/utils/thumbnail_factory.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        2
+      ]
+    },
+    "arches/app/utils/transaction.py": {
+      "path": "arches/app/utils/transaction.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/views/api/__init__.py": {
+      "path": "arches/app/views/api/__init__.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [
+        12
+      ],
+      "whichCandidatesImportIt": [
+        12
+      ]
+    },
+    "arches/app/utils/skos.py": {
+      "path": "arches/app/utils/skos.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [
+        10
+      ],
+      "whichCandidatesImportIt": [
+        11
+      ]
+    },
+    "arches/app/views/api/resource.py": {
+      "path": "arches/app/views/api/resource.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/views/base.py": {
+      "path": "arches/app/views/base.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        11
+      ]
+    },
+    "arches/app/views/etl_manager.py": {
+      "path": "arches/app/views/etl_manager.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/views/file.py": {
+      "path": "arches/app/views/file.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/views/search.py": {
+      "path": "arches/app/views/search.py",
+      "importsHowManyCandidates": 2,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [
+        2,
+        10
+      ],
+      "whichCandidatesImportIt": [
+        8
+      ]
+    },
+    "arches/app/views/resource.py": {
+      "path": "arches/app/views/resource.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        11
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/app/views/api/concept.py": {
+      "path": "arches/app/views/api/concept.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        10
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/management/commands/etl.py": {
+      "path": "arches/management/commands/etl.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/management/commands/etl_module.py": {
+      "path": "arches/management/commands/etl_module.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/management/commands/etl_template.py": {
+      "path": "arches/management/commands/etl_template.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/management/commands/load_jsonld.py": {
+      "path": "arches/management/commands/load_jsonld.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/management/commands/process_index_queue.py": {
+      "path": "arches/management/commands/process_index_queue.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "arches/settings_utils.py": {
+      "path": "arches/settings_utils.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        1
+      ]
+    },
+    "arches/wsgi.py": {
+      "path": "arches/wsgi.py",
+      "importsHowManyCandidates": 0,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [],
+      "whichCandidatesImportIt": [
+        1
+      ]
+    },
+    "arches/urls.py": {
+      "path": "arches/urls.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 1,
+      "whichCandidatesItImports": [
+        11
+      ],
+      "whichCandidatesImportIt": [
+        1
+      ]
+    },
+    "tests/base_test.py": {
+      "path": "tests/base_test.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/bulkdata/branch_excel_tests.py": {
+      "path": "tests/bulkdata/branch_excel_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/bulkdata/concept_edit_tests.py": {
+      "path": "tests/bulkdata/concept_edit_tests.py",
+      "importsHowManyCandidates": 2,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2,
+        8
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/bulkdata/jsonld_import_tests.py": {
+      "path": "tests/bulkdata/jsonld_import_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/bulkdata/single_csv_tests.py": {
+      "path": "tests/bulkdata/single_csv_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/bulkdata/staging_to_tile_tests.py": {
+      "path": "tests/bulkdata/staging_to_tile_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/bulkdata/tile_excel_tests.py": {
+      "path": "tests/bulkdata/tile_excel_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/commands/test_etl_template.py": {
+      "path": "tests/commands/test_etl_template.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/commands/test_validate.py": {
+      "path": "tests/commands/test_validate.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/importer/concept_import_tests.py": {
+      "path": "tests/importer/concept_import_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/importer/jsonld_import_tests.py": {
+      "path": "tests/importer/jsonld_import_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/localization/field_tests.py": {
+      "path": "tests/localization/field_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/localization/po_file_tests.py": {
+      "path": "tests/localization/po_file_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/models/concept_model_tests.py": {
+      "path": "tests/models/concept_model_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        10
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/models/graph_x_published_graph_tests.py": {
+      "path": "tests/models/graph_x_published_graph_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/models/mapped_archesjson_import_tests.py": {
+      "path": "tests/models/mapped_archesjson_import_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/models/mapped_csv_import_tests.py": {
+      "path": "tests/models/mapped_csv_import_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/models/node_tests.py": {
+      "path": "tests/models/node_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/models/relation_tests.py": {
+      "path": "tests/models/relation_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/models/relational_data_model_tests.py": {
+      "path": "tests/models/relational_data_model_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/models/spatialview_model_tests.py": {
+      "path": "tests/models/spatialview_model_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/models/tile_model_tests.py": {
+      "path": "tests/models/tile_model_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/permissions/permission_tests.py": {
+      "path": "tests/permissions/permission_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/permissions/permissions_arches_default_deny_tests.py": {
+      "path": "tests/permissions/permissions_arches_default_deny_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/permissions/permissions_arches_default_allow_tests.py": {
+      "path": "tests/permissions/permissions_arches_default_allow_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/search/search_tests.py": {
+      "path": "tests/search/search_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/test_settings.py": {
+      "path": "tests/test_settings.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        1
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/utils/activitystream.py": {
+      "path": "tests/utils/activitystream.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/utils/datatypes/datatype_tests.py": {
+      "path": "tests/utils/datatypes/datatype_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/utils/datatypes/non_localized_string_tests.py": {
+      "path": "tests/utils/datatypes/non_localized_string_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/utils/test_resource_relationship_utils.py": {
+      "path": "tests/utils/test_resource_relationship_utils.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        4
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/views/api/test_permissions.py": {
+      "path": "tests/views/api/test_permissions.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/views/auth_tests.py": {
+      "path": "tests/views/auth_tests.py",
+      "importsHowManyCandidates": 2,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2,
+        11
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/utils/test_transactions.py": {
+      "path": "tests/utils/test_transactions.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/views/concept_tests.py": {
+      "path": "tests/views/concept_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        10
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/views/etl_manager_tests.py": {
+      "path": "tests/views/etl_manager_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/views/resource_tests.py": {
+      "path": "tests/views/resource_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/views/spatialview_api_tests.py": {
+      "path": "tests/views/spatialview_api_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/views/workflow_tests.py": {
+      "path": "tests/views/workflow_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    },
+    "tests/views/user_preference_api_tests.py": {
+      "path": "tests/views/user_preference_api_tests.py",
+      "importsHowManyCandidates": 1,
+      "importedByHowManyCandidates": 0,
+      "whichCandidatesItImports": [
+        2
+      ],
+      "whichCandidatesImportIt": []
+    }
+  },
+  "tokenDocFreqSnap": {
+    "3693": 1,
+    "arches": 873,
+    "settings": 20,
+    "streamline": 1,
+    "streamline_import": 1,
+    "mode": 3,
+    "debug": 4,
+    "internal": 1,
+    "ips": 1,
+    "internal_ips": 1,
+    "databases": 4,
+    "auto": 2,
+    "field": 7,
+    "default_auto_field": 1,
+    "pg": 1,
+    "superuser": 1,
+    "pg_superuser": 1,
+    "pw": 1,
+    "pg_superuser_pw": 1,
+    "anonymous": 3,
+    "user": 29,
+    "name": 34,
+    "anonymous_user_name": 1,
+    "elasticsearch": 7,
+    "http": 4,
+    "port": 3,
+    "elasticsearch_http_port": 3,
+    "search": 82,
+    "backend": 9,
+    "search_backend": 1,
+    "thumbnails": 1,
+    "search_thumbnails": 1,
+    "hosts": 6,
+    "elasticsearch_hosts": 4,
+    "connection": 1,
+    "elasticsearch_connection_options": 1,
+    "prefix": 6,
+    "elasticsearch_prefix": 3,
+    "custom": 6,
+    "indexes": 5,
+    "elasticsearch_custom_indexes": 2,
+    "term": 8,
+    "types": 6,
+    "term_search_types": 1,
+    "thumbnail": 7,
+    "generator": 3,
+    "thumbnail_generator": 2,
+    "generate": 13,
+    "demand": 1,
+    "generate_thumbnails_on_demand": 1,
+    "min": 8,
+    "file": 43,
+    "size": 2,
+    "t0": 1,
+    "min_file_size_t0_generate_thumbnail": 1,
+    "public": 2,
+    "server": 3,
+    "address": 1,
+    "public_server_address": 1,
+    "kibana": 3,
+    "url": 13,
+    "kibana_url": 1,
+    "basepath": 1,
+    "kibana_config_basepath": 1,
+    "use": 2,
+    "semantic": 2,
+    "resource": 70,
+    "relationships": 1,
+    "use_semantic_resource_relationships": 1,
+    "root": 6,
+    "dir": 2,
+    "root_dir": 1,
+    "app_root": 3,
+    "package": 9,
+    "package_root": 1,
+    "package_name": 2,
+    "log": 11,
+    "resource_import_log": 2,
+    "viewer": 3,
+    "download": 3,
+    "limit": 2,
+    "file_viewer_download_limit": 1,
+    "formatters": 1,
+    "resource_formatters": 1,
+    "hide": 1,
+    "empty": 2,
+    "nodes": 4,
+    "in": 4,
+    "report": 27,
+    "hide_empty_nodes_in_report": 1,
+    "ontology": 10,
+    "namespaces": 2,
+    "ontology_namespaces": 1,
+    "ontology_dir": 1,
+    "preferred": 1,
+    "concept": 43,
+    "schemes": 1,
+    "preferred_concept_schemes": 1,
+    "jsonld": 20,
+    "cache": 7,
+    "timeout": 1,
+    "jsonld_context_cache_timeout": 1,
+    "namespace": 1,
+    "for": 15,
+    "data": 86,
+    "arches_namespace_for_data_export": 1,
+    "fields": 6,
+    "card": 40,
+    "order": 3,
+    "export_data_fields_in_card_order": 1,
+    "rdm": 27,
+    "rdm_jsonld_context": 1,
+    "coordinate": 1,
+    "systems": 1,
+    "preferred_coordinate_systems": 1,
+    "analysis": 1,
+    "system": 11,
+    "srid": 1,
+    "analysis_coordinate_system_srid": 1,
+    "admins": 1,
+    "managers": 1,
+    "editor": 14,
+    "groups": 5,
+    "resource_editor_groups": 1,
+    "session": 3,
+    "cookie": 2,
+    "session_cookie_name": 2,
+    "samesite": 1,
+    "session_cookie_samesite": 1,
+    "email": 4,
+    "host": 6,
+    "email_host_user": 1,
+    "default_from_email": 1,
+    "enable": 4,
+    "signup": 2,
+    "enable_user_signup": 2,
+    "force": 2,
+    "authentication": 5,
+    "force_user_signup_email_authentication": 2,
+    "postgis": 2,
+    "version": 7,
+    "postgis_version": 1,
+    "i18n": 22,
+    "use_i18n": 1,
+    "time": 8,
+    "zone": 1,
+    "time_zone": 1,
+    "tz": 1,
+    "use_tz": 1,
+    "language": 13,
+    "code": 1,
+    "language_code": 1,
+    "languages": 3,
+    "show": 1,
+    "switch": 3,
+    "show_language_switch": 1,
+    "locale": 1,
+    "paths": 4,
+    "locale_paths": 1,
+    "upload": 2,
+    "max": 3,
+    "memory": 2,
+    "data_upload_max_memory_size": 2,
+    "restrict": 1,
+    "media": 301,
+    "access": 1,
+    "restrict_media_access": 1,
+    "celery": 8,
+    "restrict_celery_export_for_anonymous_user": 1,
+    "media_root": 3,
+    "media_url": 1,
+    "static": 6,
+    "static_root": 4,
+    "static_url": 1,
+    "script": 2,
+    "force_script_name": 1,
+    "admin": 6,
+    "admin_media_prefix": 1,
+    "staticfiles": 4,
+    "dirs": 4,
+    "staticfiles_dirs": 3,
+    "templates": 25,
+    "finders": 1,
+    "staticfiles_finders": 1,
+    "secret": 5,
+    "key": 9,
+    "secret_key": 2,
+    "jwt": 1,
+    "jwt_key": 1,
+    "token": 5,
+    "expiration": 1,
+    "jwt_token_expiration": 1,
+    "algorithm": 1,
+    "jwt_algorithm": 1,
+    "oauth2": 1,
+    "oauth2_provider": 1,
+    "oauth": 7,
+    "client": 3,
+    "id": 10,
+    "oauth_client_id": 3,
+    "backends": 1,
+    "authentication_backends": 1,
+    "installed": 2,
+    "apps": 2,
+    "installed_apps": 2,
+    "middleware": 3,
+    "webpack": 12,
+    "loader": 4,
+    "webpack_loader": 1,
+    "development": 3,
+    "webpack_development_server_port": 1,
+    "urlconf": 2,
+    "root_urlconf": 2,
+    "hostconf": 1,
+    "root_hostconf": 1,
+    "default_host": 1,
+    "wsgi": 4,
+    "application": 5,
+    "wsgi_application": 2,
+    "logging": 2,
+    "login": 4,
+    "login_url": 1,
+    "rate": 1,
+    "rate_limit": 1,
+    "profile": 6,
+    "profile_log_base": 1,
+    "bulk": 28,
+    "batch": 1,
+    "bulk_import_batch_size": 1,
+    "local": 5,
+    "path": 11,
+    "system_settings_local_path": 2,
+    "system_settings_resource_id": 1,
+    "auth": 6,
+    "password": 4,
+    "validators": 1,
+    "auth_password_validators": 1,
+    "livereload": 2,
+    "use_livereload": 1,
+    "livereload_port": 1,
+    "captcha": 2,
+    "enable_captcha": 2,
+    "nocaptcha": 2,
+    "silenced": 1,
+    "checks": 2,
+    "silenced_system_checks": 1,
+    "group": 10,
+    "user_signup_group": 1,
+    "external": 7,
+    "configuration": 16,
+    "external_oauth_configuration": 1,
+    "caches": 3,
+    "default_resource_import_user": 1,
+    "timewheel": 2,
+    "date": 9,
+    "tiers": 1,
+    "timewheel_date_tiers": 1,
+    "by": 8,
+    "cache_by_user": 2,
+    "bypass": 1,
+    "unique": 7,
+    "constraint": 8,
+    "tile": 37,
+    "validation": 9,
+    "bypass_unique_constraint_tile_validation": 1,
+    "required": 5,
+    "value": 25,
+    "bypass_required_value_tile_validation": 1,
+    "format": 12,
+    "date_import_export_format": 1,
+    "formats": 9,
+    "date_formats": 1,
+    "api": 35,
+    "page": 6,
+    "api_max_page_size": 1,
+    "uuid": 5,
+    "regex": 3,
+    "uuid_regex": 1,
+    "phone": 1,
+    "phone_regex": 1,
+    "items": 1,
+    "per": 1,
+    "search_items_per_page": 1,
+    "search_export_limit": 1,
+    "immediate": 1,
+    "threshold": 1,
+    "search_export_immediate_download_threshold": 1,
+    "html": 2,
+    "search_export_immediate_download_threshold_html_format": 1,
+    "related": 18,
+    "resources": 27,
+    "related_resources_per_page": 1,
+    "related_resources_export_limit": 1,
+    "dropdown": 2,
+    "length": 2,
+    "search_dropdown_length": 1,
+    "sensitivity": 1,
+    "search_term_sensitivity": 1,
+    "words": 1,
+    "words_per_search_term": 1,
+    "result": 12,
+    "search_result_limit": 1,
+    "etl": 38,
+    "username": 1,
+    "etl_username": 1,
+    "google": 1,
+    "analytics": 1,
+    "tracking": 1,
+    "google_analytics_tracking_id": 1,
+    "geocoder": 6,
+    "default_geocoder": 1,
+    "sparql": 5,
+    "endpoint": 3,
+    "providers": 5,
+    "sparql_endpoint_providers": 1,
+    "app_name": 2,
+    "app_version": 1,
+    "title": 2,
+    "app_title": 2,
+    "copyright": 2,
+    "text": 9,
+    "copyright_text": 2,
+    "year": 3,
+    "copyright_year": 2,
+    "bbox": 1,
+    "data_validation_bbox": 1,
+    "graph": 70,
+    "locations": 2,
+    "resource_graph_locations": 2,
+    "business": 5,
+    "files": 6,
+    "business_data_files": 2,
+    "permission": 29,
+    "permission_locations": 1,
+    "datatype": 25,
+    "datatype_locations": 1,
+    "function_locations": 1,
+    "search_component_locations": 1,
+    "etl_module_locations": 1,
+    "checking": 2,
+    "file_type_checking": 2,
+    "file_types": 1,
+    "filename": 2,
+    "filename_generator": 1,
+    "uploaded": 1,
+    "uploaded_files_dir": 1,
+    "mapbox": 3,
+    "mapbox_api_key": 1,
+    "sprites": 1,
+    "mapbox_sprites": 1,
+    "glyphs": 1,
+    "mapbox_glyphs": 1,
+    "map": 39,
+    "zoom": 1,
+    "default_map_zoom": 1,
+    "map_min_zoom": 1,
+    "map_max_zoom": 1,
+    "filter": 33,
+    "enabled": 1,
+    "map_filter_auto_zoom_enabled": 1,
+    "two": 2,
+    "factor": 2,
+    "enable_two_factor_authentication": 2,
+    "force_two_factor_authentication": 2,
+    "bounds": 2,
+    "default_bounds": 1,
+    "hex": 1,
+    "bin": 3,
+    "hex_bin_size": 1,
+    "precision": 1,
+    "hex_bin_precision": 1,
+    "allowed": 4,
+    "popup": 3,
+    "allowed_popup_hosts": 1,
+    "tileserver": 5,
+    "tileserver_url": 1,
+    "broker": 4,
+    "celery_broker_url": 4,
+    "accept": 2,
+    "content": 3,
+    "celery_accept_content": 2,
+    "celery_result_backend": 2,
+    "task": 9,
+    "serializer": 5,
+    "celery_task_serializer": 2,
+    "expires": 2,
+    "celery_search_export_expires": 2,
+    "check": 9,
+    "celery_search_export_check": 2,
+    "beat": 2,
+    "schedule": 2,
+    "celery_beat_schedule": 2,
+    "only": 4,
+    "inspect": 2,
+    "celery_check_only_inspect_broker": 2,
+    "refresh": 5,
+    "geom": 7,
+    "view": 96,
+    "auto_refresh_geom_view": 1,
+    "tile_cache_timeout": 1,
+    "cluster": 1,
+    "distance": 1,
+    "cluster_distance_max": 1,
+    "model": 381,
+    "graph_model_cache_timeout": 1,
+    "cantaloupe": 2,
+    "cantaloupe_dir": 1,
+    "cantaloupe_http_endpoint": 2,
+    "accessibility": 1,
+    "accessibility_mode": 1,
+    "renderers": 4,
+    "instance": 30,
+    "lifecycle": 11,
+    "default_resource_instance_lifecycle_id": 1,
+    "json": 24,
+    "ld": 5,
+    "sort": 9,
+    "json_ld_sort": 1,
+    "functions": 13,
+    "json_ld_sort_functions": 1,
+    "fix": 12,
+    "json_ld_fix_data_function": 1,
+    "framework": 5,
+    "permission_framework": 1,
+    "defaults": 7,
+    "permission_defaults": 2,
+    "arch": 873,
+    "setting": 21,
+    "internal_ip": 1,
+    "databas": 4,
+    "anonymou": 3,
+    "search_thumbnail": 1,
+    "elasticsearch_host": 4,
+    "elasticsearch_connection_option": 1,
+    "elasticsearch_custom_index": 2,
+    "term_search_typ": 1,
+    "addres": 1,
+    "public_server_addres": 1,
+    "relationship": 6,
+    "use_semantic_resource_relationship": 1,
+    "formatter": 2,
+    "resource_formatter": 1,
+    "namespac": 2,
+    "ontology_namespac": 1,
+    "schem": 1,
+    "preferred_concept_schem": 1,
+    "preferred_coordinate_system": 1,
+    "analysi": 1,
+    "resource_editor_group": 1,
+    "postgi": 2,
+    "languag": 3,
+    "locale_path": 1,
+    "acces": 1,
+    "restrict_media_acces": 1,
+    "staticfil": 4,
+    "staticfiles_dir": 3,
+    "templat": 25,
+    "finder": 2,
+    "staticfiles_finder": 1,
+    "authentication_backend": 1,
+    "installed_app": 2,
+    "validator": 6,
+    "auth_password_validator": 1,
+    "silenced_system_check": 1,
+    "cach": 3,
+    "tier": 1,
+    "timewheel_date_tier": 1,
+    "bypas": 1,
+    "date_format": 1,
+    "item": 1,
+    "resourc": 27,
+    "word": 2,
+    "analytic": 1,
+    "sparql_endpoint_provider": 1,
+    "location": 3,
+    "resource_graph_location": 2,
+    "busines": 5,
+    "business_data_fil": 2,
+    "permission_location": 1,
+    "datatype_location": 1,
+    "function_location": 1,
+    "search_component_location": 1,
+    "etl_module_location": 1,
+    "file_typ": 1,
+    "sprit": 1,
+    "mapbox_sprit": 1,
+    "glyph": 1,
+    "mapbox_glyph": 1,
+    "bound": 2,
+    "default_bound": 1,
+    "allowed_popup_host": 1,
+    "expir": 2,
+    "celery_search_export_expir": 2,
+    "renderer": 4,
+    "json_ld_sort_function": 1,
+    "permission_default": 2,
+    "models": 327,
+    "queue": 4,
+    "bulkindexqueue": 1,
+    "cardmodel": 3,
+    "constraintmodel": 1,
+    "node": 41,
+    "constraintxnode": 1,
+    "cardcomponent": 2,
+    "widget": 46,
+    "cardxnodexwidget": 2,
+    "ddatatype": 1,
+    "dnodetype": 1,
+    "relation": 7,
+    "drelationtype": 1,
+    "dvaluetype": 1,
+    "edge": 4,
+    "edit": 21,
+    "editlog": 6,
+    "externaloauthtoken": 1,
+    "revision": 2,
+    "resourcerevisionlog": 1,
+    "temp": 2,
+    "tempfile": 1,
+    "functionxgraph": 1,
+    "graphmodel": 6,
+    "published": 3,
+    "graphxpublishedgraph": 1,
+    "icon": 5,
+    "nodegroup": 15,
+    "ontologyclass": 1,
+    "publishedgraph": 1,
+    "publishedgraphedit": 1,
+    "template": 9,
+    "reporttemplate": 1,
+    "resource2resource": 1,
+    "resource2resourceconstraint": 1,
+    "resourcexresource": 1,
+    "resourceinstance": 3,
+    "identifier": 4,
+    "resourceidentifier": 1,
+    "resourceinstancelifecycle": 2,
+    "resourceinstancelifecyclestate": 2,
+    "ref": 1,
+    "resourceinstancelifecyclestatefromxref": 1,
+    "resourceinstancelifecyclestatetoxref": 1,
+    "searchcomponent": 3,
+    "history": 8,
+    "searchexporthistory": 2,
+    "tilemodel": 2,
+    "filevalue": 1,
+    "source": 5,
+    "mapsource": 1,
+    "layer": 12,
+    "maplayer": 4,
+    "mapping": 8,
+    "graphxmapping": 1,
+    "userprofile": 2,
+    "userxtask": 1,
+    "notification": 8,
+    "notificationtype": 1,
+    "userxnotification": 1,
+    "userxnotificationtype": 1,
+    "getdatadownloadconfigdefaults": 1,
+    "marker": 2,
+    "mapmarker": 1,
+    "plugin": 40,
+    "workflow": 14,
+    "workflowhistory": 3,
+    "iiif": 9,
+    "manifest": 11,
+    "error": 22,
+    "iiifmanifestvalidationerror": 1,
+    "iiifmanifest": 5,
+    "groupmapsettings": 1,
+    "vw": 1,
+    "annotation": 8,
+    "vwannotation": 1,
+    "geo": 6,
+    "geometry": 4,
+    "geojsongeometry": 2,
+    "etlmodule": 3,
+    "load": 15,
+    "event": 5,
+    "loadevent": 2,
+    "staging": 4,
+    "loadstaging": 3,
+    "errors": 3,
+    "loaderrors": 1,
+    "spatial": 9,
+    "spatialview": 10,
+    "preference": 3,
+    "userpreference": 2,
+    "ontologyclas": 1,
+    "getdatadownloadconfigdefault": 1,
+    "groupmapsetting": 1,
+    "loaderror": 1,
+    "datatypes": 36,
+    "concept_types": 1,
+    "baseconceptdatatype": 1,
+    "conceptdatatype": 1,
+    "list": 19,
+    "conceptlistdatatype": 1,
+    "datatyp": 36,
+    "concept_typ": 1,
+    "utils": 123,
+    "resource_relationship_utils": 1,
+    "label": 11,
+    "get_resource_relationship_type_label": 1,
+    "resource_relationship_util": 1,
+    "concept_search": 1,
+    "conceptsearch": 1,
+    "js": 287,
+    "viewmodels": 34,
+    "concept-widget": 1,
+    "conceptwidgetviewmodel": 1,
+    "viewmodel": 52,
+    "select": 13,
+    "concept-select": 2,
+    "conceptselectviewmodel": 1,
+    "modules": 28,
+    "bulk_edit_concept": 2,
+    "missing": 4,
+    "input": 5,
+    "missingrequiredinputerror": 2,
+    "details": 4,
+    "log_event_details": 2,
+    "bulkconcepteditor": 1,
+    "modul": 28,
+    "detail": 5,
+    "log_event_detail": 2,
+    "management": 67,
+    "concepts": 9,
+    "core_concepts": 1,
+    "conceptvalue": 1,
+    "preflabel": 1,
+    "conceptid": 1,
+    "get_preflabel_from_conceptid": 1,
+    "valueids": 1,
+    "get_valueids_from_concept_label": 1,
+    "valueid": 1,
+    "get_preflabel_from_valueid": 1,
+    "core_concept": 1,
+    "get_sparql_providers": 1,
+    "sort_languages": 1,
+    "collections": 8,
+    "export_collections": 1,
+    "get_concept_collections": 1,
+    "make": 6,
+    "collection": 16,
+    "make_collection": 1,
+    "manage": 4,
+    "parents": 2,
+    "manage_parents": 1,
+    "confirm": 2,
+    "delete": 13,
+    "confirm_delete": 1,
+    "paged": 1,
+    "paged_dropdown": 1,
+    "pref": 2,
+    "get_pref_label": 1,
+    "add": 43,
+    "add_concepts_from_sparql_endpoint": 1,
+    "search_sparql_endpoint_for_concepts": 1,
+    "tree": 8,
+    "concept_tree": 1,
+    "concept_value": 1,
+    "get_sparql_provider": 1,
+    "sort_languag": 1,
+    "export_collection": 1,
+    "get_concept_collection": 1,
+    "parent": 3,
+    "manage_parent": 1,
+    "search_sparql_endpoint_for_concept": 1,
+    "property": 1,
+    "ontologyproperty": 1,
+    "ontologyutils": 1,
+    "ontologyutil": 1,
+    "concept-parents": 1,
+    "concept-parent": 1,
+    "migrations": 285,
+    "pkgs": 1,
+    "3693_ontology_in_pkgs": 1,
+    "migration": 288,
+    "3693_ontology_in_pkg": 1,
+    "concept-search": 1,
+    "concept-report": 1,
+    "concept-tree": 1,
+    "commands": 50,
+    "load_ontology": 1,
+    "command": 52,
+    "widgets": 31,
+    "radio": 3,
+    "concept-radio": 1
+  }
+}

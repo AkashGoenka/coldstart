@@ -1,0 +1,160 @@
+{
+  "_comment": "Tier 1 = files agent would be frustrated to miss (the core). Tier 2 = useful adjacent. Tier 3 = tangential but relevant. Labels assigned by Claude after inspecting repo structure, to be reviewed.",
+  "mastodon": {
+    "q1": {
+      "query": "timeline status feed",
+      "tier1": [
+        "app/javascript/mastodon/reducers/timelines.js",
+        "app/javascript/mastodon/actions/timelines.js",
+        "app/javascript/mastodon/features/home_timeline/index.jsx",
+        "app/javascript/mastodon/components/status_list.jsx"
+      ],
+      "tier2": [
+        "app/javascript/mastodon/reducers/status_lists.js",
+        "app/javascript/mastodon/actions/timelines_typed.ts",
+        "app/javascript/mastodon/features/public_timeline/index.jsx",
+        "app/javascript/mastodon/features/community_timeline/index.jsx",
+        "app/javascript/mastodon/selectors/statuses.ts",
+        "app/models/status.rb",
+        "app/models/feed.rb"
+      ],
+      "tier3": [
+        "app/javascript/mastodon/features/ui/containers/status_list_container.js",
+        "streaming/index.js",
+        "app/javascript/mastodon/features/hashtag_timeline/index.jsx",
+        "app/javascript/mastodon/features/list_timeline/index.jsx",
+        "app/javascript/mastodon/features/direct_timeline/index.jsx",
+        "app/javascript/mastodon/features/link_timeline/index.tsx",
+        "app/javascript/mastodon/components/status.jsx"
+      ]
+    },
+    "q2": {
+      "query": "media upload attachment",
+      "tier1": [
+        "app/models/media_attachment.rb",
+        "app/controllers/api/v1/media_controller.rb",
+        "app/javascript/mastodon/features/ui/components/upload_area.tsx"
+      ],
+      "tier2": [
+        "app/javascript/mastodon/reducers/media_attachments.js",
+        "app/javascript/mastodon/components/media_gallery.jsx",
+        "app/javascript/mastodon/models/media_attachment.ts",
+        "app/services/update_media_attachments_permissions_service.rb",
+        "app/policies/media_attachment_policy.rb",
+        "app/controllers/api/v2/media_controller.rb"
+      ],
+      "tier3": [
+        "app/javascript/mastodon/components/attachment_list.jsx",
+        "app/javascript/mastodon/components/media_attachments.jsx",
+        "app/controllers/media_proxy_controller.rb",
+        "app/javascript/mastodon/api_types/media_attachments.ts"
+      ]
+    },
+    "q3": {
+      "query": "follower relationship account",
+      "tier1": [
+        "app/models/account.rb",
+        "app/models/follow.rb",
+        "app/services/follow_service.rb",
+        "app/javascript/mastodon/components/follow_button.tsx"
+      ],
+      "tier2": [
+        "app/javascript/mastodon/actions/accounts.js",
+        "app/javascript/mastodon/reducers/relationships.ts",
+        "app/controllers/follower_accounts_controller.rb",
+        "app/controllers/following_accounts_controller.rb",
+        "app/presenters/account_relationships_presenter.rb",
+        "app/javascript/mastodon/features/followers/index.tsx",
+        "app/javascript/mastodon/features/following/index.tsx"
+      ],
+      "tier3": [
+        "app/javascript/mastodon/hooks/useRelationship.ts",
+        "app/javascript/mastodon/components/familiar_followers/index.tsx",
+        "app/services/authorize_follow_service.rb",
+        "app/services/reject_follow_service.rb",
+        "app/javascript/mastodon/api_types/relationships.ts",
+        "app/javascript/mastodon/models/relationship.ts"
+      ]
+    },
+    "q4": {
+      "query": "people I follow",
+      "tier1": [
+        "app/models/follow.rb",
+        "app/javascript/mastodon/components/follow_button.tsx",
+        "app/javascript/mastodon/features/following/index.tsx",
+        "app/services/follow_service.rb"
+      ],
+      "tier2": [
+        "app/models/account.rb",
+        "app/javascript/mastodon/features/followers/index.tsx",
+        "app/controllers/following_accounts_controller.rb",
+        "app/javascript/mastodon/components/familiar_followers/index.tsx"
+      ],
+      "tier3": [
+        "app/javascript/mastodon/features/onboarding/follows.tsx",
+        "app/javascript/mastodon/actions/accounts.js",
+        "app/javascript/mastodon/reducers/relationships.ts",
+        "app/javascript/mastodon/api_types/relationships.ts"
+      ]
+    }
+  },
+  "arches": {
+    "q1": {
+      "query": "resource model graph",
+      "tier1": [
+        "arches/app/models/models.py",
+        "arches/app/models/resource.py",
+        "arches/app/views/graph.py",
+        "arches/app/views/resource.py"
+      ],
+      "tier2": [
+        "arches/app/models/tile.py",
+        "arches/app/models/card.py",
+        "arches/app/utils/data_management/resource_graphs/__init__.py",
+        "arches/app/utils/update_resource_instance_data_based_on_graph_diff.py"
+      ],
+      "tier3": [
+        "arches/app/media/js/viewmodels/graph-settings.js",
+        "arches/app/media/js/viewmodels/resource-instance-select.js",
+        "arches/app/media/js/resource-types.js"
+      ]
+    },
+    "q2": {
+      "query": "permission group user",
+      "tier1": [
+        "arches/app/permissions/arches_permission_base.py",
+        "arches/app/utils/permission_backend.py",
+        "arches/app/views/user.py"
+      ],
+      "tier2": [
+        "arches/app/permissions/arches_default_allow.py",
+        "arches/app/permissions/arches_default_deny.py",
+        "arches/app/views/admin.py",
+        "arches/app/views/api/user.py"
+      ],
+      "tier3": [
+        "arches/app/utils/decorators.py",
+        "arches/app/signals.py",
+        "arches/app/views/api/userpreference.py"
+      ]
+    },
+    "q3": {
+      "query": "ontology concept relationship",
+      "tier1": [
+        "arches/app/models/concept.py",
+        "arches/app/views/concept.py",
+        "arches/app/views/api/ontology.py"
+      ],
+      "tier2": [
+        "arches/app/datatypes/concept_types.py",
+        "arches/app/search/concept_search.py",
+        "arches/app/utils/resource_relationship_utils.py"
+      ],
+      "tier3": [
+        "arches/management/commands/load_ontology.py",
+        "arches/app/media/js/utils/ontology.js",
+        "arches/app/etl_modules/bulk_edit_concept.py"
+      ]
+    }
+  }
+}
