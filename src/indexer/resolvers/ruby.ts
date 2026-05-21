@@ -197,3 +197,19 @@ export function resolveRailsConstant(
   return fqcnIndex.get(key) ?? null;
 }
 
+/**
+ * Resolve an ordered candidate group (innermost-nesting first, bare last) to a
+ * fileId, taking the first candidate that maps to a real file. Mirrors Ruby's
+ * lexical constant lookup. Returns the matched FQCN so callers can label the edge.
+ */
+export function resolveRailsConstantCandidates(
+  candidates: string[],
+  fqcnIndex: Map<string, string>,
+): { fileId: string; fqcn: string } | null {
+  for (const fqcn of candidates) {
+    const fileId = fqcnIndex.get(underscore(fqcn));
+    if (fileId) return { fileId, fqcn };
+  }
+  return null;
+}
+

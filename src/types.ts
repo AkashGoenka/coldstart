@@ -86,7 +86,7 @@ export interface IndexedFile {
   isTestFile: boolean;      // true if any path segment is a test/automation directory
   symbols: SymbolNode[];    // symbol-level nodes within this file (TS/JS only)
   reexportRatio?: number;   // TS/JS only: ratio of re-export statements to total export statements
-  constantReferences?: string[];  // Ruby only: FQCNs to resolve via autoload
+  constantReferences?: string[][];  // Ruby only: ordered FQCN candidate groups (nesting-aware) to resolve via autoload
   partialDeclarations?: Array<{ kind: 'class' | 'struct' | 'interface' | 'record'; name: string; namespace?: string }>;  // C# only: partial type declarations
   eloquentRelations?: Array<{ targetClass: string; line: number }>;  // PHP only: Eloquent relationship class references
   containerResolutions?: Array<{ targetClass: string; line: number }>;  // PHP only: DI container class references
@@ -127,7 +127,7 @@ export interface ParsedFile {
   tokenEstimate: number;
   symbols: SymbolNode[];    // symbol-level nodes (TS/JS only, empty for other languages)
   reexportRatio?: number;   // TS/JS only
-  constantReferences?: string[];  // Ruby only: FQCNs to resolve via autoload
+  constantReferences?: string[][];  // Ruby only: ordered FQCN candidate groups (nesting-aware) to resolve via autoload
   partialDeclarations?: Array<{ kind: 'class' | 'struct' | 'interface' | 'record'; name: string; namespace?: string }>;  // C# only: partial type declarations
   eloquentRelations?: Array<{ targetClass: string; line: number }>;  // PHP only: Eloquent relationship class references
   containerResolutions?: Array<{ targetClass: string; line: number }>;  // PHP only: DI container class references

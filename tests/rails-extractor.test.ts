@@ -43,6 +43,7 @@ async function buildRailsTestIndex(rootDir: string): Promise<CodebaseIndex> {
           isTestFile: isTestPath(wf.relativePath),
           symbols: parsed.symbols,
           reexportRatio: parsed.reexportRatio,
+          constantReferences: parsed.constantReferences,
         };
         indexedFiles.push(file);
       } catch {
@@ -190,6 +191,24 @@ describe('Rails extractor — controller to view edges', () => {
     const viewId = 'app/views/posts/show.rb';
     const incoming = index.inEdges.get(viewId) ?? [];
     expect(incoming).toContain(controllerId);
+  });
+});
+
+describe('Rails extractor — nesting-aware constant autoload', () => {
+  let index: CodebaseIndex;
+  const FIXTURE_ROOT = join(__dirname, 'fixtures/rails-mini');
+
+  beforeAll(async () => {
+    index = await buildRailsTestIndex(FIXTURE_ROOT);
+  });
+
+  it('resolves bare `Invite` inside module Members to Members::Invite (not top-level)', () => {
+    const fromId = 'app/services/members/invite_processor.rb';
+    const namespaced = 'app/models/members/invite.rb';
+    const topLevel = 'app/models/invite.rb';
+    const outgoing = index.outEdges.get(fromId) ?? [];
+    expect(outgoing).toContain(namespaced);
+    expect(outgoing).not.toContain(topLevel);
   });
 });
 

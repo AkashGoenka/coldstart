@@ -922,34 +922,58 @@ function shouldSkipConstantContext(node: TSNode): boolean {
   return false;
 }
 
-function collectConstantReferences(root: TSNode): string[] {
-  const out: string[] = [];
+/**
+ * Collect constant references as ordered candidate groups, mirroring Ruby's
+ * lexical-nesting constant lookup. For a reference `R` seen inside `module A;
+ * module B`, Ruby tries `A::B::R`, `A::R`, then top-level `R` — so we emit
+ * `[A::B::R, A::R, R]` (innermost-first, bare last). The resolver tries each in
+ * order and takes the first that maps to a real file. This recovers references
+ * to namespaced files (e.g. bare `Invite` → `app/models/members/invite.rb`)
+ * that a literal-only lookup misses, and avoids wrong edges to top-level
+ * homonyms.
+ *
+ * `nesting` is the enclosing class/module FQCNs, innermost-first (= Module.nesting).
+ * Compact definitions (`class A::B`) don't add intermediate namespaces, matching Ruby.
+ */
+function collectConstantReferences(root: TSNode): string[][] {
+  const out: string[][] = [];
   const seen = new Set<string>();
-  function visit(node: TSNode): void {
-    if (node.type === 'constant' || node.type === 'scope_resolution') {
-      if (node.type === 'scope_resolution') {
-        // Don't descend into scope_resolution children — we want the full path
-        if (!isConstantDefinitionContext(node) && !shouldSkipConstantContext(node)) {
-          const txt = node.text;
-          if (!seen.has(txt) && !isConstantStoplisted(txt)) {
-            seen.add(txt);
-            out.push(txt);
-          }
-        }
-        return;
+
+  function emit(ref: string, nesting: string[]): void {
+    const candidates = [...nesting.map(n => `${n}::${ref}`), ref];
+    const key = candidates.join('>');
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(candidates);
+  }
+
+  function visit(node: TSNode, nesting: string[]): void {
+    if (node.type === 'class' || node.type === 'module') {
+      // Compute this scope's FQCN the same way extractNode does (parentName::name).
+      const nameNode = firstChildOfTypes(node, ['constant', 'scope_resolution']);
+      const text: string | undefined = nameNode?.text;
+      const newName = text ? (nesting.length ? `${nesting[0]}::${text}` : text) : nesting[0];
+      const newNesting = newName ? [newName, ...nesting] : nesting;
+      // Body resolves under the new nesting; the name/superclass resolve in the
+      // OUTER nesting (Ruby resolves `class Foo < Bar` and `Foo::X` before Foo is open).
+      const body = firstChildOfType(node, 'body_statement');
+      for (const c of node.namedChildren) {
+        visit(c, c === body ? newNesting : nesting);
       }
-      // Bare constant
+      return;
+    }
+
+    if (node.type === 'constant' || node.type === 'scope_resolution') {
       if (!isConstantDefinitionContext(node) && !shouldSkipConstantContext(node)) {
         const txt = node.text;
-        if (!seen.has(txt) && !isConstantStoplisted(txt)) {
-          seen.add(txt);
-          out.push(txt);
-        }
+        if (!isConstantStoplisted(txt)) emit(txt, nesting);
       }
+      // Don't descend into scope_resolution children — we want the full path.
+      if (node.type === 'scope_resolution') return;
     }
-    for (const c of node.namedChildren) visit(c);
+    for (const c of node.namedChildren) visit(c, nesting);
   }
-  visit(root);
+  visit(root, []);
   return out;
 }
 
@@ -962,7 +986,7 @@ export interface RubyParseResult {
   exports: string[];
   hasDefaultExport: false;
   symbols: SymbolNode[];
-  constantReferences?: string[];  // FQCNs to resolve via Rails autoload
+  constantReferences?: string[][];  // ordered FQCN candidate groups (nesting-aware) to resolve via Rails autoload
 }
 
 const RUBY_MAX_STRING = 32000;
