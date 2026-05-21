@@ -1,6 +1,6 @@
 {
   "name": "coldstart-mcp",
-  "version": "1.4.4",
+  "version": "1.5.0",
   "description": "Local MCP server for AI agent codebase navigation — domain mapping, dependency tracing, file structure lookup",
   "type": "module",
   "bin": {
