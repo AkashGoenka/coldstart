@@ -12,8 +12,7 @@ import { compileGlob, matchesGlob } from './glob.js';
 
 export { parseConceptGroups, matchFile, type MatchResult };
 
-// Per-result importer cap. Evidence, not exhaustive — agent uses trace-deps
-// (until Phase 3 removes it; same semantics will move to a dedicated tool).
+// Per-result importer cap. Evidence, not exhaustive.
 const IMPORTERS_PER_RESULT = 8;
 function buildImportersFor(fileId: string, index: CodebaseIndex): string[] {
   const ids = index.inEdges.get(fileId) ?? [];
@@ -46,8 +45,7 @@ function findFileForCallers(
 
 // For a target file, find callers of its exported symbols via symbolEdges.
 // Returns up to CALLERS_CAP unique caller files, each with up to a few example
-// caller-symbol/line pairs. Evidence shape, not exhaustive — Phase 3 will fold
-// trace-impact's full output into a future scoped form.
+// caller-symbol/line pairs.
 const CALLERS_CAP = 12;
 const CALL_LINES_PER_CALLER_FILE = 3;
 function buildCallersForFile(
@@ -428,9 +426,8 @@ export function handleGetStructure(
     }
   }
 
-  // Imports — internal only, bare paths, deduped.
-  // Above IMPORTS_LIST_THRESHOLD we show only the count + pointer to trace-deps,
-  // since agents skim long lists and `trace-deps` is the right tool for a full list.
+  // Imports — internal only, bare paths, deduped. Above IMPORTS_LIST_THRESHOLD
+  // we suggest narrowing with `match` instead of dumping the whole list.
   if (view === 'imports' || view === 'both') {
     const IMPORTS_LIST_THRESHOLD = 15;
     const internalImports = [...new Set(
@@ -453,7 +450,7 @@ export function handleGetStructure(
         lines.push('Imports:');
         for (const p of filteredImports) lines.push(p);
       } else {
-        lines.push(`Imports: ${filteredImports.length} internal files — use trace-deps for the list.`);
+        lines.push(`Imports: ${filteredImports.length} internal files — pass \`match\` to scope this list (substring or /regex/).`);
       }
     } else if (matchPredicate && totalImportCount > 0) {
       lines.push('');
@@ -467,7 +464,7 @@ export function handleGetStructure(
   if (matchPredicate && filteredSymbolCount === 0 && totalSymbolCount > 0) {
     lines.push('Next: relax or drop `match`; or call this file with `view: "imports"` to see imports only.');
   } else {
-    lines.push('Next: trace-deps on this file (direction: "importers") to see who imports it; trace-impact <symbol> on any symbol above to see callers/implementors. Open the file with Read only when you need actual implementation.');
+    lines.push('Next: to see who imports this file, call `get-overview` with `with_importers: true` (or `callers_for: "<this file>"` for symbol-level callers). Open the file with Read only when you need actual implementation.');
   }
 
   return { __rawText: lines.join('\n') };
@@ -493,315 +490,6 @@ function compileMatchPredicate(spec: string | undefined): ((s: string) => boolea
   return (s) => s.toLowerCase().includes(lower);
 }
 
-// ============================================================================
-// trace-deps
-// ============================================================================
-export function handleTraceDeps(
-  index: CodebaseIndex,
-  params: {
-    file_path: string;
-    direction?: 'imports' | 'importers' | 'both';
-    depth?: number;
-  },
-): object {
-  if (!params.file_path) {
-    return { error: 'file_path is required' };
-  }
-  const direction = params.direction ?? 'both';
-  const maxDepth = Math.min(params.depth ?? 1, 3);
-
-  // Find file by relative path (or suffix match)
-  const fileEntry = findFileByPath(index, params.file_path);
-  if (!fileEntry) {
-    return { error: `File not found: ${params.file_path}` };
-  }
-  const [fileId, file] = fileEntry;
-
-  // Drop high-fanout neighbors (shared utils, contexts, enums) — they're
-  // almost never on the path to the answer and they bloat the result.
-  const FANOUT_CAP = 30;
-  let skippedHighFanout = 0;
-
-  function collectDeps(
-    startId: string,
-    getNeighbors: (id: string) => string[],
-    depth: number,
-  ): object[] {
-    const visited = new Set<string>();
-    const result: object[] = [];
-
-    function traverse(id: string, currentDepth: number): void {
-      if (currentDepth > depth || visited.has(id)) return;
-      visited.add(id);
-      for (const neighborId of getNeighbors(id)) {
-        if (visited.has(neighborId)) continue;
-        const neighbor = index.files.get(neighborId);
-        if (!neighbor) continue;
-        if (neighbor.importedByCount > FANOUT_CAP) {
-          skippedHighFanout++;
-          continue;
-        }
-        result.push({
-          path: neighbor.relativePath,
-          language: neighbor.language,
-          exports: neighbor.exports.slice(0, 10),
-          importedByCount: neighbor.importedByCount,
-          depth: currentDepth,
-        });
-        if (currentDepth < depth) {
-          traverse(neighborId, currentDepth + 1);
-        }
-      }
-    }
-
-    traverse(startId, 1);
-    return result;
-  }
-
-  const response: Record<string, unknown> = {
-    file: {
-      path: file.relativePath,
-      language: file.language,
-    },
-  };
-
-  if (direction === 'imports' || direction === 'both') {
-    response.imports = collectDeps(
-      fileId,
-      id => index.outEdges.get(id) ?? [],
-      maxDepth,
-    );
-  }
-  if (direction === 'importers' || direction === 'both') {
-    response.importers = collectDeps(
-      fileId,
-      id => index.inEdges.get(id) ?? [],
-      maxDepth,
-    );
-  }
-
-  if (skippedHighFanout > 0) {
-    response.skippedHighFanout = skippedHighFanout;
-    response.note = `Omitted ${skippedHighFanout} neighbor(s) with importedByCount > ${FANOUT_CAP} (shared utils/contexts/enums — rarely on the path to a feature).`;
-  }
-
-  return response;
-}
-
-// ============================================================================
-// trace-impact
-// ============================================================================
-export function handleTraceImpact(
-  index: CodebaseIndex,
-  params: {
-    symbol: string;
-    file?: string;
-    depth?: number;
-  },
-): object {
-  const { symbol, file: filePath, depth: requestedDepth } = params;
-
-  if (!symbol) {
-    return { error: 'symbol is required' };
-  }
-
-  const maxDepth = Math.min(requestedDepth ?? 3, 10);
-  const TRUNCATE_AT = 50;
-
-  // -------------------------------------------------------------------------
-  // Step 1: Find target symbol
-  // -------------------------------------------------------------------------
-  const candidates = findSymbolCandidates(index, symbol, filePath);
-
-  if (candidates.length === 0) {
-    // Phase B: annotation-name fallback. If no symbol is named `symbol`,
-    // check whether any symbol bears it as an annotation (e.g. `@Transactional`).
-    const annotated = findSymbolsByAnnotation(index, symbol);
-    if (annotated.length > 0) {
-      const affected = [...new Set(annotated.map(a => a.fileEntry.relativePath))].sort();
-      return {
-        target: { symbol: `@${symbol}`, type: 'annotation', matchedVia: 'annotation' },
-        annotatedSymbols: annotated.map(a => ({
-          symbol: a.name,
-          file: a.fileEntry.relativePath,
-          line: a.startLine,
-          type: a.kind,
-        })),
-        summary: {
-          totalAnnotated: annotated.length,
-          affectedFiles: affected,
-          note: `No symbol named "${symbol}". ${annotated.length} symbol(s) annotated with @${symbol} below.`,
-        },
-      };
-    }
-
-    return {
-      error: `Symbol not found: ${symbol}`,
-      suggestions: fuzzyMatchSymbols(index, symbol).slice(0, 5),
-    };
-  }
-
-  if (candidates.length > 1) {
-    return {
-      error: `Symbol "${symbol}" is ambiguous (${candidates.length} matches). Provide file to disambiguate.`,
-      candidates: candidates.map(c => ({
-        symbol: c.name,
-        file: c.fileEntry.relativePath,
-        kind: c.kind,
-      })),
-    };
-  }
-
-  const target = candidates[0];
-
-  // -------------------------------------------------------------------------
-  // Step 2: Build symbol-level reverse adjacency map (inEdges)
-  // Exclude 'exports' edges — a file exporting a symbol is not impacted by it
-  // -------------------------------------------------------------------------
-  const symInEdges = new Map<string, Array<{ from: string; type: string; line?: number }>>();
-
-  for (const edge of index.symbolEdges) {
-    if (edge.type === 'exports') continue;
-    if (!symInEdges.has(edge.to)) symInEdges.set(edge.to, []);
-    symInEdges.get(edge.to)!.push({ from: edge.from, type: edge.type, line: edge.line });
-  }
-
-  // -------------------------------------------------------------------------
-  // Step 3: BFS traversal from target
-  // -------------------------------------------------------------------------
-  type ImpactEntry = {
-    symbolId: string;
-    depth: number;
-    path: string[];     // symbolIds from target → this node
-    relationship: string;
-    callLine?: number;  // line in the caller's file where the call to its callee occurs (calls edges)
-  };
-
-  const visited = new Set<string>([target.id]);
-  const impacted: ImpactEntry[] = [];
-
-  // Queue items
-  const queue: Array<{ id: string; depth: number; path: string[]; rel: string; line?: number }> = [];
-
-  for (const inc of symInEdges.get(target.id) ?? []) {
-    if (!visited.has(inc.from)) {
-      queue.push({ id: inc.from, depth: 1, path: [target.id, inc.from], rel: inc.type, line: inc.line });
-    }
-  }
-
-  while (queue.length > 0) {
-    const { id, depth, path, rel, line } = queue.shift()!;
-    if (visited.has(id)) continue;
-    visited.add(id);
-
-    impacted.push({ symbolId: id, depth, path, relationship: rel, callLine: line });
-
-    if (depth >= maxDepth) continue;
-
-    for (const inc of symInEdges.get(id) ?? []) {
-      if (!visited.has(inc.from)) {
-        queue.push({ id: inc.from, depth: depth + 1, path: [...path, inc.from], rel: inc.type, line: inc.line });
-      }
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // Step 4: Resolve symbolIds to human-readable info
-  // -------------------------------------------------------------------------
-  const symInfo = buildSymbolInfoMap(index);
-
-  function resolveId(id: string): { name: string; file: string; kind: string } {
-    const info = symInfo.get(id);
-    if (info) return info;
-    // Fallback: parse the id format "fileId#symbolName"
-    const hash = id.lastIndexOf('#');
-    if (hash !== -1) return { name: id.slice(hash + 1), file: id.slice(0, hash), kind: 'unknown' };
-    return { name: id, file: '', kind: 'unknown' };
-  }
-
-  const truncated = impacted.length > TRUNCATE_AT;
-  const displayImpacted = truncated ? impacted.slice(0, TRUNCATE_AT) : impacted;
-
-  // -------------------------------------------------------------------------
-  // Step 5: Build summary
-  // -------------------------------------------------------------------------
-  const byDepth: Record<number, number> = {};
-  const byRelationship: Record<string, number> = {};
-  const affectedFilesSet = new Set<string>();
-
-  for (const entry of impacted) {
-    byDepth[entry.depth] = (byDepth[entry.depth] ?? 0) + 1;
-    byRelationship[entry.relationship] = (byRelationship[entry.relationship] ?? 0) + 1;
-    const info = symInfo.get(entry.symbolId);
-    if (info) affectedFilesSet.add(info.file);
-  }
-
-  // -------------------------------------------------------------------------
-  // Step 6: If no symbol-level impact, fall back to file-level importers
-  // This covers languages where calls are member expressions (obj.method())
-  // that don't produce symbol edges.
-  // -------------------------------------------------------------------------
-  let fileImporters: string[] | undefined;
-  if (impacted.length === 0) {
-    // Find the fileId for the target symbol's file
-    const targetFileId = findFileIdByRelativePath(index, target.fileEntry.relativePath);
-    if (targetFileId) {
-      const importerIds = index.inEdges.get(targetFileId) ?? [];
-      fileImporters = importerIds
-        .map(id => index.files.get(id)?.relativePath)
-        .filter((p): p is string => p !== undefined)
-        .sort();
-    }
-  }
-
-  const targetLocation = `${target.fileEntry.relativePath}:${target.startLine}`;
-
-  return {
-    target: {
-      symbol: target.name,
-      file: target.fileEntry.relativePath,
-      line: target.startLine,
-      type: target.kind,
-    },
-    impacted: displayImpacted.map(entry => {
-      const info = resolveId(entry.symbolId);
-      // Format: "file:line (in callerSymbol)" when line is known, else "file (in callerSymbol)".
-      // Graceful fallback for older indexes / extractors that have not been backfilled.
-      const hasLine = typeof entry.callLine === 'number' && entry.callLine > 0;
-      const location = hasLine
-        ? `${info.file}:${entry.callLine} (in ${info.name})`
-        : `${info.file} (in ${info.name})`;
-      return {
-        symbol: info.name,
-        file: info.file,
-        ...(hasLine ? { line: entry.callLine } : {}),
-        location,
-        type: info.kind,
-        relationship: entry.relationship,
-        depth: entry.depth,
-        path: entry.path.map(sid => resolveId(sid).name),
-      };
-    }),
-    summary: {
-      totalImpacted: impacted.length,
-      byDepth,
-      byRelationship,
-      affectedFiles: [...affectedFilesSet].sort(),
-      ...(truncated ? { truncatedAt: TRUNCATE_AT, note: 'Impact set exceeded limit; results truncated' } : {}),
-    },
-    ...(impacted.length === 0 ? {
-      fallback: 'file-level',
-      ...(fileImporters && fileImporters.length > 0
-        ? {
-            fileImporters,
-            note: `Defined at ${targetLocation}. No symbol-level callers indexed (common causes: member-expression calls like obj.method() that did not resolve, or no callers exist). fileImporters below shows files importing this file — start there.`,
-          }
-        : {
-            note: `Defined at ${targetLocation}. No callers indexed and no files import this file — symbol is an entry point, unused, or invoked dynamically. If you only needed to locate the definition, you have it.`,
-          }),
-    } : {}),
-  };
-}
 
 // ============================================================================
 // Helper: build a flat map of symbolId → { name, file, kind }
@@ -814,116 +502,6 @@ function buildSymbolInfoMap(index: CodebaseIndex): Map<string, { name: string; f
     }
   }
   return map;
-}
-
-// ============================================================================
-// Helper: find symbol candidates by name (with optional file filter)
-// ============================================================================
-type IndexedFileLike = {
-  relativePath: string;
-  symbols: import('../types.js').SymbolNode[];
-};
-
-function findSymbolCandidates(
-  index: CodebaseIndex,
-  symbolName: string,
-  filePath?: string,
-): Array<{ id: string; name: string; kind: string; startLine: number; fileEntry: IndexedFileLike }> {
-  const results: Array<{ id: string; name: string; kind: string; startLine: number; fileEntry: IndexedFileLike }> = [];
-
-  // Suffixes for qualified names: Ruby uses ::, Java/TS use .
-  const qualifiedSuffixes = ['::' + symbolName, '.' + symbolName];
-
-  const searchIn = (file: IndexedFileLike) => {
-    for (const sym of file.symbols) {
-      if (sym.name === symbolName) {
-        results.push({ id: sym.id, name: sym.name, kind: sym.kind, startLine: sym.startLine, fileEntry: file });
-      }
-    }
-  };
-
-  // Suffix match: find symbols ending with ::SymbolName or .SymbolName
-  const searchInSuffix = (file: IndexedFileLike) => {
-    for (const sym of file.symbols) {
-      if (qualifiedSuffixes.some(suffix => sym.name.endsWith(suffix))) {
-        results.push({ id: sym.id, name: sym.name, kind: sym.kind, startLine: sym.startLine, fileEntry: file });
-      }
-    }
-  };
-
-  if (filePath) {
-    const fileEntry = findFileByPath(index, filePath);
-    if (fileEntry) {
-      searchIn(fileEntry[1]);
-      // Fall back to suffix match in that file — handles the case where the
-      // ambiguity error returned a qualified name (e.g. "Class.method") but
-      // the user retries with the bare name ("method").
-      if (results.length === 0) searchInSuffix(fileEntry[1]);
-    }
-  } else {
-    // Try exact match first
-    for (const file of index.files.values()) {
-      searchIn(file);
-    }
-    // Fall back to suffix match if no exact hits
-    if (results.length === 0) {
-      for (const file of index.files.values()) {
-        searchInSuffix(file);
-      }
-    }
-  }
-
-  return results;
-}
-
-// ============================================================================
-// Helper: find symbols bearing a given annotation (Java/Kotlin)
-// ============================================================================
-function findSymbolsByAnnotation(
-  index: CodebaseIndex,
-  annotationName: string,
-): Array<{ id: string; name: string; kind: string; startLine: number; fileEntry: IndexedFileLike }> {
-  const results: Array<{ id: string; name: string; kind: string; startLine: number; fileEntry: IndexedFileLike }> = [];
-  for (const file of index.files.values()) {
-    for (const sym of file.symbols) {
-      if (sym.annotations?.includes(annotationName)) {
-        results.push({ id: sym.id, name: sym.name, kind: sym.kind, startLine: sym.startLine, fileEntry: file });
-      }
-    }
-  }
-  return results;
-}
-
-// ============================================================================
-// Helper: fuzzy-match symbol names (for error suggestions)
-// ============================================================================
-function fuzzyMatchSymbols(
-  index: CodebaseIndex,
-  query: string,
-): Array<{ symbol: string; file: string; kind: string }> {
-  const results: Array<{ symbol: string; file: string; kind: string }> = [];
-  const lq = query.toLowerCase();
-
-  for (const file of index.files.values()) {
-    for (const sym of file.symbols) {
-      if (sym.name.toLowerCase().includes(lq) || lq.includes(sym.name.toLowerCase())) {
-        results.push({ symbol: sym.name, file: file.relativePath, kind: sym.kind });
-        if (results.length >= 10) return results;
-      }
-    }
-  }
-
-  return results;
-}
-
-// ============================================================================
-// Helper: find fileId by relative path (for file-level graph lookups)
-// ============================================================================
-function findFileIdByRelativePath(index: CodebaseIndex, relativePath: string): string | null {
-  for (const [id, file] of index.files) {
-    if (file.relativePath === relativePath) return id;
-  }
-  return null;
 }
 
 // ============================================================================

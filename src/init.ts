@@ -25,15 +25,19 @@ function out(msg: string): void {
 
 const RULES_CONTENT = `# Codebase navigation — coldstart MCP tools
 
-You have 4 MCP tools (\`get-overview\`, \`get-structure\`, \`trace-deps\`, \`trace-impact\`).
-Reach for them before Read/Grep/Glob/Bash. Per-tool details are in the tool descriptions — these are the cross-tool rules:
+You have 2 MCP tools: \`get-overview\` (GO) and \`get-structure\` (GS). Reach for them before Read/Grep/Glob/Bash. Per-tool details are in the tool descriptions — these are the cross-tool rules:
 
-- **After \`get-overview\`, two paths:**
-  1. If a result path is the file you want → \`get-structure\` on it (then \`trace-deps\` / \`trace-impact\` to expand, \`Read\` only for implementation).
-  2. If a result's \`matched\` list contains a rare token (low docFreq) that names the concept you want → grep that token across the repo. The matched token is the codebase's own name for your concept; lifting it into a grep is how you find usages, callers, and in-body references that \`get-overview\` does not index.
+- **GO is the entry point.** It matches your query against DECLARED NAMES (filenames, path segments, exported symbols) — not file bodies. Each result is \`{ path, matched }\`; \`matched\` is the codebase's own identifiers, sorted rarest-first.
+- **After GO, two paths:**
+  1. If a result \`path\` is the file you want → \`get-structure\` on it (use \`match\` to scope a god-file; use \`view\` to halve output). \`Read\` only when you need implementation.
+  2. If a leading \`matched\` token names what you are looking for → grep that token across the repo. The matched token is the codebase's name for your concept; lifting it into a grep finds usages, callers, and in-body references GO does not index.
+- **Use GO's evidence fields instead of follow-up calls:**
+  - \`path: "<glob>"\` to scope before ranking (e.g. \`"src/auth/**"\`, \`"**/*.htm"\`, \`"src/**,!**/legacy/**"\`).
+  - \`with_importers: true\` to attach one-hop reverse context per result.
+  - \`callers_for: "<file>"\` (or list) to attach symbol-level callers for files you have already decided to drill into. This replaces "who calls X" round-trips.
+- **Do not reformulate GO repeatedly.** The top results are the best declared-name matches. If they're not what you want, the answer is in bodies/strings/templates/SQL/config — grep is the right next move (use \`path\`-style file-type scoping). GO indexes filenames/paths/exports only.
+- **grep is a peer of these tools, not a last resort.** Use it for: matched-token navigation, string literals, exact call sites, dynamic dispatch, and content inside non-code files (templates, SQL, config).
 - **Stop when data is sufficient.** Don't re-query to confirm what you already found.
-- **Do not reformulate \`get-overview\` repeatedly.** The top results are the best declared-name matches. If they're not what you want, the answer is not in declared names — grep is the right next move. The concept likely lives in string literals, comments, docstrings, templates, SQL, or config files, none of which \`get-overview\` indexes.
-- **grep is a peer of these tools, not a last resort.** Use it for: matched-token navigation (above), string literals, exact call sites, dynamic dispatch, and content inside non-code files (templates, SQL, config).
 `;
 
 const MDC_FRONTMATTER = `---
