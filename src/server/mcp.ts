@@ -29,9 +29,7 @@ export const TOOL_DEFINITIONS = [
       '- `path` (glob) — when you already know the area: `path: "arches/app/**"`, `path: "**/*.htm"`, or with negation `path: "src/**,!**/legacy/**"`. Filters before ranking; sharper than a broad query.\n' +
       '- `with_importers: true` — attaches `importers: [paths]` per result (cheap). Use when you also want one-hop reverse context (who consumes this).\n' +
       '- `callers_for: "src/foo.ts"` — attaches a top-level `callers` map for the named file(s): each exported symbol with its cross-file callers (file:line). Expensive — only request for files you have already decided to drill into; do not blanket-request for every result.\n\n' +
-      'DO NOT reformulate GO repeatedly hoping for a different ranking. The top results are the best declared-name matches; if they are not what you want, the answer is in bodies/strings/templates (grep) or behind a more specific identifier you saw in a matched token.\n\n' +
-      'QUERY SHAPE: bare words are independent concepts (AND across them); `[a|b]` is a synonym group. camelCase/PascalCase work directly — do not decompose. Both split tokens AND lowercased compounds are indexed ("UsersPage" → "users", "userspage").\n\n' +
-      'TEST FILES excluded by default; pass `include_tests: true` for test/automation tasks. FRAMEWORK CONVENTION FILES (page.tsx, route.ts, __init__.py): query by directory name — the filename is generic.',
+      'FRAMEWORK CONVENTION FILES (page.tsx, route.ts, __init__.py): query by directory name — the filename is generic.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -70,7 +68,6 @@ export const TOOL_DEFINITIONS = [
       'Drill into a specific file: returns its top-level symbols (exported symbols + all top-level classes and functions, with name, kind, line range, extends/implements) and its 1-hop internal imports as a compact text block. Symbols nested below the top level are not listed. Use this AFTER get-overview surfaces a candidate file, to decide whether to open it in full.\n\n' +
       'Output is compact text, not JSON: one symbol per line, methods indented under their parent class. Library/external imports are stripped — only internal repo paths are shown.\n\n' +
       'For god-files (large classes, large routers, large config modules), pass `match` to filter both symbols and imports to the area you care about — e.g. `match: "auth"` or `match: "/^handle/"`. Substring is case-insensitive; wrap in slashes for regex. Without `match`, very large files still show all symbols/imports.\n\n' +
-      'Use `view: "symbols"` or `view: "imports"` to ask for only one section when you know which you need. Default is `"both"`.\n\n' +
       'Prefer this over Read when you only need shape or imports. Reach for Read when you need actual implementation details. If you have called get-structure on 5+ files for one question, you are enumerating — go back to GO with a sharper `path` glob or a different concept token instead.',
     inputSchema: {
       type: 'object',
