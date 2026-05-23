@@ -42,6 +42,18 @@ export const EXTENSION_TO_LANGUAGE: Record<string, Language> = {
   ".erb": "erb",
   ".haml": "haml",
   ".slim": "slim",
+  // Token-only indexing: filename + path tokens feed domainMap; no AST parsing.
+  // Lets GO surface templates, stylesheets, config, and docs that name a concept
+  // even though their bodies aren't indexed.
+  ".htm": "html",
+  ".html": "html",
+  ".css": "css",
+  ".scss": "css",
+  ".sass": "css",
+  ".less": "css",
+  ".json": "json",
+  ".md": "markdown",
+  ".markdown": "markdown",
 };
 
 // ---------------------------------------------------------------------------
@@ -83,7 +95,7 @@ export const DEFAULT_EXCLUDES = new Set([
 ]);
 
 // Cache version — bump when index schema changes to force re-index
-export const CACHE_VERSION = "16.5.0";
+export const CACHE_VERSION = "16.6.0";
 
 // IDF threshold for "rare" token: log(20) ≈ 3.0 — tokens appearing in < 5% of files
 export const IDF_RARITY_THRESHOLD = Math.log(20);

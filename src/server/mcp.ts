@@ -20,23 +20,26 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'get-overview',
     description:
-      'Locate files in the codebase by keyword, symbol name, filename, or path tokens. Returns a ranked list of relative file paths — nothing else.\n\n' +
-      'This is your primary entry point. Use it BEFORE Read/Grep/Glob/Bash when you need to find which files are relevant to a task.\n\n' +
-      'INDEXING: tokens come from directory path segments, filenames, and exported symbol names. Both split tokens AND lowercased compounds are indexed (e.g. "UsersPage" → "users" + "userspage"). You can query camelCase/PascalCase directly — do not decompose it yourself.\n\n' +
-      'PAGE SIZE: `max_results` is 7. If the right file is not in the top 7, your query is wrong — refine it with different keywords, synonyms via `[a|b]`, or a more specific token. Pagination almost never helps.\n\n' +
-      'TEST FILES: excluded by default. Pass `include_tests: true` if your task is about test/automation code.\n\n' +
-      'FRAMEWORK CONVENTION FILES (page.tsx, route.ts, layout.tsx): query by directory name — the filename is generic, the directory uniquely identifies them.\n\n' +
-      'NEXT STEPS after get-overview: to inspect a specific candidate file (its symbols + 1-hop imports), call `get-structure` on its path. For reverse lookups (who imports this file), use `trace-deps` with `direction: "importers"`. For symbol-level callers/implementors, use `trace-impact`. Avoid reading source files just to check structure — these tools return that as structured data.',
+      'Locate files by matching your query against DECLARED NAMES — filenames, directory path segments, and exported symbol names. GO does NOT match file BODIES (comments, docstrings, string literals, HTML/template content, SQL); for those, grep is the correct tool. Templates, stylesheets, JSON, and markdown ARE indexed by their filename and path tokens, just not by body content.\n\n' +
+      'OUTPUT: each result is `{ path, matched }`. `matched` is the list of indexed name tokens that triggered this match, sorted rarest-first — the leading tokens are the rare, high-signal identifiers, exactly the kind of name you would grep for to find usages, callers, or in-body references.\n\n' +
+      'HOW TO CONSUME THE OUTPUT:\n' +
+      '1. If a path looks like the file you need → call `get-structure` on it, then `Read` if you need implementation.\n' +
+      '2. If the path is not exactly right but a leading matched token names what you are looking for (e.g. you queried "tile sort order" and a result has `matched: ["loadstaging_sortorder", "sortorder", ...]`) → grep that token across the repo. The matched token is the codebase\'s actual name for your concept. The agent loop runs on identifiers; GO hands you the identifiers.\n' +
+      '3. If your query words DO NOT appear in any `matched` list → the concept is not in any declared name. Likely places: string literals, comments, docstrings, templates, SQL, config — GO does not index those. Grep with file-type scoping is the right next move (do NOT keep reformulating GO).\n\n' +
+      'DO NOT reformulate GO repeatedly hoping for a different ranking. GO returns the declared names that match; if those names are not what you want, the answer is not in declared names. Switch to grep or shift to a more concrete identifier you saw in a matched token.\n\n' +
+      'QUERY SHAPE: bare words are independent concepts (AND across them); `[a|b]` is a synonym group. camelCase/PascalCase work directly — do not decompose. Both split tokens AND lowercased compounds are indexed ("UsersPage" → "users", "userspage").\n\n' +
+      'TEST FILES excluded by default; pass `include_tests: true` for test/automation tasks. FRAMEWORK CONVENTION FILES (page.tsx, route.ts, __init__.py): query by directory name — the filename is generic.\n\n' +
+      'AFTER GO: `get-structure` for symbols + 1-hop imports of a file; `trace-deps direction:"importers"` for reverse-lookup; `trace-impact` for symbol-level callers. Read only when you need actual implementation.',
     inputSchema: {
       type: 'object',
       properties: {
         domain_filter: {
           type: 'string',
-          description: 'One or more keywords relevant to your task. Bare words are independent concepts (AND logic). Bracket groups are synonyms (OR within): "[auth|login|jwt] payment". Accepts camelCase ("UsersPage") and partial matches ("workspace" matches "workspaces"). If results are missing your target, retry with the codebase\'s own terms (e.g. "post"→"Message", "edit"→"Update").',
+          description: 'Concept tokens for the thing you are looking for. Bare words = AND across concepts; `[a|b]` = OR within a synonym group. camelCase accepted. Best results come from naming the concept clearly once — if `matched` tokens in the response do not contain your query words, GO does not index where this concept lives (try grep), not "the query is wrong".',
         },
         max_results: {
           type: 'number',
-          description: 'Page size, default 7. Do not increase this to "see more" — if the right file is not in the top 7, refine the query instead.',
+          description: 'Page size, default 10. The top results are the best-scored declared-name matches — if none of them are what you want, more pages will not help; switch to grep (concept is in bodies/strings/templates) or to a more specific identifier you saw in a matched token.',
         },
         include_tests: {
           type: 'boolean',

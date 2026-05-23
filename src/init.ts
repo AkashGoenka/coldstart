@@ -28,9 +28,12 @@ const RULES_CONTENT = `# Codebase navigation — coldstart MCP tools
 You have 4 MCP tools (\`get-overview\`, \`get-structure\`, \`trace-deps\`, \`trace-impact\`).
 Reach for them before Read/Grep/Glob/Bash. Per-tool details are in the tool descriptions — these are the cross-tool rules:
 
-- **Typical flow:** \`get-overview\` → \`get-structure\` (one promising file) → \`trace-deps\` / \`trace-impact\` to expand → \`Read\` only when you need implementation.
+- **After \`get-overview\`, two paths:**
+  1. If a result path is the file you want → \`get-structure\` on it (then \`trace-deps\` / \`trace-impact\` to expand, \`Read\` only for implementation).
+  2. If a result's \`matched\` list contains a rare token (low docFreq) that names the concept you want → grep that token across the repo. The matched token is the codebase's own name for your concept; lifting it into a grep is how you find usages, callers, and in-body references that \`get-overview\` does not index.
 - **Stop when data is sufficient.** Don't re-query to confirm what you already found.
-- **Fall back to grep** only for string literals, exact call sites, or dynamic dispatch — not as your default discovery method.
+- **Do not reformulate \`get-overview\` repeatedly.** The top results are the best declared-name matches. If they're not what you want, the answer is not in declared names — grep is the right next move. The concept likely lives in string literals, comments, docstrings, templates, SQL, or config files, none of which \`get-overview\` indexes.
+- **grep is a peer of these tools, not a last resort.** Use it for: matched-token navigation (above), string literals, exact call sites, dynamic dispatch, and content inside non-code files (templates, SQL, config).
 `;
 
 const MDC_FRONTMATTER = `---

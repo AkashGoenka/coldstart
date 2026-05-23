@@ -27,7 +27,11 @@ export type Language =
   | 'groovy'
   | 'erb'
   | 'haml'
-  | 'slim';
+  | 'slim'
+  | 'html'
+  | 'css'
+  | 'json'
+  | 'markdown';
 
 export type EdgeType =
   | 'import'

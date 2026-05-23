@@ -11,6 +11,21 @@ import {
 
 export { parseConceptGroups, matchFile, type MatchResult };
 
+// Format matched tokens for a result: rarest first (lowest docFreq). The agent's
+// navigation loop runs on identifiers — emitting the names GO matched on lets
+// the agent lift them directly into its next grep. docFreq drives the sort but
+// isn't emitted; the parenthetical noise (`dropdown(2)`) confused readers more
+// than it helped, and rarity is implicit in the rank order.
+const MATCHED_TOKENS_PER_RESULT = 6;
+function formatMatchedTokens(m: MatchResult, index: CodebaseIndex): string[] {
+  const tokens = [...m.allMatchedTokens];
+  tokens.sort(
+    (a, b) =>
+      (index.tokenDocFreq.get(a) ?? 1) - (index.tokenDocFreq.get(b) ?? 1),
+  );
+  return tokens.slice(0, MATCHED_TOKENS_PER_RESULT);
+}
+
 // ============================================================================
 // get-overview
 // ============================================================================
@@ -23,7 +38,7 @@ export function handleGetOverview(
     include_tests?: boolean;
   },
 ): object {
-  const { domain_filter, max_results = 7, include_tests = false } = params;
+  const { domain_filter, max_results = 10, include_tests = false } = params;
 
   if (!domain_filter) {
     return {
@@ -114,20 +129,22 @@ export function handleGetOverview(
 
     fallbackMatched.sort((a, b) => b.matchedGroupCount - a.matchedGroupCount);
     const truncated = fallbackMatched.length > max_results;
-    const results = fallbackMatched.slice(0, max_results).map(m => m.path);
+    const results = fallbackMatched
+      .slice(0, max_results)
+      .map(m => ({ path: m.path, matched: formatMatchedTokens(m, index) }));
 
     const response: Record<string, unknown> = { filter: domain_filter };
 
     if (fallbackMatched.length === 0) {
       response.results = [];
-      response.note = 'No matches found.';
+      response.note = 'No declared names match this query. Likely places this concept lives: string literals, comments, docstrings, templates, SQL, or config files — GO does not index those. Grep is the right next tool (consider scoping by file extension).';
     } else {
       response.fallback = true;
-      response.note = 'No primary matches. Showing broad fallback matches. Try a shorter term or synonym group [term|alternative] if results look wrong.';
+      response.note = 'No exact-name matches; these are broad substring fallbacks (treat as soft signal). If your query is about content (strings/comments/templates), grep is more reliable — GO indexes only declared names.';
       response.results = results;
       if (truncated) {
         response.truncated = true;
-        response.message = `[TRUNCATED: ${fallbackMatched.length - max_results} additional matches omitted.]`;
+        response.message = `[TRUNCATED: ${fallbackMatched.length - max_results} additional fallback matches omitted.]`;
       }
     }
 
@@ -141,7 +158,9 @@ export function handleGetOverview(
 
   // Truncation
   const truncated = afterB.length > max_results;
-  const results = afterB.slice(0, max_results).map(m => m.path);
+  const results = afterB
+    .slice(0, max_results)
+    .map(m => ({ path: m.path, matched: formatMatchedTokens(m, index) }));
 
   const response: Record<string, unknown> = {
     filter: domain_filter,
@@ -150,7 +169,7 @@ export function handleGetOverview(
 
   if (truncated) {
     response.truncated = true;
-    response.message = `[TRUNCATED: ${afterB.length - max_results} additional matches omitted. If a filename above looks right, call get-structure on it. Otherwise narrow your query by adding a more specific token.]`;
+    response.message = `[TRUNCATED: ${afterB.length - max_results} additional matches omitted.] Next move: if a path above is the file you want, call get-structure on it; if a rare matched token (low docFreq) names what you are looking for, grep that token across the repo to find usages. Do not reformulate GO — the top results above are the best declared-name matches.`;
   }
 
   if (excludedTestCount > 0) {

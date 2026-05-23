@@ -172,10 +172,11 @@ beforeAll(async () => {
   index = await buildTestIndex(FIXTURE_ROOT);
 });
 
-// Helper: get result paths from handleGetOverview
+// Helper: get result paths from handleGetOverview.
+// Results are now { path, matched: string[] } — extract the path field.
 function queryPaths(filter: string, opts: { max_results?: number } = {}): string[] {
   const result = handleGetOverview(index, { domain_filter: filter, ...opts }) as any;
-  return result.results ?? [];
+  return (result.results ?? []).map((r: any) => (typeof r === 'string' ? r : r.path));
 }
 
 // Helper: get the domainMap for a file (by relative path fragment)
@@ -357,16 +358,23 @@ describe('Multi-source correctness', () => {
     // "login" is rare (single file: auth/service.ts) → passes Predicate B
     const result = handleGetOverview(index, { domain_filter: 'auth login' }) as any;
     const results = result.results ?? [];
-    expect(results).toContain('auth/service.ts');
+    expect(results.some((r: any) => r.path === 'auth/service.ts')).toBe(true);
   });
 
-  it('response results are shallow array of file paths (strings)', () => {
+  it('response results are an array of { path, matched } entries', () => {
     const result = handleGetOverview(index, { domain_filter: 'auth' }) as any;
     const results = result.results ?? [];
     expect(Array.isArray(results)).toBe(true);
     for (const r of results) {
-      expect(typeof r).toBe('string');
-      expect(r).toMatch(/\.(ts|js|tsx|jsx|java|rb)$/);
+      expect(typeof r).toBe('object');
+      expect(typeof r.path).toBe('string');
+      expect(r.path).toMatch(/\.(ts|js|tsx|jsx|java|rb)$/);
+      expect(Array.isArray(r.matched)).toBe(true);
+      // Each matched entry is a bare token string.
+      for (const m of r.matched) {
+        expect(typeof m).toBe('string');
+        expect(m).toMatch(/^[A-Za-z0-9_.-]+$/);
+      }
     }
   });
 });
