@@ -20,7 +20,7 @@ export const TOOL_DEFINITIONS = [
     description:
       'Locate files by matching your query against DECLARED NAMES — filenames, directory path segments, and exported symbol names. GO does NOT match file BODIES (comments, docstrings, string literals, HTML/template content, SQL); for those, grep is the correct tool. Templates, stylesheets, JSON, and markdown ARE indexed by filename and path tokens, just not by body content.\n\n' +
       'GO is the entry point: reach for it BEFORE Read/Grep/Glob when you need to find which files are relevant. The agent loop runs on identifiers — GO hands you the identifiers (in `matched`) and the file paths; you take it from there.\n\n' +
-      'OUTPUT: each result is `{ path, matched }`. `matched` is the list of indexed name tokens that triggered this match, sorted rarest-first — the leading tokens are the rare, high-signal identifiers, exactly the kind of name you would grep for to find usages, callers, or in-body references.\n\n' +
+      'OUTPUT: each result is `{ path, matched }`. `matched` is the list of indexed name tokens that triggered this match, sorted rarest-first (fewest files contain the token = first in the list). The leading tokens are the high-signal identifiers — names unique enough that grepping them reliably finds usages, callers, or in-body references.\n\n' +
       'HOW TO CONSUME THE OUTPUT:\n' +
       '1. If a path looks like the file you need → call `get-structure` on it (then `Read` if you need implementation).\n' +
       '2. If the path is not exactly right but a leading matched token names what you are looking for (e.g. queried "tile sort order", got `matched: ["loadstaging_sortorder", "sortorder", ...]`) → grep that token across the repo. The matched token is the codebase\'s actual name for your concept.\n' +
@@ -49,7 +49,7 @@ export const TOOL_DEFINITIONS = [
         },
         path: {
           type: 'string',
-          description: 'Minimatch-style glob to scope where to look (e.g. "arches/app/**/*.py", "src/auth/**", "**/*.htm"). Comma-separate to combine; prefix with "!" to exclude (e.g. "src/**,!**/legacy/**"). Filters before ranking, so a focused glob produces sharper results than a broad query.',
+          description: 'Minimatch-style glob to scope where to look (e.g. "arches/app/**/*.py", "src/auth/**", "**/*.htm"). Comma-separate to combine; prefix with "!" to exclude (e.g. "src/**,!**/legacy/**"). Supports `**`, `*`, `?` and `!` negation; brace `{a,b}` and char-class `[abc]` are NOT supported. Filters before ranking, so a focused glob produces sharper results than a broad query. If a path filter is supplied but matches no candidate files you will see `excluded_by_path` and `path_filter` on the response — re-check syntax there.',
         },
         with_importers: {
           type: 'boolean',
@@ -58,7 +58,7 @@ export const TOOL_DEFINITIONS = [
         callers_for: {
           type: ['string', 'array'],
           items: { type: 'string' },
-          description: 'A file path (or list of paths) for which GO should attach symbol-level callers as a top-level `callers` map. For each named file: lists its exported symbols and where they are called from (file:line). Expensive — only pass files you have already identified as worth drilling into; do not blanket-request callers for every result. This is the right tool for "who calls this symbol" once you know which file owns the symbol.',
+          description: 'A file path (or list of paths) for which GO should attach symbol-level callers as a top-level `callers` map. For each named file the entry is either an array `[{ exportedSymbol, callers: ["file:line (caller)", ...] }, ...]` (only exported symbols with at least one cross-file caller appear) or `{ note: "..." }` when nothing is indexed (no exports, member-expression call sites, or no callers). If the file path cannot be resolved you get `{ error: "File not found." }`. Expensive — pass only files you have already decided to drill into; do not blanket-request callers for every result. This is the right tool for "who calls this symbol" once you know which file owns the symbol.',
         },
       },
       required: ['domain_filter'],
@@ -67,7 +67,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'get-structure',
     description:
-      'Drill into a specific file: returns its symbols (name, kind, line range, extends/implements) and its 1-hop internal imports as a compact text block. Use this AFTER get-overview surfaces a candidate file, to decide whether to open it in full.\n\n' +
+      'Drill into a specific file: returns its top-level symbols (exported symbols + all top-level classes and functions, with name, kind, line range, extends/implements) and its 1-hop internal imports as a compact text block. Symbols nested below the top level are not listed. Use this AFTER get-overview surfaces a candidate file, to decide whether to open it in full.\n\n' +
       'Output is compact text, not JSON: one symbol per line, methods indented under their parent class. Library/external imports are stripped — only internal repo paths are shown.\n\n' +
       'For god-files (large classes, large routers, large config modules), pass `match` to filter both symbols and imports to the area you care about — e.g. `match: "auth"` or `match: "/^handle/"`. Substring is case-insensitive; wrap in slashes for regex. Without `match`, very large files still show all symbols/imports.\n\n' +
       'Use `view: "symbols"` or `view: "imports"` to ask for only one section when you know which you need. Default is `"both"`.\n\n' +
