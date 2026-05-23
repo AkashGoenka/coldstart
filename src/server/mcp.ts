@@ -45,6 +45,19 @@ export const TOOL_DEFINITIONS = [
           type: 'boolean',
           description: 'Include test and automation files. Default false.',
         },
+        path: {
+          type: 'string',
+          description: 'Minimatch-style glob to scope where to look (e.g. "arches/app/**/*.py", "src/auth/**", "**/*.htm"). Comma-separate to combine; prefix with "!" to exclude (e.g. "src/**,!**/legacy/**"). Use this when you already know the area of the repo (a top-level dir, a file extension, a feature subtree); it filters before ranking, so a focused glob produces sharper results than a broad query.',
+        },
+        with_importers: {
+          type: 'boolean',
+          description: 'When true, each result gets an `importers: [paths]` field listing up to 8 files that import it. Cheap. Useful when you want one-hop reverse-context without a follow-up trace-deps call — e.g. to see which routes/handlers consume a service module surfaced by GO.',
+        },
+        callers_for: {
+          type: ['string', 'array'],
+          items: { type: 'string' },
+          description: 'A file path (or list of paths) for which GO should attach symbol-level callers as a top-level `callers` map. For each named file: lists its exported symbols and where they are called from (file:line). Expensive — only pass files you have already identified as worth drilling into; do not blanket-request callers for every result. Folds the prior trace-impact reverse-walk into GO so you do not need to context-switch tools.',
+        },
       },
       required: ['domain_filter'],
     },
@@ -54,6 +67,8 @@ export const TOOL_DEFINITIONS = [
     description:
       'Drill into a specific file: returns its symbols (name, kind, line range, extends/implements) and its 1-hop internal imports as a compact text block. Use this AFTER get-overview surfaces a candidate file, to decide whether to open it in full.\n\n' +
       'Output is compact text, not JSON: one symbol per line, methods indented under their parent class. Library/external imports are stripped — only internal repo paths are shown.\n\n' +
+      'For god-files (large classes, large routers, large config modules), pass `match` to filter both symbols and imports to the area you care about — e.g. `match: "auth"` or `match: "/^handle/"`. Without `match`, very large files still show all symbols/imports.\n\n' +
+      'Use `view: "symbols"` or `view: "imports"` to ask for only one section when you know which you need.\n\n' +
       'Prefer this over Read when you only need shape or imports. Reach for Read when you need actual implementation details.\n\n' +
       'If you have called get-structure on 5+ files for one question, you are enumerating — switch to trace-deps (file graph) or trace-impact (symbol graph) to expand in one call instead of opening more files one-by-one.',
     inputSchema: {
@@ -62,6 +77,15 @@ export const TOOL_DEFINITIONS = [
         file_path: {
           type: 'string',
           description: 'Relative path to the file (e.g. "src/auth/service.ts"). Suffix matches are accepted.',
+        },
+        match: {
+          type: 'string',
+          description: 'Filter both symbols and imports by name. Substring (case-insensitive) by default; wrap in slashes for regex: "/^handle/". Use this on large/god-files to avoid a 90-line dump — e.g. `match: "tile"` on a big models.py reduces output to just tile-related symbols and imports.',
+        },
+        view: {
+          type: 'string',
+          enum: ['symbols', 'imports', 'both'],
+          description: 'Which section to return. Default "both". Use "symbols" or "imports" when you know which one you need to halve the output.',
         },
       },
       required: ['file_path'],
@@ -158,6 +182,9 @@ export function registerToolHandlers(
           domain_filter: params['domain_filter'] as string | undefined,
           max_results: params['max_results'] as number | undefined,
           include_tests: params['include_tests'] as boolean | undefined,
+          path: params['path'] as string | undefined,
+          with_importers: params['with_importers'] as boolean | undefined,
+          callers_for: params['callers_for'] as string | string[] | undefined,
         });
         break;
 
@@ -171,7 +198,9 @@ export function registerToolHandlers(
 
       case 'get-structure':
         result = handleGetStructure(index, {
-          file_path: (params['file_path'] ?? params['path'] ?? params['file']) as string,
+          file_path: (params['file_path'] ?? params['file'] ?? params['file_name']) as string,
+          match: params['match'] as string | undefined,
+          view: params['view'] as 'symbols' | 'imports' | 'both' | undefined,
         });
         break;
 

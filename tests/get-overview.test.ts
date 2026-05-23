@@ -13,7 +13,7 @@ import { parseFile, buildFileId } from '../src/indexer/parser.js';
 import { resolveImports } from '../src/indexer/resolvers/index.js';
 import { buildGraph } from '../src/indexer/graph.js';
 import { buildFileDomains, isTestPath } from '../src/indexer/tokenize.js';
-import { handleGetOverview } from '../src/server/tools.js';
+import { handleGetOverview, handleGetStructure } from '../src/server/tools.js';
 import type { CodebaseIndex, IndexedFile, SymbolEdge, DomainEvidence } from '../src/types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -375,6 +375,151 @@ describe('Multi-source correctness', () => {
         expect(typeof m).toBe('string');
         expect(m).toMatch(/^[A-Za-z0-9_.-]+$/);
       }
+    }
+  });
+});
+
+// ============================================================================
+// Phase 2: `path` glob filter
+// ============================================================================
+describe('GO `path` glob filter', () => {
+  it('positive glob scopes results to matching paths', () => {
+    const result = handleGetOverview(index, {
+      domain_filter: 'auth',
+      path: 'auth/**',
+    }) as any;
+    const results = result.results ?? [];
+    expect(results.length).toBeGreaterThan(0);
+    for (const r of results) {
+      expect(r.path.startsWith('auth/')).toBe(true);
+    }
+  });
+
+  it('extension glob (**/*.ts) admits all ts files; **/*.htm rejects all in this fixture', () => {
+    const ts = handleGetOverview(index, {
+      domain_filter: 'auth',
+      path: '**/*.ts',
+    }) as any;
+    expect((ts.results ?? []).length).toBeGreaterThan(0);
+
+    const htm = handleGetOverview(index, {
+      domain_filter: 'auth',
+      path: '**/*.htm',
+    }) as any;
+    // Fixture has no .htm files; either zero primary results or a fallback,
+    // but no result path should be a .htm match (we still allow fallback shape).
+    const results = htm.results ?? [];
+    for (const r of results) {
+      expect(r.path.endsWith('.htm')).toBe(false);
+    }
+  });
+
+  it('negation excludes matching paths', () => {
+    const result = handleGetOverview(index, {
+      domain_filter: 'auth',
+      path: '!auth/**',
+    }) as any;
+    const results = result.results ?? [];
+    for (const r of results) {
+      expect(r.path.startsWith('auth/')).toBe(false);
+    }
+  });
+
+  it('reports excluded_by_path count when glob filters real candidates', () => {
+    const result = handleGetOverview(index, {
+      domain_filter: 'auth',
+      path: 'navigation/**',
+    }) as any;
+    expect(typeof result.excluded_by_path).toBe('number');
+    expect(result.excluded_by_path).toBeGreaterThan(0);
+    expect(result.path_filter).toBe('navigation/**');
+  });
+});
+
+// ============================================================================
+// Phase 2: `with_importers` evidence field
+// ============================================================================
+// ============================================================================
+// Phase 2: GS `match` and `view`
+// ============================================================================
+describe('GS `match` filter', () => {
+  it('match substring filters symbols section', () => {
+    const result = handleGetStructure(index, {
+      file_path: 'auth/service.ts',
+      match: 'login',
+    }) as any;
+    const text = result.__rawText as string;
+    expect(text).toContain('loginUser');
+    expect(text).not.toContain('hashPassword');
+    expect(text).not.toContain('AuthService');
+  });
+
+  it('match /regex/ filters symbols by regex (case-insensitive)', () => {
+    const result = handleGetStructure(index, {
+      file_path: 'auth/service.ts',
+      match: '/^hash/',
+    }) as any;
+    const text = result.__rawText as string;
+    expect(text).toContain('hashPassword');
+    expect(text).not.toContain('loginUser');
+  });
+
+  it('match with no symbol hits reports the "0 of N match" summary', () => {
+    const result = handleGetStructure(index, {
+      file_path: 'auth/service.ts',
+      match: 'nonexistentxyz',
+    }) as any;
+    const text = result.__rawText as string;
+    expect(text).toMatch(/Symbols: 0 of \d+ match "nonexistentxyz"/);
+  });
+});
+
+describe('GS `view` enum', () => {
+  it('view: "symbols" omits Imports section', () => {
+    const result = handleGetStructure(index, {
+      file_path: 'auth/service.ts',
+      view: 'symbols',
+    }) as any;
+    const text = result.__rawText as string;
+    expect(text).toContain('Symbols:');
+    expect(text).not.toContain('Imports:');
+  });
+
+  it('view: "imports" omits Symbols section', () => {
+    const result = handleGetStructure(index, {
+      file_path: 'auth/index.ts',
+      view: 'imports',
+    }) as any;
+    const text = result.__rawText as string;
+    expect(text).not.toContain('Symbols:');
+  });
+
+  it('view defaults to "both"', () => {
+    const result = handleGetStructure(index, {
+      file_path: 'auth/service.ts',
+    }) as any;
+    const text = result.__rawText as string;
+    expect(text).toContain('Symbols:');
+  });
+});
+
+describe('GO `with_importers`', () => {
+  it('omits importers field by default', () => {
+    const result = handleGetOverview(index, { domain_filter: 'auth' }) as any;
+    for (const r of result.results ?? []) {
+      expect('importers' in r).toBe(false);
+    }
+  });
+
+  it('attaches an importers array per result when requested', () => {
+    const result = handleGetOverview(index, {
+      domain_filter: 'auth',
+      with_importers: true,
+    }) as any;
+    for (const r of result.results ?? []) {
+      expect(Array.isArray(r.importers)).toBe(true);
+      // Each importer is a string path
+      for (const i of r.importers) expect(typeof i).toBe('string');
     }
   });
 });
