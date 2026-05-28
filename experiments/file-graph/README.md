@@ -39,31 +39,56 @@ python3 render_svg.py arches_coldstart.json  coldstart.svg  "coldstart"
 
 ## Results on arches (261 shared `.py` files)
 
-| | standalone (ast) | coldstart |
-|---|---|---|
-| edges | 1035 | 904 |
-| agreed | — | 895 |
-| **Jaccard** | — | **0.857** |
+| | standalone (ast) | coldstart (before) | coldstart (after submodule fix) |
+|---|---|---|---|
+| edges | 1035 | 904 | 1010 |
+| agreed | — | 895 | 1001 |
+| std-only (missed) | — | 140 | 34 |
+| cold-only | — | 9 | 9 |
+| **Jaccard** | — | **0.857** | **0.959** |
 
-Coldstart's Python resolution is solid — 86% edge agreement, only **9** edges
-it found that the standalone didn't (and those are *correct*: Django synthetic
-edges, see below). The story is in the **140 edges coldstart missed**.
+Coldstart's Python resolution was already solid — 86% edge agreement, only **9**
+edges it found that the standalone didn't (and those are *correct*: Django
+synthetic edges, see below). The story was in the **140 edges coldstart missed**.
+Fixing the submodule gap (below) recovered **106** of them, lifting agreement to
+**0.959**; the remaining 34 are the nested-import judgment call.
 
-### Why coldstart missed 140 edges
+### Why coldstart missed those 140 edges
 
-| count* | cause | example |
-|---|---|---|
-| 94 | **`from pkg import submodule`** resolved to the package `__init__.py`, never to the submodule file | `from arches.app.models import models` loses the edge to `models.py` |
-| 48 | **only top-level imports captured** — function-local / deferred imports skipped | `betterJSONSerializer` imported inside a method in `datatypes/base.py` |
-| 20 | relative-import variant of the submodule pattern | `from . import models` |
+Decomposed by where the import statement actually lives (no overlap):
 
-\* buckets overlap because one target can be reached via several statements.
+| count | cause | example | fixed? |
+|---|---|---|---|
+| 94 | **`from pkg import submodule`** — a **top-level** import that coldstart resolved to the package `__init__.py`, never to the submodule file | `from arches.app.models import models` loses the edge to `models.py` | yes |
+| ~13 | relative-import variant of the same submodule pattern | `from . import models` | yes |
+| 33 | edge exists **only** as a nested / deferred import (function-local) | `tasks.py` imports `resource.py` / etl modules inside Celery task bodies | no (judgment call) |
 
-The single biggest symptom: `arches/app/models/models.py` is depended on by
-**118** files (standalone) but coldstart only sees **47** — because the common
-arches idiom is `from arches.app.models import models`, and coldstart records
-only the module path `arches.app.models`, mapping it to the package
-`__init__.py`.
+The 94 are the important part: they are **already in the top import block** —
+coldstart just mis-resolved them. The single biggest symptom was
+`arches/app/models/models.py`, depended on by **118** files (standalone) but
+only **47** in coldstart, because the common arches idiom
+`from arches.app.models import models` was recorded as just the module path
+`arches.app.models` and mapped to the package `__init__.py`.
+
+The 33 nested-only misses are concentrated in files that *intentionally* defer
+imports (Celery task runners, circular-import-prone modules), so the top block
+is genuinely incomplete there — but capturing them is a semantics choice, not a
+clear bug, so it's left unfixed.
+
+### The fix
+
+`src/indexer/extractors/python.ts` now also emits `module.name` candidate
+specifiers for each name in a `from module import name, ...` statement (joining
+without an extra dot for bare relative dots). The resolver already knows how to
+resolve a submodule path, so when `pkg/sub.py` exists the edge is recovered;
+symbol imports (`from x import SomeClass`) simply don't resolve and add no edge.
+Result: 0.857 → 0.959 Jaccard, +106 edges, **zero** new false edges.
+
+Tradeoff: symbol imports now also emit a non-resolving `module.SomeClass`
+candidate, which inflates coldstart's internal *unresolved* counter (a `--probe`
+quality signal) even though edge correctness improves. The clean follow-up is to
+pass structured import data (module + names) to the resolver so submodule
+candidates are tried as bonus edges without counting toward unresolved.
 
 ### What coldstart got that the naive parser couldn't
 
@@ -75,16 +100,14 @@ awareness adds them. Real value-add.
 
 ## What this is good for
 
-1. **A resolver oracle.** An independent graph turns "the resolver feels weak"
-   into two specific, quantified, fixable bugs. Both are in
-   `src/indexer/extractors/python.ts`:
-   - `import_from_statement` records only the module text (line ~320). Also
-     emit `module + "." + name` candidates so the resolver can pick up
-     submodule imports (it already knows how to resolve them).
-   - imports are read only from `root.namedChildren` (line ~318). Walk all
-     descendants to capture deferred/nested imports.
-   Fixing #1 alone should recover ~94 edges and restore `models.py`'s true hub
-   rank.
+1. **A resolver oracle.** An independent graph turned "the resolver feels weak"
+   into two specific, quantified issues in `src/indexer/extractors/python.ts`:
+   - **(fixed)** `import_from_statement` recorded only the module text — now
+     also emits `module.name` submodule candidates. Recovered 106 edges and
+     restored `models.py`'s true hub rank (47 → ~118).
+   - **(open, by choice)** imports are read only from `root.namedChildren`, so
+     deferred/nested imports are skipped. Real for Celery/circular-import files;
+     left unfixed because it's a semantics decision.
 2. **An architecture lens.** Both graphs independently agree the gravitational
    center of arches is `models.py` / `system_settings.py` / `betterJSONSerializer.py`
    — the hub list is nearly identical. Visualizing it (`viewer.html` or the

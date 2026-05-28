@@ -11,44 +11,44 @@
 ## Edge agreement
 
 - standalone edges: **1035**
-- coldstart edges: **904**
-- agreed (in both): **895**
-- standalone-only (coldstart missed): **140**
+- coldstart edges: **1010**
+- agreed (in both): **1001**
+- standalone-only (coldstart missed): **34**
 - coldstart-only (standalone missed): **9**
-- **Jaccard similarity: 0.857**
+- **Jaccard similarity: 0.959**
 
 ## Edges coldstart missed (sample of standalone-only)
 
 - `arches/__init__.py` -> `arches/celery.py`
-- `arches/admin.py` -> `arches/app/models/__init__.py`
-- `arches/admin.py` -> `arches/app/models/models.py`
-- `arches/app/datatypes/base.py` -> `arches/app/models/models.py`
 - `arches/app/datatypes/base.py` -> `arches/app/utils/betterJSONSerializer.py`
-- `arches/app/datatypes/concept_types.py` -> `arches/app/models/models.py`
-- `arches/app/datatypes/core/geojson_feature_collection.py` -> `arches/app/models/models.py`
-- `arches/app/datatypes/datatypes.py` -> `arches/app/models/models.py`
 - `arches/app/datatypes/datatypes.py` -> `arches/app/models/resource.py`
 - `arches/app/etl_modules/bulk_edit_concept.py` -> `arches/app/utils/i18n.py`
 - `arches/app/etl_modules/tile_excel_exporter.py` -> `arches/app/datatypes/datatypes.py`
-- `arches/app/functions/primary_descriptors.py` -> `arches/app/models/models.py`
-- `arches/app/models/card.py` -> `arches/app/models/models.py`
-- `arches/app/models/concept.py` -> `arches/app/models/models.py`
 - `arches/app/models/fields/i18n.py` -> `arches/app/utils/betterJSONSerializer.py`
-- `arches/app/models/graph.py` -> `arches/app/models/models.py`
 - `arches/app/models/models.py` -> `arches/app/datatypes/datatypes.py`
 - `arches/app/models/models.py` -> `arches/app/utils/permission_backend.py`
 - `arches/app/models/querysets/graph.py` -> `arches/app/models/__init__.py`
 - `arches/app/models/querysets/graph.py` -> `arches/app/models/models.py`
 - `arches/app/models/resource.py` -> `arches/app/models/tile.py`
-- `arches/app/models/resource.py` -> `arches/app/utils/task_management.py`
 - `arches/app/models/system_settings.py` -> `arches/app/datatypes/datatypes.py`
-- `arches/app/models/system_settings.py` -> `arches/app/models/models.py`
-- `arches/app/models/tile.py` -> `arches/app/models/models.py`
 - `arches/app/models/utils.py` -> `arches/app/models/system_settings.py`
-- `arches/app/search/base_index.py` -> `arches/app/models/models.py`
 - `arches/app/search/mappings.py` -> `arches/app/datatypes/datatypes.py`
-- `arches/app/search/mappings.py` -> `arches/app/models/models.py`
-- `arches/app/search/mappings.py` -> `arches/app/utils/permission_backend.py`
+- `arches/app/tasks.py` -> `arches/app/etl_modules/__init__.py`
+- `arches/app/tasks.py` -> `arches/app/etl_modules/base_data_editor.py`
+- `arches/app/tasks.py` -> `arches/app/etl_modules/base_import_module.py`
+- `arches/app/tasks.py` -> `arches/app/etl_modules/branch_excel_exporter.py`
+- `arches/app/tasks.py` -> `arches/app/etl_modules/branch_excel_importer.py`
+- `arches/app/tasks.py` -> `arches/app/etl_modules/bulk_data_deletion.py`
+- `arches/app/tasks.py` -> `arches/app/etl_modules/bulk_edit_concept.py`
+- `arches/app/tasks.py` -> `arches/app/etl_modules/import_single_csv.py`
+- `arches/app/tasks.py` -> `arches/app/etl_modules/jsonld_importer.py`
+- `arches/app/tasks.py` -> `arches/app/etl_modules/tile_excel_exporter.py`
+- `arches/app/tasks.py` -> `arches/app/etl_modules/tile_excel_importer.py`
+- `arches/app/tasks.py` -> `arches/app/models/resource.py`
+- `arches/app/tasks.py` -> `arches/app/models/system_settings.py`
+- `arches/app/tasks.py` -> `arches/app/search/search_export.py`
+- `arches/app/utils/i18n.py` -> `arches/app/models/graph.py`
+- `arches/app/utils/permission_backend.py` -> `arches/app/permissions/arches_default_allow.py`
 
 ## Edges only coldstart found (sample of coldstart-only)
 
@@ -82,17 +82,17 @@
 -   16  arches/app/utils/decorators.py
 
 ### coldstart
+-  117  arches/app/models/models.py
 -  103  arches/app/models/system_settings.py
--   72  arches/app/models/__init__.py
+-   73  arches/app/models/__init__.py
 -   59  arches/app/utils/betterJSONSerializer.py
--   47  arches/app/models/models.py
 -   41  arches/app/utils/response.py
--   35  arches/app/utils/permission_backend.py
+-   36  arches/app/utils/permission_backend.py
 -   33  arches/app/search/elasticsearch_dsl_builder.py
 -   28  arches/app/datatypes/datatypes.py
 -   25  arches/app/models/resource.py
 -   22  arches/app/search/search_engine_factory.py
--   20  arches/app/views/api/__init__.py
+-   21  arches/app/views/api/__init__.py
 -   18  arches/app/search/mappings.py
 -   17  arches/app/search/components/base.py
 -   16  arches/app/models/concept.py
