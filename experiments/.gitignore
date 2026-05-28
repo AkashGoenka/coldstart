@@ -1,0 +1,7 @@
+# cloned target repos (re-clone to reproduce)
+arches-repo/
+*-repo/
+
+# coldstart runtime artifacts
+**/.coldstart/
+**/*.lock

@@ -78,7 +78,9 @@ export async function walkDirectory(options: WalkOptions): Promise<WalkedFile[]>
         language = 'groovy';
       }
 
-      if (!language) continue;
+      // Fallback: index any other file as plain text so it still appears as a
+      // graph node and can be the target of edges (no AST parsing).
+      if (!language) language = 'text';
 
       // Skip generated files (e.g. foo.generated.ts, schema_pb.ts, api.pb.go)
       const nameLower = entry.name.toLowerCase();

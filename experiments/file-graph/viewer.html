@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>file-dependency graph viewer</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0e0f13; color: #d7dae0;
+    font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; overflow: hidden; }
+  #bar { position: fixed; top: 0; left: 0; right: 0; padding: 8px 12px; z-index: 10;
+    background: rgba(14,15,19,.85); border-bottom: 1px solid #23252d; display: flex;
+    gap: 14px; align-items: center; flex-wrap: wrap; }
+  #bar b { color: #8ab4ff; }
+  #stats { color: #9aa0aa; }
+  canvas { display: block; }
+  #tip { position: fixed; pointer-events: none; background: #1b1d24; border: 1px solid #3a3d47;
+    padding: 4px 7px; border-radius: 4px; font-size: 12px; display: none; max-width: 60ch;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; z-index: 20; }
+  input[type=file] { color: #9aa0aa; }
+  label { color: #9aa0aa; user-select: none; }
+  .hint { color: #6b7180; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <span><b>file-dep graph</b></span>
+  <input id="file" type="file" accept="application/json,.json" />
+  <span id="stats"></span>
+  <label><input id="labels" type="checkbox" /> labels</label>
+  <label><input id="freeze" type="checkbox" /> freeze</label>
+  <span class="hint">scroll = zoom · drag bg = pan · drag node = move · hover = path</span>
+</div>
+<canvas id="c"></canvas>
+<div id="tip"></div>
+<script>
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+const tip = document.getElementById("tip"), stats = document.getElementById("stats");
+let W = 0, H = 0, DPR = Math.min(2, window.devicePixelRatio || 1);
+function resize(){ W = innerWidth; H = innerHeight; cv.width = W*DPR; cv.height = H*DPR;
+  cv.style.width = W+"px"; cv.style.height = H+"px"; ctx.setTransform(DPR,0,0,DPR,0,0); }
+addEventListener("resize", resize); resize();
+
+let nodes = [], links = [], byId = new Map();
+let view = { x: W/2, y: H/2, k: 1 };
+let dragNode = null, panning = false, last = null, hover = null;
+const palette = ["#8ab4ff","#ff9e64","#9ece6a","#f7768e","#bb9af7","#7dcfff","#e0af68","#73daca","#c0caf5","#f4a6c0"];
+let dirColors = new Map();
+
+function topDir(id){ const i = id.indexOf("/"); return i<0 ? id : id.slice(0, id.indexOf("/", i+1)); }
+
+function load(data){
+  const indeg = new Map();
+  for (const [,b] of data.edges) indeg.set(b, (indeg.get(b)||0)+1);
+  nodes = data.nodes.map(id => ({ id,
+    x: view.x + (Math.random()-.5)*600, y: view.y + (Math.random()-.5)*600,
+    vx:0, vy:0, deg: indeg.get(id)||0 }));
+  byId = new Map(nodes.map(n => [n.id, n]));
+  links = data.edges.filter(([a,b]) => byId.has(a) && byId.has(b))
+    .map(([a,b]) => ({ s: byId.get(a), t: byId.get(b) }));
+  // assign a color per top-level dir
+  dirColors = new Map(); let ci = 0;
+  for (const n of nodes){ const d = topDir(n.id);
+    if (!dirColors.has(d)){ dirColors.set(d, palette[ci % palette.length]); ci++; } }
+  const m = data.meta || {};
+  stats.textContent = `${nodes.length} nodes · ${links.length} edges` +
+    (m.tool ? ` · ${m.tool}` : "");
+  alpha = 1;
+}
+
+// ---- force simulation ----
+let alpha = 0;
+function step(){
+  if (document.getElementById("freeze").checked){ draw(); requestAnimationFrame(step); return; }
+  if (alpha > 0.005){
+    const REP = 2200, SPR = 0.02, LEN = 42, CEN = 0.005;
+    for (let i=0;i<nodes.length;i++){
+      const a = nodes[i];
+      for (let j=i+1;j<nodes.length;j++){
+        const b = nodes[j];
+        let dx = a.x-b.x, dy = a.y-b.y, d2 = dx*dx+dy*dy+0.01;
+        const f = REP/d2; const d = Math.sqrt(d2);
+        const fx = f*dx/d, fy = f*dy/d;
+        a.vx += fx; a.vy += fy; b.vx -= fx; b.vy -= fy;
+      }
+      a.vx += (view.x - a.x)*CEN; a.vy += (view.y - a.y)*CEN;
+    }
+    for (const l of links){
+      let dx = l.t.x-l.s.x, dy = l.t.y-l.s.y, d = Math.sqrt(dx*dx+dy*dy)+0.01;
+      const f = (d-LEN)*SPR; const fx = f*dx/d, fy = f*dy/d;
+      l.s.vx += fx; l.s.vy += fy; l.t.vx -= fx; l.t.vy -= fy;
+    }
+    for (const n of nodes){
+      if (n === dragNode) { n.vx = n.vy = 0; continue; }
+      n.x += n.vx*alpha; n.y += n.vy*alpha; n.vx *= 0.85; n.vy *= 0.85;
+    }
+    alpha *= 0.99;
+  }
+  draw();
+  requestAnimationFrame(step);
+}
+
+function radius(n){ return 2.5 + Math.sqrt(n.deg)*1.8; }
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  ctx.save();
+  ctx.translate(view.x, view.y); ctx.scale(view.k, view.k); ctx.translate(-view.x, -view.y);
+  // edges
+  ctx.globalAlpha = 0.18; ctx.strokeStyle = "#5b6070"; ctx.lineWidth = 0.6/view.k;
+  ctx.beginPath();
+  for (const l of links){ ctx.moveTo(l.s.x, l.s.y); ctx.lineTo(l.t.x, l.t.y); }
+  ctx.stroke();
+  // highlight hover edges
+  if (hover){
+    ctx.globalAlpha = 0.9; ctx.strokeStyle = "#ff9e64"; ctx.lineWidth = 1.2/view.k;
+    ctx.beginPath();
+    for (const l of links){ if (l.s===hover||l.t===hover){ ctx.moveTo(l.s.x,l.s.y); ctx.lineTo(l.t.x,l.t.y); } }
+    ctx.stroke();
+  }
+  // nodes
+  ctx.globalAlpha = 1;
+  for (const n of nodes){
+    ctx.beginPath(); ctx.arc(n.x, n.y, radius(n), 0, 7);
+    ctx.fillStyle = n===hover ? "#ffffff" : dirColors.get(topDir(n.id)) || "#8ab4ff";
+    ctx.fill();
+  }
+  // labels
+  if (document.getElementById("labels").checked && view.k > 0.6){
+    ctx.fillStyle = "#c0caf5"; ctx.font = `${10/view.k}px ui-monospace, monospace`;
+    for (const n of nodes){ if (n.deg >= 3 || n===hover)
+      ctx.fillText(n.id.split("/").pop(), n.x + radius(n) + 1, n.y + 3/view.k); }
+  }
+  ctx.restore();
+}
+
+// ---- interaction ----
+function toWorld(px, py){ return { x: (px-view.x)/view.k + view.x, y: (py-view.y)/view.k + view.y }; }
+function pick(px, py){
+  const w = toWorld(px, py); let best = null, bd = 1e9;
+  for (const n of nodes){ const dx = n.x-w.x, dy = n.y-w.y, d = dx*dx+dy*dy;
+    const r = radius(n)+3; if (d < r*r && d < bd){ bd = d; best = n; } }
+  return best;
+}
+cv.addEventListener("mousedown", e => {
+  last = { x: e.clientX, y: e.clientY };
+  const n = pick(e.clientX, e.clientY);
+  if (n){ dragNode = n; alpha = Math.max(alpha, 0.3); } else panning = true;
+});
+addEventListener("mousemove", e => {
+  hover = pick(e.clientX, e.clientY);
+  if (hover){ tip.style.display = "block"; tip.style.left = (e.clientX+12)+"px";
+    tip.style.top = (e.clientY+12)+"px"; tip.textContent = `${hover.id}  (in:${hover.deg})`; }
+  else tip.style.display = "none";
+  if (dragNode){ const w = toWorld(e.clientX, e.clientY); dragNode.x = w.x; dragNode.y = w.y; }
+  else if (panning && last){ view.x -= (e.clientX-last.x); view.y -= (e.clientY-last.y);
+    last = { x: e.clientX, y: e.clientY }; }
+});
+addEventListener("mouseup", () => { dragNode = null; panning = false; last = null; });
+cv.addEventListener("wheel", e => {
+  e.preventDefault(); const f = e.deltaY < 0 ? 1.1 : 1/1.1;
+  const w = toWorld(e.clientX, e.clientY);
+  view.k *= f; view.x = w.x - (w.x - view.x); // keep center anchored simply
+}, { passive: false });
+
+document.getElementById("file").addEventListener("change", e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { try { load(JSON.parse(r.result)); } catch(err){ alert("bad JSON: "+err); } };
+  r.readAsText(f);
+});
+
+step();
+</script>
+</body>
+</html>

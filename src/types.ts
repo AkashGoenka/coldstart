@@ -27,7 +27,8 @@ export type Language =
   | 'groovy'
   | 'erb'
   | 'haml'
-  | 'slim';
+  | 'slim'
+  | 'text';      // fallback for any extension without a dedicated parser
 
 export type EdgeType =
   | 'import'
