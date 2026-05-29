@@ -318,9 +318,26 @@ export function parsePythonContent(
   for (const node of root.namedChildren) {
     // from X import Y  /  import X
     if (node.type === 'import_from_statement') {
-      const moduleNode = firstChildOfType(node, 'dotted_name') ??
+      const moduleNode = node.childForFieldName?.('module_name') ??
+        firstChildOfType(node, 'dotted_name') ??
         firstChildOfType(node, 'relative_import');
-      if (moduleNode) imports.push(moduleNode.text);
+      if (!moduleNode) continue;
+      const moduleText = moduleNode.text;
+      imports.push(moduleText);
+      // `from pkg import submodule` depends on pkg/submodule.py, not just the
+      // pkg __init__. Emit `module.name` candidates so the resolver can pick up
+      // the submodule file; names that are symbols won't resolve and are
+      // dropped. Bare relative dots ('.', '..') join without an extra dot.
+      const sep = /^\.+$/.test(moduleText) ? '' : '.';
+      for (const child of node.namedChildren) {
+        if (child === moduleNode) continue;
+        if (child.type === 'dotted_name' || child.type === 'aliased_import') {
+          const nm = child.type === 'aliased_import'
+            ? firstChildOfType(child, 'dotted_name')?.text
+            : child.text;
+          if (nm) imports.push(`${moduleText}${sep}${nm}`);
+        }
+      }
       continue;
     }
     if (node.type === 'import_statement') {
