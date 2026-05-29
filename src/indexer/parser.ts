@@ -170,6 +170,7 @@ export async function parseFile(
       tokenEstimate,
       symbols: pythonResult.symbols,
       djangoConventionRefs: pythonResult.djangoConventionRefs,
+      submoduleImportCandidates: pythonResult.submoduleImportCandidates,
     };
   }
 

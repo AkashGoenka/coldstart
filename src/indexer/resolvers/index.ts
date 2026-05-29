@@ -300,12 +300,24 @@ export async function resolveImportsForFiles(
     const batch = files.slice(i, i + BATCH);
     await Promise.all(batch.map(async (file) => {
       const resolver = getResolver(file.language);
+      const resolvedTargets = new Set<string>();
       for (const specifier of file.imports) {
         const resolved = await resolver(specifier, file.path, fileIdSet, rootDir, aliasMap);
         if (resolved && resolved !== file.id) {
           edges.push({ from: file.id, to: resolved, type: 'import', specifier });
+          resolvedTargets.add(resolved);
         } else if (!resolved) {
           unresolved.push({ from: file.id, specifier });
+        }
+      }
+      // Bonus candidates (e.g. Python `from pkg import sub` submodule probes):
+      // add an edge if the specifier resolves to a real file, but a miss is
+      // NOT counted as unresolved — most are symbol imports, not files.
+      for (const specifier of file.submoduleImportCandidates ?? []) {
+        const resolved = await resolver(specifier, file.path, fileIdSet, rootDir, aliasMap);
+        if (resolved && resolved !== file.id && !resolvedTargets.has(resolved)) {
+          edges.push({ from: file.id, to: resolved, type: 'import', specifier });
+          resolvedTargets.add(resolved);
         }
       }
     }));

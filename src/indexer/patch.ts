@@ -176,6 +176,7 @@ export async function patchIndex(
       isTestFile: isTestPath(relPath),
       symbols: parsed.symbols,
       reexportRatio: parsed.reexportRatio,
+      submoduleImportCandidates: parsed.submoduleImportCandidates,
     };
 
     index.files.set(fileId, newFile);

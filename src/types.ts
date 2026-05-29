@@ -95,6 +95,7 @@ export interface IndexedFile {
   eloquentRelations?: Array<{ targetClass: string; line: number }>;  // PHP only: Eloquent relationship class references
   containerResolutions?: Array<{ targetClass: string; line: number }>;  // PHP only: DI container class references
   djangoConventionRefs?: Array<{ kind: string; value: string }>;  // Python only: Django convention string refs (middleware, auth backends, etc.)
+  submoduleImportCandidates?: string[];  // Python only: `from pkg import sub` bonus specifiers — resolve to an edge if a file exists, but a miss is NOT counted as unresolved (most are symbol imports)
 }
 
 export interface Edge {
@@ -136,6 +137,7 @@ export interface ParsedFile {
   eloquentRelations?: Array<{ targetClass: string; line: number }>;  // PHP only: Eloquent relationship class references
   containerResolutions?: Array<{ targetClass: string; line: number }>;  // PHP only: DI container class references
   djangoConventionRefs?: Array<{ kind: string; value: string }>;  // Python only: Django convention string refs
+  submoduleImportCandidates?: string[];  // Python only: `from pkg import sub` bonus specifiers (see IndexedFile)
 }
 
 export interface CacheMeta {

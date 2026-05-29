@@ -165,6 +165,7 @@ export async function buildIndex(
             eloquentRelations: parsed.eloquentRelations,
             containerResolutions: parsed.containerResolutions,
             djangoConventionRefs: parsed.djangoConventionRefs,
+            submoduleImportCandidates: parsed.submoduleImportCandidates,
           };
           indexedFiles.push(file);
           langCount[wf.language] = (langCount[wf.language] ?? 0) + 1;
@@ -330,6 +331,7 @@ async function runProbe(rootDir: string, excludes: string[], includes: string[])
           eloquentRelations: parsed.eloquentRelations,
           containerResolutions: parsed.containerResolutions,
           djangoConventionRefs: parsed.djangoConventionRefs,
+          submoduleImportCandidates: parsed.submoduleImportCandidates,
         });
       } catch { /* skip parse errors */ }
     }));
