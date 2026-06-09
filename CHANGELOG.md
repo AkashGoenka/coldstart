@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed (BREAKING — warrants a major version bump on release)
+- **Tool surface reduced from 4 tools to 2: `get-overview` + `get-structure`.** The `trace-deps` and `trace-impact` tools were removed; their capabilities are folded into `get-structure`. A single file-scoped `get-structure` call now returns symbols (with per-symbol cross-file callers), 1-hop outbound imports, and reverse importers.
+  - `get-overview`: `domain_filter` renamed to `query` (the old name is still accepted as a deprecated alias). Removed the `with_importers` and `callers_for` params — reverse context now lives in `get-structure`. Added `page`. Default `max_results` is 10.
+  - `get-structure`: `view` now takes `full` (default) / `symbols` / `imports` / `importers` / `callers` (was `symbols` / `imports` / `both`). `full` returns symbols + imports + importers + inline callers in one call; huge files (>20 symbols, no `match`) are reordered most-used-first and truncated to the top 15. `match` now supports `|` to OR substrings.
+  - Output: `get-overview` now renders results as `<path> [matched-tokens]`; the `[matched]` display shows only tokens driven by the literal query (synonym-driven matches still count for ranking but are suppressed from the display).
+  - Dropped the per-call `_indexStatus: "rebuilding"` field (hot-path byte savings).
+- **Agent rules rewritten** (`init` output / CLAUDE.md) around the 2-tool model — "who uses this file / who calls this symbol → get-structure, not grep".
+
+### Note
+- npm currently shows `1.5.0` published, but this CHANGELOG has no `1.5.0` entry — that release predates this section and its contents are undocumented here. The two-tool change above is unreleased.
+
 ## [1.4.4] - 2026-05-13
 
 ### Changed

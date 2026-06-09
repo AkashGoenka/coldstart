@@ -25,11 +25,11 @@ Real-world testing on a ~5800-file codebase showed:
 - The old `find-files` stack (TF-IDF + PageRank + co-change) added complexity but did not consistently improve outcomes.
 - The highest value came from structural metadata and graph traversal.
 
-So the system was reduced to 4 focused MCP tools:
-1. `get-overview`
-2. `get-structure`
-3. `trace-deps`
-4. `trace-impact`
+So the system was reduced to **2 focused MCP tools**:
+1. `get-overview` — locate files by matching a query against declared names (filenames, path segments, exported symbols).
+2. `get-structure` — drill into one file: its symbols (with per-symbol cross-file callers), 1-hop outbound imports, and reverse importers.
+
+An earlier iteration split this across four tools — `get-overview`, `get-structure`, `trace-deps` (file-level import graph), and `trace-impact` (symbol-level callers/implementors/extenders). The two `trace-*` tools were collapsed into `get-structure`: a single file-scoped call now answers "what's in it", "what it imports", and "who uses it / who calls this symbol". `view` selects which of those sections you get (`full` is the default).
 
 Removed:
 - PageRank signals
@@ -144,9 +144,8 @@ The daemon survives across AI client restarts — index build cost is paid once 
 5. **Serve** (`server/mcp.ts`, `server/tools.ts`, `server/http-daemon.ts`)
    - Tool definitions are exported as `TOOL_DEFINITIONS` and shared by both the stdio path (`--no-daemon`) and the HTTP daemon path.
    - All tool responses come from in-memory index data (no file reads per tool call).
-   - `trace-impact` additionally queries symbol-level edges (calls, extends, implements) to compute transitive dependents.
+   - `get-structure` queries symbol-level edges (calls, extends, implements) to attach per-symbol cross-file callers, and file-level adjacency maps for the imports/importers sections.
    - Reads the active index via `IndexManager.getContext()` — always returns the latest live snapshot.
-   - Surfaces `_indexStatus: "rebuilding"` in responses when a full rebuild is in progress.
 
 ### Live update loop (post-startup)
 
@@ -197,7 +196,7 @@ Key per-file signals used by tools:
 `SymbolEdge` captures symbol-level relationships:
 - `from` and `to` (symbol IDs or names)
 - `type`: `'calls'`, `'extends'`, `'implements'`, `'exports'`
-- Used by `trace-impact` to compute transitive dependents and build dependency chains
+- Used by `get-structure` to attach each exported symbol's cross-file callers (and, via the reverse adjacency map, importers/implementors/extenders)
 
 ---
 
@@ -253,23 +252,22 @@ Reading `meta.json` first lets the daemon decide cache reuse before touching the
 
 ---
 
-## Symbol-level impact analysis (`trace-impact`)
+## Symbol-level usage (folded into `get-structure`)
 
-`trace-impact` is designed to answer: "What will break if I change this symbol?"
+"Who calls this symbol? / who uses this file?" — answered by `get-structure` (the work the standalone `trace-impact` tool used to do). For each exported symbol in the requested file, GS attaches its cross-file callers; the `importers` section gives the file-level reverse edges.
 
 **Implementation:**
-1. Find target symbol across all indexed files
-2. Build reverse adjacency map of symbol-level edges (excluding `exports`)
-3. BFS traversal from target to collect all transitive dependents
-4. Resolve symbol IDs to human-readable info (name, file, kind)
-5. Return results with relationship types and full dependency paths
+1. The file is already known (GS is file-scoped), so no global symbol search is needed.
+2. For each exported symbol, look up the reverse adjacency map of symbol-level edges (excluding `exports`) to find callers/implementors/extenders.
+3. Resolve symbol IDs to human-readable info (caller name, file, line).
+4. Attach callers per symbol — inline when there's one, an expanded block when there are several. `view: "callers"` returns the expanded form for the whole file.
 
 **Relationship types tracked:**
 - `calls` — symbol is invoked by another
 - `extends` — symbol is inherited by a class
 - `implements` — symbol implements an interface (for Ruby: includes/extends modules)
 
-**Use case:** Navigation — locate where a symbol is defined and find every caller, implementor, or extender, without reading their files. Secondary use: blast-radius assessment before a refactor.
+**Use case:** Navigation — find every caller, implementor, or extender of a symbol without reading their files. Secondary use: blast-radius assessment before a refactor. (This is a one-hop, file-scoped view; the old `trace-impact` computed transitive multi-hop dependency chains, which GS does not — chase further hops by calling GS on the caller files.)
 
 ---
 

@@ -1,6 +1,8 @@
 # Two-tool convergence — implementation plan
 
-**Status:** drafted 2026-05-23, not yet started. Branch: TBD (likely `feat/two-tool-convergence`).
+**Status:** IMPLEMENTED on `feat/two-tool-convergence` (committed `bf06780`, 327 tests green). Historical plan kept for rationale.
+
+> **Implementation diverged from this draft in one key way:** the plan proposed folding TD's import-graph and TI's caller info into *per-result evidence on `get-overview`* (`with_importers`/`callers_for`). What actually shipped folds them into **`get-structure`** instead — GO stayed a pure file-locator (`query`, `path`, `page`), and GS gained `view: full` returning symbols + callers + imports + importers in one file-scoped call. See README / ARCHITECTURE for the as-built contract. The rest of this document is the original plan.
 
 ## Goal
 
