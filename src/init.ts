@@ -25,13 +25,10 @@ function out(msg: string): void {
 
 const RULES_CONTENT = `# Codebase navigation — coldstart MCP tools
 
-You have 2 MCP tools: \`get-overview\` (GO) and \`get-structure\` (GS). Per-tool details are in the tool descriptions — these are the cross-tool rules:
+You have 2 MCP tools: \`get-overview\` (GO) and \`get-structure\` (GS). Per-tool guidance lives in each tool's description and response footer; the rules below are cross-tool only:
 
-- **After GO, two paths:**
-  1. If a result \`path\` is the file you want → \`get-structure\` on it. \`Read\` only when you need implementation.
-  2. If a leading \`matched\` token names what you are looking for → grep that token across the repo. The matched token is the codebase's name for your concept; lifting it into a grep finds usages, callers, and in-body references GO does not index.
-- **Do not reformulate GO repeatedly.** The top results are the best declared-name matches. If they're not what you want, the answer is in bodies/strings/templates/SQL/config — grep is the right next move. GO indexes filenames/paths/exports only.
-- **grep is a peer of these tools, not a last resort.** Use it for: matched-token navigation, string literals, exact call sites, dynamic dispatch, and content inside non-code files (templates, SQL, config).
+- **"Who uses this file / who calls this symbol?" → GS, not grep.** GS default (\`view: "full"\`) returns importers + per-symbol cross-file callers in one call. Don't bash-grep the repo for a symbol name to find call sites — call GS on the file that owns it.
+- **grep is a peer for content, not declared names or indexed call sites.** Use it for: string literals, runtime/dynamic dispatch through strings, and content inside non-code files (templates, SQL, config). For declared names (filenames, paths, exported symbols), GO is cheaper. For call sites of an indexed symbol, GS gives you the answer.
 - **Stop when data is sufficient.** Don't re-query to confirm what you already found.
 `;
 

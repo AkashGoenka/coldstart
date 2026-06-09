@@ -175,7 +175,7 @@ beforeAll(async () => {
 // Helper: get result paths from handleGetOverview.
 // Results are now { path, matched: string[] } — extract the path field.
 function queryPaths(filter: string, opts: { max_results?: number } = {}): string[] {
-  const result = handleGetOverview(index, { domain_filter: filter, ...opts }) as any;
+  const result = handleGetOverview(index, { query: filter, ...opts }) as any;
   return (result.results ?? []).map((r: any) => (typeof r === 'string' ? r : r.path));
 }
 
@@ -245,7 +245,7 @@ describe('Compound export name matching', () => {
 // ============================================================================
 describe('All-common-token diagnostic', () => {
   it('returns a diagnostic when all matched tokens are common (high frequency)', () => {
-    const result = handleGetOverview(index, { domain_filter: 'auth' }) as any;
+    const result = handleGetOverview(index, { query: 'auth' }) as any;
     expect(result).toHaveProperty('filter');
     expect(result).toHaveProperty('results');
     expect(Array.isArray(result.results)).toBe(true);
@@ -262,10 +262,10 @@ describe('All-common-token diagnostic', () => {
 // ============================================================================
 describe('Truncation', () => {
   it('returns truncated:true and message when results exceed max_results', () => {
-    const result = handleGetOverview(index, { domain_filter: 'auth', max_results: 1 }) as any;
+    const result = handleGetOverview(index, { query: 'auth', max_results: 1 }) as any;
     if ((result.total_matched ?? 0) > 1 || result.truncated) {
       expect(result.truncated).toBe(true);
-      expect(result.message).toContain('TRUNCATED');
+      expect(result.message).toMatch(/\+\d+ more/);
       expect(result.results.length).toBeLessThanOrEqual(1);
     }
     // If only 1 result (barrel excluded), truncation doesn't fire — test is N/A
@@ -356,13 +356,13 @@ describe('Multi-source correctness', () => {
 
   it('query "auth login" returns auth/service.ts in results', () => {
     // "login" is rare (single file: auth/service.ts) → passes Predicate B
-    const result = handleGetOverview(index, { domain_filter: 'auth login' }) as any;
+    const result = handleGetOverview(index, { query: 'auth login' }) as any;
     const results = result.results ?? [];
     expect(results.some((r: any) => r.path === 'auth/service.ts')).toBe(true);
   });
 
   it('response results are an array of { path, matched } entries', () => {
-    const result = handleGetOverview(index, { domain_filter: 'auth' }) as any;
+    const result = handleGetOverview(index, { query: 'auth' }) as any;
     const results = result.results ?? [];
     expect(Array.isArray(results)).toBe(true);
     for (const r of results) {
@@ -379,13 +379,45 @@ describe('Multi-source correctness', () => {
   });
 });
 
+describe('Matched-token display cuts', () => {
+  // Helper: matched[] for the first result whose path includes the fragment.
+  function matchedFor(query: string, pathFragment: string): string[] | null {
+    const result = handleGetOverview(index, { query, max_results: 20 }) as any;
+    for (const r of result.results ?? []) {
+      if ((r.path as string).includes(pathFragment)) return r.matched as string[];
+    }
+    return null;
+  }
+
+  it('drops separator-joined compounds (already visible in the path)', () => {
+    const matched = matchedFor('grid', 'grid-builder.ts');
+    expect(matched).not.toBeNull();
+    // the verbatim filename compound must be gone...
+    expect(matched).not.toContain('grid-builder');
+    for (const t of matched!) expect(t).not.toMatch(/[_-]/);
+    // ...but the atomic token the user typed stays
+    expect(matched).toContain('grid');
+  });
+
+  it('suppresses synonym-driven matches from display but keeps them for ranking', () => {
+    // "create" expands (SYNONYM_MAP) to "build" → matches buildGrid in grid-builder.ts.
+    const paths = queryPaths('create');
+    expect(paths.some(p => p.includes('grid-builder.ts'))).toBe(true); // still ranks
+    const matched = matchedFor('create', 'grid-builder.ts');
+    expect(matched).not.toBeNull();
+    // none of the displayed tokens are synonym-derived (build/grid from buildGrid)
+    expect(matched).not.toContain('build');
+    expect(matched).not.toContain('buildgrid');
+  });
+});
+
 // ============================================================================
 // Phase 2: `path` glob filter
 // ============================================================================
 describe('GO `path` glob filter', () => {
   it('positive glob scopes results to matching paths', () => {
     const result = handleGetOverview(index, {
-      domain_filter: 'auth',
+      query: 'auth',
       path: 'auth/**',
     }) as any;
     const results = result.results ?? [];
@@ -397,13 +429,13 @@ describe('GO `path` glob filter', () => {
 
   it('extension glob (**/*.ts) admits all ts files; **/*.htm rejects all in this fixture', () => {
     const ts = handleGetOverview(index, {
-      domain_filter: 'auth',
+      query: 'auth',
       path: '**/*.ts',
     }) as any;
     expect((ts.results ?? []).length).toBeGreaterThan(0);
 
     const htm = handleGetOverview(index, {
-      domain_filter: 'auth',
+      query: 'auth',
       path: '**/*.htm',
     }) as any;
     // Fixture has no .htm files; either zero primary results or a fallback,
@@ -416,7 +448,7 @@ describe('GO `path` glob filter', () => {
 
   it('negation excludes matching paths', () => {
     const result = handleGetOverview(index, {
-      domain_filter: 'auth',
+      query: 'auth',
       path: '!auth/**',
     }) as any;
     const results = result.results ?? [];
@@ -427,7 +459,7 @@ describe('GO `path` glob filter', () => {
 
   it('reports excluded_by_path count when glob filters real candidates', () => {
     const result = handleGetOverview(index, {
-      domain_filter: 'auth',
+      query: 'auth',
       path: 'navigation/**',
     }) as any;
     expect(typeof result.excluded_by_path).toBe('number');
@@ -437,10 +469,7 @@ describe('GO `path` glob filter', () => {
 });
 
 // ============================================================================
-// Phase 2: `with_importers` evidence field
-// ============================================================================
-// ============================================================================
-// Phase 2: GS `match` and `view`
+// GS `match` and `view`
 // ============================================================================
 describe('GS `match` filter', () => {
   it('match substring filters symbols section', () => {
@@ -494,32 +523,56 @@ describe('GS `view` enum', () => {
     expect(text).not.toContain('Symbols:');
   });
 
-  it('view defaults to "both"', () => {
+  it('view defaults to "full" — includes Symbols and Importers sections', () => {
     const result = handleGetStructure(index, {
       file_path: 'auth/service.ts',
     }) as any;
     const text = result.__rawText as string;
     expect(text).toContain('Symbols:');
+    // auth/service.ts is imported somewhere in the fixture, so Importers shows
+    expect(text).toMatch(/Importers \(/);
+  });
+
+  it('view: "importers" returns only the Importers section', () => {
+    const result = handleGetStructure(index, {
+      file_path: 'auth/service.ts',
+      view: 'importers',
+    }) as any;
+    const text = result.__rawText as string;
+    expect(text).not.toContain('Symbols:');
+    expect(text).not.toContain('Imports:');
+    expect(text).toMatch(/Importers \(/);
+  });
+
+  it('view: "callers" returns only the Callers section', () => {
+    const result = handleGetStructure(index, {
+      file_path: 'auth/service.ts',
+      view: 'callers',
+    }) as any;
+    const text = result.__rawText as string;
+    expect(text).not.toContain('Symbols:');
+    expect(text).not.toContain('Imports:');
+    expect(text).toContain('Callers');
+  });
+
+  it('view: "symbols" omits callers (no inline ← markers)', () => {
+    const result = handleGetStructure(index, {
+      file_path: 'auth/service.ts',
+      view: 'symbols',
+    }) as any;
+    const text = result.__rawText as string;
+    expect(text).toContain('Symbols:');
+    expect(text).not.toContain('Importers');
+    // Inline-callers marker should not appear in symbols-only view
+    expect(text).not.toContain('  ← ');
   });
 });
 
-describe('GO `with_importers`', () => {
-  it('omits importers field by default', () => {
-    const result = handleGetOverview(index, { domain_filter: 'auth' }) as any;
+describe('GO no longer accepts moved-to-GS fields', () => {
+  it('does not attach importers to results (with_importers removed from GO)', () => {
+    const result = handleGetOverview(index, { query: 'auth' }) as any;
     for (const r of result.results ?? []) {
       expect('importers' in r).toBe(false);
-    }
-  });
-
-  it('attaches an importers array per result when requested', () => {
-    const result = handleGetOverview(index, {
-      domain_filter: 'auth',
-      with_importers: true,
-    }) as any;
-    for (const r of result.results ?? []) {
-      expect(Array.isArray(r.importers)).toBe(true);
-      // Each importer is a string path
-      for (const i of r.importers) expect(typeof i).toBe('string');
     }
   });
 });

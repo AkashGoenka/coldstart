@@ -9,7 +9,7 @@ export const TEST_QUERY_KEYWORDS = new Set([
 ]);
 
 /**
- * Parse a domain_filter string into concept groups.
+ * Parse a `query` string into concept groups.
  * - [auth|login|jwt] → one group with synonyms (OR logic)
  * - bare single token → one group (AND logic across groups)
  * - bare PascalCase/camelCase like "UserProfileMenu" → one group per split token
@@ -143,10 +143,14 @@ const SYNONYM_MAP: Record<string, string[]> = {
   export: ['download', 'save', 'output', 'generate'],
 };
 
-export function expandQueryToken(token: string): string[] {
+/**
+ * Lexical (literal) forms of a query token: the token itself plus plural/singular
+ * variants. These are the forms the user effectively typed — matches via these are
+ * shown in the `[matched]` display. Kept separate from synonym expansion so the
+ * display can suppress synonym-driven matches (a token the user did NOT type).
+ */
+export function expandLexical(token: string): Set<string> {
   const forms = new Set<string>([token]);
-
-  // Plural/singular expansion
   if (token.length >= 5) {
     if (token.endsWith('es') && token.length > 4) {
       const singular = token.slice(0, -2);
@@ -159,13 +163,17 @@ export function expandQueryToken(token: string): string[] {
       forms.add(token + 'es');
     }
   }
+  return forms;
+}
 
-  // Synonym expansion
+/** Synonym forms only (SYNONYM_MAP), excluding the literal token. Used for ranking, NOT display. */
+export function expandSynonyms(token: string): Set<string> {
+  const forms = new Set<string>();
   const synonyms = SYNONYM_MAP[token];
   if (synonyms) {
     for (const syn of synonyms) forms.add(syn);
   }
-  // Also check if this token is a synonym of something, expand to that canonical + its synonyms
+  // If this token is itself a synonym of something, expand to that canonical + its synonyms
   for (const [canonical, syns] of Object.entries(SYNONYM_MAP)) {
     if (syns.includes(token)) {
       forms.add(canonical);
@@ -173,8 +181,12 @@ export function expandQueryToken(token: string): string[] {
       break;
     }
   }
+  forms.delete(token);
+  return forms;
+}
 
-  return [...forms];
+export function expandQueryToken(token: string): string[] {
+  return [...expandLexical(token), ...expandSynonyms(token)];
 }
 
 export type MatchResult = {
@@ -184,7 +196,8 @@ export type MatchResult = {
   concentration: number;
   score: number;
   idfScore: number;
-  allMatchedTokens: Set<string>;
+  allMatchedTokens: Set<string>;       // every matched token (incl. synonym-driven) — used for scoring
+  displayTokens: Set<string>;          // literal-query-driven matches only — used for the `[matched]` display
   // Tiebreaker signals
   compoundLength: number;    // longest filename token length (shorter = more precise)
 };
@@ -204,16 +217,21 @@ export function matchFile(
   let totalConvergence = 0;
   let idfScore = 0;
   const allMatchedTokens = new Set<string>();
+  const displayTokens = new Set<string>();   // literal-query-driven matches only (for display)
 
   for (const group of conceptGroups) {
     const groupMatchedTokens = new Set<string>();
 
     for (const queryToken of group) {
-      const expanded = expandQueryToken(queryToken);
+      // Literal (typed) forms drive the display; synonyms count for ranking only.
+      const lexForms = expandLexical(queryToken);
+      const expanded = [...lexForms, ...expandSynonyms(queryToken)];
       for (const qt of expanded) {
+        const isLiteral = lexForms.has(qt);
         // Exact match
         if (file.domainMap[qt] !== undefined) {
           groupMatchedTokens.add(qt);
+          if (isLiteral) displayTokens.add(qt);
         }
         // Substring match: indexed token contains query token.
         // Restricted to tokens with path or filename evidence — symbol-only compound
@@ -228,6 +246,7 @@ export function matchFile(
             indexedToken.includes(qt)
           ) {
             groupMatchedTokens.add(indexedToken);
+            if (isLiteral) displayTokens.add(indexedToken);
           }
         }
       }
@@ -283,6 +302,7 @@ export function matchFile(
     score,
     idfScore,
     allMatchedTokens,
+    displayTokens,
     compoundLength,
   };
 }
