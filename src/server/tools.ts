@@ -1,15 +1,152 @@
-import type { CodebaseIndex } from '../types.js';
+import type { CodebaseIndex, IndexedFile } from '../types.js';
 import { IDF_RARITY_THRESHOLD } from '../constants.js';
 import {
   TEST_QUERY_KEYWORDS,
   parseConceptGroups,
-  expandQueryToken,
+  expandLexical,
+  expandSynonyms,
   matchFile,
   compareMatches,
   type MatchResult,
 } from './scoring.js';
+import { compileGlob, matchesGlob } from './glob.js';
 
 export { parseConceptGroups, matchFile, type MatchResult };
+
+// For a target file, find callers of its exported symbols via symbolEdges.
+// Returns up to CALLERS_CAP unique caller files, each with up to a few example
+// caller-symbol/line pairs.
+const CALLERS_CAP = 12;
+const CALL_LINES_PER_CALLER_FILE = 3;
+function buildCallersForFile(
+  fileId: string,
+  file: IndexedFile,
+  index: CodebaseIndex,
+): { exportedSymbol: string; callers: string[] }[] {
+  // Build a map: exported symbolId → list of incoming calls (caller symbolId + line)
+  const exportedIds = new Set(
+    file.symbols.filter(s => s.isExported).map(s => s.id),
+  );
+  if (exportedIds.size === 0) return [];
+
+  // exportedSymbolId → caller fileId → [caller info]
+  const callsTo = new Map<string, Map<string, { symbolName: string; line?: number }[]>>();
+
+  // symInfo for resolving symbolIds → fileId+name. Build lazily on first hit.
+  let symInfo: Map<string, { name: string; file: string; kind: string }> | null = null;
+  function info() {
+    if (!symInfo) symInfo = buildSymbolInfoMap(index);
+    return symInfo;
+  }
+
+  for (const edge of index.symbolEdges) {
+    if (edge.type !== 'calls') continue;
+    if (!exportedIds.has(edge.to)) continue;
+
+    const fromInfo = info().get(edge.from);
+    // Skip self-references inside the target file
+    if (fromInfo?.file === file.relativePath) continue;
+    const callerFile = fromInfo?.file;
+    const callerName = fromInfo?.name ?? edge.from;
+    if (!callerFile) continue;
+
+    if (!callsTo.has(edge.to)) callsTo.set(edge.to, new Map());
+    const perFile = callsTo.get(edge.to)!;
+    if (!perFile.has(callerFile)) perFile.set(callerFile, []);
+    perFile.get(callerFile)!.push({ symbolName: callerName, line: edge.line });
+  }
+
+  const out: { exportedSymbol: string; callers: string[] }[] = [];
+  for (const sym of file.symbols) {
+    if (!sym.isExported) continue;
+    const perFile = callsTo.get(sym.id);
+    if (!perFile || perFile.size === 0) continue;
+
+    const callers: string[] = [];
+    let truncated = 0;
+    for (const [callerFile, callsList] of perFile) {
+      if (callers.length >= CALLERS_CAP) {
+        truncated += 1;
+        continue;
+      }
+      const samples = callsList.slice(0, CALL_LINES_PER_CALLER_FILE).map(c => {
+        if (typeof c.line === 'number' && c.line > 0) {
+          return `${callerFile}:${c.line} (${c.symbolName})`;
+        }
+        return `${callerFile} (${c.symbolName})`;
+      });
+      const extra = callsList.length - samples.length;
+      callers.push(samples.join('; ') + (extra > 0 ? ` +${extra} more` : ''));
+    }
+    if (truncated > 0) callers.push(`[+${truncated} more caller files]`);
+    out.push({ exportedSymbol: sym.name, callers });
+  }
+  return out;
+}
+
+// Build a single GO result entry.
+function buildResultEntry(
+  m: MatchResult,
+  index: CodebaseIndex,
+): Record<string, unknown> {
+  return {
+    path: m.path,
+    matched: formatMatchedTokens(m, index),
+    channel: matchChannel(m, index),
+  };
+}
+
+// Factual classification of HOW a file matched, from per-token DomainEvidence
+// (not a role/purpose claim — see [[coldstart-is-evidence-not-classifier]]).
+//   'symbol' — matched only on declared code names (exports/classes/functions)
+//   'name'   — matched only on file/dir names (visible in the path)
+//   'mixed'  — matched on both
+type MatchChannel = 'symbol' | 'name' | 'mixed';
+function matchChannel(m: MatchResult, index: CodebaseIndex): MatchChannel {
+  const file = index.files.get(m.path);
+  let sym = false;
+  let nameOrDir = false;
+  if (file) {
+    for (const t of m.allMatchedTokens) {
+      const ev = file.domainMap[t];
+      if (!ev) continue;
+      if (ev.symbol > 0) sym = true;
+      if (ev.filename > 0 || ev.path > 0) nameOrDir = true;
+    }
+  }
+  if (sym && !nameOrDir) return 'symbol';
+  if (nameOrDir && !sym) return 'name';
+  return 'mixed';
+}
+
+// Rarest first (lowest docFreq). Capped — leading tokens are the navigation
+// signal; later tokens add bytes without adding lift.
+const MATCHED_TOKENS_PER_RESULT = 5;
+function formatMatchedTokens(m: MatchResult, index: CodebaseIndex): string[] {
+  // Display = literal-query-driven matches only (synonym matches feed ranking but
+  // aren't shown — the agent didn't type them). Drop separator-joined compounds
+  // (`a_b_c` / `a-b-c`): tokenizeName never emits separators, so any matched token
+  // containing one is the verbatim filename/dir form already visible in the path.
+  const tokens = [...m.displayTokens].filter(
+    t => !t.includes('_') && !t.includes('-'),
+  );
+  tokens.sort(
+    (a, b) =>
+      (index.tokenDocFreq.get(a) ?? 1) - (index.tokenDocFreq.get(b) ?? 1),
+  );
+  return tokens.slice(0, MATCHED_TOKENS_PER_RESULT);
+}
+
+// One line per result: `path [tok1, tok2, ...]`. Plain text — the agent reads
+// this, JSON metadata gets skimmed.
+function formatResultLine(entry: Record<string, unknown>): string {
+  const path = entry.path as string;
+  const matched = entry.matched as string[];
+  return `${path} matched: [${matched.join(', ')}]`;
+}
+
+const GO_FOOTER =
+  'Next: `get-structure` the best `[matched]` fit; reformulate only if no result fits.';
 
 // ============================================================================
 // get-overview
@@ -18,25 +155,40 @@ export { parseConceptGroups, matchFile, type MatchResult };
 export function handleGetOverview(
   index: CodebaseIndex,
   params: {
-    domain_filter?: string;
+    query?: string;
+    domain_filter?: string; // legacy alias, accepted but undocumented
     max_results?: number;
     include_tests?: boolean;
+    path?: string;
+    page?: number;
   },
 ): object {
-  const { domain_filter, max_results = 7, include_tests = false } = params;
+  const {
+    max_results = 10,
+    include_tests = false,
+    path: pathSpec,
+    page = 1,
+  } = params;
+  const query = params.query ?? params.domain_filter;
 
-  if (!domain_filter) {
+  if (!query) {
     return {
-      error: 'domain_filter is required',
-      hint: 'Provide one or more keywords relevant to your task (e.g. "auth", "payment user"). Synonym groups: "[auth|login|jwt] payment".',
-      totalFiles: index.files.size,
+      error: 'query is required',
+      __rawText:
+        'Error: missing `query`. Provide one or more keywords (e.g. "auth", "payment user"). Synonym groups: "[auth|login|jwt] payment".',
     };
   }
 
-  const conceptGroups = parseConceptGroups(domain_filter);
+  const conceptGroups = parseConceptGroups(query);
   if (conceptGroups.length === 0) {
-    return { error: 'domain_filter produced no usable tokens after filtering stop words.' };
+    return {
+      error: 'query produced no usable tokens after filtering stop words.',
+      __rawText:
+        'Error: `query` produced no usable tokens after filtering stop words. Use concrete domain words (e.g. "auth", "tile resource graph").',
+    };
   }
+
+  const compiledGlob = pathSpec ? compileGlob(pathSpec) : null;
 
   const allTokens = conceptGroups.flat();
   const isTestQuery = include_tests || allTokens.some(t => TEST_QUERY_KEYWORDS.has(t));
@@ -44,10 +196,16 @@ export function handleGetOverview(
 
   const matched: MatchResult[] = [];
   let excludedTestCount = 0;
+  let excludedByPathCount = 0;
 
   for (const file of index.files.values()) {
     // Exclude barrels — barrels themselves are noise results
     if (file.isBarrel) continue;
+
+    if (compiledGlob && !matchesGlob(file.relativePath, compiledGlob)) {
+      excludedByPathCount++;
+      continue;
+    }
 
     if (!isTestQuery && file.isTestFile) {
       // Count test files that would have matched, for the hint
@@ -78,18 +236,23 @@ export function handleGetOverview(
     for (const file of index.files.values()) {
       if (file.isBarrel) continue;
       if (!isTestQuery && file.isTestFile) continue;
+      if (compiledGlob && !matchesGlob(file.relativePath, compiledGlob)) continue;
 
       let matchedGroupCount = 0;
       const allMatchedTokens = new Set<string>();
+      const displayTokens = new Set<string>();
 
       for (const group of conceptGroups) {
         let groupHit = false;
         for (const queryToken of group) {
-          const expanded = expandQueryToken(queryToken);
+          const lexForms = expandLexical(queryToken);
+          const expanded = [...lexForms, ...expandSynonyms(queryToken)];
           for (const qt of expanded) {
+            const isLiteral = lexForms.has(qt);
             for (const indexedToken of Object.keys(file.domainMap)) {
               if (indexedToken.length >= 4 && qt.includes(indexedToken)) {
                 allMatchedTokens.add(indexedToken);
+                if (isLiteral) displayTokens.add(indexedToken);
                 groupHit = true;
               }
             }
@@ -107,66 +270,190 @@ export function handleGetOverview(
           score: 0,
           idfScore: 0,
           allMatchedTokens,
+          displayTokens,
           compoundLength: 0,
         });
       }
     }
 
     fallbackMatched.sort((a, b) => b.matchedGroupCount - a.matchedGroupCount);
-    const truncated = fallbackMatched.length > max_results;
-    const results = fallbackMatched.slice(0, max_results).map(m => m.path);
+    const truncated = fallbackMatched.length > page * max_results;
+    const results = fallbackMatched
+      .slice((page - 1) * max_results, page * max_results)
+      .map(m => buildResultEntry(m, index));
 
-    const response: Record<string, unknown> = { filter: domain_filter };
+    const response: Record<string, unknown> = { filter: query };
 
     if (fallbackMatched.length === 0) {
       response.results = [];
-      response.note = 'No matches found.';
     } else {
       response.fallback = true;
-      response.note = 'No primary matches. Showing broad fallback matches. Try a shorter term or synonym group [term|alternative] if results look wrong.';
       response.results = results;
       if (truncated) {
         response.truncated = true;
-        response.message = `[TRUNCATED: ${fallbackMatched.length - max_results} additional matches omitted.]`;
+        response.message = `[+${fallbackMatched.length - page * max_results} more fallback matches]`;
       }
     }
 
     if (excludedTestCount > 0) {
       response.excluded_test_files = excludedTestCount;
-      response.hint = 'Test files were excluded. Pass include_tests: true to include them.';
     }
 
+    attachPathExclusion(response, excludedByPathCount, pathSpec);
+
+    response.__rawText = renderOverviewText({
+      query,
+      results: results,
+      fallback: fallbackMatched.length > 0,
+      noMatches: fallbackMatched.length === 0,
+      truncatedExtra: truncated ? fallbackMatched.length - page * max_results : 0,
+      excludedTestCount,
+      excludedByPathCount,
+      pathSpec,
+    });
     return response;
   }
 
-  // Truncation
-  const truncated = afterB.length > max_results;
-  const results = afterB.slice(0, max_results).map(m => m.path);
+  const truncated = afterB.length > page * max_results;
+  const results = afterB
+    .slice((page - 1) * max_results, page * max_results)
+    .map(m => buildResultEntry(m, index));
 
   const response: Record<string, unknown> = {
-    filter: domain_filter,
+    filter: query,
     results,
   };
 
   if (truncated) {
     response.truncated = true;
-    response.message = `[TRUNCATED: ${afterB.length - max_results} additional matches omitted. If a filename above looks right, call get-structure on it. Otherwise narrow your query by adding a more specific token.]`;
+    response.message = `[+${afterB.length - page * max_results} more results]`;
   }
 
   if (excludedTestCount > 0) {
     response.excluded_test_files = excludedTestCount;
-    response.hint = 'Test files were excluded. Pass include_tests: true to include them.';
   }
 
+  attachPathExclusion(response, excludedByPathCount, pathSpec);
+
+  response.__rawText = renderOverviewText({
+    query,
+    results,
+    fallback: false,
+    noMatches: false,
+    truncatedExtra: truncated ? afterB.length - page * max_results : 0,
+    excludedTestCount,
+    excludedByPathCount,
+    pathSpec,
+  });
   return response;
 }
 
+// Render the agent-facing text for a GO response. The agent reads this; the
+// structured fields above are retained for downstream tests and tooling.
+function renderOverviewText(opts: {
+  query: string;
+  results: Record<string, unknown>[];
+  fallback: boolean;
+  noMatches: boolean;
+  truncatedExtra: number;
+  excludedTestCount: number;
+  excludedByPathCount: number;
+  pathSpec: string | undefined;
+}): string {
+  const lines: string[] = [];
+
+  if (opts.fallback) {
+    lines.push('[No exact-name matches. Substring fallbacks — soft signal; grep is more reliable for content in strings/templates/comments.]');
+  }
+
+  if (opts.noMatches) {
+    lines.push('[No declared-name matches.]');
+  } else {
+    // Group results by match channel. Section order = first appearance, which
+    // preserves global rank: the top-ranked result leads its section and sections
+    // are ordered by their best-ranked member; rank order WITHIN a section is kept.
+    const SECTION_LABEL: Record<MatchChannel, string> = {
+      symbol: 'Matched in code/symbol names:',
+      name: 'Matched in file/dir names:',
+      mixed: 'Matched in both name and code:',
+    };
+    const order: MatchChannel[] = [];
+    const groups = new Map<MatchChannel, Record<string, unknown>[]>();
+    for (const r of opts.results) {
+      const ch = (r.channel as MatchChannel) ?? 'mixed';
+      if (!groups.has(ch)) {
+        groups.set(ch, []);
+        order.push(ch);
+      }
+      groups.get(ch)!.push(r);
+    }
+    for (let i = 0; i < order.length; i++) {
+      const ch = order[i];
+      if (i > 0) lines.push('');
+      lines.push(SECTION_LABEL[ch]);
+      for (const r of groups.get(ch)!) lines.push('  ' + formatResultLine(r));
+    }
+  }
+
+  if (opts.truncatedExtra > 0) {
+    lines.push(`[+${opts.truncatedExtra} more — narrow with a tighter \`query\` only if no shown result fits]`);
+  }
+
+  if (opts.excludedByPathCount > 0 && opts.pathSpec) {
+    lines.push(`[excluded by path filter "${opts.pathSpec}": ${opts.excludedByPathCount}]`);
+  }
+  if (opts.excludedTestCount > 0) {
+    lines.push(`[excluded ${opts.excludedTestCount} test files — pass include_tests: true to include]`);
+  }
+
+  lines.push('');
+  if (opts.noMatches) {
+    lines.push('Next: GO indexes declared names only. For content in templates, SQL, comments, docstrings, config — use grep (scope by file extension).');
+  } else {
+    lines.push(GO_FOOTER);
+  }
+
+  return lines.join('\n');
+}
+
+function attachPathExclusion(
+  response: Record<string, unknown>,
+  excludedByPathCount: number,
+  pathSpec: string | undefined,
+): void {
+  if (!pathSpec || excludedByPathCount === 0) return;
+  response.excluded_by_path = excludedByPathCount;
+  response.path_filter = pathSpec;
+}
+
 // ============================================================================
-// get-structure (merged drill-down: symbols + 1-hop internal imports)
+// get-structure (drill-down: symbols + imports + importers + per-symbol callers)
 // ============================================================================
+type GsView = 'full' | 'symbols' | 'imports' | 'importers' | 'callers';
+
+const IMPORTERS_LIST_CAP = 20;
+// For huge files, show top-K symbols sorted by caller count first; the rest
+// collapse into a tail. Avoids the 60-class wall-of-text problem.
+const SYMBOLS_TOP_K = 15;
+const SYMBOLS_HUGE_FILE_THRESHOLD = 20;
+// Inline single caller when symbol has only 1; switch to newline-per-caller
+// once a symbol has 2+ callers (otherwise the line balloons past 500 chars).
+const CALLER_INLINE_MAX = 1;
+
+function isTestPath(p: string): boolean {
+  return p.startsWith('tests/') || p.startsWith('test/')
+    || p.includes('/tests/') || p.includes('/test/')
+    || /_tests?\.[a-z]+$/.test(p)
+    || /\.tests?\.[a-z]+$/.test(p);
+}
+
 export function handleGetStructure(
   index: CodebaseIndex,
-  params: { file_path: string },
+  params: {
+    file_path: string;
+    match?: string;
+    view?: GsView;
+  },
 ): object {
   if (!params.file_path) {
     return { error: 'file_path is required' };
@@ -177,19 +464,66 @@ export function handleGetStructure(
   }
   const [fileId, file] = fileEntry;
 
-  const lines: string[] = [`${file.relativePath} (${file.lineCount} lines, importedBy: ${file.importedByCount})`];
+  // Validate `view`: an invalid value (stale client, typo, or a hallucinated
+  // name like "outline") would otherwise silently disable EVERY section and
+  // return a header-only response, pushing the agent to grep. Fail open —
+  // coerce to 'full' and surface a loud warning so the agent self-corrects.
+  const VALID_VIEWS: readonly GsView[] = ['full', 'symbols', 'imports', 'importers', 'callers'];
+  const requestedView = params.view;
+  const viewIsInvalid = requestedView !== undefined && !VALID_VIEWS.includes(requestedView);
+  const view: GsView = viewIsInvalid ? 'full' : (requestedView ?? 'full');
+  const matchPredicate = compileMatchPredicate(params.match);
+  const wantSymbols = view === 'full' || view === 'symbols';
+  const wantImports = view === 'full' || view === 'imports';
+  const wantImporters = view === 'full' || view === 'importers';
+  const wantInlineCallers = view === 'full';
+  const wantExpandedCallers = view === 'callers';
 
-  // Symbols — one per line, indented under parent class when applicable
-  const filtered = file.symbols
-    .filter(s => s.isExported || s.kind === 'class' || s.kind === 'function')
-    .slice()
-    .sort((a, b) => a.startLine - b.startLine);
+  // Pre-compute callers once if any caller view is on
+  let callersByName: Map<string, string[]> | null = null;
+  if (wantInlineCallers || wantExpandedCallers) {
+    const perSym = buildCallersForFile(fileId, file, index);
+    callersByName = new Map();
+    for (const entry of perSym) {
+      callersByName.set(entry.exportedSymbol, entry.callers);
+    }
+  }
 
-  if (filtered.length > 0) {
-    lines.push('');
-    lines.push('Symbols:');
+  // Build structured intermediate (single source of truth for both renderers).
+  type SymOut = {
+    name: string;
+    displayName: string;
+    indent: string;
+    kind: string;
+    startLine: number;
+    endLine: number;
+    extendsName?: string;
+    implementsNames: string[];
+    callers: string[];        // raw caller strings, may be empty
+    callerFileCount: number;  // for sorting
+  };
+
+  let symbolsOut: SymOut[] = [];
+  let totalSymbolCount = 0;
+  let filteredSymbolCount = 0;
+  let truncatedSymbolCount = 0;
+
+  if (wantSymbols) {
+    const baseFiltered = file.symbols
+      .filter(s => s.isExported || s.kind === 'class' || s.kind === 'function' || s.kind === 'method')
+      .slice()
+      .sort((a, b) => a.startLine - b.startLine);
+    totalSymbolCount = baseFiltered.length;
+
+    const filtered = matchPredicate
+      ? baseFiltered.filter(s => matchPredicate(s.name))
+      : baseFiltered;
+    filteredSymbolCount = filtered.length;
+
+    // Compute display names + parent class indent (preserves source-order
+    // tree structure before any reorder).
     let lastClassName: string | null = null;
-    for (const s of filtered) {
+    const annotated: SymOut[] = filtered.map(s => {
       let displayName = s.name;
       let indent = '';
       if (lastClassName && s.name.startsWith(lastClassName + '.')) {
@@ -198,352 +532,250 @@ export function handleGetStructure(
       } else if (s.kind === 'class') {
         lastClassName = s.name;
       }
-      const range = s.startLine === s.endLine ? `[${s.startLine}]` : `[${s.startLine}-${s.endLine}]`;
-      let line = `${indent}${s.kind} ${displayName} ${range}`;
-      if (s.extendsName) line += ` extends ${s.extendsName}`;
-      if (s.implementsNames.length > 0) line += ` implements ${s.implementsNames.join(', ')}`;
-      lines.push(line);
-    }
-  }
+      const callers = callersByName?.get(s.name) ?? [];
+      return {
+        name: s.name,
+        displayName,
+        indent,
+        kind: s.kind,
+        startLine: s.startLine,
+        endLine: s.endLine,
+        extendsName: s.extendsName,
+        implementsNames: s.implementsNames,
+        callers,
+        callerFileCount: callers.length,
+      };
+    });
 
-  // Imports — internal only, bare paths, deduped.
-  // Above IMPORTS_LIST_THRESHOLD we show only the count + pointer to trace-deps,
-  // since agents skim long lists and `trace-deps` is the right tool for a full list.
-  const IMPORTS_LIST_THRESHOLD = 15;
-  const internalImports = [...new Set(
-    index.edges
-      .filter(e => e.from === fileId)
-      .map(e => index.files.get(e.to)?.relativePath)
-      .filter((p): p is string => !!p)
-  )];
-
-  if (internalImports.length > 0) {
-    lines.push('');
-    if (internalImports.length <= IMPORTS_LIST_THRESHOLD) {
-      lines.push('Imports:');
-      for (const p of internalImports) lines.push(p);
+    // For full view of huge files (no match filter), reorder by caller count
+    // desc so most-used symbols surface first; then truncate to top-K with a
+    // summary tail. With a match filter we honour the filter exactly — agent
+    // is steering, not browsing.
+    if (
+      view === 'full' &&
+      !matchPredicate &&
+      annotated.length > SYMBOLS_HUGE_FILE_THRESHOLD
+    ) {
+      const sorted = annotated.slice().sort((a, b) => {
+        if (b.callerFileCount !== a.callerFileCount) {
+          return b.callerFileCount - a.callerFileCount;
+        }
+        return a.startLine - b.startLine;
+      });
+      // After reorder, parent-class indent is no longer meaningful (siblings
+      // are scattered), so show the full qualified name and drop indent.
+      symbolsOut = sorted.slice(0, SYMBOLS_TOP_K).map(s => ({
+        ...s,
+        displayName: s.name,
+        indent: '',
+      }));
+      truncatedSymbolCount = sorted.length - symbolsOut.length;
     } else {
-      lines.push(`Imports: ${internalImports.length} internal files — use trace-deps for the list.`);
+      symbolsOut = annotated;
     }
   }
 
-  // Next-step pointer — bake into output so the agent sees the chain options
-  // without relying on CLAUDE.md / SKILL.md (which it routinely ignores).
-  lines.push('');
-  lines.push('Next: trace-deps on this file (direction: "importers") to see who imports it; trace-impact <symbol> on any symbol above to see callers/implementors. Open the file with Read only when you need actual implementation.');
+  // Build imports list
+  let importsOut: string[] = [];
+  let totalImportCount = 0;
+  if (wantImports) {
+    const internalImports = [...new Set(
+      index.edges
+        .filter(e => e.from === fileId)
+        .map(e => index.files.get(e.to)?.relativePath)
+        .filter((p): p is string => !!p)
+    )];
+    totalImportCount = internalImports.length;
+    importsOut = matchPredicate
+      ? internalImports.filter(p => matchPredicate(p))
+      : internalImports;
+  }
+
+  // Build importers list
+  let importersShown: string[] = [];
+  let importersFiltered = 0;
+  let importersExtra = 0;
+  let totalImporterCount = 0;
+  if (wantImporters) {
+    const allImporters = buildAllImporters(fileId, index);
+    totalImporterCount = allImporters.length;
+    const filteredImporters = matchPredicate
+      ? allImporters.filter(p => matchPredicate(p))
+      : allImporters;
+    importersFiltered = filteredImporters.length;
+    importersShown = filteredImporters.slice(0, IMPORTERS_LIST_CAP);
+    importersExtra = filteredImporters.length - importersShown.length;
+  }
+
+  // Render text.
+  const lines: string[] = [`${file.relativePath} (${file.lineCount} lines, importedBy: ${file.importedByCount})`];
+  if (viewIsInvalid) {
+    lines.push(`[note: view "${String(requestedView)}" is not valid — showing full view. Valid views: ${VALID_VIEWS.join(', ')}.]`);
+  }
+
+  if (wantSymbols) {
+    if (symbolsOut.length > 0) {
+      lines.push('');
+      lines.push('Symbols:');
+      for (const s of symbolsOut) {
+        const range = s.startLine === s.endLine ? `[L${s.startLine}]` : `[L${s.startLine}-${s.endLine}]`;
+        let line = `${s.indent}${s.kind} ${s.displayName} ${range}`;
+        if (s.extendsName) line += ` extends ${s.extendsName}`;
+        if (s.implementsNames.length > 0) line += ` implements ${s.implementsNames.join(', ')}`;
+        // Inline single caller; newline-per-caller block when ≥2.
+        if (wantInlineCallers && s.callers.length > 0) {
+          if (s.callers.length <= CALLER_INLINE_MAX) {
+            line += `  ← ${s.callers[0]}`;
+            lines.push(line);
+          } else {
+            lines.push(line);
+            for (const c of s.callers) {
+              lines.push(`${s.indent}    ← ${c}`);
+            }
+          }
+        } else {
+          lines.push(line);
+        }
+      }
+      if (truncatedSymbolCount > 0) {
+        lines.push(`[+${truncatedSymbolCount} more symbols — pass \`match\` to filter, or \`view: "symbols"\` for full list without callers]`);
+      }
+    } else if (matchPredicate && totalSymbolCount > 0) {
+      lines.push('');
+      lines.push(`Symbols: 0 of ${totalSymbolCount} match "${params.match}".`);
+    }
+  }
+
+  // Expanded callers section (view: 'callers' only)
+  if (wantExpandedCallers && callersByName) {
+    let totalSyms = 0;
+    let shownSyms = 0;
+    lines.push('');
+    lines.push('Callers (per exported symbol):');
+    for (const [symName, callers] of callersByName) {
+      totalSyms++;
+      if (matchPredicate && !matchPredicate(symName)) continue;
+      shownSyms++;
+      lines.push(`  ${symName}:`);
+      for (const c of callers) lines.push(`    ${c}`);
+    }
+    if (totalSyms === 0) {
+      lines.push('  (no symbol-level callers indexed — no exported symbols, no member-expression call sites, or no callers exist)');
+    } else if (matchPredicate && shownSyms === 0) {
+      lines.push(`  (0 of ${totalSyms} symbols with callers match "${params.match}")`);
+    }
+  }
+
+  // Imports
+  if (wantImports) {
+    const IMPORTS_LIST_THRESHOLD = 15;
+    if (importsOut.length > 0) {
+      lines.push('');
+      if (importsOut.length <= IMPORTS_LIST_THRESHOLD || matchPredicate) {
+        lines.push('Imports:');
+        for (const p of importsOut) lines.push(p);
+      } else {
+        lines.push(`Imports: ${importsOut.length} internal files — pass \`match\` to scope this list (substring or /regex/).`);
+      }
+    } else if (matchPredicate && totalImportCount > 0) {
+      lines.push('');
+      lines.push(`Imports: 0 of ${totalImportCount} match "${params.match}".`);
+    }
+  }
+
+  // Importers — section by test/source when both groups present so the agent
+  // has a labeled attention slot for test files (they're verification, not
+  // peer call sites; agent triages them differently if labeled).
+  if (wantImporters) {
+    if (importersFiltered > 0) {
+      const testImporters = importersShown.filter(isTestPath);
+      const sourceImporters = importersShown.filter(p => !isTestPath(p));
+      lines.push('');
+      lines.push(`Importers (${importersFiltered}${importersExtra > 0 ? `, showing ${importersShown.length}` : ''}):`);
+      if (testImporters.length > 0 && sourceImporters.length > 0) {
+        lines.push(`  Source (${sourceImporters.length}):`);
+        for (const p of sourceImporters) lines.push(`    ${p}`);
+        lines.push(`  Tests (${testImporters.length}):`);
+        for (const p of testImporters) lines.push(`    ${p}`);
+      } else {
+        for (const p of importersShown) lines.push(p);
+      }
+      if (importersExtra > 0) lines.push(`[+${importersExtra} more — narrow with \`match\`]`);
+    } else if (matchPredicate && totalImporterCount > 0) {
+      lines.push('');
+      lines.push(`Importers: 0 of ${totalImporterCount} match "${params.match}".`);
+    }
+  }
+
+  // Next-step pointer (only when there's something useful to say)
+  const nextHint = computeNextHint({
+    hasMatch: !!matchPredicate,
+    wantSymbols,
+    filteredSymbolCount,
+    totalSymbolCount,
+  });
+  if (nextHint) {
+    lines.push('');
+    lines.push(nextHint);
+  }
 
   return { __rawText: lines.join('\n') };
 }
 
-// ============================================================================
-// trace-deps
-// ============================================================================
-export function handleTraceDeps(
-  index: CodebaseIndex,
-  params: {
-    file_path: string;
-    direction?: 'imports' | 'importers' | 'both';
-    depth?: number;
-  },
-): object {
-  if (!params.file_path) {
-    return { error: 'file_path is required' };
+function computeNextHint(opts: {
+  hasMatch: boolean;
+  wantSymbols: boolean;
+  filteredSymbolCount: number;
+  totalSymbolCount: number;
+}): string {
+  if (opts.hasMatch && opts.wantSymbols && opts.filteredSymbolCount === 0 && opts.totalSymbolCount > 0) {
+    return 'Next: relax or drop `match`; or call again with a narrower `view` (e.g. "imports", "importers").';
   }
-  const direction = params.direction ?? 'both';
-  const maxDepth = Math.min(params.depth ?? 1, 3);
-
-  // Find file by relative path (or suffix match)
-  const fileEntry = findFileByPath(index, params.file_path);
-  if (!fileEntry) {
-    return { error: `File not found: ${params.file_path}` };
-  }
-  const [fileId, file] = fileEntry;
-
-  // Drop high-fanout neighbors (shared utils, contexts, enums) — they're
-  // almost never on the path to the answer and they bloat the result.
-  const FANOUT_CAP = 30;
-  let skippedHighFanout = 0;
-
-  function collectDeps(
-    startId: string,
-    getNeighbors: (id: string) => string[],
-    depth: number,
-  ): object[] {
-    const visited = new Set<string>();
-    const result: object[] = [];
-
-    function traverse(id: string, currentDepth: number): void {
-      if (currentDepth > depth || visited.has(id)) return;
-      visited.add(id);
-      for (const neighborId of getNeighbors(id)) {
-        if (visited.has(neighborId)) continue;
-        const neighbor = index.files.get(neighborId);
-        if (!neighbor) continue;
-        if (neighbor.importedByCount > FANOUT_CAP) {
-          skippedHighFanout++;
-          continue;
-        }
-        result.push({
-          path: neighbor.relativePath,
-          language: neighbor.language,
-          exports: neighbor.exports.slice(0, 10),
-          importedByCount: neighbor.importedByCount,
-          depth: currentDepth,
-        });
-        if (currentDepth < depth) {
-          traverse(neighborId, currentDepth + 1);
-        }
-      }
-    }
-
-    traverse(startId, 1);
-    return result;
-  }
-
-  const response: Record<string, unknown> = {
-    file: {
-      path: file.relativePath,
-      language: file.language,
-    },
-  };
-
-  if (direction === 'imports' || direction === 'both') {
-    response.imports = collectDeps(
-      fileId,
-      id => index.outEdges.get(id) ?? [],
-      maxDepth,
-    );
-  }
-  if (direction === 'importers' || direction === 'both') {
-    response.importers = collectDeps(
-      fileId,
-      id => index.inEdges.get(id) ?? [],
-      maxDepth,
-    );
-  }
-
-  if (skippedHighFanout > 0) {
-    response.skippedHighFanout = skippedHighFanout;
-    response.note = `Omitted ${skippedHighFanout} neighbor(s) with importedByCount > ${FANOUT_CAP} (shared utils/contexts/enums — rarely on the path to a feature).`;
-  }
-
-  return response;
+  return '';
 }
 
-// ============================================================================
-// trace-impact
-// ============================================================================
-export function handleTraceImpact(
-  index: CodebaseIndex,
-  params: {
-    symbol: string;
-    file?: string;
-    depth?: number;
-  },
-): object {
-  const { symbol, file: filePath, depth: requestedDepth } = params;
-
-  if (!symbol) {
-    return { error: 'symbol is required' };
-  }
-
-  const maxDepth = Math.min(requestedDepth ?? 3, 10);
-  const TRUNCATE_AT = 50;
-
-  // -------------------------------------------------------------------------
-  // Step 1: Find target symbol
-  // -------------------------------------------------------------------------
-  const candidates = findSymbolCandidates(index, symbol, filePath);
-
-  if (candidates.length === 0) {
-    // Phase B: annotation-name fallback. If no symbol is named `symbol`,
-    // check whether any symbol bears it as an annotation (e.g. `@Transactional`).
-    const annotated = findSymbolsByAnnotation(index, symbol);
-    if (annotated.length > 0) {
-      const affected = [...new Set(annotated.map(a => a.fileEntry.relativePath))].sort();
-      return {
-        target: { symbol: `@${symbol}`, type: 'annotation', matchedVia: 'annotation' },
-        annotatedSymbols: annotated.map(a => ({
-          symbol: a.name,
-          file: a.fileEntry.relativePath,
-          line: a.startLine,
-          type: a.kind,
-        })),
-        summary: {
-          totalAnnotated: annotated.length,
-          affectedFiles: affected,
-          note: `No symbol named "${symbol}". ${annotated.length} symbol(s) annotated with @${symbol} below.`,
-        },
-      };
-    }
-
-    return {
-      error: `Symbol not found: ${symbol}`,
-      suggestions: fuzzyMatchSymbols(index, symbol).slice(0, 5),
-    };
-  }
-
-  if (candidates.length > 1) {
-    return {
-      error: `Symbol "${symbol}" is ambiguous (${candidates.length} matches). Provide file to disambiguate.`,
-      candidates: candidates.map(c => ({
-        symbol: c.name,
-        file: c.fileEntry.relativePath,
-        kind: c.kind,
-      })),
-    };
-  }
-
-  const target = candidates[0];
-
-  // -------------------------------------------------------------------------
-  // Step 2: Build symbol-level reverse adjacency map (inEdges)
-  // Exclude 'exports' edges — a file exporting a symbol is not impacted by it
-  // -------------------------------------------------------------------------
-  const symInEdges = new Map<string, Array<{ from: string; type: string; line?: number }>>();
-
-  for (const edge of index.symbolEdges) {
-    if (edge.type === 'exports') continue;
-    if (!symInEdges.has(edge.to)) symInEdges.set(edge.to, []);
-    symInEdges.get(edge.to)!.push({ from: edge.from, type: edge.type, line: edge.line });
-  }
-
-  // -------------------------------------------------------------------------
-  // Step 3: BFS traversal from target
-  // -------------------------------------------------------------------------
-  type ImpactEntry = {
-    symbolId: string;
-    depth: number;
-    path: string[];     // symbolIds from target → this node
-    relationship: string;
-    callLine?: number;  // line in the caller's file where the call to its callee occurs (calls edges)
-  };
-
-  const visited = new Set<string>([target.id]);
-  const impacted: ImpactEntry[] = [];
-
-  // Queue items
-  const queue: Array<{ id: string; depth: number; path: string[]; rel: string; line?: number }> = [];
-
-  for (const inc of symInEdges.get(target.id) ?? []) {
-    if (!visited.has(inc.from)) {
-      queue.push({ id: inc.from, depth: 1, path: [target.id, inc.from], rel: inc.type, line: inc.line });
-    }
-  }
-
-  while (queue.length > 0) {
-    const { id, depth, path, rel, line } = queue.shift()!;
-    if (visited.has(id)) continue;
-    visited.add(id);
-
-    impacted.push({ symbolId: id, depth, path, relationship: rel, callLine: line });
-
-    if (depth >= maxDepth) continue;
-
-    for (const inc of symInEdges.get(id) ?? []) {
-      if (!visited.has(inc.from)) {
-        queue.push({ id: inc.from, depth: depth + 1, path: [...path, inc.from], rel: inc.type, line: inc.line });
-      }
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // Step 4: Resolve symbolIds to human-readable info
-  // -------------------------------------------------------------------------
-  const symInfo = buildSymbolInfoMap(index);
-
-  function resolveId(id: string): { name: string; file: string; kind: string } {
-    const info = symInfo.get(id);
-    if (info) return info;
-    // Fallback: parse the id format "fileId#symbolName"
-    const hash = id.lastIndexOf('#');
-    if (hash !== -1) return { name: id.slice(hash + 1), file: id.slice(0, hash), kind: 'unknown' };
-    return { name: id, file: '', kind: 'unknown' };
-  }
-
-  const truncated = impacted.length > TRUNCATE_AT;
-  const displayImpacted = truncated ? impacted.slice(0, TRUNCATE_AT) : impacted;
-
-  // -------------------------------------------------------------------------
-  // Step 5: Build summary
-  // -------------------------------------------------------------------------
-  const byDepth: Record<number, number> = {};
-  const byRelationship: Record<string, number> = {};
-  const affectedFilesSet = new Set<string>();
-
-  for (const entry of impacted) {
-    byDepth[entry.depth] = (byDepth[entry.depth] ?? 0) + 1;
-    byRelationship[entry.relationship] = (byRelationship[entry.relationship] ?? 0) + 1;
-    const info = symInfo.get(entry.symbolId);
-    if (info) affectedFilesSet.add(info.file);
-  }
-
-  // -------------------------------------------------------------------------
-  // Step 6: If no symbol-level impact, fall back to file-level importers
-  // This covers languages where calls are member expressions (obj.method())
-  // that don't produce symbol edges.
-  // -------------------------------------------------------------------------
-  let fileImporters: string[] | undefined;
-  if (impacted.length === 0) {
-    // Find the fileId for the target symbol's file
-    const targetFileId = findFileIdByRelativePath(index, target.fileEntry.relativePath);
-    if (targetFileId) {
-      const importerIds = index.inEdges.get(targetFileId) ?? [];
-      fileImporters = importerIds
-        .map(id => index.files.get(id)?.relativePath)
-        .filter((p): p is string => p !== undefined)
-        .sort();
-    }
-  }
-
-  const targetLocation = `${target.fileEntry.relativePath}:${target.startLine}`;
-
-  return {
-    target: {
-      symbol: target.name,
-      file: target.fileEntry.relativePath,
-      line: target.startLine,
-      type: target.kind,
-    },
-    impacted: displayImpacted.map(entry => {
-      const info = resolveId(entry.symbolId);
-      // Format: "file:line (in callerSymbol)" when line is known, else "file (in callerSymbol)".
-      // Graceful fallback for older indexes / extractors that have not been backfilled.
-      const hasLine = typeof entry.callLine === 'number' && entry.callLine > 0;
-      const location = hasLine
-        ? `${info.file}:${entry.callLine} (in ${info.name})`
-        : `${info.file} (in ${info.name})`;
-      return {
-        symbol: info.name,
-        file: info.file,
-        ...(hasLine ? { line: entry.callLine } : {}),
-        location,
-        type: info.kind,
-        relationship: entry.relationship,
-        depth: entry.depth,
-        path: entry.path.map(sid => resolveId(sid).name),
-      };
-    }),
-    summary: {
-      totalImpacted: impacted.length,
-      byDepth,
-      byRelationship,
-      affectedFiles: [...affectedFilesSet].sort(),
-      ...(truncated ? { truncatedAt: TRUNCATE_AT, note: 'Impact set exceeded limit; results truncated' } : {}),
-    },
-    ...(impacted.length === 0 ? {
-      fallback: 'file-level',
-      ...(fileImporters && fileImporters.length > 0
-        ? {
-            fileImporters,
-            note: `Defined at ${targetLocation}. No symbol-level callers indexed (common causes: member-expression calls like obj.method() that did not resolve, or no callers exist). fileImporters below shows files importing this file — start there.`,
-          }
-        : {
-            note: `Defined at ${targetLocation}. No callers indexed and no files import this file — symbol is an entry point, unused, or invoked dynamically. If you only needed to locate the definition, you have it.`,
-          }),
-    } : {}),
-  };
+// Full importer list (inbound edges) — capped at IMPORTERS_LIST_CAP at display
+// time, not here.
+function buildAllImporters(fileId: string, index: CodebaseIndex): string[] {
+  const ids = index.inEdges.get(fileId) ?? [];
+  return ids
+    .map(id => index.files.get(id)?.relativePath)
+    .filter((p): p is string => !!p)
+    .sort();
 }
+
+// Compile a `match` filter for GS. Wrapped in `/.../` → regex; `a|b` →
+// OR of case-insensitive substrings; otherwise case-insensitive substring.
+// Returns null when no filter is requested or the spec is empty.
+function compileMatchPredicate(spec: string | undefined): ((s: string) => boolean) | null {
+  if (!spec) return null;
+  const trimmed = spec.trim();
+  if (!trimmed) return null;
+  if (trimmed.length >= 2 && trimmed.startsWith('/') && trimmed.endsWith('/')) {
+    const body = trimmed.slice(1, -1);
+    try {
+      const re = new RegExp(body, 'i');
+      return (s) => re.test(s);
+    } catch {
+      // Fall through to substring on malformed regex
+    }
+  }
+  if (trimmed.includes('|')) {
+    const alternatives = trimmed
+      .split('|')
+      .map(s => s.trim().toLowerCase())
+      .filter(s => s.length > 0);
+    if (alternatives.length > 1) {
+      return (s) => {
+        const lower = s.toLowerCase();
+        return alternatives.some(a => lower.includes(a));
+      };
+    }
+  }
+  const lower = trimmed.toLowerCase();
+  return (s) => s.toLowerCase().includes(lower);
+}
+
 
 // ============================================================================
 // Helper: build a flat map of symbolId → { name, file, kind }
@@ -556,116 +788,6 @@ function buildSymbolInfoMap(index: CodebaseIndex): Map<string, { name: string; f
     }
   }
   return map;
-}
-
-// ============================================================================
-// Helper: find symbol candidates by name (with optional file filter)
-// ============================================================================
-type IndexedFileLike = {
-  relativePath: string;
-  symbols: import('../types.js').SymbolNode[];
-};
-
-function findSymbolCandidates(
-  index: CodebaseIndex,
-  symbolName: string,
-  filePath?: string,
-): Array<{ id: string; name: string; kind: string; startLine: number; fileEntry: IndexedFileLike }> {
-  const results: Array<{ id: string; name: string; kind: string; startLine: number; fileEntry: IndexedFileLike }> = [];
-
-  // Suffixes for qualified names: Ruby uses ::, Java/TS use .
-  const qualifiedSuffixes = ['::' + symbolName, '.' + symbolName];
-
-  const searchIn = (file: IndexedFileLike) => {
-    for (const sym of file.symbols) {
-      if (sym.name === symbolName) {
-        results.push({ id: sym.id, name: sym.name, kind: sym.kind, startLine: sym.startLine, fileEntry: file });
-      }
-    }
-  };
-
-  // Suffix match: find symbols ending with ::SymbolName or .SymbolName
-  const searchInSuffix = (file: IndexedFileLike) => {
-    for (const sym of file.symbols) {
-      if (qualifiedSuffixes.some(suffix => sym.name.endsWith(suffix))) {
-        results.push({ id: sym.id, name: sym.name, kind: sym.kind, startLine: sym.startLine, fileEntry: file });
-      }
-    }
-  };
-
-  if (filePath) {
-    const fileEntry = findFileByPath(index, filePath);
-    if (fileEntry) {
-      searchIn(fileEntry[1]);
-      // Fall back to suffix match in that file — handles the case where the
-      // ambiguity error returned a qualified name (e.g. "Class.method") but
-      // the user retries with the bare name ("method").
-      if (results.length === 0) searchInSuffix(fileEntry[1]);
-    }
-  } else {
-    // Try exact match first
-    for (const file of index.files.values()) {
-      searchIn(file);
-    }
-    // Fall back to suffix match if no exact hits
-    if (results.length === 0) {
-      for (const file of index.files.values()) {
-        searchInSuffix(file);
-      }
-    }
-  }
-
-  return results;
-}
-
-// ============================================================================
-// Helper: find symbols bearing a given annotation (Java/Kotlin)
-// ============================================================================
-function findSymbolsByAnnotation(
-  index: CodebaseIndex,
-  annotationName: string,
-): Array<{ id: string; name: string; kind: string; startLine: number; fileEntry: IndexedFileLike }> {
-  const results: Array<{ id: string; name: string; kind: string; startLine: number; fileEntry: IndexedFileLike }> = [];
-  for (const file of index.files.values()) {
-    for (const sym of file.symbols) {
-      if (sym.annotations?.includes(annotationName)) {
-        results.push({ id: sym.id, name: sym.name, kind: sym.kind, startLine: sym.startLine, fileEntry: file });
-      }
-    }
-  }
-  return results;
-}
-
-// ============================================================================
-// Helper: fuzzy-match symbol names (for error suggestions)
-// ============================================================================
-function fuzzyMatchSymbols(
-  index: CodebaseIndex,
-  query: string,
-): Array<{ symbol: string; file: string; kind: string }> {
-  const results: Array<{ symbol: string; file: string; kind: string }> = [];
-  const lq = query.toLowerCase();
-
-  for (const file of index.files.values()) {
-    for (const sym of file.symbols) {
-      if (sym.name.toLowerCase().includes(lq) || lq.includes(sym.name.toLowerCase())) {
-        results.push({ symbol: sym.name, file: file.relativePath, kind: sym.kind });
-        if (results.length >= 10) return results;
-      }
-    }
-  }
-
-  return results;
-}
-
-// ============================================================================
-// Helper: find fileId by relative path (for file-level graph lookups)
-// ============================================================================
-function findFileIdByRelativePath(index: CodebaseIndex, relativePath: string): string | null {
-  for (const [id, file] of index.files) {
-    if (file.relativePath === relativePath) return id;
-  }
-  return null;
 }
 
 // ============================================================================

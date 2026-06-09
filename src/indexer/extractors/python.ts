@@ -279,6 +279,7 @@ export interface PythonParseResult {
   hasDefaultExport: false;
   symbols: SymbolNode[];
   djangoConventionRefs?: Array<{ kind: string; value: string }>;
+  submoduleImportCandidates?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -312,15 +313,36 @@ export function parsePythonContent(
   const root: TSNode = tree.rootNode;
 
   const imports: string[] = [];
+  const submoduleCandidates: string[] = [];
   const symbols: SymbolNode[] = [];
   let allList: string[] | null = null;
 
   for (const node of root.namedChildren) {
     // from X import Y  /  import X
     if (node.type === 'import_from_statement') {
-      const moduleNode = firstChildOfType(node, 'dotted_name') ??
+      const moduleNode = node.childForFieldName?.('module_name') ??
+        firstChildOfType(node, 'dotted_name') ??
         firstChildOfType(node, 'relative_import');
-      if (moduleNode) imports.push(moduleNode.text);
+      if (!moduleNode) continue;
+      const moduleText = moduleNode.text;
+      imports.push(moduleText);
+      // `from pkg import submodule` depends on pkg/submodule.py, not just the
+      // pkg __init__. Emit `module.name` BONUS candidates so the resolver can
+      // pick up the submodule file when one exists. These are kept separate
+      // from `imports` because most names are symbols (`from x import Klass`)
+      // that legitimately don't map to a file — counting their misses as
+      // "unresolved" would massively inflate the diagnostic counter. Bare
+      // relative dots ('.', '..') join without an extra dot.
+      const sep = /^\.+$/.test(moduleText) ? '' : '.';
+      for (const child of node.namedChildren) {
+        if (child === moduleNode) continue;
+        if (child.type === 'dotted_name' || child.type === 'aliased_import') {
+          const nm = child.type === 'aliased_import'
+            ? firstChildOfType(child, 'dotted_name')?.text
+            : child.text;
+          if (nm) submoduleCandidates.push(`${moduleText}${sep}${nm}`);
+        }
+      }
       continue;
     }
     if (node.type === 'import_statement') {
@@ -480,6 +502,7 @@ export function parsePythonContent(
     hasDefaultExport: false,
     symbols,
     djangoConventionRefs: djangoConventionRefs.length > 0 ? djangoConventionRefs : undefined,
+    submoduleImportCandidates: submoduleCandidates.length > 0 ? [...new Set(submoduleCandidates)] : undefined,
   };
 }
 

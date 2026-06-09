@@ -170,6 +170,7 @@ export async function parseFile(
       tokenEstimate,
       symbols: pythonResult.symbols,
       djangoConventionRefs: pythonResult.djangoConventionRefs,
+      submoduleImportCandidates: pythonResult.submoduleImportCandidates,
     };
   }
 
@@ -491,9 +492,9 @@ export async function parseFile(
     };
   }
 
-  // Token-only template formats (erb, haml, slim) and unsupported languages
-  // (swift, dart): no AST parsing, but the file is indexed so path/filename
-  // tokens feed domainMap and it can be the target of synthetic edges.
+  // Token-only fallback: template formats (erb, haml, slim), static assets
+  // (html, css, json, markdown), and unsupported languages. No AST parsing —
+  // the file is still indexed so its path/filename tokens feed domainMap.
   return {
     imports: [],
     exports: [],

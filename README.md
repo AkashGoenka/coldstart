@@ -6,7 +6,7 @@ It answers one question: **which files are relevant to this task?** No embedding
 
 Agents are already good at reading code, tracing logic, and reasoning about structure. What they don't need is another system trying to do that for them. coldstart stays out of the way: find the file, hand it off, done.
 
-**4 tools. Minimal context overhead. No infrastructure to babysit.**
+**2 tools. Minimal context overhead. No infrastructure to babysit.**
 
 ---
 
@@ -131,57 +131,45 @@ npx @modelcontextprotocol/inspector node dist/index.js --root . --no-daemon
 
 ## Tool reference
 
-### `get-overview`
+coldstart exposes **two** tools. `get-overview` finds the files; `get-structure` tells you everything about one file — its shape, what it imports, and who uses it. The older `trace-deps` and `trace-impact` tools are gone; their jobs (file-level import graph, symbol-level callers/implementors/extenders) are now folded into `get-structure`.
+
+### `get-overview` (GO)
+
+Locate files by matching your query against **declared names** — filenames, directory path segments, and exported symbol names. GO does not match file *bodies* (comments, docstrings, string literals, template/HTML/SQL content); for those, grep is the right tool.
 
 Required params:
-- `domain_filter` (string) — One or more keywords relevant to your task. Matched against each file's indexed tokens (derived from filename, path segments, exports, and imports). Bare words are AND logic; bracket groups are OR synonyms: `"[auth|login|jwt] payment"` = any auth synonym AND payment. Pluralization is automatic: `"workspace"` also matches `"workspaces"`.
+- `query` (string) — concept tokens for what you're looking for. Bare words are AND logic; bracket groups are OR synonyms: `"[auth|login|jwt] payment"` = any auth synonym AND payment. Naming-variant tolerant — case, separators, and plural ≡ singular are handled automatically (`LoadStaging` ≡ `load_staging` ≡ `load-staging`; `tile` ≡ `tiles`). (`domain_filter` is still accepted as a deprecated alias.)
 
 Optional params:
-- `max_results` (number, default 7) — cap on returned files. Don't raise this to "see more" — refine the query instead.
-- `include_tests` (boolean, default false) — include test files in results
+- `max_results` (number, default 10) — page size. Don't raise this to "see more" — refine the query or lift a rare `[matched]` token into the next query instead.
+- `include_tests` (boolean, default false) — include test files (excluded by default).
+- `path` (string) — minimatch-style glob to scope where to look (`"arches/app/**/*.py"`, `"src/auth/**"`). Comma-combine; prefix `!` to exclude. Filters before ranking.
+- `page` (number, default 1) — results page. Prefer reformulating `query` over paging deep.
 
-Returns a ranked list of relative file paths (under `results`). Test files are excluded by default — pass `include_tests: true` to include them.
+Output: one result per line as `<path> [tok1, tok2, ...]`. The bracketed tokens are the indexed name tokens that matched, sorted rarest-first — the leftmost are the highest-signal identifiers (rare enough that grepping them reliably finds usages). If your query words don't appear in any `[matched]` list, the concept isn't in any declared name (it lives in bodies/strings/templates) — switch to grep rather than reformulating GO.
 
-### `trace-deps`
+### `get-structure` (GS)
+
+Drill into a single known file. This is the right tool for **"what's in this file"**, **"who does this file import"**, and **"who uses this file / who calls this symbol"** — no separate call needed.
 
 Required params:
-- `file_path` (string)
+- `file_path` (string) — the file to inspect.
 
 Optional params:
-- `direction`: `imports` | `importers` | `both` (default `both`)
-- `depth`: `1-3` (default `1`)
+- `view` (string, default `full`) — which sections to return. `full` = all four below. Narrow to one section to save bytes: `symbols` (shape only, no callers), `imports` (outbound only), `importers` (inbound only), `callers` (per-symbol cross-file callers, expanded).
+- `match` (string) — filter all sections by name. Substring (case-insensitive) by default; `|` ORs substrings (`"resource|tile"`); wrap in slashes for regex (`"/^handle/"`). Use on god-files to avoid a wall of output.
 
-Returns transitive dependency relationships and lightweight metadata per file: path, language, exports (up to 10), and `importedByCount`.
+The `full` view returns four compact sections:
+- **Symbols** — top-level symbols + per-class methods (`kind name [startLine-endLine]`, with `extends`/`implements`). Each exported symbol is annotated with its cross-file callers (inline if one, a newline-per-caller block if several). For huge files (>20 symbols, no `match`), symbols are reordered most-used-first and truncated to the top 15.
+- **Imports** — 1-hop internal outbound dependencies (external/library imports stripped).
+- **Importers** — 1-hop reverse: files in this repo that import this one (capped at 20).
+- (Callers are shown inline with symbols in `full`; request `view: "callers"` for the expanded per-symbol form.)
 
-### `get-structure`
+Use this AFTER `get-overview` surfaces a candidate file. Prefer it over `Read` when you need shape, neighbors, or usage — reach for `Read` only for implementation details inside a method body.
 
-Required params:
-- `file_path` (string)
-
-Returns a compact text block describing the file's structure:
-- Header line with relative path, line count, and `importedBy` count
-- `Symbols:` section — one symbol per line with `kind name [startLine-endLine]`, methods indented under their parent class, plus `extends` / `implements` clauses where applicable
-- `Imports:` section — internal repo paths only (external/library imports stripped). If a file has more than 15 internal imports, only the count is shown with a pointer to use `trace-deps` for the full list.
-- `Next:` pointer suggesting the natural follow-up call (`trace-deps` for importers, `trace-impact` on a symbol, or `Read` for implementation).
-
-Use this AFTER `get-overview` surfaces a candidate file, to decide whether to open it. Prefer this over `Read` when you only need shape or imports.
-
-### `trace-impact`
-
-Required params:
-- `symbol` (string)
-
-Optional params:
-- `file` (string) — disambiguate when symbol appears in multiple files
-- `depth` (1-10, default 3) — max transitive depth to trace
-
-Returns all symbols that directly or transitively depend on the target (with relationship types: `calls`, `extends`, `implements`), full dependency chain paths, summary counts, and affected files list.
-
-Use this to locate where a symbol is defined and find every caller, implementor, and extender without opening their files. Also useful for blast-radius checks before a refactor.
-
-**Confidence notes:**
-- `calls` edges are resolved cross-file for named function/constant calls — if `login` in `auth.ts` calls `hashPassword` exported from `utils.ts`, that edge is fully qualified and will appear in impact results.
-- Member expression calls (`this.method()`, `api.method()`) collapse to the property name only and are not cross-file resolved — they will not appear in impact results unless a same-file symbol matches the name.
+**Caller-resolution confidence:**
+- `calls` edges are resolved cross-file for named function/constant calls — if `login` in `auth.ts` calls `hashPassword` exported from `utils.ts`, that edge is fully qualified and appears in the callers.
+- Member-expression calls (`this.method()`, `api.method()`) collapse to the property name and are not cross-file resolved — they won't appear unless a same-file symbol matches the name.
 - Nested functions one level deep inside components/functions are indexed (e.g. `UserProfile.handleSubmit`). Deeper closures are not.
 - Inheritance (`extends`/`implements`) chains are fully resolved.
 
@@ -231,7 +219,7 @@ Once the daemon is running, the index stays current automatically — no restart
 | > 30 | Full rebuild in background |
 | Git HEAD changed | Full rebuild always |
 
-During a full rebuild, tool calls are served from the previous snapshot and a `_indexStatus: "rebuilding"` field is added to responses. Changes that arrive mid-rebuild are collected and applied as a follow-up patch — no changes are silently dropped.
+During a full rebuild, tool calls are served from the previous snapshot. Changes that arrive mid-rebuild are collected and applied as a follow-up patch — no changes are silently dropped.
 
 ---
 
@@ -259,5 +247,5 @@ To force a fresh index for a single run, pass `--no-cache`. To wipe everything f
 3. Hidden directories and files over 1 MB are skipped by default.
 4. Barrel detection (TS/JS only) uses re-export ratio; non-TS/JS barrel-style files are not detected.
 5. Swift and Dart are not indexed — they have no extension mapping and are not walked.
-6. `trace-impact` call edges: member expression calls (`this.method()`, `api.method()`) are not cross-file resolved — these callers will not appear in impact results. Named function calls matched to an import are fully resolved.
+6. `get-structure` caller edges: member-expression calls (`this.method()`, `api.method()`) are not cross-file resolved — these callers won't appear under a symbol. Named function calls matched to an import are fully resolved.
 7. The daemon is per-project and per-machine. Each project root gets its own daemon process and its own in-memory index — there's no sharing across projects. And the daemon binds to `127.0.0.1` only, so two machines accessing the same project (e.g. via NFS) each spin up a separate daemon.

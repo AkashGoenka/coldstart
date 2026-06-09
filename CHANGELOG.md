@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed (BREAKING — warrants a major version bump on release)
+- **Tool surface reduced from 4 tools to 2: `get-overview` + `get-structure`.** The `trace-deps` and `trace-impact` tools were removed; their capabilities are folded into `get-structure`. A single file-scoped `get-structure` call now returns symbols (with per-symbol cross-file callers), 1-hop outbound imports, and reverse importers.
+  - `get-overview`: `domain_filter` renamed to `query` (the old name is still accepted as a deprecated alias). Removed the `with_importers` and `callers_for` params — reverse context now lives in `get-structure`. Added `page`. Default `max_results` is 10.
+  - `get-structure`: `view` now takes `full` (default) / `symbols` / `imports` / `importers` / `callers` (was `symbols` / `imports` / `both`). `full` returns symbols + imports + importers + inline callers in one call; huge files (>20 symbols, no `match`) are reordered most-used-first and truncated to the top 15. `match` now supports `|` to OR substrings.
+  - Output: `get-overview` now renders results as `<path> [matched-tokens]`; the `[matched]` display shows only tokens driven by the literal query (synonym-driven matches still count for ranking but are suppressed from the display).
+  - Dropped the per-call `_indexStatus: "rebuilding"` field (hot-path byte savings).
+- **Agent rules rewritten** (`init` output / CLAUDE.md) around the 2-tool model — "who uses this file / who calls this symbol → get-structure, not grep".
+
+## [1.5.0] - 2026-05-22
+
+Resolver-focused release: coldstart reconstructs more of the import/reference graph across more languages, so `get-overview`, `trace-deps`, and `trace-impact` surface relationships that convention-over-configuration frameworks previously hid. All changes are backward-compatible — no config or API changes; reindex happens automatically on startup.
+
+### Added
+- **Broader convention-aware resolution.** Frameworks wire much of their coupling by convention (name→file rules resolved at runtime), leaving no import text to follow. This release teaches coldstart those conventions so the edges show up in the graph:
+  - **Rails** — synthetic edges for `has_many` / `belongs_to` / `has_one` / `has_and_belongs_to_many` associations (gated to `app/models/`), `config/routes.rb` resource/route → controller edges, and bidirectional controller↔view folder pairing.
+  - **Ruby constant autoload** — nesting-aware constant resolution following Ruby's lexical `Module.nesting` lookup. A bare `Invite` inside `module Members` now resolves to `Members::Invite` (e.g. `app/models/members/invite.rb`) instead of missing it or binding to a top-level `Invite` homonym. Same technique as Packwerk's `ConstantResolver` and Shopify's Rubydex.
+  - **C# / PHP / Python** — additional convention edges (DI/container resolution, framework reference patterns) and a Python WSGI/ASGI bucket split.
+- **JVM same-package short-name qualification (Java + Kotlin).** Bare type references to classes in the same package are now qualified to their fully-qualified name and resolved, recovering intra-package edges that short-name references previously dropped.
+- **`trace-impact` call-site line numbers.** `trace-impact` now reports the exact line of each caller/implementor/extender, so you can jump straight to the reference rather than re-scanning the file.
+
+### Changed
+- **Resolver hygiene** — consistent Rails fileId conventions and the Python WSGI/ASGI bucket split, plus per-specifier synthetic-edge counts surfaced in `--probe` output for easier auditing.
+
+### Scope & non-goals
+- Resolution stays deliberately lightweight: constant/type references only — no method-dispatch tracing, `constantize`/reflection, or polymorphic resolution (the runtime-dynamic tail that's genuinely unrecoverable statically). coldstart is an evidence ranker for navigation, not a replacement for a language server.
+
 ## [1.4.4] - 2026-05-13
 
 ### Changed

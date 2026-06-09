@@ -25,12 +25,11 @@ function out(msg: string): void {
 
 const RULES_CONTENT = `# Codebase navigation — coldstart MCP tools
 
-You have 4 MCP tools (\`get-overview\`, \`get-structure\`, \`trace-deps\`, \`trace-impact\`).
-Reach for them before Read/Grep/Glob/Bash. Per-tool details are in the tool descriptions — these are the cross-tool rules:
+You have 2 MCP tools: \`get-overview\` (GO) and \`get-structure\` (GS). Per-tool guidance lives in each tool's description and response footer; the rules below are cross-tool only:
 
-- **Typical flow:** \`get-overview\` → \`get-structure\` (one promising file) → \`trace-deps\` / \`trace-impact\` to expand → \`Read\` only when you need implementation.
+- **"Who uses this file / who calls this symbol?" → GS, not grep.** GS default (\`view: "full"\`) returns importers + per-symbol cross-file callers in one call. Don't bash-grep the repo for a symbol name to find call sites — call GS on the file that owns it.
+- **grep is a peer for content, not declared names or indexed call sites.** Use it for: string literals, runtime/dynamic dispatch through strings, and content inside non-code files (templates, SQL, config). For declared names (filenames, paths, exported symbols), GO is cheaper. For call sites of an indexed symbol, GS gives you the answer.
 - **Stop when data is sufficient.** Don't re-query to confirm what you already found.
-- **Fall back to grep** only for string literals, exact call sites, or dynamic dispatch — not as your default discovery method.
 `;
 
 const MDC_FRONTMATTER = `---

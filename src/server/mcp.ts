@@ -8,9 +8,7 @@ import {
 import type { IndexContext } from '../index-manager.js';
 import {
   handleGetOverview,
-  handleTraceDeps,
   handleGetStructure,
-  handleTraceImpact,
 } from './tools.js';
 
 // ---------------------------------------------------------------------------
@@ -20,39 +18,60 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'get-overview',
     description:
-      'Locate files in the codebase by keyword, symbol name, filename, or path tokens. Returns a ranked list of relative file paths — nothing else.\n\n' +
-      'This is your primary entry point. Use it BEFORE Read/Grep/Glob/Bash when you need to find which files are relevant to a task.\n\n' +
-      'INDEXING: tokens come from directory path segments, filenames, and exported symbol names. Both split tokens AND lowercased compounds are indexed (e.g. "UsersPage" → "users" + "userspage"). You can query camelCase/PascalCase directly — do not decompose it yourself.\n\n' +
-      'PAGE SIZE: `max_results` is 7. If the right file is not in the top 7, your query is wrong — refine it with different keywords, synonyms via `[a|b]`, or a more specific token. Pagination almost never helps.\n\n' +
-      'TEST FILES: excluded by default. Pass `include_tests: true` if your task is about test/automation code.\n\n' +
-      'FRAMEWORK CONVENTION FILES (page.tsx, route.ts, layout.tsx): query by directory name — the filename is generic, the directory uniquely identifies them.\n\n' +
-      'NEXT STEPS after get-overview: to inspect a specific candidate file (its symbols + 1-hop imports), call `get-structure` on its path. For reverse lookups (who imports this file), use `trace-deps` with `direction: "importers"`. For symbol-level callers/implementors, use `trace-impact`. Avoid reading source files just to check structure — these tools return that as structured data.',
+      'Locate files by matching `query` against DECLARED NAMES — filenames, path segments, exported symbols. Reach for GO BEFORE Read/Grep/Glob when finding which files are relevant.\n\n' +
+      'OUTPUT: `<path> [tok1, tok2, ...]` per result. Bracketed tokens are the matched name tokens, rarest-first (leftmost = highest signal).\n\n' +
+      'CAPABILITIES:\n' +
+      '- Naming-variant tolerant — case, separators, plural ≡ singular. `LoadStaging` ≡ `load_staging` ≡ `load-staging`; `tile` ≡ `tiles`. Pass the concept; do NOT grep-alternate spellings.\n' +
+      '- Multi-concept — `auth payment` (AND), `[auth|login|jwt] payment` (OR), plus a small built-in synonym set (auth/login/jwt, search/find/query, message/post/chat).\n' +
+      '- `path: "arches/app/**/*.py"` — glob scope; comma-combine; `!` to exclude.\n' +
+      '- `include_tests: true` — opt in to tests (excluded by default).\n\n' +
+      'DOES NOT MATCH:\n' +
+      '- File body content (comments, docstrings, strings, HTML/template, SQL) → grep.\n' +
+      '- Import specifiers (by design).\n' +
+      '- Nested symbols → use `get-structure`.\n\n' +
+      'AFTER THE RESULT:\n' +
+      '1. Path looks right → `get-structure` on it. Default returns symbols + imports + per-symbol callers + importers in one shot — that is your "who uses this" answer.\n' +
+      '2. Leading `[matched]` token names your concept but the path is off → re-call GO with that token (~10× cheaper than bash-grep).\n' +
+      '3. Query words missing from every `[matched]` list → concept lives in body content; grep, scoped by file extension.\n\n' +
+      'FRAMEWORK CONVENTION FILES (page.tsx, route.ts, __init__.py): query by directory name — the filename is generic.',
     inputSchema: {
       type: 'object',
       properties: {
-        domain_filter: {
+        query: {
           type: 'string',
-          description: 'One or more keywords relevant to your task. Bare words are independent concepts (AND logic). Bracket groups are synonyms (OR within): "[auth|login|jwt] payment". Accepts camelCase ("UsersPage") and partial matches ("workspace" matches "workspaces"). If results are missing your target, retry with the codebase\'s own terms (e.g. "post"→"Message", "edit"→"Update").',
+          description: 'Concept tokens for the thing you are looking for. Bare words = AND across concepts; `[a|b]` = OR within a synonym group. camelCase accepted. Designed to be re-called: lift a rare token from a prior result\'s `[matched]` list into the next `query`. If `[matched]` lists do not contain your query words, GO does not index where this concept lives (try grep) — not "the query is wrong".',
         },
         max_results: {
           type: 'number',
-          description: 'Page size, default 7. Do not increase this to "see more" — if the right file is not in the top 7, refine the query instead.',
+          description: 'Page size, default 10. The top results are the best-scored declared-name matches; reformulate `query` before paging deep.',
         },
         include_tests: {
           type: 'boolean',
           description: 'Include test and automation files. Default false.',
         },
+        path: {
+          type: 'string',
+          description: 'Minimatch-style glob to scope where to look (e.g. "arches/app/**/*.py", "src/auth/**", "**/*.htm"). Comma-separate to combine; prefix with "!" to exclude (e.g. "src/**,!**/legacy/**"). Supports `**`, `*`, `?` and `!` negation; brace `{a,b}` and char-class `[abc]` are NOT supported. Filters before ranking, so a focused glob produces sharper results than a broad query. If a path filter is supplied but matches no candidate files you will see `excluded_by_path` and `path_filter` on the response — re-check syntax there.',
+        },
+        page: {
+          type: 'number',
+          description: 'Results page (default 1). Prefer reformulating `query` over paging.',
+        },
       },
-      required: ['domain_filter'],
+      required: ['query'],
     },
   },
   {
     name: 'get-structure',
     description:
-      'Drill into a specific file: returns its symbols (name, kind, line range, extends/implements) and its 1-hop internal imports as a compact text block. Use this AFTER get-overview surfaces a candidate file, to decide whether to open it in full.\n\n' +
-      'Output is compact text, not JSON: one symbol per line, methods indented under their parent class. Library/external imports are stripped — only internal repo paths are shown.\n\n' +
-      'Prefer this over Read when you only need shape or imports. Reach for Read when you need actual implementation details.\n\n' +
-      'If you have called get-structure on 5+ files for one question, you are enumerating — switch to trace-deps (file graph) or trace-impact (symbol graph) to expand in one call instead of opening more files one-by-one.',
+      'Drill into a known file. Returns four sections as compact text:\n' +
+      '- Symbols — top-level + per-class methods (name, kind, line range, extends/implements). With cross-file callers attached per exported symbol (inline if 1 caller; newline-per-caller block if ≥2). For huge files (>20 symbols, no `match`), symbols are reordered by caller count (most-used first) and truncated to top 15.\n' +
+      '- Imports — 1-hop internal outbound dependencies (library imports stripped).\n' +
+      '- Importers — 1-hop reverse: files in this repo that import this one.\n' +
+      'Use this AFTER get-overview surfaces a candidate file. This is the right tool for "who uses this file" / "who calls this symbol" — no separate call needed.\n\n' +
+      '`view` controls which sections you get (default `full` = all four). `symbols`, `imports`, `importers`, `callers` each return one section in isolation when you want a byte-light answer.\n\n' +
+      'For god-files (large classes, large routers, large config modules), pass `match` to filter symbols/imports/importers/callers to one area — e.g. `match: "auth"` or `match: "/^handle/"`. Substring is case-insensitive; wrap in slashes for regex.\n\n' +
+      'Prefer this over Read when you need shape, neighbors, or usage. Reach for Read only for implementation details inside a method body. If you have called get-structure on 5+ files for one question, you are enumerating — go back to GO with a sharper `path` glob or a different concept token instead.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -60,62 +79,17 @@ export const TOOL_DEFINITIONS = [
           type: 'string',
           description: 'Relative path to the file (e.g. "src/auth/service.ts"). Suffix matches are accepted.',
         },
-      },
-      required: ['file_path'],
-    },
-  },
-  {
-    name: 'trace-deps',
-    description:
-      'Who depends on this file? Lists every file that imports it, directly or transitively. Reach for this BEFORE grepping for import paths or opening files just to check their dependents.\n\n' +
-      'Also accepts the outgoing direction (what this file imports) — most useful with depth 2-3 for transitive reach. For a file\'s direct 1-hop imports, get-structure already returns them inline.\n\n' +
-      'Secondary use — blast-radius: before changing a file, list its importers to scope what\'s affected.\n\n' +
-      'Default depth 1; raise to 2-3 for transitive reach.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        file_path: {
+        match: {
           type: 'string',
-          description: 'Relative path to the file (e.g. "src/auth/service.ts"). Suffix matches are accepted.',
+          description: 'Filter all sections by name. Substring (case-insensitive) by default; use `|` to OR substrings (`match: "resource|tile"`); wrap in slashes for regex (`match: "/^handle/"`). Use this on large/god-files to avoid a wall of output — e.g. `match: "tile"` on a big models.py reduces output to just tile-related symbols, their callers, and matching imports/importers.',
         },
-        direction: {
+        view: {
           type: 'string',
-          enum: ['imports', 'importers', 'both'],
-          description: 'Which direction to trace (default: "both").',
-        },
-        depth: {
-          type: 'number',
-          description: 'Levels of transitive deps to include (1-3, default 1).',
+          enum: ['full', 'symbols', 'imports', 'importers', 'callers'],
+          description: 'Which sections to return. Default "full" = symbols (with inline callers) + imports + importers. Use one of the narrower views to halve or quarter the output when you know what you need: "symbols" (shape only, no callers), "imports" (outbound only), "importers" (inbound only), "callers" (per-symbol cross-file callers in expanded form, no symbol shape).',
         },
       },
       required: ['file_path'],
-    },
-  },
-  {
-    name: 'trace-impact',
-    description:
-      'Locate where a symbol is defined and find every caller, implementor, and extender. Use this whenever you have an exact function/class/constant name — to jump to its definition, find its callsites, or trace inheritance chains. The response always includes `target.file` and `target.line` for the definition site, even when there are zero callers.\n\n' +
-      'This is your fastest path to "where is X defined" and "who uses X" — reach for it BEFORE grepping `def foo`, `class Foo`, or `FOO_CONSTANT`. One call returns the definition plus the full caller/implementor set, which matters most for interface methods, listener/handler hooks, and cross-cutting concerns where callsites are scattered.\n\n' +
-      'Also accepts a Java/Kotlin annotation name (e.g. `Transactional`, `OnUserRegistered`): if no symbol matches by name, the response lists every symbol bearing `@<name>` as `annotatedSymbols`. Use this instead of grepping for `@SomeAnnotation`.\n\n' +
-      'Secondary use — blast-radius: when you\'re about to change a symbol, the same response tells you what depends on it.\n\n' +
-      'Limitations: (1) only top-level and one-level-nested symbols are indexed. (2) If `impacted` comes back empty, the response includes a file-level fallback and an explicit "Defined at" note — use that, do not retry with grep. (3) Inheritance chains (extends/implements) are the most reliable signal.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        symbol: {
-          type: 'string',
-          description: 'Symbol name (e.g. "validateToken", "AuthService", "UserDTO").',
-        },
-        file: {
-          type: 'string',
-          description: 'Optional file path to disambiguate when the symbol name appears in multiple files.',
-        },
-        depth: {
-          type: 'number',
-          description: 'Max traversal depth (1–10, default 3).',
-        },
-      },
-      required: ['symbol'],
     },
   },
 ] as const;
@@ -152,31 +126,19 @@ export function registerToolHandlers(
     switch (name) {
       case 'get-overview':
         result = handleGetOverview(index, {
-          domain_filter: params['domain_filter'] as string | undefined,
+          query: (params['query'] ?? params['domain_filter']) as string | undefined,
           max_results: params['max_results'] as number | undefined,
           include_tests: params['include_tests'] as boolean | undefined,
-        });
-        break;
-
-      case 'trace-deps':
-        result = handleTraceDeps(index, {
-          file_path: (params['file_path'] ?? params['path'] ?? params['file']) as string,
-          direction: params['direction'] as 'imports' | 'importers' | 'both' | undefined,
-          depth: params['depth'] as number | undefined,
+          path: params['path'] as string | undefined,
+          page: params['page'] as number | undefined,
         });
         break;
 
       case 'get-structure':
         result = handleGetStructure(index, {
-          file_path: (params['file_path'] ?? params['path'] ?? params['file']) as string,
-        });
-        break;
-
-      case 'trace-impact':
-        result = handleTraceImpact(index, {
-          symbol: params['symbol'] as string,
-          file: params['file'] as string | undefined,
-          depth: params['depth'] as number | undefined,
+          file_path: (params['file_path'] ?? params['file'] ?? params['file_name']) as string,
+          match: params['match'] as string | undefined,
+          view: params['view'] as 'full' | 'symbols' | 'imports' | 'importers' | 'callers' | undefined,
         });
         break;
 
@@ -184,9 +146,9 @@ export function registerToolHandlers(
         result = { error: `Unknown tool: ${name}` };
     }
 
-    if (isRebuilding) {
-      (result as Record<string, unknown>)['_indexStatus'] = 'rebuilding — results from previous snapshot';
-    }
+    // _indexStatus deliberately dropped: per-call byte savings on hot path; if
+    // the agent needs a stale-snapshot warning it is one query away via GO.
+    void isRebuilding;
 
     const isError = 'error' in result;
     const rawText = (result as { __rawText?: string }).__rawText;
