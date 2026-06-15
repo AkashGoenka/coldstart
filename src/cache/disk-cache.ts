@@ -2,8 +2,9 @@ import { readFile, writeFile, mkdir, access, readdir, rm } from 'node:fs/promise
 import { join, resolve, basename } from 'node:path';
 import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
-import type { CodebaseIndex, CacheMeta } from '../types.js';
+import type { CodebaseIndex, CacheMeta, IndexedFile } from '../types.js';
 import { CACHE_VERSION, CACHE_TTL_MS } from '../constants.js';
+import { buildContentTokenPostings, buildContentPresenceIndex } from '../indexer/content-tokens.js';
 
 const DEFAULT_CACHE_DIR = join(homedir(), '.coldstart', 'indexes');
 const FILES_CHUNK_SIZE = 5000;
@@ -267,6 +268,14 @@ function deserializeIndex(plain: SerializedIndex): CodebaseIndex {
   const outEdges = new Map<string, string[]>(Object.entries(plain.outEdges));
   const inEdges = new Map<string, string[]>(Object.entries(plain.inEdges));
   const tokenDocFreq = new Map<string, number>(Object.entries(plain.tokenDocFreq ?? {}));
+  // Derived, not serialized: per-file contentTokens round-trip through the
+  // files chunks; rebuilding the postings here is a cheap single pass.
+  const contentTokenPostings = buildContentTokenPostings(
+    files.values() as Iterable<IndexedFile>,
+  );
+  const contentPresenceIndex = buildContentPresenceIndex(
+    files.values() as Iterable<IndexedFile>,
+  );
 
   return {
     rootDir: plain.rootDir,
@@ -278,5 +287,7 @@ function deserializeIndex(plain: SerializedIndex): CodebaseIndex {
     outEdges,
     inEdges,
     tokenDocFreq,
+    contentTokenPostings,
+    contentPresenceIndex,
   };
 }

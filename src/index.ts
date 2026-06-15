@@ -26,6 +26,7 @@ import { addCSharpSyntheticEdges } from './indexer/csharp-synthetic.js';
 import { addDjangoSyntheticEdges } from './indexer/django-synthetic.js';
 import { buildGraph } from './indexer/graph.js';
 import { buildFileDomains, isTestPath } from './indexer/tokenize.js';
+import { buildContentTokenPostings, buildContentPresenceIndex } from './indexer/content-tokens.js';
 import { buildSymbolEdges } from './indexer/symbol-edges.js';
 import { getGitHead } from './indexer/git.js';
 import { loadCachedIndex, saveCachedIndex } from './cache/disk-cache.js';
@@ -166,6 +167,7 @@ export async function buildIndex(
             containerResolutions: parsed.containerResolutions,
             djangoConventionRefs: parsed.djangoConventionRefs,
             submoduleImportCandidates: parsed.submoduleImportCandidates,
+            contentTokens: parsed.contentTokens,
           };
           indexedFiles.push(file);
           langCount[wf.language] = (langCount[wf.language] ?? 0) + 1;
@@ -249,6 +251,9 @@ export async function buildIndex(
     }
   }
 
+  const contentTokenPostings = buildContentTokenPostings(indexedFiles);
+  const contentPresenceIndex = buildContentPresenceIndex(indexedFiles);
+
   const gitHead = await getGitHead(rootDir);
   const elapsed = ((Date.now() - start) / 1000).toFixed(1);
   log(quiet, `[coldstart] Indexed ${indexedFiles.length} files in ${elapsed}s`);
@@ -270,6 +275,8 @@ export async function buildIndex(
     outEdges,
     inEdges,
     tokenDocFreq,
+    contentTokenPostings,
+    contentPresenceIndex,
     indexedAt: Date.now(),
     gitHead,
   };
@@ -643,6 +650,26 @@ async function main(): Promise<void> {
     const { runRestart } = await import('./restart.js');
     await runRestart();
     return;
+  }
+
+  // CLI query surface — pure-reader `go`/`gs`, plus single-writer `index` prep.
+  // These bypass the daemon entirely: load the on-disk cache, run the same
+  // handlers the MCP server uses, print, exit. (docs/cli-skill-spec.md)
+  if (process.argv[2] === 'go') {
+    const { runGo } = await import('./cli.js');
+    process.exit(await runGo(process.argv.slice(3), buildIndex));
+  }
+  if (process.argv[2] === 'gs') {
+    const { runGs } = await import('./cli.js');
+    process.exit(await runGs(process.argv.slice(3), buildIndex));
+  }
+  if (process.argv[2] === 'find') {
+    const { runFind } = await import('./cli.js');
+    process.exit(await runFind(process.argv.slice(3), buildIndex));
+  }
+  if (process.argv[2] === 'index') {
+    const { runIndexPrep } = await import('./cli.js');
+    process.exit(await runIndexPrep(process.argv.slice(3), buildIndex));
   }
 
   const { root: cliRoot, rootExplicit, excludes, includes, cacheDir, quiet, noCache, daemon, noDaemon, probe } = parseArgs(process.argv);

@@ -13,6 +13,7 @@ import { parseFile, buildFileId } from '../src/indexer/parser.js';
 import { resolveImports } from '../src/indexer/resolvers/index.js';
 import { buildGraph } from '../src/indexer/graph.js';
 import { buildFileDomains, isTestPath } from '../src/indexer/tokenize.js';
+import { buildContentTokenPostings, buildContentPresenceIndex } from '../src/indexer/content-tokens.js';
 import { handleGetOverview, handleGetStructure } from '../src/server/tools.js';
 import type { CodebaseIndex, IndexedFile, SymbolEdge, DomainEvidence } from '../src/types.js';
 
@@ -53,6 +54,7 @@ async function buildTestIndex(rootDir: string): Promise<CodebaseIndex> {
           isTestFile: isTestPath(wf.relativePath),
           symbols: parsed.symbols,
           reexportRatio: parsed.reexportRatio,
+          contentTokens: parsed.contentTokens,
         };
         indexedFiles.push(file);
       } catch {
@@ -157,6 +159,8 @@ async function buildTestIndex(rootDir: string): Promise<CodebaseIndex> {
     outEdges,
     inEdges,
     tokenDocFreq,
+    contentTokenPostings: buildContentTokenPostings(filesMap.values()),
+    contentPresenceIndex: buildContentPresenceIndex(filesMap.values()),
     indexedAt: Date.now(),
     gitHead: '',
   };
@@ -493,13 +497,16 @@ describe('GS `match` filter', () => {
     expect(text).not.toContain('loginUser');
   });
 
-  it('match with no symbol hits reports the "0 of N match" summary', () => {
+  it('match with no symbol hits falls back to the full symbol list (flagged)', () => {
+    // A "0 symbols match" result's only possible follow-up is re-calling
+    // without the filter — so GS returns the unfiltered view instead.
     const result = handleGetStructure(index, {
       file_path: 'auth/service.ts',
       match: 'nonexistentxyz',
     }) as any;
     const text = result.__rawText as string;
-    expect(text).toMatch(/Symbols: 0 of \d+ match "nonexistentxyz"/);
+    expect(text).toMatch(/\[0 of \d+ symbols match "nonexistentxyz" — showing all symbols instead:\]/);
+    expect(text).toContain('loginUser'); // full list rendered despite the miss
   });
 });
 

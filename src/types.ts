@@ -96,6 +96,7 @@ export interface IndexedFile {
   containerResolutions?: Array<{ targetClass: string; line: number }>;  // PHP only: DI container class references
   djangoConventionRefs?: Array<{ kind: string; value: string }>;  // Python only: Django convention string refs (middleware, auth backends, etc.)
   submoduleImportCandidates?: string[];  // Python only: `from pkg import sub` bonus specifiers — resolve to an edge if a file exists, but a miss is NOT counted as unresolved (most are symbol imports)
+  contentTokens?: Record<string, number>;  // shaped full-body tokens → provenance bits (TOKEN_IN_CODE | TOKEN_IN_STRING); absent for excluded files (vendored, markdown)
 }
 
 export interface Edge {
@@ -113,6 +114,8 @@ export interface CodebaseIndex {
   outEdges: Map<string, string[]>;       // fileId → [fileId] (imports)
   inEdges: Map<string, string[]>;        // fileId → [fileId] (importers)
   tokenDocFreq: Map<string, number>;     // token → number of files containing that token (for IDF scoring)
+  contentTokenPostings: Map<string, string[]>;  // rare content token (df 2–5) → fileIds; derived from files' contentTokens, rebuilt on load/patch
+  contentPresenceIndex: Map<string, { n: number; files: string[] }>;  // lowercased content token → df + first files; derived, rebuilt on load/patch (GO content-presence fallback)
   indexedAt: number;                    // Date.now()
   gitHead: string;                      // HEAD commit hash or ''
 }
@@ -138,6 +141,7 @@ export interface ParsedFile {
   containerResolutions?: Array<{ targetClass: string; line: number }>;  // PHP only: DI container class references
   djangoConventionRefs?: Array<{ kind: string; value: string }>;  // Python only: Django convention string refs
   submoduleImportCandidates?: string[];  // Python only: `from pkg import sub` bonus specifiers (see IndexedFile)
+  contentTokens?: Record<string, number>;  // shaped full-body tokens → provenance bits (see IndexedFile)
 }
 
 export interface CacheMeta {

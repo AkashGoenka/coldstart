@@ -1,5 +1,15 @@
-import type { CodebaseIndex, IndexedFile } from '../types.js';
+import { readFileSync } from 'node:fs';
+import type { CodebaseIndex, IndexedFile, SymbolNode } from '../types.js';
 import { IDF_RARITY_THRESHOLD } from '../constants.js';
+import {
+  extractContentTokens,
+  deriveInPageTokenLinks,
+  deriveRelatedFiles,
+  deriveNameEchoFiles,
+  isShapedToken,
+  RELATED_FILES_CAP,
+  type RelatedFile,
+} from '../indexer/content-tokens.js';
 import {
   TEST_QUERY_KEYWORDS,
   parseConceptGroups,
@@ -96,6 +106,61 @@ function buildResultEntry(
   };
 }
 
+// Annotate import links AMONG the shown results (in-page only — bounded by
+// page size, no hub fan-out; arches measurement: median 2 links/page). An edge
+// between two shown files is the same structural evidence get-structure would
+// deliver one call later; surfacing it at wall-1 hands the agent its
+// read-trigger evidence (gold-timeline: GS edges are the dominant read
+// trigger) without a turn spent.
+function annotateInPageImports(
+  results: Record<string, unknown>[],
+  index: CodebaseIndex,
+): void {
+  const pageIds = new Set(results.map(r => r.path as string));
+  for (const r of results) {
+    const importers = (index.inEdges.get(r.path as string) ?? []).filter(id =>
+      pageIds.has(id),
+    );
+    if (importers.length === 0) continue;
+    const names = importers.slice(0, 2).map(id => id.split('/').pop());
+    r.importedByShown =
+      names.join(', ') +
+      (importers.length > 2 ? ` +${importers.length - 2}` : '');
+  }
+}
+
+// Annotate rare-content-token links AMONG the shown results. The pair shares
+// identifier/string tokens that are rare corpus-wide (df 2–5) but have NO
+// import edge — exactly the relations the import graph cannot see (migrations
+// ↔ models, config-by-name, cross-language pairs). Display-only; the line
+// names the shared token because a relation is the actionable unit — bare
+// filenames in context stay inert (q16: wall-1 exposure was universal in all
+// 21 runs and inert in 16).
+const LINK_TOKENS_SHOWN = 3;
+function annotateInPageTokenLinks(
+  results: Record<string, unknown>[],
+  index: CodebaseIndex,
+  queryTokens: string[],
+): void {
+  const pageIds = results.map(r => r.path as string);
+  const links = deriveInPageTokenLinks(pageIds, index, queryTokens);
+  if (links.length === 0) return;
+  const byPath = new Map(results.map(r => [r.path as string, r]));
+  for (const link of links) {
+    const host = byPath.get(link.a);
+    if (!host) continue;
+    const otherIds = [link.b, ...(link.alsoB ?? [])];
+    const otherNames = otherIds.slice(0, 2).map(id => id.split('/').pop()).join(', ') +
+      (otherIds.length > 2 ? ` +${otherIds.length - 2}` : '');
+    const shown = link.tokens.slice(0, LINK_TOKENS_SHOWN).map(t => `\`${t}\``).join(', ');
+    const extra = link.tokens.length - LINK_TOKENS_SHOWN;
+    const line = `~ shares ${shown}${extra > 0 ? ` +${extra}` : ''} with ${otherNames} (also listed)`;
+    const existing = host.tokenLinks as string[] | undefined;
+    if (existing) existing.push(line);
+    else host.tokenLinks = [line];
+  }
+}
+
 // Factual classification of HOW a file matched, from per-token DomainEvidence
 // (not a role/purpose claim — see [[coldstart-is-evidence-not-classifier]]).
 //   'symbol' — matched only on declared code names (exports/classes/functions)
@@ -142,7 +207,10 @@ function formatMatchedTokens(m: MatchResult, index: CodebaseIndex): string[] {
 function formatResultLine(entry: Record<string, unknown>): string {
   const path = entry.path as string;
   const matched = entry.matched as string[];
-  return `${path} matched: [${matched.join(', ')}]`;
+  const link = entry.importedByShown as string | undefined;
+  return `${path} matched: [${matched.join(', ')}]${
+    link ? ` ← imported by ${link} (also listed)` : ''
+  }`;
 }
 
 const GO_FOOTER =
@@ -151,6 +219,71 @@ const GO_FOOTER =
 // ============================================================================
 // get-overview
 // ============================================================================
+
+// ---------------------------------------------------------------------------
+// Content-presence fallback (option B). For query tokens that match ZERO
+// declared names (where GO is structurally blind), report where the token
+// lives in file BODIES — or, for identifier-shaped tokens only, that it
+// appears nowhere. Characterized on 52 real runs (2026-06-12): 24% of real GO
+// query tokens are declared-name-invisible; clean fires named gold 8/17;
+// absence assertions are valid ONLY for shaped tokens (unshaped words never
+// enter contentTokens, so their absence proves nothing). Display-only.
+// ---------------------------------------------------------------------------
+const CONTENT_PRESENCE_MAX_LINES = 3;
+const CONTENT_PRESENCE_FLOOD = 8; // df above this → count only, never a file list
+
+function deriveContentPresenceLines(
+  rawQuery: string,
+  index: CodebaseIndex,
+): string[] {
+  const presence = index.contentPresenceIndex;
+  if (!presence || presence.size === 0) return [];
+
+  const words: string[] = [];
+  const seen = new Set<string>();
+  for (const w of rawQuery.split(/[\s[\]|,]+/)) {
+    if (w.length < 4 || !/^[A-Za-z_][A-Za-z0-9_.-]*$/.test(w)) continue;
+    const key = w.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    words.push(w);
+  }
+
+  const listed: string[] = [];
+  const absent: string[] = [];
+  const flood: string[] = [];
+  for (const w of words) {
+    const lower = w.toLowerCase();
+    const norm = lower.replace(/[.-]/g, '_');
+    // Skip tokens GO can match: any lexical form present among declared names
+    let declared = false;
+    for (const form of new Set([...expandLexical(lower), ...expandLexical(norm)])) {
+      if ((index.tokenDocFreq.get(form) ?? 0) > 0) {
+        declared = true;
+        break;
+      }
+    }
+    if (declared) continue;
+
+    const entry = presence.get(lower) ?? presence.get(norm);
+    if (entry) {
+      if (entry.n <= CONTENT_PRESENCE_FLOOD) {
+        listed.push(
+          `\`${w}\` matches no declared name but appears in file CONTENT of: ${entry.files.join(', ')}`,
+        );
+      } else {
+        flood.push(
+          `\`${w}\` matches no declared name; found in ${entry.n} files' content — scope with \`path\` or grep`,
+        );
+      }
+    } else if (isShapedToken(w) || isShapedToken(w.replace(/[.-]/g, '_'))) {
+      absent.push(
+        `\`${w}\` appears NOWHERE in indexed file content — this identifier does not exist in the repo; do not grep spelling variants`,
+      );
+    }
+  }
+  return [...listed, ...absent, ...flood].slice(0, CONTENT_PRESENCE_MAX_LINES);
+}
 
 export function handleGetOverview(
   index: CodebaseIndex,
@@ -189,6 +322,7 @@ export function handleGetOverview(
   }
 
   const compiledGlob = pathSpec ? compileGlob(pathSpec) : null;
+  const contentPresenceLines = deriveContentPresenceLines(query, index);
 
   const allTokens = conceptGroups.flat();
   const isTestQuery = include_tests || allTokens.some(t => TEST_QUERY_KEYWORDS.has(t));
@@ -281,6 +415,8 @@ export function handleGetOverview(
     const results = fallbackMatched
       .slice((page - 1) * max_results, page * max_results)
       .map(m => buildResultEntry(m, index));
+    annotateInPageImports(results, index);
+    annotateInPageTokenLinks(results, index, allTokens);
 
     const response: Record<string, unknown> = { filter: query };
 
@@ -304,6 +440,7 @@ export function handleGetOverview(
     response.__rawText = renderOverviewText({
       query,
       results: results,
+      contentPresenceLines,
       fallback: fallbackMatched.length > 0,
       noMatches: fallbackMatched.length === 0,
       truncatedExtra: truncated ? fallbackMatched.length - page * max_results : 0,
@@ -318,6 +455,8 @@ export function handleGetOverview(
   const results = afterB
     .slice((page - 1) * max_results, page * max_results)
     .map(m => buildResultEntry(m, index));
+  annotateInPageImports(results, index);
+  annotateInPageTokenLinks(results, index, allTokens);
 
   const response: Record<string, unknown> = {
     filter: query,
@@ -338,6 +477,7 @@ export function handleGetOverview(
   response.__rawText = renderOverviewText({
     query,
     results,
+    contentPresenceLines,
     fallback: false,
     noMatches: false,
     truncatedExtra: truncated ? afterB.length - page * max_results : 0,
@@ -353,6 +493,7 @@ export function handleGetOverview(
 function renderOverviewText(opts: {
   query: string;
   results: Record<string, unknown>[];
+  contentPresenceLines?: string[];
   fallback: boolean;
   noMatches: boolean;
   truncatedExtra: number;
@@ -369,9 +510,11 @@ function renderOverviewText(opts: {
   if (opts.noMatches) {
     lines.push('[No declared-name matches.]');
   } else {
-    // Group results by match channel. Section order = first appearance, which
-    // preserves global rank: the top-ranked result leads its section and sections
-    // are ordered by their best-ranked member; rank order WITHIN a section is kept.
+    // Group results by match channel. Sections appear in order of their
+    // best-ranked member and rank order is kept WITHIN a section — but the
+    // flattened line order is NOT global rank: a later section's lead can
+    // outrank an earlier section's tail. Anything consuming this text
+    // (hooks, analysis scripts, agents) must not read line order as ranking.
     const SECTION_LABEL: Record<MatchChannel, string> = {
       symbol: 'Matched in code/symbol names:',
       name: 'Matched in file/dir names:',
@@ -391,8 +534,18 @@ function renderOverviewText(opts: {
       const ch = order[i];
       if (i > 0) lines.push('');
       lines.push(SECTION_LABEL[ch]);
-      for (const r of groups.get(ch)!) lines.push('  ' + formatResultLine(r));
+      for (const r of groups.get(ch)!) {
+        lines.push('  ' + formatResultLine(r));
+        const tokenLinks = r.tokenLinks as string[] | undefined;
+        if (tokenLinks) for (const tl of tokenLinks) lines.push('    ' + tl);
+      }
     }
+  }
+
+  if (opts.contentPresenceLines && opts.contentPresenceLines.length > 0) {
+    lines.push('');
+    lines.push('Content presence (query tokens with NO declared-name match, located in file bodies):');
+    for (const l of opts.contentPresenceLines) lines.push('  ' + l);
   }
 
   if (opts.truncatedExtra > 0) {
@@ -408,7 +561,7 @@ function renderOverviewText(opts: {
 
   lines.push('');
   if (opts.noMatches) {
-    lines.push('Next: GO indexes declared names only. For content in templates, SQL, comments, docstrings, config — use grep (scope by file extension).');
+    lines.push('Next: GO indexes declared names only. Check the Content presence lines above (file-body evidence) if present; otherwise grep, scoped by file extension.');
   } else {
     lines.push(GO_FOOTER);
   }
@@ -432,6 +585,7 @@ function attachPathExclusion(
 type GsView = 'full' | 'symbols' | 'imports' | 'importers' | 'callers';
 
 const IMPORTERS_LIST_CAP = 20;
+const BODY_REF_IMPORTERS_CAP = 8;
 // For huge files, show top-K symbols sorted by caller count first; the rest
 // collapse into a tail. Avoids the 60-class wall-of-text problem.
 const SYMBOLS_TOP_K = 15;
@@ -453,6 +607,7 @@ export function handleGetStructure(
     file_path: string;
     match?: string;
     view?: GsView;
+    symbol?: string;
   },
 ): object {
   if (!params.file_path) {
@@ -463,6 +618,17 @@ export function handleGetStructure(
     return { error: `File not found: ${params.file_path}` };
   }
   const [fileId, file] = fileEntry;
+
+  // Grade-2 symbol-body delivery: `--symbol name1,name2` slices the named
+  // method bodies straight from the indexed [startLine,endLine] range so the
+  // agent gets them in ONE call instead of windowing a god-file at guessed
+  // offsets (q22 read graph.py 8× hunting serialize/restore_state). Each slice
+  // is followed by 1-line caller/callee POINTERS (not bodies) so the next hop
+  // is one directed call away. This is the lever; grade-1 (the matched-symbol
+  // line ranges in `find`) only pointed the agent at the offsets.
+  if (params.symbol && params.symbol.trim()) {
+    return renderSymbolSlice(index, fileId, file, params.symbol);
+  }
 
   // Validate `view`: an invalid value (stale client, typo, or a hallucinated
   // name like "outline") would otherwise silently disable EVERY section and
@@ -507,6 +673,7 @@ export function handleGetStructure(
   let totalSymbolCount = 0;
   let filteredSymbolCount = 0;
   let truncatedSymbolCount = 0;
+  let matchMissedSymbols = false;
 
   if (wantSymbols) {
     const baseFiltered = file.symbols
@@ -515,9 +682,16 @@ export function handleGetStructure(
       .sort((a, b) => a.startLine - b.startLine);
     totalSymbolCount = baseFiltered.length;
 
-    const filtered = matchPredicate
+    let filtered = matchPredicate
       ? baseFiltered.filter(s => matchPredicate(s.name))
       : baseFiltered;
+    // Match-miss auto-fallback: a "0 symbols match" result's only possible
+    // follow-up is re-calling without the filter (a measured wasted call).
+    // Return the full view instead, flagged via matchMissedSymbols.
+    if (matchPredicate && filtered.length === 0 && baseFiltered.length > 0) {
+      filtered = baseFiltered;
+      matchMissedSymbols = true;
+    }
     filteredSymbolCount = filtered.length;
 
     // Compute display names + parent class indent (preserves source-order
@@ -553,7 +727,7 @@ export function handleGetStructure(
     // is steering, not browsing.
     if (
       view === 'full' &&
-      !matchPredicate &&
+      (!matchPredicate || matchMissedSymbols) &&
       annotated.length > SYMBOLS_HUGE_FILE_THRESHOLD
     ) {
       const sorted = annotated.slice().sort((a, b) => {
@@ -596,6 +770,8 @@ export function handleGetStructure(
   let importersFiltered = 0;
   let importersExtra = 0;
   let totalImporterCount = 0;
+  let bodyRefImporters: string[] = [];
+  let bodyRefTotal = 0;
   if (wantImporters) {
     const allImporters = buildAllImporters(fileId, index);
     totalImporterCount = allImporters.length;
@@ -605,6 +781,80 @@ export function handleGetStructure(
     importersFiltered = filteredImporters.length;
     importersShown = filteredImporters.slice(0, IMPORTERS_LIST_CAP);
     importersExtra = filteredImporters.length - importersShown.length;
+
+    // Body-reference filter: with `match`, the filename filter alone hides the
+    // files an agent actually wants — files that *reference* the matched
+    // symbol but don't carry it in their path (q16: admin.py registers
+    // models.SpatialView via attribute access; not a call edge, filename
+    // doesn't match → invisible, and the agent reconstructed this set with 25
+    // greps). Scan is REPO-WIDE, not importer-scoped: the cross-language
+    // use-sites this section exists for (a JS file referencing a Python
+    // symbol) import nothing from the target file, so an importer-only scan
+    // misses them — and only a repo-wide scan makes the rendered
+    // exhaustiveness claim true (q16 run-3: the agent held "body-refs =
+    // admin.py + graph.py" at call 11 and still spent 20 calls hunting a JS
+    // frontend that doesn't exist, because nothing said the list was
+    // complete). Shape-gated tokens only, so single-word terms find nothing —
+    // the section is omitted, never rendered as a misleading "0".
+    if (matchPredicate) {
+      const alreadyShown = new Set(importersShown);
+      for (const [p, f] of index.files) {
+        if (p === fileId || alreadyShown.has(p)) continue;
+        const toks = f.contentTokens;
+        if (!toks) continue;
+        for (const k of Object.keys(toks)) {
+          if (matchPredicate(k)) { bodyRefImporters.push(p); break; }
+        }
+      }
+      bodyRefTotal = bodyRefImporters.length;
+      // Source files first — tests are verification, not mechanism.
+      bodyRefImporters = [
+        ...bodyRefImporters.filter(p => !isTestPath(p)),
+        ...bodyRefImporters.filter(isTestPath),
+      ].slice(0, BODY_REF_IMPORTERS_CAP);
+    }
+  }
+
+  // Related files via the content-token channel (full view only). When the
+  // agent passed `match`, scope the source tokens to the matched symbols'
+  // line ranges — the match param is the agent's stated intent, and the echo
+  // lands at the attend-moment (the call right before the region gets Read).
+  // Dedupe is against what THIS payload renders (importsOut/importersShown),
+  // not the raw edge set — a god-file's truncated importer list can hide a
+  // file that the edge set technically contains.
+  let relatedOut: RelatedFile[] = [];
+  if (view === 'full') {
+    const excludeIds = new Set<string>([fileId, ...importsOut, ...importersShown, ...bodyRefImporters]);
+    let sourceTokens = file.contentTokens;
+    if (matchPredicate && !matchMissedSymbols && symbolsOut.length > 0 && index.contentTokenPostings.size > 0) {
+      try {
+        const allLines = readFileSync(file.path, 'utf-8').split('\n');
+        const parts: string[] = [];
+        let taken = 0;
+        for (const s of symbolsOut) {
+          parts.push(allLines.slice(s.startLine - 1, s.endLine).join('\n'));
+          taken += s.endLine - s.startLine + 1;
+          if (taken > 3000) break;
+        }
+        sourceTokens = extractContentTokens(parts.join('\n'), fileId) ?? sourceTokens;
+      } catch { /* unreadable — fall back to file-level tokens */ }
+    }
+    if (sourceTokens && index.contentTokenPostings.size > 0) {
+      relatedOut = deriveRelatedFiles(fileId, sourceTokens, index, excludeIds);
+    }
+    // Name-echo: filenames matching the agent's match terms (df-gated,
+    // separator-insensitive). Regex specs are skipped — terms only.
+    if (params.match && relatedOut.length < RELATED_FILES_CAP) {
+      const spec = params.match.trim();
+      if (!(spec.length >= 2 && spec.startsWith('/') && spec.endsWith('/'))) {
+        const terms = spec.split('|').map(s => s.trim()).filter(s => s.length > 0);
+        const echoExclude = new Set([...excludeIds, ...relatedOut.map(r => r.fileId)]);
+        relatedOut = [
+          ...relatedOut,
+          ...deriveNameEchoFiles(terms, index, echoExclude),
+        ].slice(0, RELATED_FILES_CAP);
+      }
+    }
   }
 
   // Render text.
@@ -616,6 +866,9 @@ export function handleGetStructure(
   if (wantSymbols) {
     if (symbolsOut.length > 0) {
       lines.push('');
+      if (matchMissedSymbols) {
+        lines.push(`[0 of ${totalSymbolCount} symbols match "${params.match}" — showing all symbols instead:]`);
+      }
       lines.push('Symbols:');
       for (const s of symbolsOut) {
         const range = s.startLine === s.endLine ? `[L${s.startLine}]` : `[L${s.startLine}-${s.endLine}]`;
@@ -703,7 +956,38 @@ export function handleGetStructure(
       if (importersExtra > 0) lines.push(`[+${importersExtra} more — narrow with \`match\`]`);
     } else if (matchPredicate && totalImporterCount > 0) {
       lines.push('');
-      lines.push(`Importers: 0 of ${totalImporterCount} match "${params.match}".`);
+      lines.push(`Importers: 0 of ${totalImporterCount} match "${params.match}" by filename.`);
+    }
+    // Body references: the grep-replacement answer to "who uses <match>" —
+    // files whose CONTENT references the matched term even though their
+    // filename doesn't. Repo-wide scan, so the closing exhaustiveness line is
+    // a true claim: absence here = no other indexed file names the term.
+    if (bodyRefImporters.length > 0) {
+      lines.push('');
+      lines.push(`Files referencing "${params.match}" in content (${bodyRefTotal}${bodyRefTotal > bodyRefImporters.length ? `, showing ${bodyRefImporters.length}` : ''}) — use-sites the lists above miss:`);
+      for (const p of bodyRefImporters) lines.push(`  ${p}`);
+      if (bodyRefTotal > bodyRefImporters.length) {
+        lines.push(`  The count (${bodyRefTotal}) is exhaustive over indexed file content — exactly that many files reference "${params.match}" as a named identifier; the list is truncated, narrow \`match\` to see the rest. Do not grep to re-verify.`);
+      } else {
+        lines.push(`  This list is exhaustive over indexed file content: no other file references "${params.match}" as a named identifier. Do not grep to re-verify, and do not hunt for use-sites in other subsystems.`);
+      }
+    }
+  }
+
+  // Related (content-token channel)
+  if (relatedOut.length > 0) {
+    lines.push('');
+    lines.push('Related (shares rare tokens, no import edge — name-reference relations the import graph cannot see):');
+    for (const r of relatedOut) {
+      if (r.viaName) {
+        lines.push(`  ${r.fileId} — filename matches "${r.viaName}"`);
+      } else {
+        const ids = [r.fileId, ...(r.alsoFileIds ?? [])];
+        const names = ids.slice(0, 2).join(', ') + (ids.length > 2 ? ` +${ids.length - 2}` : '');
+        const shown = r.tokens.slice(0, 3).map(t => `\`${t}\``).join(', ');
+        const extra = r.tokens.length - 3;
+        lines.push(`  ${names} — shares ${shown}${extra > 0 ? ` +${extra}` : ''}`);
+      }
     }
   }
 
@@ -719,6 +1003,176 @@ export function handleGetStructure(
     lines.push(nextHint);
   }
 
+  return { __rawText: lines.join('\n') };
+}
+
+// Grade-2 caps. Bodies are the expensive payload, so bound them; pointers are
+// cheap so they stay generous.
+const SLICE_SYMBOL_CAP = 4;      // distinct symbols sliced in one call
+const SLICE_LINE_BUDGET = 450;   // total body lines across all slices
+const SLICE_CALLEE_CAP = 10;     // callee pointers per symbol
+
+// Resolve requested symbol name(s) → SymbolNodes in `file`, tiered so a bare
+// last-segment like `serialize` lands on `Graph.serialize` and never on the
+// substring lookalike `serialized_graph`. Tiers, first non-empty wins per name:
+//   1. exact full name (`Graph.serialize`)        2. exact last segment (`serialize`)
+//   3. case-insensitive substring (last resort, e.g. a typo or partial recall)
+function resolveSliceSymbols(file: IndexedFile, spec: string): SymbolNode[] {
+  const names = spec.split(/[,|]/).map(s => s.trim()).filter(Boolean);
+  const picked = new Map<string, SymbolNode>(); // by symbol id, dedupe
+  for (const q of names) {
+    const ql = q.toLowerCase();
+    const exact = file.symbols.filter(s => s.name.toLowerCase() === ql);
+    const lastSeg = exact.length ? exact
+      : file.symbols.filter(s => s.name.toLowerCase().split('.').pop() === ql);
+    const tier = lastSeg.length ? lastSeg
+      : file.symbols.filter(s => s.name.toLowerCase().includes(ql));
+    for (const s of tier) picked.set(s.id, s);
+  }
+  return [...picked.values()].sort((a, b) => a.startLine - b.startLine);
+}
+
+// In-tool grep fallback for `--symbol` when no declared symbol matches: locate
+// the token(s) in the file body and return the matching line regions with
+// context, so the agent never shells out to grep. Caps keep it byte-light.
+const CONTENT_CONTEXT = 2;     // context lines each side of a match
+const CONTENT_REGION_CAP = 8;  // distinct regions returned
+const CONTENT_LINE_CAP = 70;   // total lines returned
+function renderContentMatch(file: IndexedFile, spec: string, allLines: string[]): object {
+  const terms = spec.split(/[,|]/).map(s => s.trim().toLowerCase()).filter(Boolean);
+  const hitLines: number[] = []; // 0-based
+  for (let i = 0; i < allLines.length; i++) {
+    const low = allLines[i].toLowerCase();
+    if (terms.some(t => low.includes(t))) hitLines.push(i);
+  }
+  if (hitLines.length === 0) {
+    const avail = file.symbols
+      .filter(s => s.isExported || s.kind === 'class' || s.kind === 'function' || s.kind === 'method')
+      .slice(0, 25).map(s => s.name).join(', ');
+    return {
+      __rawText: `${file.relativePath}: no symbol named "${spec}", and the token does not appear in this file's content either.\n` +
+        (avail ? `Declared symbols here: ${avail}${file.symbols.length > 25 ? ', …' : ''}` : 'No top-level symbols indexed in this file.') +
+        '\nThe identifier is not in this file — check the file path, or the value may be injected at runtime from elsewhere.',
+      error: `no symbol or content match for "${spec}"`,
+    };
+  }
+  // Merge nearby hits into regions.
+  const regions: Array<[number, number]> = [];
+  for (const ln of hitLines) {
+    const start = Math.max(0, ln - CONTENT_CONTEXT);
+    const end = Math.min(allLines.length - 1, ln + CONTENT_CONTEXT);
+    const last = regions[regions.length - 1];
+    if (last && start <= last[1] + 1) last[1] = Math.max(last[1], end);
+    else regions.push([start, end]);
+  }
+  const lines: string[] = [
+    `${file.relativePath} (${file.lineCount} lines) — no declared symbol matches "${spec}"; showing ${hitLines.length} content match${hitLines.length === 1 ? '' : 'es'} (in-tool grep, so you don't have to):`,
+  ];
+  let shown = 0;
+  let r = 0;
+  for (const [start, end] of regions) {
+    if (r >= CONTENT_REGION_CAP || shown >= CONTENT_LINE_CAP) {
+      lines.push(`   … [+${regions.length - r} more match regions — narrow \`--symbol\` or read the file]`);
+      break;
+    }
+    r++;
+    lines.push('');
+    for (let i = start; i <= end && shown < CONTENT_LINE_CAP; i++) {
+      lines.push(`${String(i + 1).padStart(5)}  ${allLines[i]}`);
+      shown++;
+    }
+  }
+  lines.push('');
+  lines.push('These are content matches, not a declared symbol — the token has no static definition here (often runtime/template-injected). Do not grep this file to re-confirm.');
+  return { __rawText: lines.join('\n') };
+}
+
+function renderSymbolSlice(
+  index: CodebaseIndex,
+  fileId: string,
+  file: IndexedFile,
+  spec: string,
+): object {
+  const wanted = resolveSliceSymbols(file, spec);
+
+  let allLines: string[];
+  try {
+    allLines = readFileSync(file.path, 'utf-8').split('\n');
+  } catch (e) {
+    return { error: `could not read ${file.relativePath}: ${e}` };
+  }
+
+  // No declared symbol matched — fall back to a CONTENT match (in-tool grep):
+  // return the body lines where the requested token(s) live, with context. This
+  // is the answer for tokens that have no static symbol (runtime/template-
+  // injected data like `arches.termSearchTypes`, string keys, config values) —
+  // so the agent gets the body text from the SAME call instead of shelling out
+  // to grep and guessing spellings (q19's 5 empty greps).
+  if (wanted.length === 0) {
+    return renderContentMatch(file, spec, allLines);
+  }
+
+  // Caller pointers: reuse the file-level builder (exported symbols only).
+  const callersByName = new Map<string, string[]>();
+  for (const entry of buildCallersForFile(fileId, file, index)) {
+    callersByName.set(entry.exportedSymbol, entry.callers);
+  }
+  // Callee pointers: resolve this symbol's outgoing calls edges → target location.
+  const symInfo = buildSymbolInfoMap(index);
+  const locById = new Map<string, { rel: string; start: number; end: number }>();
+  for (const f of index.files.values()) {
+    for (const s of f.symbols) locById.set(s.id, { rel: f.relativePath, start: s.startLine, end: s.endLine });
+  }
+  const calleesOf = (symId: string): string[] => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const edge of index.symbolEdges) {
+      if (edge.type !== 'calls' || edge.from !== symId) continue;
+      if (seen.has(edge.to)) continue;
+      seen.add(edge.to);
+      const meta = symInfo.get(edge.to);
+      if (!meta) continue;
+      const loc = locById.get(edge.to);
+      out.push(loc
+        ? `${meta.name} → ${loc.rel} [L${loc.start}-${loc.end}]`
+        : `${meta.name} → ${meta.file}`);
+      if (out.length >= SLICE_CALLEE_CAP) break;
+    }
+    return out;
+  };
+
+  const lines: string[] = [`${file.relativePath} (${file.lineCount} lines) — bodies for: ${wanted.map(s => s.name).join(', ')}`];
+  const sliced = wanted.slice(0, SLICE_SYMBOL_CAP);
+  if (wanted.length > sliced.length) {
+    lines.push(`[${wanted.length} symbols matched; slicing the first ${sliced.length} — narrow \`--symbol\` for the rest: ${wanted.slice(sliced.length).map(s => s.name).join(', ')}]`);
+  }
+
+  let spent = 0;
+  for (const s of sliced) {
+    lines.push('');
+    lines.push(`━━ ${s.kind} ${s.name} [L${s.startLine}-${s.endLine}]${s.extendsName ? ` extends ${s.extendsName}` : ''} ━━`);
+    const want = s.endLine - s.startLine + 1;
+    const room = Math.max(0, SLICE_LINE_BUDGET - spent);
+    if (room === 0) {
+      lines.push(`   [line budget reached — re-call \`--symbol ${s.name}\` alone to read this body]`);
+    } else {
+      const take = Math.min(want, room);
+      for (let i = s.startLine; i < s.startLine + take && i <= allLines.length; i++) {
+        lines.push(`${String(i).padStart(5)}  ${allLines[i - 1]}`);
+      }
+      if (take < want) lines.push(`   … [+${want - take} more lines truncated by budget — re-call \`--symbol ${s.name}\` alone for the full body]`);
+      spent += take;
+    }
+    // Pointers (not bodies): who calls this, what this calls — each is one directed `--symbol` hop away.
+    const callers = callersByName.get(s.name) ?? [];
+    if (callers.length) lines.push(`   callers: ${callers.slice(0, 6).join(' · ')}`);
+    const callees = calleesOf(s.id);
+    if (callees.length) lines.push(`   calls: ${callees.join(' · ')}`);
+    if (!callers.length && !callees.length) lines.push('   (no indexed callers/callees)');
+  }
+
+  lines.push('');
+  lines.push('Bodies delivered inline — no Read needed. Follow `calls:`/`callers:` pointers with another `gs <file> --symbol <name>` to hop without windowing.');
   return { __rawText: lines.join('\n') };
 }
 

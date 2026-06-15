@@ -19,20 +19,22 @@ export const TOOL_DEFINITIONS = [
     name: 'get-overview',
     description:
       'Locate files by matching `query` against DECLARED NAMES — filenames, path segments, exported symbols. Reach for GO BEFORE Read/Grep/Glob when finding which files are relevant.\n\n' +
-      'OUTPUT: `<path> [tok1, tok2, ...]` per result. Bracketed tokens are the matched name tokens, rarest-first (leftmost = highest signal).\n\n' +
+      'OUTPUT: results grouped into sections by WHERE they matched (file/dir names; code/symbol names; both). Each line is `<path> matched: [tok1, tok2, ...]` — matched name tokens, rarest-first (leftmost = highest signal). Sections are categories, NOT a ranking: line order across sections does not mean relevance order, and the strongest match may sit in any section — scan all sections before choosing.\n\n' +
+      'RELATION ANNOTATIONS: some result lines carry `← imported by X (also listed)` (an import edge between two shown results) or `~ shares `token` with X (also listed)` (the two results share a rare identifier/string literal). The `~` links are real relations the import graph cannot see — migration↔model schema twins, config-by-name references, cross-language pairs. Treat a linked pair as ONE unit of evidence: if one is worth reading, fetch the other in the same step instead of rediscovering it later.\n\n' +
       'CAPABILITIES:\n' +
       '- Naming-variant tolerant — case, separators, plural ≡ singular. `LoadStaging` ≡ `load_staging` ≡ `load-staging`; `tile` ≡ `tiles`. Pass the concept; do NOT grep-alternate spellings.\n' +
       '- Multi-concept — `auth payment` (AND), `[auth|login|jwt] payment` (OR), plus a small built-in synonym set (auth/login/jwt, search/find/query, message/post/chat).\n' +
       '- `path: "arches/app/**/*.py"` — glob scope; comma-combine; `!` to exclude.\n' +
       '- `include_tests: true` — opt in to tests (excluded by default).\n\n' +
-      'DOES NOT MATCH:\n' +
-      '- File body content (comments, docstrings, strings, HTML/template, SQL) → grep.\n' +
+      'DOES NOT MATCH (but see Content presence below):\n' +
+      '- File body content (comments, docstrings, strings, HTML/template, SQL).\n' +
       '- Import specifiers (by design).\n' +
       '- Nested symbols → use `get-structure`.\n\n' +
+      'CONTENT PRESENCE: when a query token matches NO declared name, GO reports where that token lives in file BODIES instead — `Content presence` lines name the files (rare token), give a count (common token), or state the identifier appears NOWHERE in indexed content. Trust the nowhere-line: the identifier does not exist in this repo — do not grep spelling variants of it. This makes GO the right FIRST probe even for identifiers you would otherwise grep for.\n\n' +
       'AFTER THE RESULT:\n' +
       '1. Path looks right → `get-structure` on it. Default returns symbols + imports + per-symbol callers + importers in one shot — that is your "who uses this" answer.\n' +
       '2. Leading `[matched]` token names your concept but the path is off → re-call GO with that token (~10× cheaper than bash-grep).\n' +
-      '3. Query words missing from every `[matched]` list → concept lives in body content; grep, scoped by file extension.\n\n' +
+      '3. Query words missing from every `[matched]` list → check the `Content presence` lines first; they tell you where the word lives in file bodies (or that it does not exist). Grep only for phrases/regex patterns GO cannot index.\n\n' +
       'FRAMEWORK CONVENTION FILES (page.tsx, route.ts, __init__.py): query by directory name — the filename is generic.',
     inputSchema: {
       type: 'object',
@@ -43,7 +45,7 @@ export const TOOL_DEFINITIONS = [
         },
         max_results: {
           type: 'number',
-          description: 'Page size, default 10. The top results are the best-scored declared-name matches; reformulate `query` before paging deep.',
+          description: 'Page size, default 10. The shown results are the best-scored declared-name matches, but display groups them by match channel — position in the output is not score order. Reformulate `query` before paging deep.',
         },
         include_tests: {
           type: 'boolean',
@@ -64,10 +66,11 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'get-structure',
     description:
-      'Drill into a known file. Returns four sections as compact text:\n' +
+      'Drill into a known file. Returns these sections as compact text:\n' +
       '- Symbols — top-level + per-class methods (name, kind, line range, extends/implements). With cross-file callers attached per exported symbol (inline if 1 caller; newline-per-caller block if ≥2). For huge files (>20 symbols, no `match`), symbols are reordered by caller count (most-used first) and truncated to top 15.\n' +
       '- Imports — 1-hop internal outbound dependencies (library imports stripped).\n' +
-      '- Importers — 1-hop reverse: files in this repo that import this one.\n' +
+      '- Importers — 1-hop reverse: files in this repo that import this one. With `match`, additionally lists EVERY indexed file (importer or not, any language) whose CONTENT references the matched term even when its filename does not (a registry, admin, or config file using the symbol — or a frontend file referencing a backend name). That subsection IS the complete "who uses <symbol>" answer: it is exhaustive over indexed content, so a subsystem absent from it does NOT use the symbol — do not grep to enumerate or re-verify use-sites, and do not keep hunting in subsystems the section rules out.\n' +
+      '- Related — files sharing rare identifier/string-literal tokens with this file (with `match`: with the matched symbols\' code region), shown only when NO import edge connects them. These are name-reference relations the import graph cannot see — Django migrations↔models, config-by-name registration, cross-language (JS↔Python) pairs. Treat them as first-class neighbors: the shared token shown is the reason they are related.\n' +
       'Use this AFTER get-overview surfaces a candidate file. This is the right tool for "who uses this file" / "who calls this symbol" — no separate call needed.\n\n' +
       '`view` controls which sections you get (default `full` = all four). `symbols`, `imports`, `importers`, `callers` each return one section in isolation when you want a byte-light answer.\n\n' +
       'For god-files (large classes, large routers, large config modules), pass `match` to filter symbols/imports/importers/callers to one area — e.g. `match: "auth"` or `match: "/^handle/"`. Substring is case-insensitive; wrap in slashes for regex.\n\n' +
@@ -87,6 +90,10 @@ export const TOOL_DEFINITIONS = [
           type: 'string',
           enum: ['full', 'symbols', 'imports', 'importers', 'callers'],
           description: 'Which sections to return. Default "full" = symbols (with inline callers) + imports + importers. Use one of the narrower views to halve or quarter the output when you know what you need: "symbols" (shape only, no callers), "imports" (outbound only), "importers" (inbound only), "callers" (per-symbol cross-file callers in expanded form, no symbol shape).',
+        },
+        symbol: {
+          type: 'string',
+          description: 'Deliver the BODY of the named symbol(s) inline, sliced from their indexed line range — so you read a method WITHOUT a Read at a guessed offset. Comma/pipe-separate names (`serialize,restore_state`). A bare name matches the method (`serialize` → `Graph.serialize`). Each body is followed by `callers:`/`calls:` POINTERS (file + line range) so the next hop is one more `get-structure --symbol` call, not a windowed Read. Use this the moment a file’s symbol list shows the method you need — it replaces the read-at-offset hunt on god-files. If the name is NOT a declared symbol (a runtime/template-injected value, a string key, a config token), it falls back to an in-tool GREP: returns the body lines where the token appears, with context — so you never shell out to grep. Overrides `view`/`match`.',
         },
       },
       required: ['file_path'],
@@ -138,6 +145,7 @@ export function registerToolHandlers(
         result = handleGetStructure(index, {
           file_path: (params['file_path'] ?? params['file'] ?? params['file_name']) as string,
           match: params['match'] as string | undefined,
+          symbol: params['symbol'] as string | undefined,
           view: params['view'] as 'full' | 'symbols' | 'imports' | 'importers' | 'callers' | undefined,
         });
         break;
