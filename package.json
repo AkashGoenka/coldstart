@@ -4,7 +4,8 @@
   "description": "Local MCP server for AI agent codebase navigation — domain mapping, dependency tracing, file structure lookup",
   "type": "module",
   "bin": {
-    "coldstart-mcp": "./dist/index.js"
+    "coldstart-mcp": "./dist/index.js",
+    "coldstart": "./dist/index.js"
   },
   "main": "./dist/index.js",
   "files": [

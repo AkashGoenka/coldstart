@@ -167,6 +167,110 @@ function callsFromMap(calls: Map<string, number>, exclude?: string): CallSite[] 
 }
 
 // ---------------------------------------------------------------------------
+// Member-assignment definitions: `ko.bindingHandlers.termSearch = {...}`,
+// `arches.foo = function(){}`, `module.exports.bar = () => {}`. The declared-
+// symbol walk only sees `function`/`class`/`const` keywords, so files that
+// define their surface by assigning onto a namespace object (Knockout binding
+// handlers, jQuery plugins, AMD module exports) index as ZERO symbols — and the
+// agent is forced to grep for them (q19: term-search.js had 0 symbols, 5 empty
+// greps). These assignments are usually wrapped in an AMD `define([...], fn)` or
+// an IIFE, so we unwrap one level of call/function wrapper to reach them.
+// ---------------------------------------------------------------------------
+
+// Statement_blocks to treat as "module top level": the program root, plus the
+// body of a single wrapping define()/require()/IIFE call. One level only —
+// enough for AMD/UMD without walking into every nested closure.
+function moduleBodies(root: TSNode): TSNode[] {
+  const bodies: TSNode[] = [root];
+  for (const node of root.namedChildren) {
+    const expr = node.type === 'expression_statement' ? node.namedChildren[0] : node;
+    if (!expr) continue;
+    // define([...], function(){...})  /  (function(){...})()  /  require([...], fn)
+    const call = expr.type === 'call_expression' ? expr
+      : expr.type === 'parenthesized_expression' ? firstChildOfType(expr, 'call_expression')
+      : null;
+    if (!call) continue;
+    const args = firstChildOfType(call, 'arguments') ?? call;
+    for (const a of args.namedChildren) {
+      if (a.type === 'function_expression' || a.type === 'arrow_function') {
+        const blk = firstChildOfType(a, 'statement_block');
+        if (blk) bodies.push(blk);
+      }
+    }
+  }
+  return bodies;
+}
+
+function extractAssignmentSymbols(root: TSNode, fileId: string): SymbolNode[] {
+  const out: SymbolNode[] = [];
+  const seen = new Set<string>();
+  for (const body of moduleBodies(root)) {
+    for (const stmt of body.namedChildren) {
+      if (stmt.type !== 'expression_statement') continue;
+      const assign = stmt.namedChildren[0];
+      if (!assign || assign.type !== 'assignment_expression') continue;
+      const lhs = assign.namedChildren[0];
+      const rhs = assign.namedChildren[1];
+      if (!lhs || !rhs || lhs.type !== 'member_expression') continue;
+      const name = lhs.text.replace(/\s+/g, '');
+      // Only definitions worth a symbol: a function, arrow, object, or class —
+      // not `x.y = 5` primitive config. Object literals are the binding-handler case.
+      const isFn = rhs.type === 'function_expression' || rhs.type === 'arrow_function';
+      const isObj = rhs.type === 'object';
+      const isClass = rhs.type === 'class';
+      if (!isFn && !isObj && !isClass) continue;
+      if (seen.has(name)) continue;
+      seen.add(name);
+      const startLine = stmt.startPosition.row + 1;
+      const endLine = stmt.endPosition.row + 1;
+      const calls = new Map<string, number>();
+      const fnBody = firstChildOfType(rhs, 'statement_block');
+      if (fnBody) collectCalls(fnBody, calls);
+      else if (isObj) collectCalls(rhs, calls);
+      // module-level assignments ARE the file's public surface (no `export` in
+      // AMD/script files) → mark exported so they surface in get-structure.
+      out.push({
+        id: `${fileId}#${name}`,
+        name,
+        kind: isClass ? 'class' : isObj ? 'constant' : 'function',
+        startLine,
+        endLine,
+        isExported: true,
+        calls: callsFromMap(calls, name),
+        implementsNames: [],
+      });
+      // Function-valued properties of an assigned object literal become methods
+      // (init/update on a binding handler, the handlers on a controller object).
+      if (isObj) {
+        for (const pair of childrenOfType(rhs, 'pair')) {
+          const key = pair.namedChildren[0];
+          const val = pair.namedChildren[1];
+          if (!key || !val) continue;
+          if (val.type !== 'function_expression' && val.type !== 'arrow_function') continue;
+          const propName = key.type === 'property_identifier' || key.type === 'string'
+            ? key.text.replace(/['"]/g, '') : null;
+          if (!propName) continue;
+          const mCalls = new Map<string, number>();
+          const mBody = firstChildOfType(val, 'statement_block');
+          if (mBody) collectCalls(mBody, mCalls);
+          out.push({
+            id: `${fileId}#${name}.${propName}`,
+            name: `${name}.${propName}`,
+            kind: 'method',
+            startLine: pair.startPosition.row + 1,
+            endLine: pair.endPosition.row + 1,
+            isExported: false,
+            calls: callsFromMap(mCalls, propName),
+            implementsNames: [],
+          });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Extract symbols from a declaration node (unwrapped from export_statement)
 // ---------------------------------------------------------------------------
 function extractFromDeclaration(
@@ -499,6 +603,17 @@ export function parseTsContent(
       const nodes = Array.isArray(result) ? result : [result];
       rawSymbols.push(...nodes);
     }
+  }
+
+  // Member-assignment definitions (Knockout/jQuery/AMD surface the declared-name
+  // walk misses). Added after the keyword-declaration passes; skip any name a
+  // real declaration already claimed so a `const x = ...; window.x = x` re-export
+  // doesn't double-count.
+  const declaredNames = new Set(rawSymbols.map(s => s.name));
+  for (const sym of extractAssignmentSymbols(root, fileId)) {
+    if (declaredNames.has(sym.name)) continue;
+    rawSymbols.push(sym);
+    if (sym.isExported && sym.kind !== 'method') exports.push(sym.name);
   }
 
   // Resolve intra-file calls: replace plain names with full symbol IDs where known

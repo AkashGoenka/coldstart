@@ -20,6 +20,7 @@ import { parseTomlContent } from './extractors/toml.js';
 import { parseEnvContent } from './extractors/env.js';
 import { parseXmlContent } from './extractors/xml.js';
 import { parseGroovyContent } from './extractors/groovy.js';
+import { extractContentTokens } from './content-tokens.js';
 
 const MAX_FILE_SIZE = 1_000_000; // 1 MB
 
@@ -64,6 +65,20 @@ export async function parseFile(
     return null;
   }
 
+  const parsed = await parseByLanguage(filePath, language, fileId, content);
+  if (!parsed) return null;
+  // Content-token channel is language-agnostic: shaped full-body identifiers
+  // with provenance bits, extracted once here for every indexed language.
+  parsed.contentTokens = extractContentTokens(content, fileId || filePath);
+  return parsed;
+}
+
+async function parseByLanguage(
+  filePath: string,
+  language: Language,
+  fileId: string,
+  content: string,
+): Promise<ParsedFile | null> {
   const hash = createHash('md5').update(content).digest('hex');
   const lineCount = content.split('\n').length;
   const tokenEstimate = Math.ceil(content.length / 4);
