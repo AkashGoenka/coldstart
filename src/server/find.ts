@@ -625,7 +625,9 @@ export function buildRichPage(index: CodebaseIndex, root: string, rawQuery: stri
 
   lines.push('== matches (top files previewed; ranked by term coverage + definition/path match) ==');
   if (connected >= 2) {
-    lines.push('These top files reference each other — they are likely ONE answer set. Open the file marked START HERE, then name the connected files (below) in your answer; you do not need to read each one.');
+    lines.push(
+      'These top files reference each other — they are likely ONE answer set. Open the file marked START HERE, then name the connected files (below) in your answer; you do not need to read each one.',
+    );
   }
   detailSet.forEach(([rel, ts], i) => {
     const file = index.files.get(rel)!;

@@ -1083,7 +1083,20 @@ function renderContentMatch(file: IndexedFile, spec: string, allLines: string[])
     }
   }
   lines.push('');
-  lines.push('These are content matches, not a declared symbol — the token has no static definition here (often runtime/template-injected). Do not grep this file to re-confirm.');
+  lines.push('These are content matches, not a declared symbol — the token has no static definition here (often runtime/template-injected). Grepping this file again returns these same lines; you already have them.');
+  // STOP-GUESSING menu: a wrong `--symbol` guess still produces content hits (the word appears
+  // somewhere in the body), which reads as "productive" and invites re-guessing OTHER names — the
+  // #1 wasted-call pattern (q21: 3 serial gs on one file guessing upload/unzip/write_zip_file…,
+  // none of which are methods). Surface the file's ACTUAL declared symbols so the next call picks a
+  // real one instead of guessing again. Same menu the no-hit branch already shows.
+  const menu = file.symbols
+    .filter(s => s.isExported || s.kind === 'class' || s.kind === 'function' || s.kind === 'method')
+    .slice(0, 25).map(s => s.name);
+  if (menu.length) {
+    lines.push('');
+    lines.push(`"${spec}" is NOT a declared symbol here. This file's methods are: ${menu.join(', ')}${file.symbols.length > 25 ? ', …' : ''}`);
+    lines.push(`These are the file's only declared symbols — a name that isn't listed has no body to slice. Is the name you need in this list? If yes, pass it; if not, the token is runtime/template text — Read the file rather than guessing another \`--symbol\`.`);
+  }
   return { __rawText: lines.join('\n') };
 }
 
