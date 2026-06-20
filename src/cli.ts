@@ -1,12 +1,12 @@
 /**
- * coldstart CLI query surface — `go` / `gs` / `index`.
+ * coldstart CLI query surface — `find` / `gs` / `index`.
  *
  * Design rule (see docs/cli-skill-spec.md): the query path is a PURE READER.
- * It loads the on-disk cache and runs the SAME handlers the MCP server uses
- * (handleGetOverview / handleGetStructure), printing their `__rawText` to
+ * It loads the on-disk cache and runs the SAME engine the MCP reader uses
+ * (buildRichPage / handleGetStructure), printing their `__rawText` to
  * stdout so output is byte-identical to the MCP tool and pipeable.
  *
- * Cache miss is the one exception: `go`/`gs` will lazily build + save so the
+ * Cache miss is the one exception: `find`/`gs` will lazily build + save so the
  * tool is usable without an explicit prep step. This build+save is NOT
  * concurrency-safe (no lock) — fine for sequential CLI use; the product-grade
  * single-writer prep is `coldstart index` (and, later, the write-only daemon).
@@ -119,23 +119,6 @@ function emit(result: HandlerResult, json: boolean): void {
     return;
   }
   process.stdout.write((result.__rawText ?? result.error ?? '') + '\n');
-}
-
-export async function runGo(argv: string[], buildIndex: BuildFn): Promise<number> {
-  const { positional, flags } = parseQueryArgs(argv);
-  const query = positional.join(' ').trim();
-  if (!query) {
-    err('usage: coldstart go <terms...>  — pass every salient identifier from the task, not one distilled keyword [--json]');
-    return 1;
-  }
-  const root = resolve(flags.root ?? '.');
-  const index = await getIndex(root, flags.cacheDir, buildIndex);
-  if (!index) { err('[coldstart] no index available'); return 1; }
-
-  // go and find share one engine — same query in, same page out.
-  const { buildRichPage } = await import('./server/find.js');
-  process.stdout.write(buildRichPage(index, root, query, flags.json, flags.via === true) + '\n');
-  return 0;
 }
 
 export async function runGs(argv: string[], buildIndex: BuildFn): Promise<number> {

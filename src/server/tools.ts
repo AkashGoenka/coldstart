@@ -81,12 +81,12 @@ function buildCallersForFile(
 }
 
 // ============================================================================
-// get-overview (GO) — shares ONE engine with `coldstart find`: buildRichPage.
-// GO is the MCP adapter over it; runGo/runFind are the CLI adapters. Same query
-// in, same page out, regardless of transport. Everything heavy (grep-recall +
-// AST precision against the live root) lives in find.ts; this is a thin shim.
+// find — shares ONE engine across transports: buildRichPage. The MCP `find`
+// tool and the CLI `find`/`gs index` reader both call it. Same query in, same
+// page out, regardless of transport. Everything heavy (grep-recall + AST
+// precision against the live root) lives in find.ts; this is a thin shim.
 // ============================================================================
-export function handleGetOverview(
+export function handleFind(
   index: CodebaseIndex,
   params: { query?: string; domain_filter?: string },
 ): { __rawText?: string; error?: string } {
@@ -103,7 +103,7 @@ export function handleGetOverview(
 }
 
 // ============================================================================
-// get-structure (drill-down: symbols + imports + importers + per-symbol callers)
+// gs (drill-down: symbols + imports + importers + per-symbol callers)
 // ============================================================================
 type GsView = 'full' | 'symbols' | 'imports' | 'importers' | 'callers';
 

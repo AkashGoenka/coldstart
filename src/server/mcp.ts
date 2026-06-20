@@ -7,7 +7,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import type { IndexContext } from '../index-manager.js';
 import {
-  handleGetOverview,
+  handleFind,
   handleGetStructure,
 } from './tools.js';
 
@@ -16,16 +16,16 @@ import {
 // ---------------------------------------------------------------------------
 export const TOOL_DEFINITIONS = [
   {
-    name: 'get-overview',
+    name: 'find',
     description:
-      'Locate the files relevant to a task. Pass `query` = EVERY salient identifier from the task (symbol names, domain nouns, the rare token you half-remember) — not one distilled keyword. Recall is bounded by the terms you give: a one-token query cannot out-rank lookalikes, so over-supply rather than under-supply. Reach for GO BEFORE Read/Grep/Glob.\n\n' +
-      'HOW IT WORKS: GO greps every term across the repo body AND matches declared names (filenames, path segments, exported symbols), then ranks files by DISTINCT-TERM COVERAGE — the file that covers MORE of your query rises above its lookalikes. This catches body-level matches (nested defs, dynamic refs, string literals) that a declared-name index misses.\n\n' +
+      'Locate the files relevant to a task. Pass `query` = EVERY salient identifier from the task (symbol names, domain nouns, the rare token you half-remember) — not one distilled keyword. Recall is bounded by the terms you give: a one-token query cannot out-rank lookalikes, so over-supply rather than under-supply. Reach for find BEFORE Read/Grep/Glob.\n\n' +
+      'HOW IT WORKS: find greps every term across the repo body AND matches declared names (filenames, path segments, exported symbols), then ranks files by DISTINCT-TERM COVERAGE — the file that covers MORE of your query rises above its lookalikes. This catches body-level matches (nested defs, dynamic refs, string literals) that a declared-name index misses.\n\n' +
       'OUTPUT: a ranked page. Top files get an inline preview — their indexed symbols (with line ranges) plus the body lines where your rare terms CLUSTER (def/class/assignment lines first), so you often answer WITHOUT a follow-up Read. Lower-ranked files list as bare paths. Prose/doc and stylesheet matches are partitioned into secondary lists so they do not crowd out source. Related files (sharing a rare identifier with a top hit, no import edge between them) are surfaced as first-class neighbors.\n\n' +
       'NAMING: case- and separator-insensitive (`LoadStaging` ≡ `load_staging`). It does NOT expand synonyms or plurals for you — that is your job: if the concept could be named two ways, pass both tokens.\n\n' +
       'AFTER THE RESULT:\n' +
       '1. A path + its inline symbols/preview answer the question → done, no Read needed.\n' +
-      '2. Path looks right but you need shape/usage → `get-structure` on it (symbols + imports + per-symbol callers + importers in one shot).\n' +
-      '3. "no indexed file contains any of [...]" → those identifiers do not exist in the repo; reformulate or grep for a phrase/regex GO cannot index. Do not grep spelling variants of a token GO already reported absent.',
+      '2. Path looks right but you need shape/usage → `gs` on it (symbols + imports + per-symbol callers + importers in one shot).\n' +
+      '3. "no indexed file contains any of [...]" → those identifiers do not exist in the repo; reformulate or grep for a phrase/regex find cannot index. Do not grep spelling variants of a token find already reported absent.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -38,17 +38,17 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: 'get-structure',
+    name: 'gs',
     description:
       'Drill into a known file. Returns these sections as compact text:\n' +
       '- Symbols — top-level + per-class methods (name, kind, line range, extends/implements). With cross-file callers attached per exported symbol (inline if 1 caller; newline-per-caller block if ≥2). For huge files (>20 symbols, no `match`), symbols are reordered by caller count (most-used first) and truncated to top 15.\n' +
       '- Imports — 1-hop internal outbound dependencies (library imports stripped).\n' +
       '- Importers — 1-hop reverse: files in this repo that import this one. With `match`, additionally lists EVERY indexed file (importer or not, any language) whose CONTENT references the matched term even when its filename does not (a registry, admin, or config file using the symbol — or a frontend file referencing a backend name). That subsection IS the complete "who uses <symbol>" answer: it is exhaustive over indexed content, so a subsystem absent from it does NOT use the symbol — do not grep to enumerate or re-verify use-sites, and do not keep hunting in subsystems the section rules out.\n' +
       '- Related — files sharing rare identifier/string-literal tokens with this file (with `match`: with the matched symbols\' code region), shown only when NO import edge connects them. These are name-reference relations the import graph cannot see — Django migrations↔models, config-by-name registration, cross-language (JS↔Python) pairs. Treat them as first-class neighbors: the shared token shown is the reason they are related.\n' +
-      'Use this AFTER get-overview surfaces a candidate file. This is the right tool for "who uses this file" / "who calls this symbol" — no separate call needed.\n\n' +
+      'Use this AFTER find surfaces a candidate file. This is the right tool for "who uses this file" / "who calls this symbol" — no separate call needed.\n\n' +
       '`view` controls which sections you get (default `full` = all four). `symbols`, `imports`, `importers`, `callers` each return one section in isolation when you want a byte-light answer.\n\n' +
       'For god-files (large classes, large routers, large config modules), pass `match` to filter symbols/imports/importers/callers to one area — e.g. `match: "auth"` or `match: "/^handle/"`. Substring is case-insensitive; wrap in slashes for regex.\n\n' +
-      'Prefer this over Read when you need shape, neighbors, or usage. Reach for Read only for implementation details inside a method body. If you have called get-structure on 5+ files for one question, you are enumerating — go back to GO with a sharper `path` glob or a different concept token instead.',
+      'Prefer this over Read when you need shape, neighbors, or usage. Reach for Read only for implementation details inside a method body. If you have called gs on 5+ files for one question, you are enumerating — go back to find with a sharper `path` glob or a different concept token instead.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -67,7 +67,7 @@ export const TOOL_DEFINITIONS = [
         },
         symbol: {
           type: 'string',
-          description: 'Deliver the BODY of the named symbol(s) inline, sliced from their indexed line range — so you read a method WITHOUT a Read at a guessed offset. Comma/pipe-separate names (`serialize,restore_state`). A bare name matches the method (`serialize` → `Graph.serialize`). Each body is followed by `callers:`/`calls:` POINTERS (file + line range) so the next hop is one more `get-structure --symbol` call, not a windowed Read. Use this the moment a file’s symbol list shows the method you need — it replaces the read-at-offset hunt on god-files. If the name is NOT a declared symbol (a runtime/template-injected value, a string key, a config token), it falls back to an in-tool GREP: returns the body lines where the token appears, with context — so you never shell out to grep. Overrides `view`/`match`.',
+          description: 'Deliver the BODY of the named symbol(s) inline, sliced from their indexed line range — so you read a method WITHOUT a Read at a guessed offset. Comma/pipe-separate names (`serialize,restore_state`). A bare name matches the method (`serialize` → `Graph.serialize`). Each body is followed by `callers:`/`calls:` POINTERS (file + line range) so the next hop is one more `gs --symbol` call, not a windowed Read. Use this the moment a file’s symbol list shows the method you need — it replaces the read-at-offset hunt on god-files. If the name is NOT a declared symbol (a runtime/template-injected value, a string key, a config token), it falls back to an in-tool GREP: returns the body lines where the token appears, with context — so you never shell out to grep. Overrides `view`/`match`.',
         },
       },
       required: ['file_path'],
@@ -105,13 +105,13 @@ export function registerToolHandlers(
     let result: object;
 
     switch (name) {
-      case 'get-overview':
-        result = handleGetOverview(index, {
+      case 'find':
+        result = handleFind(index, {
           query: (params['query'] ?? params['domain_filter']) as string | undefined,
         });
         break;
 
-      case 'get-structure':
+      case 'gs':
         result = handleGetStructure(index, {
           file_path: (params['file_path'] ?? params['file'] ?? params['file_name']) as string,
           match: params['match'] as string | undefined,

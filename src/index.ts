@@ -655,10 +655,6 @@ async function main(): Promise<void> {
   // CLI query surface — pure-reader `go`/`gs`, plus single-writer `index` prep.
   // These bypass the daemon entirely: load the on-disk cache, run the same
   // handlers the MCP server uses, print, exit. (docs/cli-skill-spec.md)
-  if (process.argv[2] === 'go') {
-    const { runGo } = await import('./cli.js');
-    process.exit(await runGo(process.argv.slice(3), buildIndex));
-  }
   if (process.argv[2] === 'gs') {
     const { runGs } = await import('./cli.js');
     process.exit(await runGs(process.argv.slice(3), buildIndex));
