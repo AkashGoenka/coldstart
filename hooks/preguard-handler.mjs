@@ -27,6 +27,7 @@
 
 import { readFileSync } from "node:fs";
 import { canonicalFindKey } from "./canonical-find-key.mjs";
+import { normalizeColdstartCall } from "./coldstart-call.mjs";
 
 const REASON =
   "You have ALREADY run this exact `coldstart find` earlier in this session — same " +
@@ -41,9 +42,12 @@ const REASON =
  * @returns {object|null} a permissionDecision:"deny" envelope, or null to allow
  */
 export default function handle(input) {
-  if ((input.tool_name || "") !== "Bash") return null;
   const tin = input.tool_input && typeof input.tool_input === "object" ? input.tool_input : {};
-  const cmd = typeof tin.command === "string" ? tin.command : "";
+  // Normalize so a `mcp__coldstart__find` call is deduped against a CLI `coldstart
+  // find` (and vice-versa) using the same canonical key. Non-coldstart Bash falls
+  // through to canonicalFindKey, which returns null for anything that isn't a find.
+  const { tool, cmd } = normalizeColdstartCall(input.tool_name || "", tin);
+  if (tool !== "Bash") return null;
   const key = canonicalFindKey(cmd);
   if (!key) return null;
 

@@ -13,7 +13,7 @@ For Rails repos: the Ruby parser emits synthetic edges for `has_many`/`belongs_t
 
 **Live updates:** the keeper's `fs.watch` listener keeps the cache current. Changes are debounced (400 ms), then either patched incrementally (≤30 files, ~2–5 ms/file) or trigger a full background rebuild (>30 files), and the cache is re-saved ~5 s after edits settle. No restarts required.
 
-**Setup:** `coldstart init` writes a single `coldstart.md` at the repo root (CLI- or MCP-flavored) carrying all agent guidance. For Claude Code it wires `@coldstart.md` into CLAUDE.md; for any other app it writes coldstart.md for manual wiring. (No skill, no per-IDE rules files.)
+**Setup:** `coldstart init` writes a single `coldstart.md` at the repo root (CLI- or MCP-flavored) carrying all agent guidance. For Claude Code it also wires `@coldstart.md` into CLAUDE.md and registers the find/gs search hooks (PostToolUse nudge + PreToolUse find-dedup guard) in `.claude/settings.json` — merged idempotently, pointing at the version-pinned hooks in `~/.coldstart/versions/<v>/`. For any other app it writes coldstart.md for manual wiring. (No skill, no per-IDE rules files.) The same hooks ship in the Claude Code plugin. Hook handlers normalize CLI (`coldstart find`/`gs`) and MCP (`mcp__coldstart__find`/`gs`) calls to one code path (`hooks/coldstart-call.mjs`).
 
 Key files:
 

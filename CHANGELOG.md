@@ -34,9 +34,21 @@ process model is rebuilt around a single background keeper with stateless reader
   "is my index fresh?" job is covered by `status`).
 - **`init` rewritten around a single `coldstart.md`.** `coldstart init` writes one
   `coldstart.md` (CLI or MCP flavor) at the repo root carrying all agent guidance;
-  Claude Code gets `@coldstart.md` wired into `CLAUDE.md`, other apps wire it
-  manually. No per-IDE rules files, no skill. `init` also warms the index in the
-  background so the first lookup is instant.
+  Claude Code gets `@coldstart.md` wired into `CLAUDE.md` **and the find/gs search
+  hooks registered in `.claude/settings.json`**, other apps wire it manually. No
+  per-IDE rules files, no skill. `init` also warms the index in the background so
+  the first lookup is instant.
+
+### Added
+- **Search hooks wired by `init` (Claude Code).** `coldstart init` now registers two
+  hooks in `.claude/settings.json`, pointing at the version-pinned copies under
+  `~/.coldstart/versions/<v>/hooks/`: a PostToolUse nudge that flags search behaviour
+  going wrong, and a PreToolUse guard that denies an exact `find` re-run. Merged
+  idempotently — every other setting and any foreign hooks are preserved, a malformed
+  `settings.json` is left untouched. The handlers are surface-agnostic: a shared
+  `normalizeColdstartCall` rewrites an MCP `find`/`gs` call into the equivalent CLI
+  command string, so the detectors run unchanged whether the agent reached coldstart
+  via the CLI or the MCP tools. The hooks ship in the package (`hooks/`).
 
 ### Fixed
 - **Convention-edge freshness on incremental patch.** Editing a single Rails/Django/

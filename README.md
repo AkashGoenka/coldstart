@@ -42,7 +42,7 @@ coldstart init
 
 `init` writes a single `coldstart.md` at your repo root (the agent-facing guidance) and wires it in:
 
-- **Claude Code** → ensures `CLAUDE.md` imports it via `@coldstart.md`.
+- **Claude Code** → ensures `CLAUDE.md` imports it via `@coldstart.md`, and registers the find/gs search hooks in `.claude/settings.json` (a PostToolUse nudge + a PreToolUse find-dedup guard — merged into any existing settings, never overwriting them).
 - **Any other app** → writes `coldstart.md` only, and prints the MCP server entry to paste into your client's config.
 
 It then warms the index in the background, so your first lookup is instant. Re-running `init` is safe — it never duplicates entries.

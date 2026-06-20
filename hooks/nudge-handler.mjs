@@ -1,5 +1,10 @@
 /**
- * nudge-handler.mjs — PostToolUse nudge for the `coldstart find` CLI.
+ * nudge-handler.mjs — PostToolUse nudge for coldstart `find`/`gs`, CLI and MCP.
+ *
+ * The agent may reach coldstart via the CLI (Bash `coldstart find/gs`) or the MCP
+ * tools (`mcp__coldstart__find/gs`). normalizeColdstartCall rewrites an MCP call
+ * into the equivalent CLI command string so every detector below runs unchanged on
+ * either surface — same logic, only the entry tool name differs.
  *
  * Fires advisory nudges (additionalContext) at the moments the agent's search
  * behaviour goes wrong. Detectors, each fires sparingly:
@@ -32,6 +37,7 @@
 
 import { readFileSync, writeFileSync, renameSync } from "node:fs";
 import { canonicalFindKey } from "./canonical-find-key.mjs";
+import { normalizeColdstartCall } from "./coldstart-call.mjs";
 
 // ---- detector thresholds (tune freely) ----
 const FINDS_BEFORE_READ = 2; // (1) nudge to read after this many finds w/o a Read/gs
@@ -95,9 +101,10 @@ function matchAllGroup(re, s, group) {
 export default function handle(input) {
   const sid = input.session_id || "default";
   const aid = input.agent_id || ""; // set when inside a subagent
-  const tool = input.tool_name || "";
   const tin = input.tool_input && typeof input.tool_input === "object" ? input.tool_input : {};
-  const cmd = typeof tin.command === "string" ? tin.command : "";
+  // Collapse CLI and MCP coldstart calls to one shape: an MCP find/gs becomes a
+  // synthetic `coldstart find/gs ...` Bash command so the detectors run unchanged.
+  const { tool, cmd } = normalizeColdstartCall(input.tool_name || "", tin);
   const out = resultText(input);
 
   const key = aid ? `${sid}_${aid}` : sid;

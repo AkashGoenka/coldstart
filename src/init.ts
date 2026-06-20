@@ -5,7 +5,8 @@
  * agent-facing guidance. Clients pull it in by reference, so future wording
  * changes touch only coldstart.md, never the client's own rules file.
  *
- *   - Claude Code  → ensure CLAUDE.md exists and imports it via `@coldstart.md`.
+ *   - Claude Code  → ensure CLAUDE.md exists and imports it via `@coldstart.md`,
+ *     and register the find/gs search hooks in `.claude/settings.json`.
  *   - Any other app → write coldstart.md only; the user wires it as rules/
  *     instructions/skill however their app prefers (and, for no-shell clients,
  *     adds the MCP server entry we print).
@@ -133,6 +134,17 @@ function mcpServerEntry(cwd: string): { command: string; args: string[] } {
   return { command: 'node', args: [entryPath, '--root', cwd] };
 }
 
+/**
+ * Absolute path to the shipped hooks dir, inside the version-pinned stable
+ * install (sibling of `dist/`). Pinning to the stable copy means the path we
+ * write into settings.json survives a later `npm update`/uninstall of the live
+ * package. Throws (same as mcpServerEntry) if no install can be located.
+ */
+function resolveHooksDir(): string {
+  const entryPath = getOrInstallStableVersion(); // <stable>/node_modules/<pkg>/dist/index.js
+  return path.join(path.dirname(path.dirname(entryPath)), 'hooks');
+}
+
 // ---------------------------------------------------------------------------
 // Writers
 // ---------------------------------------------------------------------------
@@ -158,6 +170,81 @@ export function wireClaudeImport(cwd: string): 'created' | 'added' | 'present' {
   return 'added';
 }
 
+// Hook entry files (in the shipped hooks/ dir). The PostToolUse nudge fires
+// search-behaviour advice; the PreToolUse guard denies an exact find re-run.
+const HOOK_PRE = 'find-preguard.mjs';
+const HOOK_POST = 'find-nudge.mjs';
+
+/** True if a settings.json hook-array entry is one WE wrote (by entry filename),
+ *  so re-running init can strip + refresh it instead of duplicating it. */
+function isColdstartHookEntry(entry: unknown): boolean {
+  const hooks = (entry as { hooks?: unknown })?.hooks;
+  if (!Array.isArray(hooks)) return false;
+  return hooks.some((h) => {
+    const cmd = (h as { command?: unknown })?.command;
+    return typeof cmd === 'string' && (cmd.includes(HOOK_PRE) || cmd.includes(HOOK_POST));
+  });
+}
+
+/**
+ * Register the find/gs search hooks in the project's `.claude/settings.json`.
+ *
+ * Merges (never clobbers): preserves every other setting and any non-coldstart
+ * hooks. Idempotent — strips our prior entries (matched by entry filename) and
+ * re-adds them, so a re-run refreshes a stale hook path without duplicating.
+ * Fail-safe — if settings.json exists but is not valid JSON, we leave it alone
+ * and report, rather than overwrite a file the user owns.
+ *
+ * The matchers are surface-agnostic: PreToolUse fires for the CLI `coldstart
+ * find` (Bash) AND the `mcp__coldstart__find` tool; PostToolUse fires for all
+ * tools. The hook handler normalizes both surfaces to one code path.
+ */
+export function wireClaudeHooks(cwd: string): 'created' | 'updated' | { error: string } {
+  let hooksDir: string;
+  try {
+    hooksDir = resolveHooksDir();
+  } catch (e) {
+    return { error: `could not resolve a stable install path (${e})` };
+  }
+  const preCmd = `node ${path.join(hooksDir, HOOK_PRE)}`;
+  const postCmd = `node ${path.join(hooksDir, HOOK_POST)}`;
+
+  const dir = path.join(cwd, '.claude');
+  const filePath = path.join(dir, 'settings.json');
+
+  let settings: Record<string, unknown> = {};
+  const existed = fs.existsSync(filePath);
+  if (existed) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      if (parsed && typeof parsed === 'object') settings = parsed as Record<string, unknown>;
+    } catch {
+      return { error: `${filePath} is not valid JSON — left untouched; wire hooks manually` };
+    }
+  }
+
+  const hooksCfg =
+    settings.hooks && typeof settings.hooks === 'object'
+      ? (settings.hooks as Record<string, unknown>)
+      : {};
+  const stripOurs = (arr: unknown): unknown[] =>
+    (Array.isArray(arr) ? arr : []).filter((e) => !isColdstartHookEntry(e));
+
+  hooksCfg.PreToolUse = [
+    ...stripOurs(hooksCfg.PreToolUse),
+    { matcher: 'Bash|mcp__coldstart__find', hooks: [{ type: 'command', command: preCmd }] },
+  ];
+  hooksCfg.PostToolUse = [
+    ...stripOurs(hooksCfg.PostToolUse),
+    { matcher: '*', hooks: [{ type: 'command', command: postCmd }] },
+  ];
+  settings.hooks = hooksCfg;
+
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(settings, null, 2) + '\n');
+  return existed ? 'updated' : 'created';
+}
+
 // ---------------------------------------------------------------------------
 // Setup routines
 // ---------------------------------------------------------------------------
@@ -167,6 +254,12 @@ function setupClaude(cwd: string): void {
   const importResult = wireClaudeImport(cwd);
   out(`  coldstart.md  — ${mdResult} (CLI flavor)`);
   out(`  CLAUDE.md     — ${importResult === 'present' ? 'already imports @coldstart.md' : `${importResult} @coldstart.md import`}`);
+  const hookResult = wireClaudeHooks(cwd);
+  if (typeof hookResult === 'object') {
+    out(`  settings.json — search hooks NOT wired: ${hookResult.error}`);
+  } else {
+    out(`  settings.json — ${hookResult} find/gs search hooks (PreToolUse + PostToolUse)`);
+  }
 }
 
 function setupOther(cwd: string): void {
@@ -215,6 +308,7 @@ export async function runInit(): Promise<void> {
     out('Will write:');
     out('  coldstart.md  — agent guidance (CLI flavor)');
     out('  CLAUDE.md     — import `@coldstart.md` (create if missing, append if present)');
+    out('  .claude/settings.json — register find/gs search hooks (PreToolUse + PostToolUse)');
     out('');
     const answer = await ask('Set up for Claude Code? [Y/n] ');
     claude = answer === '' || answer === 'y';
