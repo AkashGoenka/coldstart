@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * coldstart-mcp — Local MCP server for AI agent codebase navigation.
+ * coldstart — fast static codebase navigation for AI agents (CLI + MCP).
  *
- * Usage:
- *   coldstart-mcp --root /path/to/project
- *   coldstart-mcp --root . --exclude vendor --quiet
- *   coldstart-mcp --root . --no-cache
- *   coldstart-mcp --root . --no-daemon    # self-contained stdio MCP (no keeper)
+ * Default invocation = stdio MCP reader over the keeper's cache:
+ *   coldstart --root /path/to/project
+ *   coldstart --root . --exclude vendor --quiet
+ *   coldstart --root . --no-cache
+ *   coldstart --root . --no-daemon    # self-contained stdio MCP (no keeper)
  *
  * Subcommands:
  *   coldstart init            # wire coldstart.md into the project
@@ -15,7 +15,7 @@
  *   coldstart restart [--all] # stop the keeper(s); respawn on next read
  *
  * Internal (spawned automatically by readers):
- *   coldstart-mcp --root . --daemon       # background keeper (keeps cache fresh)
+ *   coldstart --root . --daemon       # background keeper (keeps cache fresh)
  */
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';

@@ -29,7 +29,7 @@ function collectCalls(node: TSNode, results: Map<string, number>): void {
     // method_invocation grammar: field('object', ...)? field('name', identifier) field('arguments', ...)
     // Use the field accessor — `find(c.type === 'identifier')` returns the receiver
     // identifier when the object is a bare variable (`dispatcher.notifyMessagePost(x)`),
-    // not the method name. That made every member-call invisible to trace-impact.
+    // not the method name. That made every member-call invisible to gs callers.
     const nameNode = node.childForFieldName('name');
     if (nameNode && !results.has(nameNode.text)) {
       results.set(nameNode.text, node.startPosition.row + 1);

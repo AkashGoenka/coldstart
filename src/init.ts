@@ -102,18 +102,21 @@ function getOrInstallStableVersion(): string {
   if (!home) throw new Error('Could not determine HOME directory');
 
   const pkgPath = path.resolve(path.dirname(path.dirname(__filename)), 'package.json');
-  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version?: string };
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version?: string; name?: string };
   const version = pkg.version;
   if (!version) throw new Error('Could not determine version from package.json');
+  // Derive the install dir name from package.json so the rename (coldstart-mcp →
+  // coldstart) — or any future rename — doesn't break stable-install resolution.
+  const pkgName = pkg.name ?? 'coldstart';
 
   const versionDir = path.join(home, '.coldstart', 'versions', version);
-  const entryPath = path.join(versionDir, 'node_modules', 'coldstart-mcp', 'dist', 'index.js');
+  const entryPath = path.join(versionDir, 'node_modules', pkgName, 'dist', 'index.js');
   if (fs.existsSync(entryPath)) return entryPath;
 
   const running = fs.realpathSync(process.argv[1]);
   const sourceNm = path.resolve(running, '..', '..', '..');
-  if (!fs.existsSync(path.join(sourceNm, 'coldstart-mcp', 'package.json'))) {
-    throw new Error(`Cannot locate the running coldstart-mcp install from ${running}.`);
+  if (!fs.existsSync(path.join(sourceNm, pkgName, 'package.json'))) {
+    throw new Error(`Cannot locate the running ${pkgName} install from ${running}.`);
   }
 
   out(`Copying coldstart-mcp@${version} to ~/.coldstart/versions/${version}/ …`);

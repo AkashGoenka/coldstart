@@ -1,4 +1,4 @@
-// All shared interfaces and types for coldstart-mcp
+// All shared interfaces and types for coldstart
 
 export type DomainEvidence = { filename: number; path: number; symbol: number };
 

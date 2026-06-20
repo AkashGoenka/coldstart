@@ -6,6 +6,7 @@ import {
   ListRootsResultSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { IndexContext } from '../index-manager.js';
+import { getCurrentVersion } from '../daemon-lock.js';
 import {
   handleFind,
   handleGetStructure,
@@ -138,11 +139,11 @@ export function registerToolHandlers(
 }
 
 // ---------------------------------------------------------------------------
-// Factory — creates a fully wired MCP server (used per-session in HTTP daemon)
+// Factory — creates a fully wired MCP server (the stdio reader over the cache)
 // ---------------------------------------------------------------------------
 export function createMcpServer(getContext: () => Promise<IndexContext>): Server {
   const server = new Server(
-    { name: 'coldstart-mcp', version: '3.0.0' },
+    { name: 'coldstart', version: getCurrentVersion() },
     { capabilities: { tools: {} } },
   );
   registerToolHandlers(server, getContext);

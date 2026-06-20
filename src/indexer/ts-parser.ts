@@ -138,7 +138,7 @@ function extractNestedFunctions(
 // ---------------------------------------------------------------------------
 // Walk a subtree and collect all call_expression callee names + their lines.
 // Keeps the first-seen line per callee name (sufficient for the
-// trace-impact "go to first call site" use case).
+// gs "go to first call site" use case).
 // ---------------------------------------------------------------------------
 function collectCalls(node: TSNode, results: Map<string, number>): void {
   if (node.type === 'call_expression') {
@@ -228,7 +228,7 @@ function extractAssignmentSymbols(root: TSNode, fileId: string): SymbolNode[] {
       if (fnBody) collectCalls(fnBody, calls);
       else if (isObj) collectCalls(rhs, calls);
       // module-level assignments ARE the file's public surface (no `export` in
-      // AMD/script files) → mark exported so they surface in get-structure.
+      // AMD/script files) → mark exported so they surface in gs.
       out.push({
         id: `${fileId}#${name}`,
         name,
