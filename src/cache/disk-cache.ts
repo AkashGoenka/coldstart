@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import type { CodebaseIndex, CacheMeta, IndexedFile } from '../types.js';
 import { CACHE_VERSION, CACHE_TTL_MS } from '../constants.js';
-import { buildContentTokenPostings, buildContentPresenceIndex } from '../indexer/content-tokens.js';
+import { buildContentTokenPostings } from '../indexer/content-tokens.js';
 
 const DEFAULT_CACHE_DIR = join(homedir(), '.coldstart', 'indexes');
 const FILES_CHUNK_SIZE = 5000;
@@ -273,9 +273,6 @@ function deserializeIndex(plain: SerializedIndex): CodebaseIndex {
   const contentTokenPostings = buildContentTokenPostings(
     files.values() as Iterable<IndexedFile>,
   );
-  const contentPresenceIndex = buildContentPresenceIndex(
-    files.values() as Iterable<IndexedFile>,
-  );
 
   return {
     rootDir: plain.rootDir,
@@ -288,6 +285,5 @@ function deserializeIndex(plain: SerializedIndex): CodebaseIndex {
     inEdges,
     tokenDocFreq,
     contentTokenPostings,
-    contentPresenceIndex,
   };
 }

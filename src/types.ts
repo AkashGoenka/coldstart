@@ -115,7 +115,6 @@ export interface CodebaseIndex {
   inEdges: Map<string, string[]>;        // fileId → [fileId] (importers)
   tokenDocFreq: Map<string, number>;     // token → number of files containing that token (for IDF scoring)
   contentTokenPostings: Map<string, string[]>;  // rare content token (df 2–5) → fileIds; derived from files' contentTokens, rebuilt on load/patch
-  contentPresenceIndex: Map<string, { n: number; files: string[] }>;  // lowercased content token → df + first files; derived, rebuilt on load/patch (GO content-presence fallback)
   indexedAt: number;                    // Date.now()
   gitHead: string;                      // HEAD commit hash or ''
 }

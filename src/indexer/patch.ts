@@ -6,7 +6,7 @@ import { parseFile, buildFileId } from './parser.js';
 import { buildFileDomains, isTestPath } from './tokenize.js';
 import { resolveImportsForFiles } from './resolvers/index.js';
 import { buildSymbolEdges } from './symbol-edges.js';
-import { buildContentTokenPostings, buildContentPresenceIndex } from './content-tokens.js';
+import { buildContentTokenPostings } from './content-tokens.js';
 
 /**
  * Incrementally patches the in-memory index for a set of changed files.
@@ -275,7 +275,6 @@ export async function patchIndex(
   // means almost any edit can move tokens in or out of the postings)
   // -------------------------------------------------------------------------
   index.contentTokenPostings = buildContentTokenPostings(index.files.values());
-  index.contentPresenceIndex = buildContentPresenceIndex(index.files.values());
 
   index.indexedAt = Date.now();
 }

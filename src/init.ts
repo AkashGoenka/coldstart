@@ -33,7 +33,7 @@ function out(msg: string): void {
 // coldstart.md content — one doc, two invocation flavors
 // ---------------------------------------------------------------------------
 
-function coldstartMd(mode: 'cli' | 'mcp'): string {
+export function coldstartMd(mode: 'cli' | 'mcp'): string {
   const cli = mode === 'cli';
   const find = cli ? '`coldstart find <terms...>`' : 'the `find` tool';
   const gs = cli ? '`coldstart gs <file>`' : 'the `gs` tool';
@@ -72,8 +72,8 @@ ${invocation} that answer "where does this live?" and "what is this file?" witho
 
 ${flags}
 ## Reading the output
-- Each \`find\` line is \`<path> matched: [tok1, tok2...]\` (rarest-first). Top files get an inline preview (symbols + clustered body lines) — often enough to answer without a Read.
-- \`← imported by X\` = an import edge between two results. \`~ shares\` = a name-reference relation the import graph can't see — the two files share a rare identifier/string token (migration↔model, config-by-name, cross-language). Treat a linked pair as one unit.
+- Top files are marked \`▸ <path>  [covered/total]\` — how many of your query terms they cover — with a \`Role:\` line (which terms each defines/imports) and an inline preview of the body lines where your terms cluster. Often enough to answer WITHOUT a Read.
+- A \`Wired:\` line shows relations: \`uses\`/\`used by\` = import edges; \`near\` = a name-reference relation the import graph can't see (the files share a rare identifier/string token — migration↔model, config-by-name, cross-language). Treat wired files as one unit: if one is worth opening, the others usually belong in your answer too.
 - "no indexed file contains any of [...]" = those identifiers aren't in the repo. Don't grep spelling variants.
 - \`gs\` Importers with \`match\` lists every file whose content references the term — exhaustive, so a subsystem absent from it does NOT use the symbol. Don't grep to re-verify.
 
@@ -133,7 +133,7 @@ function mcpServerEntry(cwd: string): { command: string; args: string[] } {
 // Writers
 // ---------------------------------------------------------------------------
 
-function writeColdstartMd(cwd: string, mode: 'cli' | 'mcp'): 'created' | 'updated' {
+export function writeColdstartMd(cwd: string, mode: 'cli' | 'mcp'): 'created' | 'updated' {
   const filePath = path.join(cwd, 'coldstart.md');
   const existed = fs.existsSync(filePath);
   fs.writeFileSync(filePath, coldstartMd(mode));
@@ -141,7 +141,7 @@ function writeColdstartMd(cwd: string, mode: 'cli' | 'mcp'): 'created' | 'update
 }
 
 /** Ensure CLAUDE.md exists and imports coldstart.md via `@coldstart.md`. */
-function wireClaudeImport(cwd: string): 'created' | 'added' | 'present' {
+export function wireClaudeImport(cwd: string): 'created' | 'added' | 'present' {
   const filePath = path.join(cwd, 'CLAUDE.md');
   if (!fs.existsSync(filePath)) {
     fs.writeFileSync(filePath, `# Project guidance\n\n${IMPORT_LINE}\n`);

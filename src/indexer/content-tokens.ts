@@ -168,44 +168,6 @@ export function buildContentTokenPostings(
 }
 
 // ---------------------------------------------------------------------------
-// Content-presence index — lowercased token → where it lives in file bodies.
-// Backs GO's content-presence fallback for query tokens that match zero
-// declared names: name the files (small df), give a count (flood), or assert
-// absence (df 0 — valid ONLY for shaped tokens, since unshaped words never
-// enter contentTokens and their absence here proves nothing).
-// Posting lists are capped: past the cap only the count matters for display.
-// ---------------------------------------------------------------------------
-export const CONTENT_PRESENCE_LIST_CAP = 8;
-
-export interface ContentPresenceEntry {
-  n: number; // full document frequency (non-test, non-barrel)
-  files: string[]; // first CONTENT_PRESENCE_LIST_CAP fileIds only
-}
-
-export function buildContentPresenceIndex(
-  files: Iterable<IndexedFile>,
-): Map<string, ContentPresenceEntry> {
-  const out = new Map<string, ContentPresenceEntry>();
-  for (const file of files) {
-    if (file.isTestFile || file.isBarrel || !file.contentTokens) continue;
-    const seenLower = new Set<string>(); // SpatialView + spatialView in one file = one df
-    for (const token of Object.keys(file.contentTokens)) {
-      const lower = token.toLowerCase();
-      if (seenLower.has(lower)) continue;
-      seenLower.add(lower);
-      const entry = out.get(lower);
-      if (entry === undefined) {
-        out.set(lower, { n: 1, files: [file.id] });
-      } else {
-        entry.n++;
-        if (entry.files.length < CONTENT_PRESENCE_LIST_CAP) entry.files.push(file.id);
-      }
-    }
-  }
-  return out;
-}
-
-// ---------------------------------------------------------------------------
 // Link derivation
 // ---------------------------------------------------------------------------
 export interface TokenLink {

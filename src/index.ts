@@ -29,7 +29,7 @@ import { addCSharpSyntheticEdges } from './indexer/csharp-synthetic.js';
 import { addDjangoSyntheticEdges } from './indexer/django-synthetic.js';
 import { buildGraph } from './indexer/graph.js';
 import { buildFileDomains, isTestPath } from './indexer/tokenize.js';
-import { buildContentTokenPostings, buildContentPresenceIndex } from './indexer/content-tokens.js';
+import { buildContentTokenPostings } from './indexer/content-tokens.js';
 import { buildSymbolEdges } from './indexer/symbol-edges.js';
 import { getGitHead } from './indexer/git.js';
 import { loadCachedIndex, saveCachedIndex } from './cache/disk-cache.js';
@@ -257,7 +257,6 @@ export async function buildIndex(
   }
 
   const contentTokenPostings = buildContentTokenPostings(indexedFiles);
-  const contentPresenceIndex = buildContentPresenceIndex(indexedFiles);
 
   const gitHead = await getGitHead(rootDir);
   const elapsed = ((Date.now() - start) / 1000).toFixed(1);
@@ -281,7 +280,6 @@ export async function buildIndex(
     inEdges,
     tokenDocFreq,
     contentTokenPostings,
-    contentPresenceIndex,
     indexedAt: Date.now(),
     gitHead,
   };
