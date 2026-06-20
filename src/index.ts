@@ -29,6 +29,7 @@ import { addCSharpSyntheticEdges } from './indexer/csharp-synthetic.js';
 import { addDjangoSyntheticEdges } from './indexer/django-synthetic.js';
 import { buildGraph } from './indexer/graph.js';
 import { buildFileDomains, isTestPath } from './indexer/tokenize.js';
+import { baseIndexedFile } from './indexer/indexed-file.js';
 import { buildContentTokenPostings } from './indexer/content-tokens.js';
 import { buildSymbolEdges } from './indexer/symbol-edges.js';
 import { getGitHead } from './indexer/git.js';
@@ -156,30 +157,12 @@ export async function buildIndex(
           if (!parsed) return;
 
           const file: IndexedFile = {
-            id,
-            path: wf.absolutePath,
-            relativePath: wf.relativePath,
-            language: wf.language,
+            ...baseIndexedFile(id, wf.absolutePath, wf.relativePath, wf.language, parsed),
             domainMap: buildFileDomains(wf.relativePath, parsed.exports),
-            exports: parsed.exports,
-            hasDefaultExport: parsed.hasDefaultExport,
-            imports: parsed.imports,
-            hash: parsed.hash,
-            lineCount: parsed.lineCount,
-            tokenEstimate: parsed.tokenEstimate,
             importedByCount: 0,
             transitiveImportedByCount: 0,
             isBarrel: false,
             isTestFile: isTestPath(wf.relativePath),
-            symbols: parsed.symbols,
-            reexportRatio: parsed.reexportRatio,
-            constantReferences: parsed.constantReferences,
-            partialDeclarations: parsed.partialDeclarations,
-            eloquentRelations: parsed.eloquentRelations,
-            containerResolutions: parsed.containerResolutions,
-            djangoConventionRefs: parsed.djangoConventionRefs,
-            submoduleImportCandidates: parsed.submoduleImportCandidates,
-            contentTokens: parsed.contentTokens,
           };
           indexedFiles.push(file);
           langCount[wf.language] = (langCount[wf.language] ?? 0) + 1;
@@ -326,29 +309,12 @@ async function runProbe(rootDir: string, excludes: string[], includes: string[])
         const parsed = await parseFile(wf.absolutePath, wf.language, id);
         if (!parsed) return;
         indexedFiles.push({
-          id,
-          path: wf.absolutePath,
-          relativePath: wf.relativePath,
-          language: wf.language,
+          ...baseIndexedFile(id, wf.absolutePath, wf.relativePath, wf.language, parsed),
           domainMap: {},
-          exports: parsed.exports,
-          hasDefaultExport: parsed.hasDefaultExport,
-          imports: parsed.imports,
-          hash: parsed.hash,
-          lineCount: parsed.lineCount,
-          tokenEstimate: parsed.tokenEstimate,
           importedByCount: 0,
           transitiveImportedByCount: 0,
           isBarrel: false,
           isTestFile: false,
-          symbols: parsed.symbols,
-          reexportRatio: parsed.reexportRatio,
-          constantReferences: parsed.constantReferences,
-          partialDeclarations: parsed.partialDeclarations,
-          eloquentRelations: parsed.eloquentRelations,
-          containerResolutions: parsed.containerResolutions,
-          djangoConventionRefs: parsed.djangoConventionRefs,
-          submoduleImportCandidates: parsed.submoduleImportCandidates,
         });
       } catch { /* skip parse errors */ }
     }));

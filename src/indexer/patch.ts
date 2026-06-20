@@ -7,6 +7,11 @@ import { buildFileDomains, isTestPath } from './tokenize.js';
 import { resolveImportsForFiles } from './resolvers/index.js';
 import { buildSymbolEdges } from './symbol-edges.js';
 import { buildContentTokenPostings } from './content-tokens.js';
+import { baseIndexedFile } from './indexed-file.js';
+import { addRailsSyntheticEdges } from './rails-synthetic.js';
+import { addLaravelSyntheticEdges } from './laravel-synthetic.js';
+import { addCSharpSyntheticEdges } from './csharp-synthetic.js';
+import { addDjangoSyntheticEdges } from './django-synthetic.js';
 
 /**
  * Incrementally patches the in-memory index for a set of changed files.
@@ -160,25 +165,12 @@ export async function patchIndex(
     const oldFile = index.files.get(fileId);
 
     const newFile: IndexedFile = {
-      id: fileId,
-      path: absPath,
-      relativePath: relPath,
-      language: lang,
+      ...baseIndexedFile(fileId, absPath, relPath, lang, parsed),
       domainMap: buildFileDomains(relPath, parsed.exports),
-      exports: parsed.exports,
-      hasDefaultExport: parsed.hasDefaultExport,
-      imports: parsed.imports,
-      hash: parsed.hash,
-      lineCount: parsed.lineCount,
-      tokenEstimate: parsed.tokenEstimate,
       importedByCount: oldFile?.importedByCount ?? 0,
       transitiveImportedByCount: oldFile?.transitiveImportedByCount ?? 0,
       isBarrel: false,
       isTestFile: isTestPath(relPath),
-      symbols: parsed.symbols,
-      reexportRatio: parsed.reexportRatio,
-      submoduleImportCandidates: parsed.submoduleImportCandidates,
-      contentTokens: parsed.contentTokens,
     };
 
     index.files.set(fileId, newFile);
@@ -239,6 +231,39 @@ export async function patchIndex(
 
       for (const edge of buildSymbolEdges([file], index.outEdges, index.files)) {
         index.symbolEdges.push(edge);
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Phase 5.5: Refresh synthetic (convention) edges. Phase 1 stripped the
+    // outgoing edges of every changed file, INCLUDING its synthetic
+    // Rails/Django/Laravel/C# convention edges — so without this, editing a
+    // convention file deletes its association/view/route edges until the next
+    // full rebuild. The synthetic passes are idempotent (each seeds a `seen`
+    // set from the existing edges and only adds what's missing), so re-running
+    // them over the full file set re-creates exactly the stripped edges with no
+    // duplication. Gate on the languages that actually changed so a
+    // non-convention edit (e.g. a TS file in a Rails repo) pays nothing.
+    const changedLangs = new Set(newFiles.map(f => f.language));
+    if (changedLangs.has('ruby') || changedLangs.has('php') ||
+        changedLangs.has('csharp') || changedLangs.has('python')) {
+      const allFiles = [...index.files.values()];
+      const before = index.edges.length;
+      if (changedLangs.has('ruby'))   await addRailsSyntheticEdges(allFiles, index.edges, fileIdSet, rootDir);
+      if (changedLangs.has('php'))    await addLaravelSyntheticEdges(allFiles, index.edges, fileIdSet, rootDir);
+      if (changedLangs.has('csharp')) await addCSharpSyntheticEdges(allFiles, index.edges, fileIdSet, rootDir);
+      if (changedLangs.has('python')) await addDjangoSyntheticEdges(allFiles, index.edges, fileIdSet, rootDir);
+      // Sync the newly-added synthetic edges into the graph maps + recompute set.
+      for (let i = before; i < index.edges.length; i++) {
+        const e = index.edges[i];
+        const out = index.outEdges.get(e.from) ?? [];
+        if (!out.includes(e.to)) out.push(e.to);
+        index.outEdges.set(e.from, out);
+        if (!index.inEdges.has(e.to)) index.inEdges.set(e.to, []);
+        const inn = index.inEdges.get(e.to)!;
+        if (!inn.includes(e.from)) inn.push(e.from);
+        affectedIds.add(e.from);
+        affectedIds.add(e.to);
       }
     }
   }
