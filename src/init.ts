@@ -19,6 +19,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
+import { ensureKeeper } from './keeper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 
@@ -229,6 +230,14 @@ export async function runInit(): Promise<void> {
 
   if (claude) setupClaude(cwd);
   else setupOther(cwd);
+
+  // Warm the index now, while the user is here at setup, so the first lookup
+  // isn't a cold build. ensureKeeper spawns the background keeper (detached) and
+  // returns immediately; the keeper walks + indexes + watches from here on.
+  // Best-effort — a spawn failure just means the first query builds lazily.
+  out('');
+  out('Indexing this repo in the background — your first lookup will be instant.');
+  await ensureKeeper(cwd);
 
   out('');
   out(DIVIDER);
