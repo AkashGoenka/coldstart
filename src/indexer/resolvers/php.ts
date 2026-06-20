@@ -1,6 +1,6 @@
 import { dirname, join, resolve } from 'node:path';
 import { readFile } from 'node:fs/promises';
-import { tryResolveBase } from './shared.js';
+import { tryResolveBase, MAX_DIR_WALK_DEPTH } from './shared.js';
 
 /**
  * PHP resolver: handles PSR-4 namespace imports and relative path includes.
@@ -39,7 +39,7 @@ async function findComposerDirs(startDir: string): Promise<string[]> {
   if (cached) return cached;
   const found: string[] = [];
   let dir = startDir;
-  for (let i = 0; i < 64; i++) {
+  for (let i = 0; i < MAX_DIR_WALK_DEPTH; i++) {
     try {
       await readFile(join(dir, 'composer.json'), 'utf-8');
       found.push(dir);

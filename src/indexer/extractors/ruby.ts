@@ -6,45 +6,22 @@
  * Follows the same interface and patterns as ts-parser.ts.
  */
 import { createRequire } from 'node:module';
-import { dirname, resolve, basename } from 'node:path';
 import type { SymbolNode, CallSite } from '../../types.js';
+import { childrenOfType, firstChildOfType, firstChildOfTypes } from './node-helpers.js';
+import { makeParser } from './parser-factory.js';
 
 const require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ParserCtor = require('tree-sitter') as { new(): any };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const rubyGrammar = require('tree-sitter-ruby') as unknown;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let rubyParser: any = null;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getParser(): any {
-  if (!rubyParser) {
-    rubyParser = new ParserCtor();
-    rubyParser.setLanguage(rubyGrammar);
-  }
-  return rubyParser;
-}
+const getParser = makeParser(rubyGrammar);
 
 // ---------------------------------------------------------------------------
 // Node helpers
 // ---------------------------------------------------------------------------
-
-function childrenOfType(node: TSNode, type: string): TSNode[] {
-  return node.namedChildren.filter((c: TSNode) => c.type === type);
-}
-
-function firstChildOfType(node: TSNode, type: string): TSNode | null {
-  return node.namedChildren.find((c: TSNode) => c.type === type) ?? null;
-}
-
-function firstChildOfTypes(node: TSNode, types: string[]): TSNode | null {
-  return node.namedChildren.find((c: TSNode) => types.includes(c.type)) ?? null;
-}
 
 /** Collect all call node method names + first-seen line in a subtree */
 function collectCalls(node: TSNode, results: Map<string, number>): void {
@@ -841,52 +818,6 @@ function extractNode(
       break;
     }
   }
-}
-
-// ---------------------------------------------------------------------------
-// Import resolution
-// ---------------------------------------------------------------------------
-
-export interface RubyImport {
-  raw: string;           // original require string
-  resolved: string | null; // relative file path or null for external
-  isRelative: boolean;
-}
-
-/** Known gem/stdlib names — skip these as external */
-const STDLIB_PREFIXES = new Set([
-  'json', 'yaml', 'csv', 'net/', 'openssl', 'base64', 'digest',
-  'date', 'time', 'uri', 'fileutils', 'pathname', 'set',
-  'singleton', 'forwardable', 'ostruct', 'struct', 'logger',
-  'securerandom', 'benchmark', 'pp', 'io/', 'cgi', 'erb',
-  'tempfile', 'tmpdir',
-]);
-
-function isExternalGem(specifier: string): boolean {
-  // Gems typically use simple names without slashes, or known stdlib prefixes
-  if (STDLIB_PREFIXES.has(specifier)) return true;
-  for (const prefix of STDLIB_PREFIXES) {
-    if (specifier.startsWith(prefix)) return true;
-  }
-  // If no slash and no dot, likely a gem
-  if (!specifier.includes('/') && !specifier.includes('.')) return true;
-  return false;
-}
-
-export function resolveRubyRequire(
-  specifier: string,
-  fromFilePath: string,
-  isRelative: boolean,
-  projectRoot: string,
-): string | null {
-  if (!isRelative && isExternalGem(specifier)) return null;
-
-  const base = isRelative
-    ? resolve(dirname(fromFilePath), specifier)
-    : resolve(projectRoot, specifier);
-
-  // Return without extension (resolver will try appending .rb)
-  return base;
 }
 
 // ---------------------------------------------------------------------------

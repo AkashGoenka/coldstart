@@ -4,10 +4,11 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { readLock, writeLock, watchOwnLockfile, daemonDir } from '../src/daemon-lock.js';
 
-// These tests exercise the daemon-lock invariants that prevent the two
+// These tests exercise the keeper-lock invariants that prevent the two
 // catastrophic failure modes shipped in v1.4.3:
-//   1. Loop on the daemon's own lockfile write (existence-check filter).
-//   2. Silent attach to an older-version daemon (version field round-trip).
+//   1. Loop on the keeper's own lockfile write (existence-check filter).
+//   2. Silent attach to an older-version keeper (version field round-trip).
+// The keeper no longer serves over HTTP, so the lock carries no port.
 
 describe('daemon-lock', () => {
   const realDaemonDir = daemonDir();
@@ -38,11 +39,10 @@ describe('daemon-lock', () => {
 
   describe('readLock / writeLock version round-trip', () => {
     it('preserves the version field on round-trip', async () => {
-      await writeLock(testRoot, 12345, 49999, '1.4.3');
+      await writeLock(testRoot, 12345, '1.4.3');
       const lock = await readLock(testRoot);
       expect(lock).toBeTruthy();
       expect(lock!.pid).toBe(12345);
-      expect(lock!.port).toBe(49999);
       expect(lock!.version).toBe('1.4.3');
     });
 
@@ -53,7 +53,7 @@ describe('daemon-lock', () => {
       const files = fs.readdirSync(dir);
       // writeLock derives the filename internally; we can reuse it by writing once
       // with version and then stripping the field.
-      await writeLock(testRoot, 9, 9, '1.4.3');
+      await writeLock(testRoot, 9, '1.4.3');
       const written = fs.readdirSync(dir).find(f => f.endsWith('.json'))!;
       const full = path.join(dir, written);
       const raw = JSON.parse(fs.readFileSync(full, 'utf-8'));
@@ -73,18 +73,18 @@ describe('daemon-lock', () => {
   describe('watchOwnLockfile existence-check filter', () => {
     it('does NOT fire onMissing when the daemon writes its own lockfile', async () => {
       // Pre-create the lockfile so the watcher is observing a steady-state
-      // condition (daemon already running).
-      await writeLock(testRoot, 11111, 50000, '1.4.3');
+      // condition (keeper already running).
+      await writeLock(testRoot, 11111, '1.4.3');
 
       let onMissingCalls = 0;
       const stop = watchOwnLockfile(testRoot, () => { onMissingCalls++; });
 
       try {
-        // Simulate the daemon re-writing its lockfile (e.g., port changed,
-        // periodic touch, atomic-replace pattern). This MUST NOT trigger the
-        // onMissing callback — that would be the infinite-loop bug.
-        await writeLock(testRoot, 11111, 50001, '1.4.3');
-        await writeLock(testRoot, 11111, 50002, '1.4.3');
+        // Simulate the keeper re-writing its lockfile (periodic touch,
+        // atomic-replace pattern). This MUST NOT trigger the onMissing
+        // callback — that would be the infinite-loop bug.
+        await writeLock(testRoot, 11111, '1.4.3');
+        await writeLock(testRoot, 11111, '1.4.3');
 
         // Wait past the 200 ms debounce + a safety margin.
         await new Promise(r => setTimeout(r, 400));
@@ -95,7 +95,7 @@ describe('daemon-lock', () => {
     });
 
     it('fires onMissing exactly once when the user deletes the lockfile', async () => {
-      await writeLock(testRoot, 22222, 51000, '1.4.3');
+      await writeLock(testRoot, 22222, '1.4.3');
 
       let onMissingCalls = 0;
       const stop = watchOwnLockfile(testRoot, () => { onMissingCalls++; });
@@ -116,7 +116,7 @@ describe('daemon-lock', () => {
     });
 
     it('stop() halts further callbacks even if the file is later deleted', async () => {
-      await writeLock(testRoot, 33333, 52000, '1.4.3');
+      await writeLock(testRoot, 33333, '1.4.3');
       let onMissingCalls = 0;
       const stop = watchOwnLockfile(testRoot, () => { onMissingCalls++; });
       stop();

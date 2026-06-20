@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import type { CodebaseIndex, CacheMeta, IndexedFile } from '../types.js';
 import { CACHE_VERSION, CACHE_TTL_MS } from '../constants.js';
-import { buildContentTokenPostings, buildContentPresenceIndex } from '../indexer/content-tokens.js';
+import { buildContentTokenPostings } from '../indexer/content-tokens.js';
 
 const DEFAULT_CACHE_DIR = join(homedir(), '.coldstart', 'indexes');
 const FILES_CHUNK_SIZE = 5000;
@@ -176,30 +176,6 @@ export async function saveCachedIndex(
   await writeFile(join(dir, 'meta.json'), JSON.stringify(meta, null, 2));
 }
 
-export async function isCacheStale(
-  index: CodebaseIndex,
-  currentGitHead: string,
-  baseCacheDir?: string,
-): Promise<boolean> {
-  const dir = getCacheDir(index.rootDir, baseCacheDir);
-  const metaPath = join(dir, 'meta.json');
-
-  try {
-    const raw = await readFile(metaPath, 'utf-8');
-    const meta = JSON.parse(raw) as CacheMeta;
-
-    if (meta.gitHead && currentGitHead && meta.gitHead !== currentGitHead) {
-      return true;
-    }
-    if (Date.now() - meta.timestamp > CACHE_TTL_MS) {
-      return true;
-    }
-    return false;
-  } catch {
-    return true;
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Serialization helpers (Map ↔ plain object)
 // ---------------------------------------------------------------------------
@@ -273,9 +249,6 @@ function deserializeIndex(plain: SerializedIndex): CodebaseIndex {
   const contentTokenPostings = buildContentTokenPostings(
     files.values() as Iterable<IndexedFile>,
   );
-  const contentPresenceIndex = buildContentPresenceIndex(
-    files.values() as Iterable<IndexedFile>,
-  );
 
   return {
     rootDir: plain.rootDir,
@@ -288,6 +261,5 @@ function deserializeIndex(plain: SerializedIndex): CodebaseIndex {
     inEdges,
     tokenDocFreq,
     contentTokenPostings,
-    contentPresenceIndex,
   };
 }

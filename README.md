@@ -1,110 +1,153 @@
 # coldstart
 
-coldstart is a lightweight navigation layer for AI agents.
+Fast codebase navigation for AI agents. It answers one question: **which files are relevant to this task?**
 
-It answers one question: **which files are relevant to this task?** No embeddings, no graph, no model to run or maintain. Just a fast, static index over your codebase — file paths, symbol names, exports — built once, queried instantly.
+No embeddings, no model to run, no service to babysit. Just a static index over your codebase — file paths, symbol names, exports, and the import/call graph — built once and queried in milliseconds. Agents are already good at reading and reasoning about code; what they waste tokens on is *finding* the right file. coldstart does that part, hands the file off, and gets out of the way.
 
-Agents are already good at reading code, tracing logic, and reasoning about structure. What they don't need is another system trying to do that for them. coldstart stays out of the way: find the file, hand it off, done.
-
-**2 tools. Minimal context overhead. No infrastructure to babysit.**
+**Two operations. Two surfaces (CLI + MCP). One background process that keeps the index fresh.**
 
 ---
 
-## Installation
+## The two operations
+
+| | What it answers | Replaces |
+|---|---|---|
+| **`find <terms>`** | "Which files are about this?" — ranks files by how many of your query terms they cover (filenames, path segments, exported symbols, plus a repo-wide name-reference pass). | a flurry of `grep`/`glob` while orienting |
+| **`gs <file>`** | "What is this file?" — top-level symbols with line ranges, who imports it, who calls each symbol, and name-related neighbors. | reading a whole file just to learn its shape and usage |
+
+The intended flow: **`find`** a concept → pick the best path → **`gs`** that file for its shape and who uses it → `Read` only for the implementation inside a method body.
+
+---
+
+## Two ways to call it, identical output
+
+coldstart ships as one binary with two front doors:
+
+- **CLI (primary)** — `coldstart find …` / `coldstart gs …`. For any shell-capable agent (Claude Code, Cursor, terminal use). This is the fast path.
+- **MCP (for no-shell clients)** — the `find` and `gs` MCP tools, byte-identical output. For clients like Claude Desktop that have no shell.
+
+Same engine, same index, same results. Pick whichever your agent can reach.
+
+---
+
+## Install
 
 Requires Node.js 18+.
 
-**Install globally, then run init once from inside your project:**
-
 ```bash
-npm install -g coldstart-mcp --legacy-peer-deps
-coldstart-mcp init
+npm install -g coldstart --legacy-peer-deps
+cd your-project
+coldstart init
 ```
 
-`init` copies the global install into `~/.coldstart/versions/<version>/` and writes a `.mcp.json` pointing directly at that path. After that, every MCP startup is a direct `node` invocation — fast, no per-session npm overhead.
+`init` writes a single `coldstart.md` at your repo root (the agent-facing guidance) and wires it in:
 
-> **Why `--legacy-peer-deps`?** The tree-sitter grammar packages under-declare their peer-dep ranges (some say `^0.21.x`, others say `^0.22.x`). Without the flag, npm's strict resolver enters a long retry loop on fresh installs and can appear to hang. The flag tells npm to use our declared versions as-is — exactly what we test against. We can't set this from inside the package (npm reads install config only from the user's environment, never from the package being installed).
+- **Claude Code** → ensures `CLAUDE.md` imports it via `@coldstart.md`.
+- **Any other app** → writes `coldstart.md` only, and prints the MCP server entry to paste into your client's config.
 
-coldstart detects your IDE (Claude Code or Cursor) and writes the right files automatically:
+It then warms the index in the background, so your first lookup is instant. Re-running `init` is safe — it never duplicates entries.
 
-| IDE | MCP config | Agent rules |
-|-----|-----------|-------------|
-| Claude Code | `.mcp.json` — merged if exists | `CLAUDE.md` — appended if exists |
-| Cursor | `.cursor/mcp.json` — merged if exists | `.cursor/rules/coldstart-mcp.mdc` |
-| Neither detected | `coldstart-mcp.json` + `coldstart-rules.md` to copy manually |
-
-Re-running `init` is safe — it never duplicates entries.
+> **Why `--legacy-peer-deps`?** The tree-sitter grammar packages under-declare their peer-dep ranges (some say `^0.21.x`, others `^0.22.x`). Without the flag npm's strict resolver enters a long retry loop on a cold cache and can appear to hang. The flag tells npm to use our tested versions as-is. We can't set it from inside the package — npm reads install config only from your environment.
 
 ### Upgrading
 
 ```bash
-npm install -g coldstart-mcp@latest --legacy-peer-deps
-coldstart-mcp init
+npm install -g coldstart@latest --legacy-peer-deps
+coldstart init   # re-run in each project to refresh coldstart.md
 ```
 
-The second command re-runs init from the new install, which rewrites `.mcp.json` to point at the new versioned path under `~/.coldstart/versions/`. The version-stamped lockfile then triggers the old daemon to shut down on the next tool call and a fresh daemon spawns from the new binary.
+A version stamp in the keeper's lockfile makes the old background keeper shut down on the next lookup; a fresh one spawns from the new binary. No manual restart needed.
 
-### Migrating from a previous version
-
-If your `.mcp.json` was written by an earlier release and uses `"command": "npx"`, you have two options:
-
-1. **Re-run init** (recommended) — see the install/upgrade commands above.
-
-2. **Automatic on next launch**: starting in v1.4.0, coldstart-mcp detects legacy `npx`-style entries in `.mcp.json` at startup and rewrites them to use direct `node` (with a backup file). The current session keeps running on the slow path; the next session is fast.
-
-To opt out of auto-migration: set `COLDSTART_NO_AUTO_MIGRATE=1` in the MCP entry's `env`.
-
-> **Note on `--root`:** Modern MCP clients (Claude Code, Cursor) advertise the workspace via `roots/list` during the handshake — coldstart auto-detects the project path from that. `--root` is a fallback for older clients, direct CLI use, or pinning a specific subdirectory of a monorepo.
->
-> **Caveat for some IDEs:** the daemon is keyed by absolute path, so if one client passes `--root /work/myproj` and another opens the same project but `roots/list` returns a different form (trailing slash, symlinked path that doesn't resolve, or a workspace root that's a parent of the project), they'll spawn two separate daemons indexing overlapping content. For init-generated configs, leave `--root` unset and let `roots/list` handle it. If you see duplicate daemons in `~/.coldstart/daemon/`, this is the usual cause.
+> **Migrating from `coldstart-mcp`:** the package was renamed `coldstart-mcp` → **`coldstart`** at 2.0.0 (the CLI is now the primary surface). `coldstart-mcp` is deprecated but still installs; switch with `npm uninstall -g coldstart-mcp && npm install -g coldstart --legacy-peer-deps && coldstart init`. The `coldstart-mcp` binary name is kept as an alias, so existing MCP configs keep working.
 
 ---
 
-## How it runs
+## Using it
 
-By default coldstart runs in **bridge + daemon** mode. The first time an MCP client connects, the bridge spawns a small background daemon process that holds the index in memory; subsequent client sessions for the same project reuse it. This means you don't pay the indexing cost every time the AI client restarts.
-
-```
-AI client ──stdio──> coldstart bridge ──HTTP──> coldstart daemon
-                                                     │
-                                                     └── live index in memory
-```
-
-- **One daemon per project root.** Identified by the absolute path (no daemon sharing across projects).
-- **Lockfile:** `~/.coldstart/daemon/<basename>-<hash>.json` records `{pid, port, rootDir}`.
-- **Log file:** `~/.coldstart/daemon/<basename>-<hash>.log` captures the daemon's full stderr (parse progress, errors, watcher events). The previous run is preserved at `.log.prev`. Each file caps at 1 MB.
-- **Idle daemon:** stays alive across client restarts. Nothing pings it shut — it sits at near-zero CPU and a few MB of RAM until invoked.
-- **First-call latency:** the bridge waits up to 180s for the daemon to finish its initial index, then proxies tool calls.
-
-**Daemon management:**
+### `find` — locate the files for a concept
 
 ```bash
-coldstart-mcp doctor          # is the current project's daemon healthy?
-coldstart-mcp status          # list every daemon on the machine
-coldstart-mcp restart         # kill the current project's daemon (next tool call respawns)
-coldstart-mcp restart --all   # kill every running daemon
+coldstart find auth session cookie
 ```
 
-`doctor` exits 0 on PASS and 1 on FAIL — easy to wire into scripts. `restart` is the right answer when *anything* feels off; a fresh daemon loads the disk cache (or rebuilds if missing). Upgrading the package is automatic — the bridge version-checks the running daemon and respawns it from your new binary; you don't need to restart anything by hand.
+Pass **every salient identifier** from your task — the symbol, the domain noun, the rare token you half-remember — not one distilled keyword. `find` ranks files by how many of your terms each one covers and shows, per file, which terms it defines vs. imports and a preview of the lines where they cluster. Often that's enough to answer without opening anything.
 
-As of v1.4.3 the daemon's log lines (parse progress, errors, watcher events) stream into your AI client's Output panel in real time, so you'll usually see what's happening without `tail`. The full log still lives at `~/.coldstart/daemon/<basename>-<hash>.log` (rotated at 1 MB; previous run in `.log.prev`) for crash postmortems.
+**Flags:**
+- `--path GLOB` — scope to a glob (`--path 'app/**/*.py'`); comma-combine, `!` to exclude.
+- `--tests` — include test files (excluded by default).
+- `--via` — show the name-reference relations (`near` edges) that the import graph can't see.
+- `--json` — machine-readable output.
 
-If you want to avoid the daemon entirely (e.g. for debugging or in environments where spawning detached processes is awkward), pass `--no-daemon` and coldstart runs as a single stdio process — same tools, no background state.
+### `gs` — drill into one file
 
-See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for deeper recovery procedures.
+```bash
+coldstart gs src/auth/service.ts
+```
+
+Returns the file's symbols (with line ranges), its 1-hop internal imports, who imports it, and per-symbol cross-file callers — in one call. This is the answer to **"who uses this file / who calls this symbol"**; it is not a grep.
+
+**Flags:**
+- `--symbol a,b` — deliver the named method bodies inline, plus their caller/callee pointers.
+- `--match TERM` — on a god-file, filter to one area (`--match tile`); `a|b` = OR, `/regex/` = regex.
+- `--view symbols|imports|importers|callers` — return one section instead of the full page (`full` is the default).
+- `--json` — machine-readable output.
+
+### Batch independent lookups in one shell call
+
+```bash
+coldstart find auth; coldstart find 'session cookie'; coldstart gs src/auth/service.ts
+```
 
 ---
 
-## How it indexes
+## How it stays fresh
 
-There is no separate indexing step. On first run coldstart automatically:
+coldstart is **one keeper, thin readers**:
 
-1. Walks the filesystem and parses all source files in batches of 100 — progress is logged to stderr every 500 files so you can see it's alive on large repos
-2. Resolves imports and builds a dependency graph
-3. Caches the index to `~/.coldstart/indexes/<basename>-<hash>/` (`meta.json` + `graph.json` + `files-N.json` chunks)
-4. Starts a file watcher — index stays live for the entire daemon session, no restarts needed
+```
+            ┌─────────────────────────────────────────────┐
+            │  keeper  (coldstart --daemon)                │
+            │  watches repo → patch/rebuild → save cache   │   ← keeps the cache fresh, serves nothing
+            └───────────────────────┬─────────────────────┘
+                                    │ on-disk cache
+        ┌───────────────────────────┼───────────────────────────┐
+        │                           │                           │
+  coldstart find            coldstart gs                  MCP server
+  (reads cache, prints)     (reads cache, prints)   (reads cache, stdio to client)
+```
 
-On a repo like Apache Kafka (~6k Java files) expect ~22s and ~42k edges on first run; subsequent starts load from cache instantly.
+- A single **keeper** process per repo watches the filesystem and keeps the on-disk cache current. It does **not** answer queries.
+- The CLI readers (`find`/`gs`) and the MCP server are **stateless readers** over that cache. The first reader for a repo lazily spawns the keeper, so even uncommitted edits stay live.
+- No HTTP, no ports, no bridge. The keeper logs to `~/.coldstart/daemon/<root>.log` and exits when its lockfile is removed.
+
+Edits are debounced (400 ms), then **patched incrementally** (≤30 changed files, ~2–5 ms/file) or trigger a **background full rebuild** (>30 files, served from the last good index until the swap). The cache re-saves ~5 s after edits settle. Branch switches / large pulls force a rebuild via a git-HEAD check.
+
+### Lifecycle commands
+
+```bash
+coldstart status         # list keepers on this machine: alive? index freshness?
+coldstart restart        # kill the current repo's keeper (respawns on next lookup)
+coldstart restart --all  # kill every keeper
+coldstart index          # build + save the cache once, up front (single-writer prep)
+```
+
+`restart` is the right move whenever anything feels stale — a fresh keeper reloads the cache (or rebuilds if missing). `status` also covers the old "is my index fresh?" check: it reads the cache `meta.json` mtime, no network probe.
+
+---
+
+## Supported languages
+
+TypeScript, JavaScript, JSX/TSX, Vue, Svelte, Astro, AngularJS 1.x, Java, Kotlin, Ruby (Rails-aware: `has_many`/`belongs_to` associations, `routes.rb` resources, controller↔view edges), Python (Django convention edges), Go, Rust, C#, PHP (Laravel convention edges), C++, Groovy (incl. Gradle DSL), GraphQL, YAML, TOML, XML, and `.env` files.
+
+**Not indexed:** Swift, Dart — no extension mapping; these files are not walked or parsed.
+
+---
+
+## When *not* to reach for it
+
+- A literal string / phrase / regex inside file bodies → **Grep**.
+- Reading an implementation → **Read**, after `gs` gives you the shape.
+- `find` says *"no indexed file contains any of […]"* → those identifiers aren't in the repo. Don't grep spelling variants.
 
 ---
 
@@ -113,139 +156,27 @@ On a repo like Apache Kafka (~6k Java files) expect ~22s and ~42k edges on first
 ```bash
 npm install
 npm run build
-node dist/index.js --root /path/to/project --no-daemon
-
 npm test
-npm run test:watch
-npm run dev          # watch mode for TypeScript
+
+# run a query from your build:
+node dist/index.js find auth --root .
+
+# run the MCP server in a single process (no background keeper) for debugging:
+node dist/index.js --root . --no-daemon
 ```
 
-To test against a live MCP client:
-```bash
-npx @modelcontextprotocol/inspector node dist/index.js --root . --no-daemon
-```
-
-`--no-daemon` is recommended during development — it keeps the index in the same process so logs, breakpoints, and crashes are visible.
-
----
-
-## Tool reference
-
-coldstart exposes **two** tools. `get-overview` finds the files; `get-structure` tells you everything about one file — its shape, what it imports, and who uses it. The older `trace-deps` and `trace-impact` tools are gone; their jobs (file-level import graph, symbol-level callers/implementors/extenders) are now folded into `get-structure`.
-
-### `get-overview` (GO)
-
-Locate files by matching your query against **declared names** — filenames, directory path segments, and exported symbol names. GO does not match file *bodies* (comments, docstrings, string literals, template/HTML/SQL content); for those, grep is the right tool.
-
-Required params:
-- `query` (string) — concept tokens for what you're looking for. Bare words are AND logic; bracket groups are OR synonyms: `"[auth|login|jwt] payment"` = any auth synonym AND payment. Naming-variant tolerant — case, separators, and plural ≡ singular are handled automatically (`LoadStaging` ≡ `load_staging` ≡ `load-staging`; `tile` ≡ `tiles`). (`domain_filter` is still accepted as a deprecated alias.)
-
-Optional params:
-- `max_results` (number, default 10) — page size. Don't raise this to "see more" — refine the query or lift a rare `[matched]` token into the next query instead.
-- `include_tests` (boolean, default false) — include test files (excluded by default).
-- `path` (string) — minimatch-style glob to scope where to look (`"arches/app/**/*.py"`, `"src/auth/**"`). Comma-combine; prefix `!` to exclude. Filters before ranking.
-- `page` (number, default 1) — results page. Prefer reformulating `query` over paging deep.
-
-Output: one result per line as `<path> [tok1, tok2, ...]`. The bracketed tokens are the indexed name tokens that matched, sorted rarest-first — the leftmost are the highest-signal identifiers (rare enough that grepping them reliably finds usages). If your query words don't appear in any `[matched]` list, the concept isn't in any declared name (it lives in bodies/strings/templates) — switch to grep rather than reformulating GO.
-
-### `get-structure` (GS)
-
-Drill into a single known file. This is the right tool for **"what's in this file"**, **"who does this file import"**, and **"who uses this file / who calls this symbol"** — no separate call needed.
-
-Required params:
-- `file_path` (string) — the file to inspect.
-
-Optional params:
-- `view` (string, default `full`) — which sections to return. `full` = all four below. Narrow to one section to save bytes: `symbols` (shape only, no callers), `imports` (outbound only), `importers` (inbound only), `callers` (per-symbol cross-file callers, expanded).
-- `match` (string) — filter all sections by name. Substring (case-insensitive) by default; `|` ORs substrings (`"resource|tile"`); wrap in slashes for regex (`"/^handle/"`). Use on god-files to avoid a wall of output.
-
-The `full` view returns four compact sections:
-- **Symbols** — top-level symbols + per-class methods (`kind name [startLine-endLine]`, with `extends`/`implements`). Each exported symbol is annotated with its cross-file callers (inline if one, a newline-per-caller block if several). For huge files (>20 symbols, no `match`), symbols are reordered most-used-first and truncated to the top 15.
-- **Imports** — 1-hop internal outbound dependencies (external/library imports stripped).
-- **Importers** — 1-hop reverse: files in this repo that import this one (capped at 20).
-- (Callers are shown inline with symbols in `full`; request `view: "callers"` for the expanded per-symbol form.)
-
-Use this AFTER `get-overview` surfaces a candidate file. Prefer it over `Read` when you need shape, neighbors, or usage — reach for `Read` only for implementation details inside a method body.
-
-**Caller-resolution confidence:**
-- `calls` edges are resolved cross-file for named function/constant calls — if `login` in `auth.ts` calls `hashPassword` exported from `utils.ts`, that edge is fully qualified and appears in the callers.
-- Member-expression calls (`this.method()`, `api.method()`) collapse to the property name and are not cross-file resolved — they won't appear unless a same-file symbol matches the name.
-- Nested functions one level deep inside components/functions are indexed (e.g. `UserProfile.handleSubmit`). Deeper closures are not.
-- Inheritance (`extends`/`implements`) chains are fully resolved.
-
----
-
-## Supported languages and frameworks
-
-TypeScript, JavaScript, Vue, Svelte, Astro, AngularJS 1.x, Java, Ruby (with Rails-aware edges: `has_many`/`belongs_to` associations, `routes.rb` resources, controller↔views), Python, Go, Rust, C#, PHP, Kotlin, C++, GraphQL, YAML, TOML, XML, Groovy (including Gradle DSL), `.env` files.
-
-**Not indexed:** Swift, Dart — no extension mapping; these file types are not walked or parsed.
-
----
-
-## CLI flags
-
-```txt
---root        Fallback project root directory (default: .). Ignored if the MCP client provides a workspace root.
---exclude     Additional directory names to skip (repeatable)
---include     Restrict walk to subdirectory (repeatable)
---cache-dir   Override cache directory (default: ~/.coldstart/indexes/)
---quiet       Suppress stderr logging (including parse progress output)
---no-cache    Skip reading/writing the disk cache and always build a fresh index.
-              The live file watcher still runs — only disk persistence is disabled.
---no-daemon   Run as a single stdio process. No background daemon, no port, no
-              lockfile. Useful for development, debugging, or restricted environments.
---daemon      Internal flag. The bridge spawns a child with this flag to run the
-              daemon HTTP server. You should not need to pass it manually.
-```
-
----
-
-## Live index updates
-
-Once the daemon is running, the index stays current automatically — no restarts required.
-
-1. A recursive `fs.watch` listener runs on the project root (native Node.js, no extra deps).
-2. Events are debounced over a 400 ms window and deduplicated by path.
-3. Only files whose extension maps to an indexed language are considered (SVG, JSON, CSS, images, etc. are ignored).
-4. A SHA-256 content check filters out false-positive events (editor atomic saves, `git checkout` mtime touches).
-
-**Decision after the debounce settles:**
-
-| Changed files | Action |
-|--------------|--------|
-| 0 (no real content change) | No-op |
-| 1 – 30 | Incremental patch (~2–5 ms per file) |
-| > 30 | Full rebuild in background |
-| Git HEAD changed | Full rebuild always |
-
-During a full rebuild, tool calls are served from the previous snapshot. Changes that arrive mid-rebuild are collected and applied as a follow-up patch — no changes are silently dropped.
-
----
-
-## Cache behavior
-
-Indexes are stored at `~/.coldstart/indexes/<basename>-<hash>/`, split into three artifact types:
-- `meta.json` — schema version, root path, git HEAD, file count, timestamp. Written last as an atomic commit marker; read first on startup to decide whether the rest of the cache is worth loading.
-- `graph.json` — file-level and symbol-level edges, adjacency maps, token document frequencies.
-- `files-N.json` — per-file metadata (exports, imports, symbols, domain map) in chunks of 5,000 entries. Large repos produce multiple chunks (`files-0.json`, `files-1.json`, …). Chunks are written in parallel alongside `graph.json`; `meta.json` is committed last.
-
-The cache is reused when:
-- `CACHE_VERSION` matches the running binary
-- Git HEAD has not changed since the index was built
-
-Bumping `CACHE_VERSION` (in `src/constants.ts`) auto-invalidates every cache on the next run. The cache TTL is **24 hours** and acts as a safety net only — the file watcher is the primary freshness signal during an active daemon session.
-
-To force a fresh index for a single run, pass `--no-cache`. To wipe everything for a clean slate, remove `~/.coldstart/`.
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for the index pipeline and process model, and [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for recovery procedures.
 
 ---
 
 ## Limitations
 
-1. Dynamic/computed import patterns (e.g., `import(variable)`) may not be resolved.
-2. It is a routing layer, not a behavior summarizer — no semantic analysis or code summaries.
-3. Hidden directories and files over 1 MB are skipped by default.
-4. Barrel detection (TS/JS only) uses re-export ratio; non-TS/JS barrel-style files are not detected.
-5. Swift and Dart are not indexed — they have no extension mapping and are not walked.
-6. `get-structure` caller edges: member-expression calls (`this.method()`, `api.method()`) are not cross-file resolved — these callers won't appear under a symbol. Named function calls matched to an import are fully resolved.
-7. The daemon is per-project and per-machine. Each project root gets its own daemon process and its own in-memory index — there's no sharing across projects. And the daemon binds to `127.0.0.1` only, so two machines accessing the same project (e.g. via NFS) each spin up a separate daemon.
+1. It's a routing layer, not a behavior summarizer — no semantic analysis or code summaries.
+2. `gs` callers are one-hop and file-scoped. Member-expression calls (`this.method()`, `api.method()`) aren't cross-file resolved; named function/constant calls are. Chase further hops by calling `gs` on the caller files.
+3. Dynamic/computed imports (`import(variable)`) and runtime-DSL references (polymorphic associations, gem/reflection-backed models) stay unresolved.
+4. Hidden directories and files over 1 MB are skipped.
+5. The keeper is per-repo and per-machine — no sharing across projects or hosts.
+
+## License
+
+MIT

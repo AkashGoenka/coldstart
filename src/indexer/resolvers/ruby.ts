@@ -1,7 +1,7 @@
 import { dirname, resolve, join, basename, relative, sep } from 'node:path';
 import { readFile, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { tryResolveBase } from './shared.js';
+import { tryResolveBase, MAX_DIR_WALK_DEPTH } from './shared.js';
 import { buildFileId } from '../parser.js';
 
 /**
@@ -29,7 +29,7 @@ const startDirToGemfileDir = new Map<string, string | null>();
 async function findGemfileDir(startDir: string, rootDir: string): Promise<string | null> {
   if (startDirToGemfileDir.has(startDir)) return startDirToGemfileDir.get(startDir)!;
   let dir = startDir;
-  for (let i = 0; i < 64; i++) {
+  for (let i = 0; i < MAX_DIR_WALK_DEPTH; i++) {
     try {
       await readFile(join(dir, 'Gemfile'), 'utf-8');
       startDirToGemfileDir.set(startDir, dir);
@@ -74,7 +74,7 @@ export async function resolveRuby(
 
   // Walk up from file dir; at each ancestor, try Rails load-path roots.
   let dir = dirname(fromFile);
-  for (let i = 0; i < 64; i++) {
+  for (let i = 0; i < MAX_DIR_WALK_DEPTH; i++) {
     for (const loadRoot of RUBY_LOAD_ROOTS) {
       const base = join(dir, loadRoot, specifier);
       const result = tryResolveBase(base, fileIdSet, rootDir);
@@ -186,15 +186,6 @@ export async function buildRailsFqcnIndex(
   }
 
   return idx;
-}
-
-/** Resolve a constant FQCN to a fileId using the Rails autoload index */
-export function resolveRailsConstant(
-  fqcn: string,
-  fqcnIndex: Map<string, string>,
-): string | null {
-  const key = underscore(fqcn);
-  return fqcnIndex.get(key) ?? null;
 }
 
 /**

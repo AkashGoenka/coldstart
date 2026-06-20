@@ -24,7 +24,7 @@ function stripComments(content: string): string {
  *   - Type-system defs: `type X`, `interface X`, `enum X`, `input X`, `scalar X`, `union X`
  *
  * Imports: graphql-tag's loader convention `#import './foo.graphql'` is common in JS
- * tooling — capture those so trace-deps works across .graphql files.
+ * tooling — capture those so import edges work across .graphql files.
  *
  * Anonymous operations (`{ field }`) produce no symbol; we skip them.
  */

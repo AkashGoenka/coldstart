@@ -1,26 +1,15 @@
 import { createRequire } from 'node:module';
 import type { SymbolNode } from '../../types.js';
+import { makeParser } from './parser-factory.js';
 
 const require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ParserCtor = require('tree-sitter') as { new(): any };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const tomlModule = require('@tree-sitter-grammars/tree-sitter-toml') as unknown;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let tomlParser: any = null;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getParser(): any {
-  if (!tomlParser) {
-    tomlParser = new ParserCtor();
-    tomlParser.setLanguage(tomlModule);
-  }
-  return tomlParser;
-}
+const getParser = makeParser(tomlModule);
 
 export interface TomlParseResult {
   imports: string[];

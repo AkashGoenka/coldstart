@@ -1,38 +1,20 @@
 import { createRequire } from 'node:module';
 import type { SymbolNode, CallSite } from '../../types.js';
+import { childrenOfType, firstChildOfType } from './node-helpers.js';
+import { makeParser } from './parser-factory.js';
 
 const require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ParserCtor = require('tree-sitter') as { new(): any };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const csharpGrammar = require('tree-sitter-c-sharp') as unknown;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let csharpParser: any = null;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getParser(): any {
-  if (!csharpParser) {
-    csharpParser = new ParserCtor();
-    csharpParser.setLanguage(csharpGrammar);
-  }
-  return csharpParser;
-}
+const getParser = makeParser(csharpGrammar);
 
 // ---------------------------------------------------------------------------
 // Node helpers
 // ---------------------------------------------------------------------------
-
-function firstChildOfType(node: TSNode, type: string): TSNode | null {
-  return node.namedChildren.find((c: TSNode) => c.type === type) ?? null;
-}
-
-function childrenOfType(node: TSNode, type: string): TSNode[] {
-  return node.namedChildren.filter((c: TSNode) => c.type === type);
-}
 
 /** Check if a node has a `public` modifier. */
 function hasPublicModifier(node: TSNode): boolean {

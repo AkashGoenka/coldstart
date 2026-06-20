@@ -1,9 +1,9 @@
 import { createRequire } from 'node:module';
 import type { SymbolNode, CallSite } from '../../types.js';
+import { childrenOfType, firstChildOfType } from './node-helpers.js';
+import { makeParser } from './parser-factory.js';
 
 const require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ParserCtor = require('tree-sitter') as { new(): any };
 // tree-sitter-php exports a { php, php_only } object
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const phpModule = require('tree-sitter-php') as { php: unknown; php_only: unknown };
@@ -12,29 +12,11 @@ const phpGrammar = phpModule.php ?? phpModule.php_only;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let phpParser: any = null;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getParser(): any {
-  if (!phpParser) {
-    phpParser = new ParserCtor();
-    phpParser.setLanguage(phpGrammar);
-  }
-  return phpParser;
-}
+const getParser = makeParser(phpGrammar);
 
 // ---------------------------------------------------------------------------
 // Node helpers
 // ---------------------------------------------------------------------------
-
-function firstChildOfType(node: TSNode, type: string): TSNode | null {
-  return node.namedChildren.find((c: TSNode) => c.type === type) ?? null;
-}
-
-function childrenOfType(node: TSNode, type: string): TSNode[] {
-  return node.namedChildren.filter((c: TSNode) => c.type === type);
-}
 
 function hasPublicModifier(node: TSNode): boolean {
   // In tree-sitter-php, modifiers are named children of type 'modifier' or appear as keywords

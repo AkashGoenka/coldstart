@@ -1,38 +1,20 @@
 import { createRequire } from 'node:module';
 import type { SymbolNode, CallSite } from '../../types.js';
+import { childrenOfType, firstChildOfType } from './node-helpers.js';
+import { makeParser } from './parser-factory.js';
 
 const require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ParserCtor = require('tree-sitter') as { new(): any };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const pythonGrammar = require('tree-sitter-python') as unknown;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let pythonParser: any = null;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getParser(): any {
-  if (!pythonParser) {
-    pythonParser = new ParserCtor();
-    pythonParser.setLanguage(pythonGrammar);
-  }
-  return pythonParser;
-}
+const getParser = makeParser(pythonGrammar);
 
 // ---------------------------------------------------------------------------
 // Node helpers
 // ---------------------------------------------------------------------------
-
-function firstChildOfType(node: TSNode, type: string): TSNode | null {
-  return node.namedChildren.find((c: TSNode) => c.type === type) ?? null;
-}
-
-function childrenOfType(node: TSNode, type: string): TSNode[] {
-  return node.namedChildren.filter((c: TSNode) => c.type === type);
-}
 
 /** Return true if a name is considered public (no leading underscore). */
 function isPublicName(name: string): boolean {
@@ -504,9 +486,4 @@ export function parsePythonContent(
     djangoConventionRefs: djangoConventionRefs.length > 0 ? djangoConventionRefs : undefined,
     submoduleImportCandidates: submoduleCandidates.length > 0 ? [...new Set(submoduleCandidates)] : undefined,
   };
-}
-
-// Helper used by tests only
-export function _childrenOfType(node: TSNode, type: string): TSNode[] {
-  return childrenOfType(node, type);
 }

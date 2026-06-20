@@ -5,7 +5,7 @@
  * triangle dedupe, caps), and GO/GS rendering.
  */
 import { describe, it, expect } from 'vitest';
-import { buildContentPresenceIndex,
+import {
   extractContentTokens,
   buildContentTokenPostings,
   deriveInPageTokenLinks,
@@ -17,7 +17,7 @@ import { buildContentPresenceIndex,
   TOKEN_IN_STRING,
   TOKEN_LINKS_PER_PAGE,
 } from '../src/indexer/content-tokens.js';
-import { handleGetOverview, handleGetStructure } from '../src/server/tools.js';
+import { handleFind, handleGetStructure } from '../src/server/tools.js';
 import type { CodebaseIndex, IndexedFile, Edge } from '../src/types.js';
 
 // ============================================================================
@@ -74,7 +74,6 @@ function makeIndex(specs: FileSpec[], edges: Edge[] = []): CodebaseIndex {
     inEdges,
     tokenDocFreq,
     contentTokenPostings: buildContentTokenPostings(files.values()),
-    contentPresenceIndex: buildContentPresenceIndex(files.values()),
     indexedAt: Date.now(),
     gitHead: '',
   };
@@ -313,29 +312,6 @@ describe('deriveNameEchoFiles', () => {
 // ============================================================================
 // End-to-end rendering
 // ============================================================================
-describe('GO token-link rendering', () => {
-  it('renders the ~ shares line under the linked result', () => {
-    const specs: FileSpec[] = [
-      {
-        id: 'app/models/models.py',
-        domainMap: { spatialview: { filename: 1, path: 0, symbol: 1 } },
-        contentTokens: { limit_choices_to: TOKEN_IN_CODE, source_identifier__isnull: TOKEN_IN_CODE },
-      },
-      {
-        id: 'app/migrations/11857_fix.py',
-        domainMap: { spatialview: { filename: 1, path: 0, symbol: 0 } },
-        contentTokens: { limit_choices_to: TOKEN_IN_STRING, source_identifier__isnull: TOKEN_IN_STRING },
-      },
-    ];
-    // Filler corpus so the query token passes the IDF rarity predicate
-    for (let i = 0; i < 60; i++) specs.push({ id: `filler/f${i}.py` });
-    const index = makeIndex(specs);
-    const res = handleGetOverview(index, { query: 'spatialview' }) as { __rawText: string };
-    expect(res.__rawText).toContain('~ shares `limit_choices_to`');
-    expect(res.__rawText).toContain('with 11857_fix.py (also listed)');
-  });
-});
-
 describe('GS Related section rendering', () => {
   it('renders Related with shared tokens in the full view', () => {
     const index = makeIndex([
@@ -417,64 +393,3 @@ describe('GS Related section rendering', () => {
   });
 });
 
-// ============================================================================
-// Content-presence index + GO fallback lines (option B)
-// ============================================================================
-describe('buildContentPresenceIndex', () => {
-  it('counts df case-insensitively and caps the file list', () => {
-    const specs: FileSpec[] = [];
-    for (let i = 0; i < 12; i++) {
-      specs.push({ id: `app/mod${i}.py`, contentTokens: { geom_nodes: TOKEN_IN_CODE } });
-    }
-    // same token in two casings within one file → one df
-    specs.push({ id: 'app/dual.py', contentTokens: { SpatialView: TOKEN_IN_CODE, spatialView: TOKEN_IN_CODE } });
-    specs.push({ id: 'tests/excluded_test.py', isTestFile: true, contentTokens: { geom_nodes: TOKEN_IN_CODE } });
-    const presence = buildContentPresenceIndex(specs.map(makeFile));
-    const entry = presence.get('geom_nodes')!;
-    expect(entry.n).toBe(12); // test file excluded
-    expect(entry.files.length).toBe(8); // CONTENT_PRESENCE_LIST_CAP
-    expect(presence.get('spatialview')!.n).toBe(1);
-  });
-});
-
-describe('GO content-presence fallback', () => {
-  function presenceIndex(specs: FileSpec[]): CodebaseIndex {
-    const index = makeIndex(specs);
-    index.contentPresenceIndex = buildContentPresenceIndex([...index.files.values()]);
-    return index;
-  }
-
-  it('names the files for a declared-name-invisible token with small content df', () => {
-    const index = presenceIndex([
-      { id: 'app/views/base.py', contentTokens: { geom_nodes: TOKEN_IN_CODE } },
-      { id: 'app/media/map-layer-manager.js', language: 'javascript', contentTokens: { geom_nodes: TOKEN_IN_CODE } },
-    ]);
-    const res = handleGetOverview(index, { query: 'geom_nodes dropdown' }) as { __rawText: string };
-    expect(res.__rawText).toContain('Content presence');
-    expect(res.__rawText).toContain('`geom_nodes` matches no declared name but appears in file CONTENT of: app/views/base.py, app/media/map-layer-manager.js');
-  });
-
-  it('asserts absence ONLY for shaped tokens', () => {
-    const index = presenceIndex([{ id: 'app/views/base.py', contentTokens: { other_token_here: TOKEN_IN_CODE } }]);
-    const res = handleGetOverview(index, { query: 'graph_published sidebar' }) as { __rawText: string };
-    expect(res.__rawText).toContain('`graph_published` appears NOWHERE in indexed file content');
-    expect(res.__rawText).not.toContain('`sidebar`'); // unshaped — absence unprovable, stay silent
-  });
-
-  it('stays silent for tokens that match declared names', () => {
-    const index = presenceIndex([
-      { id: 'app/spatialview.py', domainMap: { spatialview: { filename: 1, path: 0, symbol: 0 } }, contentTokens: { spatialView: TOKEN_IN_CODE } },
-    ]);
-    const res = handleGetOverview(index, { query: 'spatialview' }) as { __rawText: string };
-    expect(res.__rawText).not.toContain('Content presence');
-  });
-
-  it('gives a count-only line when the token floods', () => {
-    const specs: FileSpec[] = [];
-    for (let i = 0; i < 20; i++) specs.push({ id: `app/m${i}.py`, contentTokens: { load_event: TOKEN_IN_CODE } });
-    const index = presenceIndex(specs);
-    const res = handleGetOverview(index, { query: 'load_event' }) as { __rawText: string };
-    expect(res.__rawText).toContain("`load_event` matches no declared name; found in 20 files' content");
-    expect(res.__rawText).not.toContain('appears in file CONTENT of:');
-  });
-});

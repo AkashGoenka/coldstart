@@ -1,22 +1,25 @@
 #!/usr/bin/env node
 /**
- * coldstart-mcp — Local MCP server for AI agent codebase navigation.
+ * coldstart — fast static codebase navigation for AI agents (CLI + MCP).
  *
- * Usage:
- *   coldstart-mcp --root /path/to/project
- *   coldstart-mcp --root . --exclude vendor --quiet
- *   coldstart-mcp --root . --no-cache
- *   coldstart-mcp --root . --no-daemon    # bypass daemon (single-process stdio mode)
+ * Default invocation = stdio MCP reader over the keeper's cache:
+ *   coldstart --root /path/to/project
+ *   coldstart --root . --exclude vendor --quiet
+ *   coldstart --root . --no-cache
+ *   coldstart --root . --no-daemon    # self-contained stdio MCP (no keeper)
  *
  * Subcommands:
- *   coldstart-mcp init        # interactive setup for Claude Code / Cursor
- *   coldstart-mcp status      # list every running daemon and its health
+ *   coldstart init            # wire coldstart.md into the project
+ *   coldstart find / gs       # CLI readers (load the cache, print, exit)
+ *   coldstart status          # list every keeper + its index freshness
+ *   coldstart restart [--all] # stop the keeper(s); respawn on next read
  *
- * Internal (spawned automatically):
- *   coldstart-mcp --root . --daemon       # background index daemon
+ * Internal (spawned automatically by readers):
+ *   coldstart --root . --daemon       # background keeper (keeps cache fresh)
  */
-import { resolve } from 'node:path';
+import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { statSync } from 'node:fs';
 import { walkDirectory } from './indexer/walker.js';
 import { parseFile, buildFileId } from './indexer/parser.js';
 import { resolveImports } from './indexer/resolvers/index.js';
@@ -26,15 +29,16 @@ import { addCSharpSyntheticEdges } from './indexer/csharp-synthetic.js';
 import { addDjangoSyntheticEdges } from './indexer/django-synthetic.js';
 import { buildGraph } from './indexer/graph.js';
 import { buildFileDomains, isTestPath } from './indexer/tokenize.js';
-import { buildContentTokenPostings, buildContentPresenceIndex } from './indexer/content-tokens.js';
+import { baseIndexedFile } from './indexer/indexed-file.js';
+import { buildContentTokenPostings } from './indexer/content-tokens.js';
 import { buildSymbolEdges } from './indexer/symbol-edges.js';
 import { getGitHead } from './indexer/git.js';
-import { loadCachedIndex, saveCachedIndex } from './cache/disk-cache.js';
+import { loadCachedIndex, saveCachedIndex, getCacheDir } from './cache/disk-cache.js';
 import { startMCPServer } from './server/mcp.js';
-import { startDaemonHttpServer } from './server/http-daemon.js';
-import { startBridge } from './server/bridge.js';
 import { IndexManager } from './index-manager.js';
+import type { IndexContext } from './index-manager.js';
 import { readLock, writeLock, deleteLock, isDaemonAlive, getCurrentVersion, watchOwnLockfile } from './daemon-lock.js';
+import { ensureKeeper } from './keeper.js';
 import { attachDaemonLogger } from './daemon-log.js';
 import { migrateLegacyMcpConfig } from './migrate.js';
 import type { CodebaseIndex, IndexedFile, SymbolEdge } from './types.js';
@@ -110,6 +114,15 @@ function log(quiet: boolean, ...args: unknown[]): void {
   if (!quiet) process.stderr.write(args.join(' ') + '\n');
 }
 
+// MCP clients advertise their workspace as a `file://` URI (or sometimes a bare
+// path). Resolve the first advertised root to an absolute filesystem path,
+// falling back to the CLI-provided root when the client advertises none.
+function resolveClientRoot(clientRoots: string[], fallback: string): string {
+  if (clientRoots.length === 0) return fallback;
+  const uri = clientRoots[0];
+  return uri.startsWith('file://') ? fileURLToPath(uri) : resolve(uri);
+}
+
 // ---------------------------------------------------------------------------
 // Full indexing pipeline
 // ---------------------------------------------------------------------------
@@ -144,30 +157,12 @@ export async function buildIndex(
           if (!parsed) return;
 
           const file: IndexedFile = {
-            id,
-            path: wf.absolutePath,
-            relativePath: wf.relativePath,
-            language: wf.language,
+            ...baseIndexedFile(id, wf.absolutePath, wf.relativePath, wf.language, parsed),
             domainMap: buildFileDomains(wf.relativePath, parsed.exports),
-            exports: parsed.exports,
-            hasDefaultExport: parsed.hasDefaultExport,
-            imports: parsed.imports,
-            hash: parsed.hash,
-            lineCount: parsed.lineCount,
-            tokenEstimate: parsed.tokenEstimate,
             importedByCount: 0,
             transitiveImportedByCount: 0,
             isBarrel: false,
             isTestFile: isTestPath(wf.relativePath),
-            symbols: parsed.symbols,
-            reexportRatio: parsed.reexportRatio,
-            constantReferences: parsed.constantReferences,
-            partialDeclarations: parsed.partialDeclarations,
-            eloquentRelations: parsed.eloquentRelations,
-            containerResolutions: parsed.containerResolutions,
-            djangoConventionRefs: parsed.djangoConventionRefs,
-            submoduleImportCandidates: parsed.submoduleImportCandidates,
-            contentTokens: parsed.contentTokens,
           };
           indexedFiles.push(file);
           langCount[wf.language] = (langCount[wf.language] ?? 0) + 1;
@@ -252,7 +247,6 @@ export async function buildIndex(
   }
 
   const contentTokenPostings = buildContentTokenPostings(indexedFiles);
-  const contentPresenceIndex = buildContentPresenceIndex(indexedFiles);
 
   const gitHead = await getGitHead(rootDir);
   const elapsed = ((Date.now() - start) / 1000).toFixed(1);
@@ -276,7 +270,6 @@ export async function buildIndex(
     inEdges,
     tokenDocFreq,
     contentTokenPostings,
-    contentPresenceIndex,
     indexedAt: Date.now(),
     gitHead,
   };
@@ -316,29 +309,12 @@ async function runProbe(rootDir: string, excludes: string[], includes: string[])
         const parsed = await parseFile(wf.absolutePath, wf.language, id);
         if (!parsed) return;
         indexedFiles.push({
-          id,
-          path: wf.absolutePath,
-          relativePath: wf.relativePath,
-          language: wf.language,
+          ...baseIndexedFile(id, wf.absolutePath, wf.relativePath, wf.language, parsed),
           domainMap: {},
-          exports: parsed.exports,
-          hasDefaultExport: parsed.hasDefaultExport,
-          imports: parsed.imports,
-          hash: parsed.hash,
-          lineCount: parsed.lineCount,
-          tokenEstimate: parsed.tokenEstimate,
           importedByCount: 0,
           transitiveImportedByCount: 0,
           isBarrel: false,
           isTestFile: false,
-          symbols: parsed.symbols,
-          reexportRatio: parsed.reexportRatio,
-          constantReferences: parsed.constantReferences,
-          partialDeclarations: parsed.partialDeclarations,
-          eloquentRelations: parsed.eloquentRelations,
-          containerResolutions: parsed.containerResolutions,
-          djangoConventionRefs: parsed.djangoConventionRefs,
-          submoduleImportCandidates: parsed.submoduleImportCandidates,
         });
       } catch { /* skip parse errors */ }
     }));
@@ -494,9 +470,13 @@ async function buildManager(
 }
 
 // ---------------------------------------------------------------------------
-// Daemon mode: HTTP server + lockfile, runs until killed
+// Keeper mode (`--daemon`): keep the on-disk index FRESH. Watches the repo,
+// patches/rebuilds the in-memory index, and writes it to the disk cache that
+// the CLI and MCP readers load. It does NOT serve queries — every reader reads
+// the cache directly. Lazy-spawned by the first reader; runs until killed or
+// its lockfile is removed.
 // ---------------------------------------------------------------------------
-async function runDaemon(
+async function runKeeper(
   finalRoot: string,
   excludes: string[],
   includes: string[],
@@ -504,97 +484,40 @@ async function runDaemon(
   quiet: boolean,
   noCache: boolean,
 ): Promise<void> {
-  // Attach the file-backed logger BEFORE the first log() call so daemon
-  // startup output (including any fatal "another daemon already running"
-  // exit) is captured. The daemon is auto-spawned with stdio: 'ignore',
-  // so without this every line written below would vanish.
+  // Attach the file-backed logger BEFORE the first log() call: the keeper is
+  // auto-spawned with stdio: 'ignore', so the log file is the ONLY debug trace.
   const detachLogger = attachDaemonLogger(finalRoot);
 
-  log(quiet, `[coldstart] Daemon starting — root: ${finalRoot} (PID ${process.pid})`);
+  log(quiet, `[coldstart] Keeper starting — root: ${finalRoot} (PID ${process.pid})`);
 
-  // Exit immediately if another daemon is already serving this root
+  // Exit immediately if another keeper is already alive for this root.
   const existing = await readLock(finalRoot);
   if (existing && isDaemonAlive(existing.pid)) {
-    try {
-      const res = await fetch(`http://127.0.0.1:${existing.port}/mcp`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(2000),
-      });
-      if (res.status < 500) {
-        log(quiet, '[coldstart] Another daemon is already running — exiting.');
-        process.exit(0);
-      }
-    } catch { /* stale lock — proceed */ }
+    log(quiet, '[coldstart] Another keeper is already running — exiting.');
+    detachLogger();
+    process.exit(0);
   }
 
-  // managerReady: tool calls queue here until index is built
-  let managerReadyResolve!: () => void;
-  let managerReadyReject!: (err: Error) => void;
-  const managerReady = new Promise<void>((res, rej) => {
-    managerReadyResolve = res;
-    managerReadyReject = rej;
-  });
+  // Version in the lock lets a reader replace an outdated keeper (cache-format
+  // compatibility) on upgrade.
+  await writeLock(finalRoot, process.pid, getCurrentVersion());
+  log(quiet, `[coldstart] Keeper lock written (PID ${process.pid})`);
+
+  // Auto-migrate legacy npx-based .mcp.json entries (non-fatal).
+  try { await migrateLegacyMcpConfig(finalRoot); } catch { /* ignore */ }
+
   let manager: IndexManager | null = null;
-
-  // Status snapshot for GET /status — cheap to read, used by `coldstart-mcp status`.
-  const daemonStartedAt = Date.now();
-  let indexReadyAt: number | null = null;
-  let buildFailed = false;
-
-  // Start HTTP server immediately so bridges can connect while index builds
-  const port = await startDaemonHttpServer(
-    async () => {
-      await managerReady;
-      return manager!.getContext();
-    },
-    () => {
-      if (buildFailed) {
-        return { state: 'failed', fileCount: null, startedAt: daemonStartedAt, indexBuildMs: null };
-      }
-      if (!manager) {
-        return { state: 'building', fileCount: null, startedAt: daemonStartedAt, indexBuildMs: null };
-      }
-      const ctx = manager.getContext();
-      return {
-        state: ctx.isRebuilding ? 'rebuilding' : 'ready',
-        fileCount: ctx.index.files.size,
-        startedAt: daemonStartedAt,
-        indexBuildMs: indexReadyAt !== null ? indexReadyAt - daemonStartedAt : null,
-        // Fix #3: Extended health surface for doctor command
-        indexedAt: ctx.index.indexedAt,
-      };
-    },
-  );
-
-  // Write lockfile — bridges start connecting
-  // Fix #1: Include version in lockfile for version-mismatch detection
-  await writeLock(finalRoot, process.pid, port, getCurrentVersion());
-  log(quiet, `[coldstart] Daemon HTTP server on port ${port} (PID ${process.pid})`);
-
-  // Auto-migrate legacy npx-based .mcp.json entries
   try {
-    await migrateLegacyMcpConfig(finalRoot);
-  } catch {
-    // Non-fatal; continue with indexing
+    // buildManager loads-or-builds the index AND starts the watcher, which
+    // patches/rebuilds and debounce-saves the cache on every change.
+    manager = await buildManager(finalRoot, excludes, includes, cacheDir, quiet, noCache);
+    log(quiet, '[coldstart] Keeper index ready — watching for changes');
+  } catch (err) {
+    log(quiet, `[coldstart] Keeper index build failed: ${err}`);
+    await deleteLock(finalRoot).catch(() => {});
+    detachLogger();
+    process.exit(1);
   }
-
-  // Build index in background
-  buildManager(finalRoot, excludes, includes, cacheDir, quiet, noCache)
-    .then(m => {
-      manager = m;
-      indexReadyAt = Date.now();
-      managerReadyResolve();
-      log(quiet, '[coldstart] Daemon index ready');
-    })
-    .catch(err => {
-      log(quiet, `[coldstart] Daemon index build failed: ${err}`);
-      buildFailed = true;
-      managerReadyReject(err instanceof Error ? err : new Error(String(err)));
-      deleteLock(finalRoot).catch(() => {}).finally(() => {
-        detachLogger();
-        process.exit(1);
-      });
-    });
 
   const cleanup = (): void => {
     manager?.stopWatching();
@@ -604,9 +527,9 @@ async function runDaemon(
     });
   };
 
-  // Fix #6: Watch lockfile for deletion; exit cleanly if user removes it
+  // Exit cleanly if the user removes our lockfile.
   const stopLockWatcher = watchOwnLockfile(finalRoot, () => {
-    log(quiet, '[coldstart] Lockfile deleted — shutting down');
+    log(quiet, '[coldstart] Lockfile deleted — shutting down keeper');
     cleanup();
   });
 
@@ -618,8 +541,44 @@ async function runDaemon(
     detachLogger();
   });
 
-  // Run forever
+  // Run forever.
   await new Promise<never>(() => {});
+}
+
+// ---------------------------------------------------------------------------
+// A disk-cache reader for the long-lived MCP server: loads the keeper-maintained
+// index and reloads it when the cache file's mtime advances (the keeper rewrites
+// it ~5s after edits settle). This is how the MCP server stays live WITHOUT its
+// own watcher — the keeper is the single freshness authority.
+// ---------------------------------------------------------------------------
+function makeCacheReader(
+  finalRoot: string,
+  cacheDir: string | undefined,
+  quiet: boolean,
+): () => Promise<IndexContext> {
+  let cached: CodebaseIndex | null = null;
+  let lastMtimeMs = 0;
+  const metaPath = join(getCacheDir(finalRoot, cacheDir), 'meta.json');
+  const currentMtime = (): number => {
+    try { return statSync(metaPath).mtimeMs; } catch { return 0; }
+  };
+  return async () => {
+    const m = currentMtime();
+    if (!cached || (m > 0 && m > lastMtimeMs)) {
+      const fresh = await loadCachedIndex(finalRoot, cacheDir);
+      if (fresh) {
+        cached = fresh;
+        lastMtimeMs = m;
+      } else if (!cached) {
+        // No cache yet (keeper still building its first index) — build once in
+        // this process so the first call works; the keeper takes over after.
+        cached = await buildIndex(finalRoot, [], [], quiet);
+        try { await saveCachedIndex(cached, cacheDir); } catch { /* ignore */ }
+        lastMtimeMs = currentMtime();
+      }
+    }
+    return { index: cached!, isRebuilding: false };
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -638,27 +597,17 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Fix #3: Add doctor subcommand for health checks
-  if (process.argv[2] === 'doctor') {
-    const { runDoctor } = await import('./doctor.js');
-    await runDoctor();
-    return;
-  }
-
-  // Fix #5: Add restart subcommand to kill daemons
+  // `restart` — kill the keeper for this root (or --all) and clear its lock.
+  // The keeper respawns lazily on the next reader.
   if (process.argv[2] === 'restart') {
     const { runRestart } = await import('./restart.js');
     await runRestart();
     return;
   }
 
-  // CLI query surface — pure-reader `go`/`gs`, plus single-writer `index` prep.
-  // These bypass the daemon entirely: load the on-disk cache, run the same
-  // handlers the MCP server uses, print, exit. (docs/cli-skill-spec.md)
-  if (process.argv[2] === 'go') {
-    const { runGo } = await import('./cli.js');
-    process.exit(await runGo(process.argv.slice(3), buildIndex));
-  }
+  // CLI query surface — pure-reader `find`/`gs`, plus single-writer `index` prep.
+  // These read the on-disk cache directly (kept fresh by the keeper), run the
+  // same engine the MCP reader uses, print, exit. (docs/cli-skill-spec.md)
   if (process.argv[2] === 'gs') {
     const { runGs } = await import('./cli.js');
     process.exit(await runGs(process.argv.slice(3), buildIndex));
@@ -680,14 +629,16 @@ async function main(): Promise<void> {
     return;
   }
 
-  // --daemon: background index process spawned by bridge
+  // --daemon: background keeper that keeps the on-disk cache fresh (no serving).
+  // Lazy-spawned by readers via ensureKeeper().
   if (daemon) {
     const finalRoot = resolve(cliRoot);
-    await runDaemon(finalRoot, excludes, includes, cacheDir, quiet, noCache);
+    await runKeeper(finalRoot, excludes, includes, cacheDir, quiet, noCache);
     return;
   }
 
-  // --no-daemon: traditional single-process stdio mode (useful for debugging)
+  // --no-daemon: self-contained single-process stdio MCP (builds + watches +
+  // serves in-process, no background keeper). Useful for debugging / one-off use.
   if (noDaemon) {
     let manager: IndexManager | null = null;
     let managerReadyResolve!: () => void;
@@ -718,12 +669,7 @@ async function main(): Promise<void> {
     await startMCPServer(
       async (clientRoots: string[]) => {
         if (!rootExplicit) {
-          let finalRoot = resolve(cliRoot);
-          if (clientRoots.length > 0) {
-            const uri = clientRoots[0];
-            finalRoot = uri.startsWith('file://') ? fileURLToPath(uri) : resolve(uri);
-          }
-          buildAndSet(finalRoot).catch(() => {});
+          buildAndSet(resolveClientRoot(clientRoots, resolve(cliRoot))).catch(() => {});
         }
       },
       async () => {
@@ -738,8 +684,38 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Default: daemon + bridge mode
-  await startBridge(cliRoot, rootExplicit, quiet);
+  // Default: stdio MCP server in READER mode. Serves find/gs off the on-disk
+  // cache that a background keeper keeps fresh; spawns the keeper if absent.
+  // This is the path for no-shell MCP clients (e.g. Claude Desktop).
+  {
+    let reader: (() => Promise<IndexContext>) | null = null;
+    let readerReadyResolve!: () => void;
+    const readerReady = new Promise<void>(res => { readerReadyResolve = res; });
+
+    const initRoot = async (finalRoot: string): Promise<void> => {
+      log(quiet, `[coldstart] MCP reader — root: ${finalRoot}`);
+      await ensureKeeper(finalRoot);
+      reader = makeCacheReader(finalRoot, cacheDir, quiet);
+      readerReadyResolve();
+    };
+
+    if (rootExplicit) {
+      void initRoot(resolve(cliRoot));
+    }
+
+    await startMCPServer(
+      async (clientRoots: string[]) => {
+        if (!rootExplicit) {
+          void initRoot(resolveClientRoot(clientRoots, resolve(cliRoot)));
+        }
+      },
+      async () => {
+        await readerReady;
+        return reader!();
+      },
+    );
+    return;
+  }
 }
 
 main().catch(err => {

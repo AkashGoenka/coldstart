@@ -7,11 +7,15 @@ import { fileURLToPath } from 'node:url';
 
 export interface DaemonLock {
   pid: number;
-  port: number;
   /** Absolute project root. Optional for forward-compat with old lockfiles. */
   rootDir?: string;
-  /** Version of the daemon that wrote this lock. Optional for forward-compat with old lockfiles. */
+  /** Version of the keeper that wrote this lock. Optional for forward-compat with old lockfiles. */
   version?: string;
+  /**
+   * Legacy HTTP-serving port. The keeper no longer serves, so new locks omit
+   * it; kept optional so old lockfiles still parse without erroring.
+   */
+  port?: number;
 }
 
 export function daemonDir(): string {
@@ -47,7 +51,7 @@ export async function readLock(rootDir: string): Promise<DaemonLock | null> {
   try {
     const raw = await readFile(lockPath(rootDir), 'utf-8');
     const lock = JSON.parse(raw) as Partial<DaemonLock>;
-    if (typeof lock.pid !== 'number' || typeof lock.port !== 'number') return null;
+    if (typeof lock.pid !== 'number') return null;
     return lock as DaemonLock;
   } catch {
     return null;
@@ -57,11 +61,10 @@ export async function readLock(rootDir: string): Promise<DaemonLock | null> {
 export async function writeLock(
   rootDir: string,
   pid: number,
-  port: number,
   version?: string,
 ): Promise<void> {
   await mkdir(daemonDir(), { recursive: true });
-  const payload: DaemonLock = { pid, port, rootDir: resolve(rootDir), version };
+  const payload: DaemonLock = { pid, rootDir: resolve(rootDir), version };
   await writeFile(lockPath(rootDir), JSON.stringify(payload));
 }
 
@@ -94,7 +97,7 @@ export async function listDaemonLocks(): Promise<DaemonLockListing[]> {
     try {
       const raw = await readFile(full, 'utf-8');
       const parsed = JSON.parse(raw) as Partial<DaemonLock>;
-      if (typeof parsed.pid !== 'number' || typeof parsed.port !== 'number') continue;
+      if (typeof parsed.pid !== 'number') continue;
       out.push({
         basename: name.replace(/\.json$/, ''),
         lockPath: full,
@@ -160,7 +163,7 @@ export async function killDaemon(pid: number): Promise<boolean> {
 }
 
 /**
- * Try to atomically acquire a spawn lock so only one bridge process spawns the daemon.
+ * Try to atomically acquire a spawn lock so only one reader spawns the keeper.
  * Returns a release function if acquired, null if another process already holds it.
  */
 export async function tryAcquireSpawnLock(rootDir: string): Promise<(() => Promise<void>) | null> {
@@ -172,7 +175,7 @@ export async function tryAcquireSpawnLock(rootDir: string): Promise<(() => Promi
     await fd.close();
     return async () => { try { await unlink(path); } catch { /* ignore */ } };
   } catch {
-    return null; // Another bridge already holds the spawn lock
+    return null; // Another reader already holds the spawn lock
   }
 }
 

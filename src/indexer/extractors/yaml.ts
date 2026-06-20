@@ -1,26 +1,15 @@
 import { createRequire } from 'node:module';
 import type { SymbolNode } from '../../types.js';
+import { makeParser } from './parser-factory.js';
 
 const require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ParserCtor = require('tree-sitter') as { new(): any };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const yamlModule = require('@tree-sitter-grammars/tree-sitter-yaml') as unknown;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let yamlParser: any = null;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getParser(): any {
-  if (!yamlParser) {
-    yamlParser = new ParserCtor();
-    yamlParser.setLanguage(yamlModule);
-  }
-  return yamlParser;
-}
+const getParser = makeParser(yamlModule);
 
 export interface YamlParseResult {
   imports: string[];

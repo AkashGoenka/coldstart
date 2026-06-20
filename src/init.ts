@@ -1,137 +1,161 @@
 /**
- * coldstart-mcp init — Interactive setup for Claude Code and Cursor.
+ * coldstart init — wire coldstart into a project.
  *
- * Usage: npx coldstart-mcp init
+ * Model: a single `coldstart.md` lives at the repo root and carries ALL the
+ * agent-facing guidance. Clients pull it in by reference, so future wording
+ * changes touch only coldstart.md, never the client's own rules file.
  *
- * Detects IDE from project structure, then writes MCP config and agent rules.
+ *   - Claude Code  → ensure CLAUDE.md exists and imports it via `@coldstart.md`.
+ *   - Any other app → write coldstart.md only; the user wires it as rules/
+ *     instructions/skill however their app prefers (and, for no-shell clients,
+ *     adds the MCP server entry we print).
+ *
+ * The content of coldstart.md depends on how the client invokes coldstart:
+ *   - `cli` flavor → the agent runs `coldstart find` / `coldstart gs` (shell).
+ *   - `mcp` flavor → the agent calls the `find` / `gs` MCP tools (no shell).
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
+import { ensureKeeper } from './keeper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 
 const DIVIDER = '─'.repeat(60);
+const IMPORT_LINE = '@coldstart.md';
 
 function out(msg: string): void {
   process.stderr.write(msg + '\n');
 }
 
 // ---------------------------------------------------------------------------
-// Rules content (same for Claude and Cursor)
+// coldstart.md content — one doc, two invocation flavors
 // ---------------------------------------------------------------------------
 
-const RULES_CONTENT = `# Codebase navigation — coldstart MCP tools
+export function coldstartMd(mode: 'cli' | 'mcp'): string {
+  const cli = mode === 'cli';
+  const find = cli ? '`coldstart find <terms...>`' : 'the `find` tool';
+  const gs = cli ? '`coldstart gs <file>`' : 'the `gs` tool';
+  const invocation = cli
+    ? 'Two local, instant shell commands'
+    : 'Two local, instant MCP tools';
+  const flags = cli
+    ? `## Load-bearing flags
+- \`find --path GLOB\` — scope to a glob (\`--path 'app/**/*.py'\`); \`,\` to combine, \`!\` to exclude.
+- \`find --tests\` — include test files (excluded by default).
+- \`gs --match TERM\` — on a god-file, filter to one area (\`--match tile\`); \`a|b\` = OR, \`/regex/\` = regex.
+- \`gs --view symbols|imports|importers|callers\` — one section instead of the full page.
+- \`gs <file> --symbol a,b\` — deliver named method bodies inline + caller/callee pointers.
 
-You have 2 MCP tools: \`get-overview\` (GO) and \`get-structure\` (GS). Per-tool guidance lives in each tool's description and response footer; the rules below are cross-tool only:
-
-- **"Who uses this file / who calls this symbol?" → GS, not grep.** GS default (\`view: "full"\`) returns importers + per-symbol cross-file callers in one call. Don't bash-grep the repo for a symbol name to find call sites — call GS on the file that owns it.
-- **grep is a peer for content, not declared names or indexed call sites.** Use it for: string literals, runtime/dynamic dispatch through strings, and content inside non-code files (templates, SQL, config). For declared names (filenames, paths, exported symbols), GO is cheaper. For call sites of an indexed symbol, GS gives you the answer.
-- **Stop when data is sufficient.** Don't re-query to confirm what you already found.
+## Batch independent lookups in one call
+\`coldstart find auth; coldstart find 'session cookie'; coldstart gs src/auth/service.ts\`
+`
+    : `## Load-bearing params
+- \`find\` \`path\` — scope to a glob (\`app/**/*.py\`); \`,\` to combine, \`!\` to exclude.
+- \`gs\` \`match\` — on a god-file, filter to one area (\`tile\`); \`a|b\` = OR, \`/regex/\` = regex.
+- \`gs\` \`view\` (symbols|imports|importers|callers) — one section instead of the full page.
+- \`gs\` \`symbol\` (\`a,b\`) — deliver named method bodies inline + caller/callee pointers.
 `;
 
-const MDC_FRONTMATTER = `---
-description: Codebase navigation with coldstart MCP tools
-alwaysApply: true
----
+  return `# coldstart — fast codebase navigation
 
+${invocation} that answer "where does this live?" and "what is this file?" without a model call. Reach for them BEFORE Grep/Glob/Read when orienting in a codebase or locating code.
+
+- ${find} — locate the files relevant to a concept. Pass EVERY salient identifier (symbol, domain noun, the rare token you half-remember), not one keyword. Ranks files by how many of your terms they cover.
+- ${gs} — drill into one file: its symbols (with line ranges), who imports it, who calls each symbol, and name-related neighbors. This is the answer to "who uses this file / who calls this symbol" — not grep.
+
+## Flow
+1. ${find} on a concept → pick the best path.
+2. ${gs} on that file → shape + who uses it.
+3. \`Read\` only for the implementation inside a method body.
+
+${flags}
+## Reading the output
+- Top files are marked \`▸ <path>  [covered/total]\` — how many of your query terms they cover — with a \`Role:\` line (which terms each defines/imports) and an inline preview of the body lines where your terms cluster. Often enough to answer WITHOUT a Read.
+- A \`Wired:\` line shows relations: \`uses\`/\`used by\` = import edges; \`near\` = a name-reference relation the import graph can't see (the files share a rare identifier/string token — migration↔model, config-by-name, cross-language). Treat wired files as one unit: if one is worth opening, the others usually belong in your answer too.
+- "no indexed file contains any of [...]" = those identifiers aren't in the repo. Don't grep spelling variants.
+- \`gs\` Importers with \`match\` lists every file whose content references the term — exhaustive, so a subsystem absent from it does NOT use the symbol. Don't grep to re-verify.
+
+## Stop rule
+Ran \`gs\` on 5+ files for one question → you're enumerating. Go back to \`find\` with a sharper \`path\` scope or a different concept token.
+
+## When NOT to use it
+- A literal string/phrase/regex inside file bodies → Grep.
+- Reading an implementation → Read, after \`gs\` gives the shape.
 `;
+}
 
 // ---------------------------------------------------------------------------
-// Stable install resolution and MCP entry builders
+// Stable install resolution + MCP entry (printed for no-shell / other clients)
 // ---------------------------------------------------------------------------
 
 /**
- * Resolve the absolute path to a stable install of coldstart-mcp.
- *
- * If `~/.coldstart/versions/<version>/` already has the install, reuse it.
- * Otherwise, copy the running install's node_modules into that directory.
- * `init` always runs from a complete on-disk install (npx cache, global, or
- * local devDep), so the source tree is guaranteed to exist.
+ * Resolve the absolute path to a stable install of coldstart. If
+ * `~/.coldstart/versions/<version>/` already has it, reuse it; otherwise copy
+ * the running install there. `init` always runs from a complete on-disk
+ * install (npx cache, global, or local devDep), so the source tree exists.
  */
 function getOrInstallStableVersion(): string {
   const home = process.env.HOME ?? process.env.USERPROFILE ?? '';
-  if (!home) {
-    throw new Error('Could not determine HOME directory');
-  }
+  if (!home) throw new Error('Could not determine HOME directory');
 
   const pkgPath = path.resolve(path.dirname(path.dirname(__filename)), 'package.json');
-  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version?: string };
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version?: string; name?: string };
   const version = pkg.version;
-  if (!version) {
-    throw new Error('Could not determine version from package.json');
-  }
+  if (!version) throw new Error('Could not determine version from package.json');
+  // Derive the install dir name from package.json so the rename (coldstart-mcp →
+  // coldstart) — or any future rename — doesn't break stable-install resolution.
+  const pkgName = pkg.name ?? 'coldstart';
 
   const versionDir = path.join(home, '.coldstart', 'versions', version);
-  const entryPath = path.join(versionDir, 'node_modules', 'coldstart-mcp', 'dist', 'index.js');
+  const entryPath = path.join(versionDir, 'node_modules', pkgName, 'dist', 'index.js');
+  if (fs.existsSync(entryPath)) return entryPath;
 
-  if (fs.existsSync(entryPath)) {
-    return entryPath;
-  }
-
-  // argv[1] → .../<install_root>/node_modules/coldstart-mcp/dist/index.js
-  // realpath resolves .bin/ symlinks; three dirnames up is the node_modules root.
   const running = fs.realpathSync(process.argv[1]);
   const sourceNm = path.resolve(running, '..', '..', '..');
-  if (!fs.existsSync(path.join(sourceNm, 'coldstart-mcp', 'package.json'))) {
-    throw new Error(`Cannot locate the running coldstart-mcp install from ${running}.`);
+  if (!fs.existsSync(path.join(sourceNm, pkgName, 'package.json'))) {
+    throw new Error(`Cannot locate the running ${pkgName} install from ${running}.`);
   }
 
   out(`Copying coldstart-mcp@${version} to ~/.coldstart/versions/${version}/ …`);
   fs.mkdirSync(versionDir, { recursive: true });
   fs.cpSync(sourceNm, path.join(versionDir, 'node_modules'), { recursive: true });
-
   if (!fs.existsSync(entryPath)) {
     throw new Error(`Copy completed but entry file not found at ${entryPath}`);
   }
   return entryPath;
 }
 
-function buildMcpEntry(cwd: string): { command: string; args: string[] } {
+function mcpServerEntry(cwd: string): { command: string; args: string[] } {
   const entryPath = getOrInstallStableVersion();
   return { command: 'node', args: [entryPath, '--root', cwd] };
 }
 
-function mergeMcpJson(filePath: string, cwd: string): 'created' | 'merged' {
-  let config: Record<string, unknown> = { mcpServers: {} };
-  let existed = false;
-  if (fs.existsSync(filePath)) {
-    try {
-      config = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<string, unknown>;
-    } catch {
-      config = { mcpServers: {} };
-    }
-    if (!config.mcpServers) config.mcpServers = {};
-    existed = true;
-  }
-  (config.mcpServers as Record<string, unknown>).coldstart = buildMcpEntry(cwd);
-  const dir = path.dirname(filePath);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(config, null, 2) + '\n');
-  return existed ? 'merged' : 'created';
-}
+// ---------------------------------------------------------------------------
+// Writers
+// ---------------------------------------------------------------------------
 
-function writeClaudeMd(cwd: string): 'created' | 'appended' | 'skipped' {
-  const filePath = path.join(cwd, 'CLAUDE.md');
-  if (fs.existsSync(filePath)) {
-    const existing = fs.readFileSync(filePath, 'utf8');
-    if (existing.includes('coldstart MCP tools')) return 'skipped';
-    fs.appendFileSync(filePath, '\n---\n\n' + RULES_CONTENT);
-    return 'appended';
-  }
-  fs.writeFileSync(filePath, RULES_CONTENT);
-  return 'created';
-}
-
-function writeCursorRule(cwd: string): 'created' | 'updated' {
-  const rulesDir = path.join(cwd, '.cursor', 'rules');
-  const filePath = path.join(rulesDir, 'coldstart-mcp.mdc');
+export function writeColdstartMd(cwd: string, mode: 'cli' | 'mcp'): 'created' | 'updated' {
+  const filePath = path.join(cwd, 'coldstart.md');
   const existed = fs.existsSync(filePath);
-  fs.mkdirSync(rulesDir, { recursive: true });
-  fs.writeFileSync(filePath, MDC_FRONTMATTER + RULES_CONTENT);
+  fs.writeFileSync(filePath, coldstartMd(mode));
   return existed ? 'updated' : 'created';
+}
+
+/** Ensure CLAUDE.md exists and imports coldstart.md via `@coldstart.md`. */
+export function wireClaudeImport(cwd: string): 'created' | 'added' | 'present' {
+  const filePath = path.join(cwd, 'CLAUDE.md');
+  if (!fs.existsSync(filePath)) {
+    fs.writeFileSync(filePath, `# Project guidance\n\n${IMPORT_LINE}\n`);
+    return 'created';
+  }
+  const existing = fs.readFileSync(filePath, 'utf8');
+  if (existing.includes(IMPORT_LINE)) return 'present';
+  const sep = existing.endsWith('\n') ? '' : '\n';
+  fs.appendFileSync(filePath, `${sep}\n${IMPORT_LINE}\n`);
+  return 'added';
 }
 
 // ---------------------------------------------------------------------------
@@ -139,26 +163,29 @@ function writeCursorRule(cwd: string): 'created' | 'updated' {
 // ---------------------------------------------------------------------------
 
 function setupClaude(cwd: string): void {
-  const mcpResult = mergeMcpJson(path.join(cwd, '.mcp.json'), cwd);
-  const mdResult = writeClaudeMd(cwd);
-  out(`  .mcp.json   — ${mcpResult}`);
-  out(`  CLAUDE.md   — ${mdResult}`);
+  const mdResult = writeColdstartMd(cwd, 'cli');
+  const importResult = wireClaudeImport(cwd);
+  out(`  coldstart.md  — ${mdResult} (CLI flavor)`);
+  out(`  CLAUDE.md     — ${importResult === 'present' ? 'already imports @coldstart.md' : `${importResult} @coldstart.md import`}`);
 }
 
-function setupCursor(cwd: string): void {
-  const mcpResult = mergeMcpJson(path.join(cwd, '.cursor', 'mcp.json'), cwd);
-  const ruleResult = writeCursorRule(cwd);
-  out(`  .cursor/mcp.json                 — ${mcpResult}`);
-  out(`  .cursor/rules/coldstart-mcp.mdc  — ${ruleResult}`);
-}
-
-function setupFiles(cwd: string): void {
-  const mcpPath = path.join(cwd, 'coldstart-mcp.json');
-  const rulesPath = path.join(cwd, 'coldstart-rules.md');
-  fs.writeFileSync(mcpPath, JSON.stringify({ mcpServers: { coldstart: buildMcpEntry(cwd) } }, null, 2) + '\n');
-  fs.writeFileSync(rulesPath, RULES_CONTENT);
-  out('  coldstart-mcp.json   — copy the mcpServers entry into your IDE\'s MCP config file');
-  out('  coldstart-rules.md   — copy the contents into your IDE\'s rules/instructions file');
+function setupOther(cwd: string): void {
+  const mdResult = writeColdstartMd(cwd, 'mcp');
+  out(`  coldstart.md  — ${mdResult} (MCP flavor)`);
+  out('');
+  out('  Wire it into your client:');
+  out('  1. Add coldstart.md to your client\'s rules / instructions / skill');
+  out('     (whatever your app uses — point it at this file or paste its contents).');
+  out('  2. Add the MCP server entry to your client\'s MCP config:');
+  out('');
+  let entry: { command: string; args: string[] };
+  try {
+    entry = mcpServerEntry(cwd);
+  } catch (e) {
+    out(`     (could not resolve a stable install path: ${e})`);
+    return;
+  }
+  out('       ' + JSON.stringify({ mcpServers: { coldstart: entry } }, null, 2).split('\n').join('\n       '));
 }
 
 // ---------------------------------------------------------------------------
@@ -169,9 +196,6 @@ export async function runInit(): Promise<void> {
   const cwd = process.cwd();
   const home = process.env.HOME ?? process.env.USERPROFILE ?? '';
   const hasClaude = fs.existsSync(path.join(home, '.claude'));
-  const hasCursor =
-    fs.existsSync(path.join(home, '.cursor')) ||
-    fs.existsSync('/Applications/Cursor.app');
 
   const rl = createInterface({ input: process.stdin, output: process.stderr });
   const ask = async (question: string): Promise<string> => {
@@ -180,60 +204,43 @@ export async function runInit(): Promise<void> {
   };
 
   out('');
-  out('coldstart-mcp init');
+  out('coldstart init');
   out(DIVIDER);
   out('');
 
-  type Target = 'claude' | 'cursor' | 'both' | 'files';
-  let target: Target;
-
-  if (hasClaude && hasCursor) {
-    out('Detected: Claude Code and Cursor');
-    out('');
-    out('Will write:');
-    out('  .mcp.json, CLAUDE.md');
-    out('  .cursor/mcp.json, .cursor/rules/coldstart-mcp.mdc');
-    out('');
-    const answer = await ask('Set up for both? [Y/n] ');
-    target = (answer === '' || answer === 'y') ? 'both' : 'files';
-  } else if (hasClaude) {
+  let claude: boolean;
+  if (hasClaude) {
     out('Detected: Claude Code');
     out('');
     out('Will write:');
-    out('  .mcp.json   — MCP server config (merge if exists)');
-    out('  CLAUDE.md   — agent rules (append if exists, create if not)');
+    out('  coldstart.md  — agent guidance (CLI flavor)');
+    out('  CLAUDE.md     — import `@coldstart.md` (create if missing, append if present)');
     out('');
-    const answer = await ask('Proceed? [Y/n] ');
-    target = (answer === '' || answer === 'y') ? 'claude' : 'files';
-  } else if (hasCursor) {
-    out('Detected: Cursor');
-    out('');
-    out('Will write:');
-    out('  .cursor/mcp.json                 — MCP server config (merge if exists)');
-    out('  .cursor/rules/coldstart-mcp.mdc  — agent rules');
-    out('');
-    const answer = await ask('Proceed? [Y/n] ');
-    target = (answer === '' || answer === 'y') ? 'cursor' : 'files';
+    const answer = await ask('Set up for Claude Code? [Y/n] ');
+    claude = answer === '' || answer === 'y';
   } else {
-    out('No IDE detected (.claude/ or .cursor/ not found).');
+    out('Which client are you wiring coldstart into?');
     out('');
-    out('  1  Claude Code  (.mcp.json + CLAUDE.md)');
-    out('  2  Cursor       (.cursor/mcp.json + .cursor/rules/coldstart-mcp.mdc)');
-    out('  3  Both');
-    out('  4  Generate files to copy manually');
+    out('  1  Claude Code  (coldstart.md + @coldstart.md import in CLAUDE.md)');
+    out('  2  Other app    (coldstart.md only — you wire it as rules + add the MCP server)');
     out('');
-    const answer = await ask('Choose [1/2/3/4]: ');
-    const map: Record<string, Target> = { '1': 'claude', '2': 'cursor', '3': 'both', '4': 'files' };
-    target = map[answer] ?? 'files';
+    const answer = await ask('Choose [1/2]: ');
+    claude = answer === '1';
   }
 
   rl.close();
-
   out('');
 
-  if (target === 'claude' || target === 'both') setupClaude(cwd);
-  if (target === 'cursor' || target === 'both') setupCursor(cwd);
-  if (target === 'files') setupFiles(cwd);
+  if (claude) setupClaude(cwd);
+  else setupOther(cwd);
+
+  // Warm the index now, while the user is here at setup, so the first lookup
+  // isn't a cold build. ensureKeeper spawns the background keeper (detached) and
+  // returns immediately; the keeper walks + indexes + watches from here on.
+  // Best-effort — a spawn failure just means the first query builds lazily.
+  out('');
+  out('Indexing this repo in the background — your first lookup will be instant.');
+  await ensureKeeper(cwd);
 
   out('');
   out(DIVIDER);

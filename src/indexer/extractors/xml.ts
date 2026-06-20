@@ -1,9 +1,9 @@
 import { createRequire } from 'node:module';
 import type { SymbolNode } from '../../types.js';
+import { childrenOfType, firstChildOfType } from './node-helpers.js';
+import { makeParser } from './parser-factory.js';
 
 const require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ParserCtor = require('tree-sitter') as { new(): any };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const xmlModule = require('@tree-sitter-grammars/tree-sitter-xml') as unknown;
 
@@ -11,16 +11,7 @@ const xmlModule = require('@tree-sitter-grammars/tree-sitter-xml') as unknown;
 type TSNode = any;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let xmlParser: any = null;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getParser(): any {
-  if (!xmlParser) {
-    xmlParser = new ParserCtor();
-    xmlParser.setLanguage((xmlModule as any).xml);
-  }
-  return xmlParser;
-}
+const getParser = makeParser((xmlModule as any).xml);
 
 // ---------------------------------------------------------------------------
 // Result type
@@ -36,14 +27,6 @@ export interface XmlParseResult {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function firstChildOfType(node: TSNode, type: string): TSNode | null {
-  return node.namedChildren.find((c: TSNode) => c.type === type) ?? null;
-}
-
-function childrenOfType(node: TSNode, type: string): TSNode[] {
-  return node.namedChildren.filter((c: TSNode) => c.type === type);
-}
 
 /**
  * Extract the quoted string value from an AttValue node.

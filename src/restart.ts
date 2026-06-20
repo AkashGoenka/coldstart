@@ -1,8 +1,12 @@
 /**
- * coldstart-mcp restart [--all] — Kill daemons and clean lockfiles.
+ * coldstart restart [--all] — Kill the background keeper and clear its lock.
  *
- * Without --all: restarts the daemon for the current working directory.
- * With --all: restarts all daemons the user has running.
+ * Without --all: the keeper for the current working directory.
+ * With --all: every keeper the user has running.
+ *
+ * The keeper respawns lazily on the next `coldstart find` (or MCP call), so
+ * "restart" = stop now, fresh keeper on next use. Use this to clear a wedged
+ * keeper or a stale lockfile.
  */
 
 import { resolve } from 'node:path';
@@ -13,30 +17,30 @@ export async function runRestart(): Promise<void> {
   let killed = 0;
 
   if (all) {
-    // Kill all daemons
+    // Kill every keeper.
     const listings = await listDaemonLocks();
     for (const listing of listings) {
       await killDaemon(listing.lock.pid);
       await deleteLock(listing.lock.rootDir || '.').catch(() => {});
-      process.stdout.write(`[coldstart] Killed ${listing.basename} (PID ${listing.lock.pid})\n`);
+      process.stdout.write(`[coldstart] Killed keeper ${listing.basename} (PID ${listing.lock.pid})\n`);
       killed++;
     }
   } else {
-    // Kill daemon for cwd
+    // Kill the keeper for cwd.
     const cwd = process.cwd();
     const finalRoot = resolve(cwd);
     const lock = await readLock(finalRoot);
     if (!lock) {
-      process.stdout.write(`[coldstart] No daemon found for ${finalRoot}\n`);
+      process.stdout.write(`[coldstart] No keeper found for ${finalRoot}\n`);
       return;
     }
     await killDaemon(lock.pid);
     await deleteLock(finalRoot).catch(() => {});
-    process.stdout.write(`[coldstart] Killed daemon (PID ${lock.pid})\n`);
+    process.stdout.write(`[coldstart] Killed keeper (PID ${lock.pid}) — respawns on next \`coldstart find\`\n`);
     killed++;
   }
 
   if (killed === 0) {
-    process.stdout.write(`[coldstart] No daemons to restart\n`);
+    process.stdout.write(`[coldstart] No keepers to restart\n`);
   }
 }

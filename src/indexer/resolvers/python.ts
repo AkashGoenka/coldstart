@@ -1,5 +1,5 @@
 import { dirname, join } from 'node:path';
-import { toFileId, tryResolveBase } from './shared.js';
+import { toFileId, tryResolveBase, MAX_DIR_WALK_DEPTH } from './shared.js';
 
 /**
  * Python resolver: handles both relative and absolute imports.
@@ -53,7 +53,7 @@ export async function resolvePython(
   // (e.g. /repos/django/django-coldstart/django/...) and multi-project repos.
   const relPath = specifier.replace(/\./g, '/');
   let dir = dirname(fromFile);
-  for (let i = 0; i < 64; i++) {
+  for (let i = 0; i < MAX_DIR_WALK_DEPTH; i++) {
     const direct = await tryResolveBase(join(dir, relPath), fileIdSet, rootDir);
     if (direct) return direct;
     const srcLayout = await tryResolveBase(join(dir, 'src', relPath), fileIdSet, rootDir);
