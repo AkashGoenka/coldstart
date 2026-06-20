@@ -1,5 +1,11 @@
 import { join, relative, extname } from 'node:path';
 
+// Upper bound on how many directory ancestors a resolver walks when searching
+// for a project marker (go.mod, composer.json, Gemfile, a load-path root, …).
+// A safety valve against an unbounded loop, not a real-world depth — no source
+// tree is 64 directories deep.
+export const MAX_DIR_WALK_DEPTH = 64;
+
 // TypeScript ESM: `from './foo.js'` may resolve to `foo.ts` on disk.
 const JS_TO_TS: Record<string, string[]> = {
   '.js':  ['.ts', '.tsx'],

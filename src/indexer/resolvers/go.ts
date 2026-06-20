@@ -1,5 +1,6 @@
 import { join, dirname, isAbsolute } from 'node:path';
 import { readFile } from 'node:fs/promises';
+import { MAX_DIR_WALK_DEPTH } from './shared.js';
 
 /**
  * Go resolver: resolves module-local import paths using go.mod / go.work.
@@ -44,7 +45,7 @@ const startDirToWorkDir = new Map<string, string | null>();
 
 async function findUpwards(startDir: string, filename: string): Promise<string | null> {
   let dir = startDir;
-  for (let i = 0; i < 64; i++) {
+  for (let i = 0; i < MAX_DIR_WALK_DEPTH; i++) {
     try {
       await readFile(join(dir, filename), 'utf-8');
       return dir;
