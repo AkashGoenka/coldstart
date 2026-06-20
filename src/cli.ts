@@ -16,6 +16,7 @@ import { resolve } from 'node:path';
 import { loadCachedIndex, saveCachedIndex } from './cache/disk-cache.js';
 import { getGitHead } from './indexer/git.js';
 import { handleGetStructure } from './server/tools.js';
+import { ensureKeeper } from './keeper.js';
 import type { CodebaseIndex } from './types.js';
 
 type BuildFn = (
@@ -129,6 +130,9 @@ export async function runGs(argv: string[], buildIndex: BuildFn): Promise<number
     return 1;
   }
   const root = resolve(flags.root ?? '.');
+  // Keep the on-disk cache live for uncommitted edits: ensure a background
+  // keeper is running (cheap no-op when one already is).
+  await ensureKeeper(root);
   const index = await getIndex(root, flags.cacheDir, buildIndex);
   if (!index) { err('[coldstart] no index available'); return 1; }
 
@@ -152,6 +156,9 @@ export async function runFind(argv: string[], buildIndex: BuildFn): Promise<numb
     return 1;
   }
   const root = resolve(flags.root ?? '.');
+  // Keep the on-disk cache live for uncommitted edits: ensure a background
+  // keeper is running (cheap no-op when one already is).
+  await ensureKeeper(root);
   const index = await getIndex(root, flags.cacheDir, buildIndex);
   if (!index) { err('[coldstart] no index available'); return 1; }
 

@@ -1,70 +1,24 @@
 /**
- * coldstart-mcp status — list every daemon known to this user and report
- * whether each is alive and answering HTTP. Reads `~/.coldstart/daemon/*.json`
- * and probes `GET /mcp` on the recorded port.
+ * coldstart status — list every keeper known to this user and report, without
+ * any network probe, whether each is alive and how fresh its on-disk index is.
  *
- * Output format is intentionally simple stdout text (not JSON) so it's
- * grep-friendly from the shell. If we later want machine-readable output we
- * can add a `--json` flag without breaking the human form.
+ * The keeper no longer serves over HTTP, so liveness is a lockfile PID check
+ * (`process.kill(pid, 0)`) and freshness is the cache meta.json mtime. This
+ * also covers the old `doctor` use-case ("is my index fresh?") for the cwd.
+ *
+ * Output is simple grep-friendly stdout text.
  */
 
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, statSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   daemonDir,
   daemonLogPath,
-  daemonLogPrevPath,
   isDaemonAlive,
   listDaemonLocks,
   type DaemonLockListing,
 } from './daemon-lock.js';
-
-async function probeHttp(port: number): Promise<boolean> {
-  try {
-    const res = await fetch(`http://127.0.0.1:${port}/mcp`, {
-      method: 'GET',
-      signal: AbortSignal.timeout(1500),
-    });
-    return res.status < 500;
-  } catch {
-    return false;
-  }
-}
-
-interface IndexStatus {
-  state: 'building' | 'ready' | 'rebuilding' | 'failed' | 'unknown';
-  fileCount: number | null;
-  indexBuildMs: number | null;
-}
-
-async function probeIndexStatus(port: number): Promise<IndexStatus | null> {
-  try {
-    const res = await fetch(`http://127.0.0.1:${port}/status`, {
-      method: 'GET',
-      signal: AbortSignal.timeout(1500),
-    });
-    if (!res.ok) return null;
-    const raw = await res.json() as Partial<IndexStatus>;
-    const state = raw.state ?? 'unknown';
-    return {
-      state: state as IndexStatus['state'],
-      fileCount: typeof raw.fileCount === 'number' ? raw.fileCount : null,
-      indexBuildMs: typeof raw.indexBuildMs === 'number' ? raw.indexBuildMs : null,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function renderIndexCol(s: IndexStatus | null): string {
-  if (!s) return '?';
-  switch (s.state) {
-    case 'building':   return 'building';
-    case 'rebuilding': return s.fileCount !== null ? `rebuilding (${s.fileCount} files)` : 'rebuilding';
-    case 'ready':      return s.fileCount !== null ? `ready (${s.fileCount} files)` : 'ready';
-    case 'failed':     return 'failed';
-    default:           return s.state;
-  }
-}
+import { getCacheDir } from './cache/disk-cache.js';
 
 function fileSize(path: string): string {
   try {
@@ -78,72 +32,83 @@ function fileSize(path: string): string {
   }
 }
 
-interface Row {
-  root: string;
-  pid: string;
-  port: string;
-  status: string;
-  index: string;
-  log: string;
-  logSize: string;
+function relativeAge(ms: number): string {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.round(h / 24)}d ago`;
+}
+
+/** Freshness of a root's on-disk index, derived from the cache meta.json. */
+function indexFreshness(rootDir: string | undefined): string {
+  if (!rootDir) return '?';
+  try {
+    const metaPath = join(getCacheDir(rootDir, undefined), 'meta.json');
+    if (!existsSync(metaPath)) return 'no cache';
+    const st = statSync(metaPath);
+    const age = relativeAge(Date.now() - st.mtimeMs);
+    // meta.json may carry a file count; surface it when present.
+    try {
+      const meta = JSON.parse(readFileSync(metaPath, 'utf-8')) as { fileCount?: number; files?: unknown[] };
+      const n = typeof meta.fileCount === 'number'
+        ? meta.fileCount
+        : Array.isArray(meta.files) ? meta.files.length : null;
+      return n !== null ? `${n} files, ${age}` : age;
+    } catch {
+      return age;
+    }
+  } catch {
+    return '?';
+  }
 }
 
 function deriveRoot(listing: DaemonLockListing): string {
-  // Modern lockfiles record the absolute root path. Older ones don't —
-  // fall back to the basename portion of the filename, which is the
-  // project directory's name (collision-disambiguated by hash suffix).
   if (listing.lock.rootDir) return listing.lock.rootDir;
   return `(unknown — ${listing.basename})`;
+}
+
+interface Row {
+  root: string;
+  pid: string;
+  status: string;
+  version: string;
+  index: string;
+  logSize: string;
 }
 
 export async function runStatus(): Promise<void> {
   const listings = await listDaemonLocks();
   if (listings.length === 0) {
     process.stdout.write(
-      `No coldstart daemons found.\n` +
-      `Daemon directory: ${daemonDir()}\n` +
-      `Run any MCP tool from your AI client to spawn one.\n`,
+      `No coldstart keepers running.\n` +
+      `Keeper directory: ${daemonDir()}\n` +
+      `Run \`coldstart find\` (or any MCP call) to spawn one.\n`,
     );
     return;
   }
 
-  // Probe everything in parallel — typically a handful of entries, all on
-  // 127.0.0.1, so even with timeouts this stays well under a second.
-  const probed = await Promise.all(listings.map(async (l) => {
+  const rows: Row[] = listings.map((l) => {
     const alive = isDaemonAlive(l.lock.pid);
-    const [httpOk, indexStatus] = alive
-      ? await Promise.all([probeHttp(l.lock.port), probeIndexStatus(l.lock.port)])
-      : [false, null];
-    let status: string;
-    if (!alive) status = 'dead (stale lock)';
-    else if (!httpOk) status = 'alive, http unreachable';
-    else status = 'ok';
-    // Use the lockfile's own basename for log paths — it works for old
-    // lockfiles without rootDir, and for new ones it's equivalent.
-    const logPath = l.lock.rootDir ? daemonLogPath(l.lock.rootDir) : '';
-    const prevPath = l.lock.rootDir ? daemonLogPrevPath(l.lock.rootDir) : '';
-    const log = logPath || `${daemonDir()}/${l.basename}.log`;
-    return { listing: l, status, indexStatus, log, logSize: fileSize(log), prevPath } as const;
-  }));
+    const logPath = l.lock.rootDir ? daemonLogPath(l.lock.rootDir) : `${daemonDir()}/${l.basename}.log`;
+    return {
+      root: deriveRoot(l),
+      pid: String(l.lock.pid),
+      status: alive ? 'alive' : 'dead (stale lock)',
+      version: l.lock.version ?? '-',
+      index: indexFreshness(l.lock.rootDir),
+      logSize: fileSize(logPath),
+    };
+  });
 
-  const rows: Row[] = probed.map(p => ({
-    root: deriveRoot(p.listing),
-    pid: String(p.listing.lock.pid),
-    port: String(p.listing.lock.port),
-    status: p.status,
-    index: renderIndexCol(p.indexStatus),
-    log: p.log,
-    logSize: p.logSize,
-  }));
-
-  // Column widths sized to content with reasonable minimums.
   const widths = {
     root: Math.max(4, ...rows.map(r => r.root.length)),
     pid: Math.max(3, ...rows.map(r => r.pid.length)),
-    port: Math.max(4, ...rows.map(r => r.port.length)),
     status: Math.max(6, ...rows.map(r => r.status.length)),
+    version: Math.max(7, ...rows.map(r => r.version.length)),
     index: Math.max(5, ...rows.map(r => r.index.length)),
-    log: Math.max(3, ...rows.map(r => r.log.length)),
     logSize: Math.max(4, ...rows.map(r => r.logSize.length)),
   };
 
@@ -151,11 +116,10 @@ export async function runStatus(): Promise<void> {
   const header = [
     pad('ROOT', widths.root),
     pad('PID', widths.pid),
-    pad('PORT', widths.port),
     pad('STATUS', widths.status),
+    pad('VERSION', widths.version),
     pad('INDEX', widths.index),
-    pad('SIZE', widths.logSize),
-    pad('LOG', widths.log),
+    pad('LOG', widths.logSize),
   ].join('  ');
 
   const lines = [header, '─'.repeat(header.length)];
@@ -163,21 +127,19 @@ export async function runStatus(): Promise<void> {
     lines.push([
       pad(r.root, widths.root),
       pad(r.pid, widths.pid),
-      pad(r.port, widths.port),
       pad(r.status, widths.status),
+      pad(r.version, widths.version),
       pad(r.index, widths.index),
       pad(r.logSize, widths.logSize),
-      pad(r.log, widths.log),
     ].join('  '));
   }
 
   process.stdout.write(lines.join('\n') + '\n');
 
-  const anyDead = rows.some(r => r.status !== 'ok');
-  if (anyDead) {
+  if (rows.some(r => r.status !== 'alive')) {
     process.stdout.write(
-      `\nFor a sick daemon: tail the LOG path above (and the matching .log.prev for the previous run).\n` +
-      `To force a respawn, remove the lockfile in ${daemonDir()} and restart your AI client.\n`,
+      `\nA dead keeper means a stale lockfile. \`coldstart restart\` clears it; ` +
+      `the next \`coldstart find\` respawns a fresh keeper.\n`,
     );
   }
 }
