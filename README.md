@@ -28,6 +28,16 @@ coldstart ships as one binary with two front doors:
 
 Same engine, same index, same results. Pick whichever your agent can reach.
 
+It works best with **Claude Code**: shell-capable, so it gets the fast CLI path, and `coldstart init` auto-wires the guidance import *and* the search hooks for it. Other clients use the MCP surface with manual wiring.
+
+---
+
+## Bring your own semantics
+
+coldstart has no embeddings, no summaries, no semantic layer — **on purpose. The semantic layer is the agent.** Every consumer is already a frontier model, the most capable reasoner in the loop; pre-computing meaning at index time only duplicates that, worse and stale. So coldstart indexes what's cheap to keep *exact* — paths, symbols, exports, the import/call graph — returns *why* each file ranked (this term defined here, imported there), and leaves meaning to the reasoner that has the task in hand. It does the one thing the agent can't do cheaply: find the right file without burning tokens grepping.
+
+That's not a missing feature next to embedding-based tools — it's the design. The full argument is in **[PHILOSOPHY.md](./PHILOSOPHY.md)**.
+
 ---
 
 ## Install
@@ -165,13 +175,13 @@ node dist/index.js find auth --root .
 node dist/index.js --root . --no-daemon
 ```
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for the index pipeline and process model, and [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for recovery procedures.
+See [PHILOSOPHY.md](./PHILOSOPHY.md) for why coldstart has no semantic layer, [ARCHITECTURE.md](./ARCHITECTURE.md) for the index pipeline and process model, and [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for recovery procedures.
 
 ---
 
 ## Limitations
 
-1. It's a routing layer, not a behavior summarizer — no semantic analysis or code summaries.
+1. It's a routing layer, not a behavior summarizer — no semantic analysis or code summaries. This is deliberate: the consuming agent is the semantic layer (see [PHILOSOPHY.md](./PHILOSOPHY.md)).
 2. `gs` callers are one-hop and file-scoped. Member-expression calls (`this.method()`, `api.method()`) aren't cross-file resolved; named function/constant calls are. Chase further hops by calling `gs` on the caller files.
 3. Dynamic/computed imports (`import(variable)`) and runtime-DSL references (polymorphic associations, gem/reflection-backed models) stay unresolved.
 4. Hidden directories and files over 1 MB are skipped.
