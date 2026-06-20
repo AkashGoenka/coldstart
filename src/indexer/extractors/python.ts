@@ -1,27 +1,16 @@
 import { createRequire } from 'node:module';
 import type { SymbolNode, CallSite } from '../../types.js';
 import { childrenOfType, firstChildOfType } from './node-helpers.js';
+import { makeParser } from './parser-factory.js';
 
 const require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ParserCtor = require('tree-sitter') as { new(): any };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const pythonGrammar = require('tree-sitter-python') as unknown;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let pythonParser: any = null;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getParser(): any {
-  if (!pythonParser) {
-    pythonParser = new ParserCtor();
-    pythonParser.setLanguage(pythonGrammar);
-  }
-  return pythonParser;
-}
+const getParser = makeParser(pythonGrammar);
 
 // ---------------------------------------------------------------------------
 // Node helpers

@@ -1,27 +1,16 @@
 import { createRequire } from 'node:module';
 import type { SymbolNode, CallSite } from '../../types.js';
 import { firstChildOfType } from './node-helpers.js';
+import { makeParser } from './parser-factory.js';
 
 const require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ParserCtor = require('tree-sitter') as { new(): any };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const cppGrammar = require('tree-sitter-cpp') as unknown;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let cppParser: any = null;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getParser(): any {
-  if (!cppParser) {
-    cppParser = new ParserCtor();
-    cppParser.setLanguage(cppGrammar);
-  }
-  return cppParser;
-}
+const getParser = makeParser(cppGrammar);
 
 /** Recursively collect call_expression callee names + first-seen line in a subtree. */
 function collectCalls(node: TSNode, results: Map<string, number>): void {

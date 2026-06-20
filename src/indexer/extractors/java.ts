@@ -8,28 +8,16 @@
 import { createRequire } from 'node:module';
 import type { SymbolNode, SymbolKind, CallSite } from '../../types.js';
 import { childrenOfType, firstChildOfType, firstChildOfTypes } from './node-helpers.js';
+import { makeParser } from './parser-factory.js';
 
 const require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ParserCtor = require('tree-sitter') as { new(): any };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const javaGrammar = require('tree-sitter-java') as unknown;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-// Re-use a single parser instance
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let javaParser: any = null;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getParser(): any {
-  if (!javaParser) {
-    javaParser = new ParserCtor();
-    javaParser.setLanguage(javaGrammar);
-  }
-  return javaParser;
-}
+const getParser = makeParser(javaGrammar);
 
 // ---------------------------------------------------------------------------
 // Node helpers

@@ -1,27 +1,16 @@
 import { createRequire } from 'node:module';
 import type { SymbolNode } from '../../types.js';
 import { childrenOfType, firstChildOfType } from './node-helpers.js';
+import { makeParser } from './parser-factory.js';
 
 const require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ParserCtor = require('tree-sitter') as { new(): any };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const groovyModule = require('tree-sitter-groovy') as unknown;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let groovyParser: any = null;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getParser(): any {
-  if (!groovyParser) {
-    groovyParser = new ParserCtor();
-    groovyParser.setLanguage(groovyModule);
-  }
-  return groovyParser;
-}
+const getParser = makeParser(groovyModule);
 
 // ---------------------------------------------------------------------------
 // Result type
