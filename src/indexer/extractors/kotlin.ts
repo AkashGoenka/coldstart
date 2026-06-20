@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import type { SymbolNode, CallSite } from '../../types.js';
+import { firstChildOfType } from './node-helpers.js';
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -25,10 +26,6 @@ function getParser(): any {
 // ---------------------------------------------------------------------------
 // Node helpers
 // ---------------------------------------------------------------------------
-
-function firstChildOfType(node: TSNode, type: string): TSNode | null {
-  return node.namedChildren.find((c: TSNode) => c.type === type) ?? null;
-}
 
 /** Recursively walk a node and collect call_expression callee names + first-seen line.
  *

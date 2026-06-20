@@ -7,6 +7,7 @@
  */
 import { createRequire } from 'node:module';
 import type { SymbolNode, CallSite } from '../../types.js';
+import { childrenOfType, firstChildOfType, firstChildOfTypes } from './node-helpers.js';
 
 const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -32,18 +33,6 @@ function getParser(): any {
 // ---------------------------------------------------------------------------
 // Node helpers
 // ---------------------------------------------------------------------------
-
-function childrenOfType(node: TSNode, type: string): TSNode[] {
-  return node.namedChildren.filter((c: TSNode) => c.type === type);
-}
-
-function firstChildOfType(node: TSNode, type: string): TSNode | null {
-  return node.namedChildren.find((c: TSNode) => c.type === type) ?? null;
-}
-
-function firstChildOfTypes(node: TSNode, types: string[]): TSNode | null {
-  return node.namedChildren.find((c: TSNode) => types.includes(c.type)) ?? null;
-}
 
 /** Collect all call node method names + first-seen line in a subtree */
 function collectCalls(node: TSNode, results: Map<string, number>): void {
