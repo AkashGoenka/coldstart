@@ -5,15 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.0.0] - Unreleased
 
-### Changed (BREAKING — warrants a major version bump on release)
-- **Tool surface reduced from 4 tools to 2: `get-overview` + `get-structure`.** The `trace-deps` and `trace-impact` tools were removed; their capabilities are folded into `get-structure`. A single file-scoped `get-structure` call now returns symbols (with per-symbol cross-file callers), 1-hop outbound imports, and reverse importers.
-  - `get-overview`: `domain_filter` renamed to `query` (the old name is still accepted as a deprecated alias). Removed the `with_importers` and `callers_for` params — reverse context now lives in `get-structure`. Added `page`. Default `max_results` is 10.
-  - `get-structure`: `view` now takes `full` (default) / `symbols` / `imports` / `importers` / `callers` (was `symbols` / `imports` / `both`). `full` returns symbols + imports + importers + inline callers in one call; huge files (>20 symbols, no `match`) are reordered most-used-first and truncated to the top 15. `match` now supports `|` to OR substrings.
-  - Output: `get-overview` now renders results as `<path> [matched-tokens]`; the `[matched]` display shows only tokens driven by the literal query (synonym-driven matches still count for ranking but are suppressed from the display).
-  - Dropped the per-call `_indexStatus: "rebuilding"` field (hot-path byte savings).
-- **Agent rules rewritten** (`init` output / CLAUDE.md) around the 2-tool model — "who uses this file / who calls this symbol → get-structure, not grep".
+Major release. The package is renamed, the CLI is now the primary surface, and the
+process model is rebuilt around a single background keeper with stateless readers.
+
+### Changed (BREAKING)
+- **Package renamed `coldstart-mcp` → `coldstart`.** The CLI is the primary surface
+  now; MCP is the no-shell fallback. `coldstart-mcp` on npm is deprecated and
+  redirects here. The `coldstart-mcp` binary name is retained as an alias, so
+  existing MCP configs keep working. Migrate with
+  `npm uninstall -g coldstart-mcp && npm install -g coldstart --legacy-peer-deps && coldstart init`.
+- **Tools/commands renamed to `find` + `gs`** (matching the CLI verbs):
+  `get-overview` → `find`, `get-structure` → `gs`. Exposed identically as CLI
+  commands (`coldstart find` / `coldstart gs`, the primary path) and as MCP tools
+  (`find` / `gs`, for no-shell clients) with byte-identical output.
+- **Tool surface reduced from 4 to 2.** `trace-deps` and `trace-impact` are gone;
+  their jobs (file-level import graph, symbol-level callers/implementors/extenders)
+  fold into `gs`. A single file-scoped `gs` call returns symbols (with per-symbol
+  cross-file callers), 1-hop outbound imports, and reverse importers. `view` takes
+  `full` (default) / `symbols` / `imports` / `importers` / `callers`.
+- **One keeper, thin readers — the HTTP-serving daemon is removed.** The background
+  process (`coldstart --daemon`) now *only* keeps the on-disk cache fresh
+  (watch → patch/rebuild → save); it serves nothing. `find`/`gs` and the stdio MCP
+  server are stateless readers over that cache, lazy-spawning the keeper. No more
+  bridge, HTTP server, or port. The lockfile drops `port`; `status` is HTTP-free
+  (lockfile PID + cache `meta.json` mtime); the `doctor` command is removed (its
+  "is my index fresh?" job is covered by `status`).
+- **`init` rewritten around a single `coldstart.md`.** `coldstart init` writes one
+  `coldstart.md` (CLI or MCP flavor) at the repo root carrying all agent guidance;
+  Claude Code gets `@coldstart.md` wired into `CLAUDE.md`, other apps wire it
+  manually. No per-IDE rules files, no skill. `init` also warms the index in the
+  background so the first lookup is instant.
+
+### Fixed
+- **Convention-edge freshness on incremental patch.** Editing a single Rails/Django/
+  Laravel/C# convention file used to drop that file's synthetic convention edges
+  (and reference fields) until the next full rebuild, because the incremental patch
+  stripped them and never rebuilt them. `patchIndex` now re-runs the idempotent
+  synthetic-edge passes, and a shared `baseIndexedFile()` keeps the buildIndex /
+  runProbe / patch construction sites from drifting. Regression test:
+  `tests/patch-synthetic-freshness.test.ts`.
+
+### Internal
+- Dedup pass: shared tree-sitter node helpers (`extractors/node-helpers.ts`), a
+  shared parser factory (`extractors/parser-factory.ts`), and a `MAX_DIR_WALK_DEPTH`
+  constant replace ~20 copied helpers, 13 hand-rolled parser singletons, and a magic
+  number. Dead code removed (`bridge`, `http-daemon`, `doctor`, `scoring`, `glob`,
+  the skill, plus several unused helpers).
 
 ## [1.5.0] - 2026-05-22
 
