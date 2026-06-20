@@ -18,46 +18,20 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'get-overview',
     description:
-      'Locate files by matching `query` against DECLARED NAMES — filenames, path segments, exported symbols. Reach for GO BEFORE Read/Grep/Glob when finding which files are relevant.\n\n' +
-      'OUTPUT: results grouped into sections by WHERE they matched (file/dir names; code/symbol names; both). Each line is `<path> matched: [tok1, tok2, ...]` — matched name tokens, rarest-first (leftmost = highest signal). Sections are categories, NOT a ranking: line order across sections does not mean relevance order, and the strongest match may sit in any section — scan all sections before choosing.\n\n' +
-      'RELATION ANNOTATIONS: some result lines carry `← imported by X (also listed)` (an import edge between two shown results) or `~ shares `token` with X (also listed)` (the two results share a rare identifier/string literal). The `~` links are real relations the import graph cannot see — migration↔model schema twins, config-by-name references, cross-language pairs. Treat a linked pair as ONE unit of evidence: if one is worth reading, fetch the other in the same step instead of rediscovering it later.\n\n' +
-      'CAPABILITIES:\n' +
-      '- Naming-variant tolerant — case, separators, plural ≡ singular. `LoadStaging` ≡ `load_staging` ≡ `load-staging`; `tile` ≡ `tiles`. Pass the concept; do NOT grep-alternate spellings.\n' +
-      '- Multi-concept — `auth payment` (AND), `[auth|login|jwt] payment` (OR), plus a small built-in synonym set (auth/login/jwt, search/find/query, message/post/chat).\n' +
-      '- `path: "arches/app/**/*.py"` — glob scope; comma-combine; `!` to exclude.\n' +
-      '- `include_tests: true` — opt in to tests (excluded by default).\n\n' +
-      'DOES NOT MATCH (but see Content presence below):\n' +
-      '- File body content (comments, docstrings, strings, HTML/template, SQL).\n' +
-      '- Import specifiers (by design).\n' +
-      '- Nested symbols → use `get-structure`.\n\n' +
-      'CONTENT PRESENCE: when a query token matches NO declared name, GO reports where that token lives in file BODIES instead — `Content presence` lines name the files (rare token), give a count (common token), or state the identifier appears NOWHERE in indexed content. Trust the nowhere-line: the identifier does not exist in this repo — do not grep spelling variants of it. This makes GO the right FIRST probe even for identifiers you would otherwise grep for.\n\n' +
+      'Locate the files relevant to a task. Pass `query` = EVERY salient identifier from the task (symbol names, domain nouns, the rare token you half-remember) — not one distilled keyword. Recall is bounded by the terms you give: a one-token query cannot out-rank lookalikes, so over-supply rather than under-supply. Reach for GO BEFORE Read/Grep/Glob.\n\n' +
+      'HOW IT WORKS: GO greps every term across the repo body AND matches declared names (filenames, path segments, exported symbols), then ranks files by DISTINCT-TERM COVERAGE — the file that covers MORE of your query rises above its lookalikes. This catches body-level matches (nested defs, dynamic refs, string literals) that a declared-name index misses.\n\n' +
+      'OUTPUT: a ranked page. Top files get an inline preview — their indexed symbols (with line ranges) plus the body lines where your rare terms CLUSTER (def/class/assignment lines first), so you often answer WITHOUT a follow-up Read. Lower-ranked files list as bare paths. Prose/doc and stylesheet matches are partitioned into secondary lists so they do not crowd out source. Related files (sharing a rare identifier with a top hit, no import edge between them) are surfaced as first-class neighbors.\n\n' +
+      'NAMING: case- and separator-insensitive (`LoadStaging` ≡ `load_staging`). It does NOT expand synonyms or plurals for you — that is your job: if the concept could be named two ways, pass both tokens.\n\n' +
       'AFTER THE RESULT:\n' +
-      '1. Path looks right → `get-structure` on it. Default returns symbols + imports + per-symbol callers + importers in one shot — that is your "who uses this" answer.\n' +
-      '2. Leading `[matched]` token names your concept but the path is off → re-call GO with that token (~10× cheaper than bash-grep).\n' +
-      '3. Query words missing from every `[matched]` list → check the `Content presence` lines first; they tell you where the word lives in file bodies (or that it does not exist). Grep only for phrases/regex patterns GO cannot index.\n\n' +
-      'FRAMEWORK CONVENTION FILES (page.tsx, route.ts, __init__.py): query by directory name — the filename is generic.',
+      '1. A path + its inline symbols/preview answer the question → done, no Read needed.\n' +
+      '2. Path looks right but you need shape/usage → `get-structure` on it (symbols + imports + per-symbol callers + importers in one shot).\n' +
+      '3. "no indexed file contains any of [...]" → those identifiers do not exist in the repo; reformulate or grep for a phrase/regex GO cannot index. Do not grep spelling variants of a token GO already reported absent.',
     inputSchema: {
       type: 'object',
       properties: {
         query: {
           type: 'string',
-          description: 'Concept tokens for the thing you are looking for. Bare words = AND across concepts; `[a|b]` = OR within a synonym group. camelCase accepted. Designed to be re-called: lift a rare token from a prior result\'s `[matched]` list into the next `query`. If `[matched]` lists do not contain your query words, GO does not index where this concept lives (try grep) — not "the query is wrong".',
-        },
-        max_results: {
-          type: 'number',
-          description: 'Page size, default 10. The shown results are the best-scored declared-name matches, but display groups them by match channel — position in the output is not score order. Reformulate `query` before paging deep.',
-        },
-        include_tests: {
-          type: 'boolean',
-          description: 'Include test and automation files. Default false.',
-        },
-        path: {
-          type: 'string',
-          description: 'Minimatch-style glob to scope where to look (e.g. "arches/app/**/*.py", "src/auth/**", "**/*.htm"). Comma-separate to combine; prefix with "!" to exclude (e.g. "src/**,!**/legacy/**"). Supports `**`, `*`, `?` and `!` negation; brace `{a,b}` and char-class `[abc]` are NOT supported. Filters before ranking, so a focused glob produces sharper results than a broad query. If a path filter is supplied but matches no candidate files you will see `excluded_by_path` and `path_filter` on the response — re-check syntax there.',
-        },
-        page: {
-          type: 'number',
-          description: 'Results page (default 1). Prefer reformulating `query` over paging.',
+          description: 'Space-separated identifiers for the thing you are looking for — pass every salient token from the task, not one keyword. camelCase/snake_case both accepted. More discriminating tokens = sharper ranking.',
         },
       },
       required: ['query'],
@@ -134,10 +108,6 @@ export function registerToolHandlers(
       case 'get-overview':
         result = handleGetOverview(index, {
           query: (params['query'] ?? params['domain_filter']) as string | undefined,
-          max_results: params['max_results'] as number | undefined,
-          include_tests: params['include_tests'] as boolean | undefined,
-          path: params['path'] as string | undefined,
-          page: params['page'] as number | undefined,
         });
         break;
 

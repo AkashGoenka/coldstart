@@ -38,7 +38,7 @@ const FINDS_BEFORE_READ = 2; // (1) nudge to read after this many finds w/o a Re
 const NONFIND_SHELL_STREAK = 3; // (3) nudge after this many non-find search/shell calls
 const CHECKPOINT_EVERY = 12; // (4) checkpoint nudge cadence, in tool calls
 const GS_SLICE_CAP = 3; // (5) nudge once gs has sliced the SAME file this many times
-const EMPTY_NUDGE_CAP = 3; // (2) max empty-search nudges per session
+const EMPTY_NUDGE_CAP = 2; // (2) max empty-search nudges per session
 const REDUNDANT_CAP = 6; // (3b) max no-new-evidence nudges per session
 
 // coldstart find (the GOOD locator)
@@ -259,11 +259,10 @@ export default function handle(input) {
     st.empty_fired += 1;
     msgs.push([
       4,
-      "That search returned nothing. An empty result means the term or path is WRONG, not that the " +
-        "thing is absent — don't repeat the same shape or guess spelling variants. If you're grepping a " +
-        "specific FILE for an identifier, run `coldstart gs <file> --symbol <token>` instead: it returns " +
-        "the body lines where the token appears (it greps in-tool), so you stop guessing. Otherwise re-run " +
-        "`coldstart find` with a different salient term, or Read a candidate you already have.",
+      "That search returned nothing. An empty result only tells you the term doesn't appear here — it is " +
+        "not evidence the thing is absent. If you're grepping a specific FILE for an identifier, run " +
+        "`coldstart gs <file> --symbol <token>` instead: it returns the body lines where the token appears " +
+        "(it greps in-tool), so you don't have to guess at spelling.",
     ]);
   }
 

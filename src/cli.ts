@@ -15,7 +15,7 @@
 import { resolve } from 'node:path';
 import { loadCachedIndex, saveCachedIndex } from './cache/disk-cache.js';
 import { getGitHead } from './indexer/git.js';
-import { handleGetOverview, handleGetStructure } from './server/tools.js';
+import { handleGetStructure } from './server/tools.js';
 import type { CodebaseIndex } from './types.js';
 
 type BuildFn = (
@@ -125,22 +125,16 @@ export async function runGo(argv: string[], buildIndex: BuildFn): Promise<number
   const { positional, flags } = parseQueryArgs(argv);
   const query = positional.join(' ').trim();
   if (!query) {
-    err('usage: coldstart go <query...> [--path GLOB] [--tests] [--max N] [--page N] [--json]');
+    err('usage: coldstart go <terms...>  — pass every salient identifier from the task, not one distilled keyword [--json]');
     return 1;
   }
   const root = resolve(flags.root ?? '.');
   const index = await getIndex(root, flags.cacheDir, buildIndex);
   if (!index) { err('[coldstart] no index available'); return 1; }
 
-  const result = handleGetOverview(index, {
-    query,
-    max_results: flags.max ? Number(flags.max) : undefined,
-    include_tests: flags.tests === true,
-    path: flags.path,
-    page: flags.page ? Number(flags.page) : undefined,
-  }) as HandlerResult;
-
-  emit(result, flags.json === true);
+  // go and find share one engine — same query in, same page out.
+  const { buildRichPage } = await import('./server/find.js');
+  process.stdout.write(buildRichPage(index, root, query, flags.json, flags.via === true) + '\n');
   return 0;
 }
 
