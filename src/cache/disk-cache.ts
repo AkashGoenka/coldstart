@@ -176,30 +176,6 @@ export async function saveCachedIndex(
   await writeFile(join(dir, 'meta.json'), JSON.stringify(meta, null, 2));
 }
 
-export async function isCacheStale(
-  index: CodebaseIndex,
-  currentGitHead: string,
-  baseCacheDir?: string,
-): Promise<boolean> {
-  const dir = getCacheDir(index.rootDir, baseCacheDir);
-  const metaPath = join(dir, 'meta.json');
-
-  try {
-    const raw = await readFile(metaPath, 'utf-8');
-    const meta = JSON.parse(raw) as CacheMeta;
-
-    if (meta.gitHead && currentGitHead && meta.gitHead !== currentGitHead) {
-      return true;
-    }
-    if (Date.now() - meta.timestamp > CACHE_TTL_MS) {
-      return true;
-    }
-    return false;
-  } catch {
-    return true;
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Serialization helpers (Map ↔ plain object)
 // ---------------------------------------------------------------------------

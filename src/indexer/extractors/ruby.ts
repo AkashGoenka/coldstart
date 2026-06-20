@@ -6,7 +6,6 @@
  * Follows the same interface and patterns as ts-parser.ts.
  */
 import { createRequire } from 'node:module';
-import { dirname, resolve, basename } from 'node:path';
 import type { SymbolNode, CallSite } from '../../types.js';
 
 const require = createRequire(import.meta.url);
@@ -841,52 +840,6 @@ function extractNode(
       break;
     }
   }
-}
-
-// ---------------------------------------------------------------------------
-// Import resolution
-// ---------------------------------------------------------------------------
-
-export interface RubyImport {
-  raw: string;           // original require string
-  resolved: string | null; // relative file path or null for external
-  isRelative: boolean;
-}
-
-/** Known gem/stdlib names — skip these as external */
-const STDLIB_PREFIXES = new Set([
-  'json', 'yaml', 'csv', 'net/', 'openssl', 'base64', 'digest',
-  'date', 'time', 'uri', 'fileutils', 'pathname', 'set',
-  'singleton', 'forwardable', 'ostruct', 'struct', 'logger',
-  'securerandom', 'benchmark', 'pp', 'io/', 'cgi', 'erb',
-  'tempfile', 'tmpdir',
-]);
-
-function isExternalGem(specifier: string): boolean {
-  // Gems typically use simple names without slashes, or known stdlib prefixes
-  if (STDLIB_PREFIXES.has(specifier)) return true;
-  for (const prefix of STDLIB_PREFIXES) {
-    if (specifier.startsWith(prefix)) return true;
-  }
-  // If no slash and no dot, likely a gem
-  if (!specifier.includes('/') && !specifier.includes('.')) return true;
-  return false;
-}
-
-export function resolveRubyRequire(
-  specifier: string,
-  fromFilePath: string,
-  isRelative: boolean,
-  projectRoot: string,
-): string | null {
-  if (!isRelative && isExternalGem(specifier)) return null;
-
-  const base = isRelative
-    ? resolve(dirname(fromFilePath), specifier)
-    : resolve(projectRoot, specifier);
-
-  // Return without extension (resolver will try appending .rb)
-  return base;
 }
 
 // ---------------------------------------------------------------------------

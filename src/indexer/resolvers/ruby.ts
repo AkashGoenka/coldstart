@@ -188,15 +188,6 @@ export async function buildRailsFqcnIndex(
   return idx;
 }
 
-/** Resolve a constant FQCN to a fileId using the Rails autoload index */
-export function resolveRailsConstant(
-  fqcn: string,
-  fqcnIndex: Map<string, string>,
-): string | null {
-  const key = underscore(fqcn);
-  return fqcnIndex.get(key) ?? null;
-}
-
 /**
  * Resolve an ordered candidate group (innermost-nesting first, bare last) to a
  * fileId, taking the first candidate that maps to a real file. Mirrors Ruby's

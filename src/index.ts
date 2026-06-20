@@ -17,7 +17,7 @@
  * Internal (spawned automatically by readers):
  *   coldstart-mcp --root . --daemon       # background keeper (keeps cache fresh)
  */
-import { resolve } from 'node:path';
+import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { statSync } from 'node:fs';
 import { walkDirectory } from './indexer/walker.js';
@@ -32,12 +32,10 @@ import { buildFileDomains, isTestPath } from './indexer/tokenize.js';
 import { buildContentTokenPostings } from './indexer/content-tokens.js';
 import { buildSymbolEdges } from './indexer/symbol-edges.js';
 import { getGitHead } from './indexer/git.js';
-import { loadCachedIndex, saveCachedIndex } from './cache/disk-cache.js';
+import { loadCachedIndex, saveCachedIndex, getCacheDir } from './cache/disk-cache.js';
 import { startMCPServer } from './server/mcp.js';
 import { IndexManager } from './index-manager.js';
 import type { IndexContext } from './index-manager.js';
-import { getCacheDir } from './cache/disk-cache.js';
-import { join } from 'node:path';
 import { readLock, writeLock, deleteLock, isDaemonAlive, getCurrentVersion, watchOwnLockfile } from './daemon-lock.js';
 import { ensureKeeper } from './keeper.js';
 import { attachDaemonLogger } from './daemon-log.js';
@@ -113,6 +111,15 @@ function parseArgs(argv: string[]): {
 // ---------------------------------------------------------------------------
 function log(quiet: boolean, ...args: unknown[]): void {
   if (!quiet) process.stderr.write(args.join(' ') + '\n');
+}
+
+// MCP clients advertise their workspace as a `file://` URI (or sometimes a bare
+// path). Resolve the first advertised root to an absolute filesystem path,
+// falling back to the CLI-provided root when the client advertises none.
+function resolveClientRoot(clientRoots: string[], fallback: string): string {
+  if (clientRoots.length === 0) return fallback;
+  const uri = clientRoots[0];
+  return uri.startsWith('file://') ? fileURLToPath(uri) : resolve(uri);
 }
 
 // ---------------------------------------------------------------------------
@@ -696,12 +703,7 @@ async function main(): Promise<void> {
     await startMCPServer(
       async (clientRoots: string[]) => {
         if (!rootExplicit) {
-          let finalRoot = resolve(cliRoot);
-          if (clientRoots.length > 0) {
-            const uri = clientRoots[0];
-            finalRoot = uri.startsWith('file://') ? fileURLToPath(uri) : resolve(uri);
-          }
-          buildAndSet(finalRoot).catch(() => {});
+          buildAndSet(resolveClientRoot(clientRoots, resolve(cliRoot))).catch(() => {});
         }
       },
       async () => {
@@ -738,12 +740,7 @@ async function main(): Promise<void> {
     await startMCPServer(
       async (clientRoots: string[]) => {
         if (!rootExplicit) {
-          let finalRoot = resolve(cliRoot);
-          if (clientRoots.length > 0) {
-            const uri = clientRoots[0];
-            finalRoot = uri.startsWith('file://') ? fileURLToPath(uri) : resolve(uri);
-          }
-          void initRoot(finalRoot);
+          void initRoot(resolveClientRoot(clientRoots, resolve(cliRoot)));
         }
       },
       async () => {

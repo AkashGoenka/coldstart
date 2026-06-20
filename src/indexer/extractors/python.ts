@@ -505,8 +505,3 @@ export function parsePythonContent(
     submoduleImportCandidates: submoduleCandidates.length > 0 ? [...new Set(submoduleCandidates)] : undefined,
   };
 }
-
-// Helper used by tests only
-export function _childrenOfType(node: TSNode, type: string): TSNode[] {
-  return childrenOfType(node, type);
-}
