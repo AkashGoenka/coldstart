@@ -74,6 +74,10 @@ export interface CSharpParseResult {
   hasDefaultExport: false;
   symbols: SymbolNode[];
   partialDeclarations?: PartialDeclaration[];
+  /** The file's primary declared namespace (`namespace Foo.Bar`), if any. Used
+   *  to resolve `using` directives by declared namespace rather than by guessing
+   *  it from the directory layout. */
+  packageName?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -303,6 +307,7 @@ export function parseCSharpContent(
   const imports: string[] = [];
   const symbols: SymbolNode[] = [];
   const exports: string[] = [];
+  let packageName: string | undefined;
 
   function visitChildren(nodes: TSNode[]): void {
     for (const node of nodes) {
@@ -316,6 +321,13 @@ export function parseCSharpContent(
       }
 
       if (node.type === 'namespace_declaration' || node.type === 'file_scoped_namespace_declaration') {
+        // First declared namespace becomes the file's package identity. The name
+        // node (`qualified_name`) already carries the full dotted form, e.g.
+        // `Serilog.Core.Pipeline`.
+        if (packageName === undefined) {
+          const nameNode = firstChildOfType(node, 'qualified_name') ?? firstChildOfType(node, 'identifier');
+          if (nameNode) packageName = nameNode.text;
+        }
         const body = firstChildOfType(node, 'declaration_list') ??
           node; // file-scoped: members are siblings
         visitChildren(body.namedChildren);
@@ -370,6 +382,7 @@ export function parseCSharpContent(
     hasDefaultExport: false,
     symbols,
     partialDeclarations: partialDeclarations.length > 0 ? partialDeclarations : undefined,
+    packageName,
   };
 }
 

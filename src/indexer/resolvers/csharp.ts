@@ -1,18 +1,25 @@
 import { join } from 'node:path';
 
 /**
- * C# resolver: maps a `using` namespace to any .cs file in the corresponding
- * directory.
+ * C# resolver: maps a `using Foo.Bar` directive to a representative .cs file
+ * that *declares* namespace `Foo.Bar`.
  *
- * `using Serilog.Core.Pipeline` — namespace-as-path: convert dots to slashes
- * and look for any `.cs` file under <source-root>/Serilog/Core/Pipeline/.
+ * Preferred path is the AST-declared namespace (`pkgById`): each .cs file's
+ * `namespace Foo.Bar` declaration (parsed by the extractor) is indexed, and a
+ * `using` resolves to any file whose declared namespace matches. This is
+ * layout-independent — C# namespaces routinely diverge from the directory tree
+ * (a `RootNamespace` in the .csproj, files moved without renaming the folder),
+ * so guessing the namespace from the path silently fails on those repos.
  *
- * Unlike Java where one class = one file, a C# namespace is spread across
- * many files. We pick any file in the directory as a representative — that's
- * sufficient for graph-level "this import points at this part of the repo".
+ * Fallback (files without a known namespace, or no pkgById): the old
+ * namespace-as-path heuristic — `using Serilog.Core.Pipeline` → look for any
+ * .cs file under a `Serilog/Core/Pipeline/` directory. On conventional repos
+ * where the namespace mirrors the folders, the two agree exactly, so the
+ * fallback never regresses a conventional layout.
  *
- * Source roots are discovered by suffix-matching `.cs` paths against a small
- * set of layout markers (project-name dir is also accepted).
+ * Unlike Java where one class = one file, a C# namespace spans many files; we
+ * return one representative — sufficient for graph-level "this import points at
+ * this part of the repo".
  */
 
 const ROOT_MARKERS = ['/src/', '/source/', '/lib/'];
@@ -22,20 +29,29 @@ interface CSharpIndex {
   dirToFile: Map<string, string>;
   // Discovered source roots (rootDir-relative, may be empty string for repo root)
   roots: string[];
+  // Declared namespace → a representative .cs fileId declaring it (AST-anchored)
+  byNamespace: Map<string, string>;
 }
 
-const indexCache = new WeakMap<Set<string>, CSharpIndex>();
+// Memoized on (fileIdSet identity, pkgById identity). pkgById changes per resolve
+// cycle, so a stale path-only index can't leak into a later cycle.
+const indexCache = new WeakMap<Set<string>, { idx: CSharpIndex; pkgById?: Map<string, string> }>();
 
-function buildIndex(fileIdSet: Set<string>): CSharpIndex {
+function buildIndex(fileIdSet: Set<string>, pkgById?: Map<string, string>): CSharpIndex {
   const cached = indexCache.get(fileIdSet);
-  if (cached) return cached;
+  if (cached && cached.pkgById === pkgById) return cached.idx;
   const dirToFile = new Map<string, string>();
+  const byNamespace = new Map<string, string>();
   const roots = new Set<string>();
   for (const id of fileIdSet) {
     if (!id.endsWith('.cs')) continue;
     const slash = id.lastIndexOf('/');
     const dirPath = slash >= 0 ? id.slice(0, slash) : '';
     if (!dirToFile.has(dirPath)) dirToFile.set(dirPath, id);
+
+    // AST-anchored: index the file's declared namespace (first-write-wins).
+    const ns = pkgById?.get(id);
+    if (ns && !byNamespace.has(ns)) byNamespace.set(ns, id);
 
     // Discover roots — strip the longest ROOT_MARKER occurrence
     let rootFound = false;
@@ -53,8 +69,8 @@ function buildIndex(fileIdSet: Set<string>): CSharpIndex {
     }
   }
   roots.add('');
-  const result: CSharpIndex = { dirToFile, roots: Array.from(roots) };
-  indexCache.set(fileIdSet, result);
+  const result: CSharpIndex = { dirToFile, roots: Array.from(roots), byNamespace };
+  indexCache.set(fileIdSet, { idx: result, pkgById });
   return result;
 }
 
@@ -64,8 +80,14 @@ export async function resolveCSharp(
   fileIdSet: Set<string>,
   _rootDir: string,
   _aliasMap: Map<string, string[]>,
+  pkgById?: Map<string, string>,
 ): Promise<string | null> {
-  const { dirToFile, roots } = buildIndex(fileIdSet);
+  const { dirToFile, roots, byNamespace } = buildIndex(fileIdSet, pkgById);
+
+  // AST-anchored: a file declaring exactly this namespace.
+  const declared = byNamespace.get(specifier);
+  if (declared) return declared;
+
   const nsPath = specifier.replace(/\./g, '/');
 
   for (const root of roots) {

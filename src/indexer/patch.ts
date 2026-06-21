@@ -4,7 +4,7 @@ import type { CodebaseIndex, IndexedFile, ParsedFile, Language } from '../types.
 import { EXTENSION_TO_LANGUAGE } from '../constants.js';
 import { parseFile, buildFileId } from './parser.js';
 import { buildFileDomains, isTestPath } from './tokenize.js';
-import { resolveImportsForFiles } from './resolvers/index.js';
+import { resolveImportsForFiles, buildPackageIndex } from './resolvers/index.js';
 import { buildSymbolEdges } from './symbol-edges.js';
 import { buildContentTokenPostings } from './content-tokens.js';
 import { baseIndexedFile } from './indexed-file.js';
@@ -186,7 +186,10 @@ export async function patchIndex(
   // Phase 4: Resolve imports for updated files, rebuild edges + inEdges
   // -------------------------------------------------------------------------
   if (newFiles.length > 0) {
-    const { edges: newEdges } = await resolveImportsForFiles(newFiles, fileIdSet, rootDir);
+    // Build the JVM package index from the FULL set (not just newFiles) so a
+    // changed Java/Kotlin file resolves against unchanged ones by declared package.
+    const pkgById = buildPackageIndex([...index.files.values()]);
+    const { edges: newEdges } = await resolveImportsForFiles(newFiles, fileIdSet, rootDir, pkgById);
 
     for (const edge of newEdges) {
       index.edges.push(edge);

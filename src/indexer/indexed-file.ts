@@ -35,6 +35,7 @@ export function baseIndexedFile(
     tokenEstimate: parsed.tokenEstimate,
     symbols: parsed.symbols,
     reexportRatio: parsed.reexportRatio,
+    packageName: parsed.packageName,
     constantReferences: parsed.constantReferences,
     partialDeclarations: parsed.partialDeclarations,
     eloquentRelations: parsed.eloquentRelations,

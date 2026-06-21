@@ -254,6 +254,7 @@ type ResolverFn = (
   fileIdSet: Set<string>,
   rootDir: string,
   aliasMap: Map<string, string[]>,
+  pkgById?: Map<string, string>, // JVM only: fileId → declared package, for layout-independent FQCN resolution
 ) => Promise<string | null>;
 
 function getResolver(language: Language): ResolverFn {
@@ -289,6 +290,11 @@ export async function resolveImportsForFiles(
   files: IndexedFile[],
   fileIdSet: Set<string>,
   rootDir: string,
+  // JVM (Java/Kotlin) FQCN resolution anchors on each file's declared `package`
+  // rather than guessing it from the directory layout. Built once from the FULL
+  // file set by the caller (so a changed file can resolve against unchanged ones
+  // in patch mode); files without a package fall back to the path-regex.
+  pkgById?: Map<string, string>,
 ): Promise<ResolveResult> {
   const aliasMap = await buildAliasMap(rootDir);
 
@@ -302,7 +308,7 @@ export async function resolveImportsForFiles(
       const resolver = getResolver(file.language);
       const resolvedTargets = new Set<string>();
       for (const specifier of file.imports) {
-        const resolved = await resolver(specifier, file.path, fileIdSet, rootDir, aliasMap);
+        const resolved = await resolver(specifier, file.path, fileIdSet, rootDir, aliasMap, pkgById);
         if (resolved && resolved !== file.id) {
           edges.push({ from: file.id, to: resolved, type: 'import', specifier });
           resolvedTargets.add(resolved);
@@ -314,7 +320,7 @@ export async function resolveImportsForFiles(
       // add an edge if the specifier resolves to a real file, but a miss is
       // NOT counted as unresolved — most are symbol imports, not files.
       for (const specifier of file.submoduleImportCandidates ?? []) {
-        const resolved = await resolver(specifier, file.path, fileIdSet, rootDir, aliasMap);
+        const resolved = await resolver(specifier, file.path, fileIdSet, rootDir, aliasMap, pkgById);
         if (resolved && resolved !== file.id && !resolvedTargets.has(resolved)) {
           edges.push({ from: file.id, to: resolved, type: 'import', specifier });
           resolvedTargets.add(resolved);
@@ -335,5 +341,16 @@ export async function resolveImports(
   rootDir: string,
 ): Promise<ResolveResult> {
   const fileIdSet = new Set(files.map(f => f.id));
-  return resolveImportsForFiles(files, fileIdSet, rootDir);
+  return resolveImportsForFiles(files, fileIdSet, rootDir, buildPackageIndex(files));
+}
+
+/**
+ * fileId → declared package, for the JVM resolver. Built from the FULL file set
+ * (only JVM files carry `packageName`) so a file can be FQCN-resolved by its
+ * `package` line regardless of where it sits on disk.
+ */
+export function buildPackageIndex(files: IndexedFile[]): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const f of files) if (f.packageName) m.set(f.id, f.packageName);
+  return m;
 }

@@ -15,6 +15,7 @@ const TS_MULTI_TARGET_FIXTURES = join(FIXTURES, 'ts-multi-target');
 const TS_LONGEST_PREFIX_FIXTURES = join(FIXTURES, 'ts-longest-prefix');
 const NPM_WORKSPACES_FIXTURES = join(FIXTURES, 'npm-workspaces');
 const CPP_FIXTURES = join(FIXTURES, 'cpp');
+const CSHARP_FIXTURES = join(FIXTURES, 'csharp');
 const GO_REPLACE_FIXTURES = join(FIXTURES, 'go-replace');
 const GO_WORKSPACE_FIXTURES = join(FIXTURES, 'go-workspace');
 const PHP_PSR4_FIXTURES = join(FIXTURES, 'php-psr4');
@@ -157,6 +158,71 @@ describe('resolver — Java package-name imports', () => {
     const authEdges = edges.filter(e => e.from === 'src/main/java/com/example/AuthService.java');
     expect(authEdges).toHaveLength(1);
     expect(authEdges[0].to).toBe('src/main/java/com/example/UserRepository.java');
+  });
+
+  it('anchors FQCN on the declared package, not the directory (non-Maven layout)', async () => {
+    // JMRI-style: files live under java/src/<pkg>/, which no Maven source-root
+    // regex matches. The FQCN must come from the declared `package`, otherwise
+    // every intra-repo import misses (the regression that produced java 0%).
+    const mk = (id: string, pkg: string, imports: string[]) => {
+      const f = makeJavaFile(id, imports);
+      (f as unknown as { packageName: string }).packageName = pkg;
+      return f;
+    };
+    const files: IndexedFile[] = [
+      mk('java/src/jmri/AuthService.java', 'jmri', ['jmri.UserRepository']),
+      mk('java/src/jmri/UserRepository.java', 'jmri', []),
+    ];
+    const { edges } = await resolveImports(files, JAVA_FIXTURES);
+    const targets = edges
+      .filter(e => e.from === 'java/src/jmri/AuthService.java')
+      .map(e => e.to);
+    expect(targets).toContain('java/src/jmri/UserRepository.java');
+  });
+});
+
+describe('resolver — C# using-namespace imports', () => {
+  function makeCsFile(id: string, namespaceName: string | undefined, imports: string[]): IndexedFile {
+    return {
+      id,
+      path: join(CSHARP_FIXTURES, id),
+      relativePath: id,
+      language: 'csharp',
+      domains: [],
+      exports: [],
+      hasDefaultExport: false,
+      imports,
+      packageName: namespaceName,
+      hash: 'abc',
+      lineCount: 10,
+      tokenEstimate: 100,
+      isEntryPoint: false,
+      archRole: 'unknown',
+      centrality: 0,
+      depth: 0,
+    } as unknown as IndexedFile;
+  }
+
+  it('resolves `using` to a file declaring that namespace when folders diverge', async () => {
+    // namespace ≠ folder — the case that silently resolves 0% under path-guessing
+    // (a RootNamespace in the .csproj, or files moved without renaming the dir).
+    const files: IndexedFile[] = [
+      makeCsFile('weird/deep/Foo.cs', 'Company.Product.Core', ['Company.Product.Util']),
+      makeCsFile('somewhere-else/Bar.cs', 'Company.Product.Util', []),
+    ];
+    const { edges } = await resolveImports(files, CSHARP_FIXTURES);
+    const targets = edges.filter(e => e.from === 'weird/deep/Foo.cs').map(e => e.to);
+    expect(targets).toContain('somewhere-else/Bar.cs');
+  });
+
+  it('falls back to the path convention when the namespace is undeclared', async () => {
+    const files: IndexedFile[] = [
+      makeCsFile('src/Company/Product/Core/Foo.cs', undefined, ['Company.Product.Util']),
+      makeCsFile('src/Company/Product/Util/Bar.cs', undefined, []),
+    ];
+    const { edges } = await resolveImports(files, CSHARP_FIXTURES);
+    const targets = edges.filter(e => e.from === 'src/Company/Product/Core/Foo.cs').map(e => e.to);
+    expect(targets).toContain('src/Company/Product/Util/Bar.cs');
   });
 });
 
