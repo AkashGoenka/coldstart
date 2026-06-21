@@ -137,6 +137,7 @@ async function parseByLanguage(
       lineCount,
       tokenEstimate,
       symbols: javaResult.symbols,
+      packageName: javaResult.packageName,
     };
   }
 
@@ -269,6 +270,7 @@ async function parseByLanguage(
       tokenEstimate,
       symbols: csharpResult.symbols,
       partialDeclarations: csharpResult.partialDeclarations,
+      packageName: csharpResult.packageName,
     };
   }
 
@@ -306,7 +308,7 @@ async function parseByLanguage(
       kotlinResult = parseKotlinContent(content, fileId || filePath);
     } catch (err) {
       console.error(`[parser] Tree-sitter error in ${fileId || filePath}: ${err}`);
-      kotlinResult = { imports: [], exports: [], hasDefaultExport: false as const, symbols: [] };
+      kotlinResult = { imports: [], exports: [], hasDefaultExport: false as const, symbols: [], packageName: '' };
     }
 
     return {
@@ -317,6 +319,7 @@ async function parseByLanguage(
       lineCount,
       tokenEstimate,
       symbols: kotlinResult.symbols,
+      packageName: kotlinResult.packageName,
     };
   }
 

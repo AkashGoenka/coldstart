@@ -322,12 +322,16 @@ async function runProbe(rootDir: string, excludes: string[], includes: string[])
 
   const tParse = Date.now() - tParseStart;
   const tResolveStart = Date.now();
-  const { resolveImportsForFiles } = await import('./indexer/resolvers/index.js');
+  const { resolveImportsForFiles, buildPackageIndex } = await import('./indexer/resolvers/index.js');
 
   // Per-language resolve timing — pass the FULL fileIdSet (resolvers index it
   // once via WeakMap) but invoke per-language so we can attribute time. Java
   // resolves to Kotlin files and vice versa, so we must not narrow the set.
   const fullFileIdSet = new Set(indexedFiles.map(f => f.id));
+  // JVM package index over the FULL set — anchors Java/Kotlin FQCN resolution on
+  // each file's declared `package`, so non-Maven layouts (e.g. JMRI's java/src/)
+  // resolve correctly instead of mis-deriving the package from the path.
+  const pkgById = buildPackageIndex(indexedFiles);
   const filesByLang = new Map<string, IndexedFile[]>();
   for (const f of indexedFiles) {
     const arr = filesByLang.get(f.language) ?? [];
@@ -339,7 +343,7 @@ async function runProbe(rootDir: string, excludes: string[], includes: string[])
   let allUnresolved: Awaited<ReturnType<typeof resolveImportsForFiles>>['unresolved'] = [];
   for (const [lang, files] of filesByLang) {
     const t0 = Date.now();
-    const r = await resolveImportsForFiles(files, fullFileIdSet, rootDir);
+    const r = await resolveImportsForFiles(files, fullFileIdSet, rootDir, pkgById);
     langTimes[lang] = Date.now() - t0;
     allEdges = allEdges.concat(r.edges);
     allUnresolved = allUnresolved.concat(r.unresolved);

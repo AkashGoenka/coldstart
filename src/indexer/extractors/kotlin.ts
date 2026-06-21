@@ -74,6 +74,7 @@ export interface KotlinParseResult {
   exports: string[];
   hasDefaultExport: false;
   symbols: SymbolNode[];
+  packageName: string;  // declared package — anchors layout-independent FQCN resolution
 }
 
 // ---------------------------------------------------------------------------
@@ -350,6 +351,7 @@ export function parseKotlinContent(
     exports: [...new Set(exports)],
     hasDefaultExport: false,
     symbols,
+    packageName,
   };
 }
 

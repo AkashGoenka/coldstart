@@ -22,11 +22,26 @@ interface FqcnIndex {
   byFqcn: Map<string, string>;
 }
 
-const indexCache = new WeakMap<Set<string>, FqcnIndex>();
+// Memoized on (fileIdSet identity, pkgById identity). pkgById changes per resolve
+// cycle, so a stale path-only index from a prior cycle can't leak in.
+const indexCache = new WeakMap<Set<string>, { idx: FqcnIndex; pkgById?: Map<string, string> }>();
 
-function buildFqcnIndex(fileIdSet: Set<string>): FqcnIndex {
+/**
+ * Build the FQCN→fileId map.
+ *
+ * Preferred keying is the file's *declared package* (`pkgById`): FQCN =
+ * `<package>.<filename-stem>`. This is layout-independent — it resolves the same
+ * whether the repo uses Maven (`src/main/java/com/foo/Bar.java`) or any other tree
+ * (e.g. JMRI's `java/src/jmri/Bar.java`), because it reads the `package` line the
+ * parser already extracted instead of guessing the package from the directory path.
+ *
+ * Files without a known package (default package, parse miss, or a non-JVM call
+ * site) fall back to the source-root path regex. On Maven layouts the two agree
+ * exactly, so the fallback never regresses a conventional repo.
+ */
+function buildFqcnIndex(fileIdSet: Set<string>, pkgById?: Map<string, string>): FqcnIndex {
   const cached = indexCache.get(fileIdSet);
-  if (cached) return cached;
+  if (cached && cached.pkgById === pkgById) return cached.idx;
   const byFqcn = new Map<string, string>();
 
   for (const id of fileIdSet) {
@@ -36,7 +51,16 @@ function buildFqcnIndex(fileIdSet: Set<string>): FqcnIndex {
     }
     if (!ext) continue;
 
-    // Find where the package path starts (right after the source-root marker)
+    // Package-anchored (layout-independent): FQCN = <declared package>.<stem>.
+    const pkg = pkgById?.get(id);
+    if (pkg) {
+      const base = id.slice(id.lastIndexOf('/') + 1, id.length - ext.length);
+      const fqcn = `${pkg}.${base}`;
+      if (!byFqcn.has(fqcn)) byFqcn.set(fqcn, id);
+      continue;
+    }
+
+    // Fallback: derive the package from the source-root path convention.
     let pkgStart: number | null = null;
     const m = SRC_LANG_RE.exec(id);
     if (m) {
@@ -57,7 +81,7 @@ function buildFqcnIndex(fileIdSet: Set<string>): FqcnIndex {
   }
 
   const result: FqcnIndex = { byFqcn };
-  indexCache.set(fileIdSet, result);
+  indexCache.set(fileIdSet, { idx: result, pkgById });
   return result;
 }
 
@@ -67,10 +91,11 @@ export async function resolveJava(
   fileIdSet: Set<string>,
   _rootDir: string,
   _aliasMap: Map<string, string[]>,
+  pkgById?: Map<string, string>,
 ): Promise<string | null> {
   if (specifier.endsWith('.*')) return null;
 
-  const { byFqcn } = buildFqcnIndex(fileIdSet);
+  const { byFqcn } = buildFqcnIndex(fileIdSet, pkgById);
 
   const direct = byFqcn.get(specifier);
   if (direct) return direct;
