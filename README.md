@@ -28,7 +28,7 @@ coldstart ships as one binary with two front doors:
 
 Same engine, same index, same results. Pick whichever your agent can reach.
 
-It works best with **Claude Code**: shell-capable, so it gets the fast CLI path, and `coldstart init` auto-wires the guidance import *and* the search hooks for it. Other clients use the MCP surface with manual wiring.
+It works best with **Claude Code** and **Codex**: both get the fast CLI path *and* the find/gs search hooks (the find-dedup guard + behavioral nudge), which `coldstart init` auto-wires. **Cursor** is auto-wired for rules + MCP (no hooks — its after-tool hooks can't deliver the nudge); any other client gets `coldstart.md` plus printed wiring directions.
 
 ---
 
@@ -50,10 +50,14 @@ cd your-project
 coldstart init
 ```
 
-`init` writes a single `coldstart.md` at your repo root (the agent-facing guidance) and wires it in:
+`init` asks two things — the **experience** (`cli`, recommended, or `mcp`) and the **client** — then writes a single `coldstart.md` at your repo root (the agent-facing guidance) and wires it in. Pass `--experience` / `--client` to skip the prompts. The client is never auto-detected; you always pick it.
 
-- **Claude Code** → ensures `CLAUDE.md` imports it via `@coldstart.md`, and registers the find/gs search hooks in `.claude/settings.json` (a PostToolUse nudge + a PreToolUse find-dedup guard — merged into any existing settings, never overwriting them).
-- **Any other app** → writes `coldstart.md` only, and prints the MCP server entry to paste into your client's config.
+- **Claude Code** → ensures `CLAUDE.md` imports it via `@coldstart.md`, and registers the find/gs search hooks in `.claude/settings.json` (a PostToolUse nudge + a PreToolUse find-dedup guard — merged into any existing settings, never overwriting them). The `mcp` experience also writes `.mcp.json`.
+- **Codex** → adds a coldstart section to `AGENTS.md` and registers the same find/gs hooks in `.codex/hooks.json` (Codex uses the same Claude-style hook protocol, so the shipped handlers run unchanged). The `mcp` experience also writes `[mcp_servers.coldstart]` into `.codex/config.toml`.
+- **Cursor** → writes `.cursor/rules/coldstart.mdc` (an always-applied rule referencing `@coldstart.md`) and, for the `mcp` experience, `.cursor/mcp.json`. No hooks: Cursor's after-tool hooks are notification-only, so the behavioral nudge can't be delivered.
+- **Other** → writes `coldstart.md` only, and prints the wiring directions (plus the MCP server entry for the `mcp` experience).
+
+The behavioral hooks (find-dedup guard + nudge) need a host that supports Claude-style hooks, so coldstart works best on **Claude Code** or **Codex**.
 
 It then warms the index in the background, so your first lookup is instant. Re-running `init` is safe — it never duplicates entries.
 

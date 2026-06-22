@@ -5,15 +5,26 @@
  * agent-facing guidance. Clients pull it in by reference, so future wording
  * changes touch only coldstart.md, never the client's own rules file.
  *
- *   - Claude Code  → ensure CLAUDE.md exists and imports it via `@coldstart.md`,
- *     and register the find/gs search hooks in `.claude/settings.json`.
- *   - Any other app → write coldstart.md only; the user wires it as rules/
- *     instructions/skill however their app prefers (and, for no-shell clients,
- *     adds the MCP server entry we print).
+ * init asks two things (or takes `--experience` / `--client` flags):
+ *   1. EXPERIENCE — how the agent invokes coldstart:
+ *        - `cli` (recommended) → runs `coldstart find` / `coldstart gs` (shell).
+ *        - `mcp`               → calls the `find` / `gs` MCP tools (no shell).
+ *      This selects the coldstart.md flavor and the hook matcher surface.
+ *   2. CLIENT — which tool to wire (never auto-detected; the user always picks):
+ *        - Claude Code → CLAUDE.md imports `@coldstart.md`; find/gs hooks in
+ *          `.claude/settings.json`. (MCP experience also writes `.mcp.json`.)
+ *        - Cursor      → `.cursor/rules/coldstart.mdc` references coldstart.md;
+ *          (MCP) `.cursor/mcp.json`. No hooks — Cursor's after-hooks are
+ *          notification-only, so the nudge can't be delivered.
+ *        - Codex       → AGENTS.md points at coldstart.md; find/gs hooks in
+ *          `.codex/hooks.json` (Claude-style, same handlers). (MCP) writes
+ *          `[mcp_servers.coldstart]` into `.codex/config.toml`.
+ *        - Other       → write coldstart.md only; print wiring directions.
  *
- * The content of coldstart.md depends on how the client invokes coldstart:
- *   - `cli` flavor → the agent runs `coldstart find` / `coldstart gs` (shell).
- *   - `mcp` flavor → the agent calls the `find` / `gs` MCP tools (no shell).
+ * Hooks (the find-dedup guard + behavioral nudge) are the same shipped handlers
+ * for Claude and Codex — both share Claude's `permissionDecision`/
+ * `additionalContext` protocol. Tools that can't deliver the nudge get rules +
+ * MCP only, and we tell the user it "works best on Claude Code or Codex".
  */
 
 import * as fs from 'node:fs';
@@ -175,8 +186,26 @@ export function wireClaudeImport(cwd: string): 'created' | 'added' | 'present' {
 const HOOK_PRE = 'find-preguard.mjs';
 const HOOK_POST = 'find-nudge.mjs';
 
-/** True if a settings.json hook-array entry is one WE wrote (by entry filename),
- *  so re-running init can strip + refresh it instead of duplicating it. */
+// PreToolUse matcher — surface-agnostic: fires for the CLI `coldstart find`
+// (Bash) AND the `mcp__coldstart__find` tool. A plain regex alternation, so it
+// works in both Claude's and Codex's matcher engine unchanged.
+const PRE_MATCHER = 'Bash|mcp__coldstart__find';
+
+interface HookCommand {
+  type: 'command';
+  command: string;
+}
+interface HookMatcher {
+  matcher: string;
+  hooks: HookCommand[];
+}
+interface HookSet {
+  PreToolUse: HookMatcher[];
+  PostToolUse: HookMatcher[];
+}
+
+/** True if a hook-array entry is one WE wrote (by entry filename), so re-running
+ *  init can strip + refresh it instead of duplicating it. */
 function isColdstartHookEntry(entry: unknown): boolean {
   const hooks = (entry as { hooks?: unknown })?.hooks;
   if (!Array.isArray(hooks)) return false;
@@ -187,6 +216,29 @@ function isColdstartHookEntry(entry: unknown): boolean {
 }
 
 /**
+ * Build the coldstart hook entries (find-dedup guard + behavioral nudge).
+ * `postMatcher` differs by engine: Claude uses `*` for match-all, Codex uses the
+ * regex `.*`. Everything else is identical — the shipped handlers are the same.
+ */
+function coldstartHooks(hooksDir: string, postMatcher: string): HookSet {
+  const preCmd = `node ${path.join(hooksDir, HOOK_PRE)}`;
+  const postCmd = `node ${path.join(hooksDir, HOOK_POST)}`;
+  return {
+    PreToolUse: [{ matcher: PRE_MATCHER, hooks: [{ type: 'command', command: preCmd }] }],
+    PostToolUse: [{ matcher: postMatcher, hooks: [{ type: 'command', command: postCmd }] }],
+  };
+}
+
+/** Merge our hook entries into an existing `hooks` config object, stripping any
+ *  prior coldstart entries first (idempotent re-run) and preserving foreign ones. */
+function mergeHooks(hooksCfg: Record<string, unknown>, entries: HookSet): void {
+  const stripOurs = (arr: unknown): unknown[] =>
+    (Array.isArray(arr) ? arr : []).filter((e) => !isColdstartHookEntry(e));
+  hooksCfg.PreToolUse = [...stripOurs(hooksCfg.PreToolUse), ...entries.PreToolUse];
+  hooksCfg.PostToolUse = [...stripOurs(hooksCfg.PostToolUse), ...entries.PostToolUse];
+}
+
+/**
  * Register the find/gs search hooks in the project's `.claude/settings.json`.
  *
  * Merges (never clobbers): preserves every other setting and any non-coldstart
@@ -194,10 +246,6 @@ function isColdstartHookEntry(entry: unknown): boolean {
  * re-adds them, so a re-run refreshes a stale hook path without duplicating.
  * Fail-safe — if settings.json exists but is not valid JSON, we leave it alone
  * and report, rather than overwrite a file the user owns.
- *
- * The matchers are surface-agnostic: PreToolUse fires for the CLI `coldstart
- * find` (Bash) AND the `mcp__coldstart__find` tool; PostToolUse fires for all
- * tools. The hook handler normalizes both surfaces to one code path.
  */
 export function wireClaudeHooks(cwd: string): 'created' | 'updated' | { error: string } {
   let hooksDir: string;
@@ -206,8 +254,6 @@ export function wireClaudeHooks(cwd: string): 'created' | 'updated' | { error: s
   } catch (e) {
     return { error: `could not resolve a stable install path (${e})` };
   }
-  const preCmd = `node ${path.join(hooksDir, HOOK_PRE)}`;
-  const postCmd = `node ${path.join(hooksDir, HOOK_POST)}`;
 
   const dir = path.join(cwd, '.claude');
   const filePath = path.join(dir, 'settings.json');
@@ -227,17 +273,7 @@ export function wireClaudeHooks(cwd: string): 'created' | 'updated' | { error: s
     settings.hooks && typeof settings.hooks === 'object'
       ? (settings.hooks as Record<string, unknown>)
       : {};
-  const stripOurs = (arr: unknown): unknown[] =>
-    (Array.isArray(arr) ? arr : []).filter((e) => !isColdstartHookEntry(e));
-
-  hooksCfg.PreToolUse = [
-    ...stripOurs(hooksCfg.PreToolUse),
-    { matcher: 'Bash|mcp__coldstart__find', hooks: [{ type: 'command', command: preCmd }] },
-  ];
-  hooksCfg.PostToolUse = [
-    ...stripOurs(hooksCfg.PostToolUse),
-    { matcher: '*', hooks: [{ type: 'command', command: postCmd }] },
-  ];
+  mergeHooks(hooksCfg, coldstartHooks(hooksDir, '*'));
   settings.hooks = hooksCfg;
 
   fs.mkdirSync(dir, { recursive: true });
@@ -245,88 +281,358 @@ export function wireClaudeHooks(cwd: string): 'created' | 'updated' | { error: s
   return existed ? 'updated' : 'created';
 }
 
+/**
+ * Register the find/gs search hooks in the project's `.codex/hooks.json`.
+ *
+ * Codex hooks are Claude-style: same `PreToolUse`/`PostToolUse` events, the same
+ * `permissionDecision: "deny"` (guard) and `hookSpecificOutput.additionalContext`
+ * (nudge), and the same `tool_name`/`tool_input`/`tool_response` stdin — so the
+ * SAME shipped handlers run unchanged. The only differences vs Claude: the file
+ * lives at `.codex/hooks.json` with a top-level `hooks` object, and Codex's
+ * match-all is the regex `.*` (Claude uses `*`).
+ */
+export function wireCodexHooks(cwd: string): 'created' | 'updated' | { error: string } {
+  let hooksDir: string;
+  try {
+    hooksDir = resolveHooksDir();
+  } catch (e) {
+    return { error: `could not resolve a stable install path (${e})` };
+  }
+
+  const dir = path.join(cwd, '.codex');
+  const filePath = path.join(dir, 'hooks.json');
+
+  let config: Record<string, unknown> = {};
+  const existed = fs.existsSync(filePath);
+  if (existed) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      if (parsed && typeof parsed === 'object') config = parsed as Record<string, unknown>;
+    } catch {
+      return { error: `${filePath} is not valid JSON — left untouched; wire hooks manually` };
+    }
+  }
+
+  const hooksCfg =
+    config.hooks && typeof config.hooks === 'object'
+      ? (config.hooks as Record<string, unknown>)
+      : {};
+  mergeHooks(hooksCfg, coldstartHooks(hooksDir, '.*'));
+  config.hooks = hooksCfg;
+
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(config, null, 2) + '\n');
+  return existed ? 'updated' : 'created';
+}
+
 // ---------------------------------------------------------------------------
-// Setup routines
+// Rules-file writers — each references coldstart.md, never duplicates it
 // ---------------------------------------------------------------------------
 
-function setupClaude(cwd: string): void {
-  const mdResult = writeColdstartMd(cwd, 'cli');
-  const importResult = wireClaudeImport(cwd);
-  out(`  coldstart.md  — ${mdResult} (CLI flavor)`);
-  out(`  CLAUDE.md     — ${importResult === 'present' ? 'already imports @coldstart.md' : `${importResult} @coldstart.md import`}`);
-  const hookResult = wireClaudeHooks(cwd);
-  if (typeof hookResult === 'object') {
-    out(`  settings.json — search hooks NOT wired: ${hookResult.error}`);
-  } else {
-    out(`  settings.json — ${hookResult} find/gs search hooks (PreToolUse + PostToolUse)`);
+/** Write `.cursor/rules/coldstart.mdc` — an always-applied rule that pulls in
+ *  coldstart.md via Cursor's `@file` reference. Overwritten on re-run (it owns
+ *  this file), so guidance edits flow through coldstart.md. */
+export function wireCursorRule(cwd: string): 'created' | 'updated' {
+  const dir = path.join(cwd, '.cursor', 'rules');
+  const filePath = path.join(dir, 'coldstart.mdc');
+  const existed = fs.existsSync(filePath);
+  const body = `---
+description: coldstart — fast codebase navigation (find/gs) before grep/read
+alwaysApply: true
+---
+
+Before grepping or reading files to orient in this codebase, use coldstart
+(\`find\` to locate files, \`gs\` to inspect one). Full guidance:
+
+@coldstart.md
+`;
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(filePath, body);
+  return existed ? 'updated' : 'created';
+}
+
+const AGENTS_START = '<!-- coldstart:start -->';
+const AGENTS_END = '<!-- coldstart:end -->';
+
+/** Ensure AGENTS.md carries a coldstart section pointing at coldstart.md.
+ *  AGENTS.md has no import directive, so we inject a marked block and refresh it
+ *  in place on re-run (idempotent), preserving everything else in the file. */
+export function wireCodexAgents(cwd: string): 'created' | 'updated' {
+  const filePath = path.join(cwd, 'AGENTS.md');
+  const block = `${AGENTS_START}
+## Codebase navigation (coldstart)
+
+Before grepping or reading files to orient in this repo, use coldstart. Read
+\`coldstart.md\` at the repo root for the find/gs workflow and follow it.
+${AGENTS_END}`;
+
+  if (!fs.existsSync(filePath)) {
+    fs.writeFileSync(filePath, `# AGENTS.md\n\n${block}\n`);
+    return 'created';
+  }
+  const existing = fs.readFileSync(filePath, 'utf8');
+  const start = existing.indexOf(AGENTS_START);
+  if (start !== -1) {
+    const end = existing.indexOf(AGENTS_END, start);
+    if (end !== -1) {
+      const next = existing.slice(0, start) + block + existing.slice(end + AGENTS_END.length);
+      fs.writeFileSync(filePath, next);
+      return 'updated';
+    }
+  }
+  const sep = existing.endsWith('\n') ? '' : '\n';
+  fs.appendFileSync(filePath, `${sep}\n${block}\n`);
+  return 'updated';
+}
+
+// ---------------------------------------------------------------------------
+// MCP config writers (only used for the `mcp` experience)
+// ---------------------------------------------------------------------------
+
+/** Merge `{ mcpServers: { coldstart: entry } }` into a JSON MCP config (used for
+ *  Claude's `.mcp.json` and Cursor's `.cursor/mcp.json` — identical shape).
+ *  Fail-safe on invalid JSON; preserves other servers and keys. */
+export function wireJsonMcp(
+  cwd: string,
+  relFile: string,
+  entry: { command: string; args: string[] },
+): 'created' | 'updated' | { error: string } {
+  const filePath = path.join(cwd, relFile);
+  let config: Record<string, unknown> = {};
+  const existed = fs.existsSync(filePath);
+  if (existed) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      if (parsed && typeof parsed === 'object') config = parsed as Record<string, unknown>;
+    } catch {
+      return { error: `${filePath} is not valid JSON — left untouched; add the MCP server manually` };
+    }
+  }
+  const servers =
+    config.mcpServers && typeof config.mcpServers === 'object'
+      ? (config.mcpServers as Record<string, unknown>)
+      : {};
+  servers.coldstart = entry;
+  config.mcpServers = servers;
+
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(config, null, 2) + '\n');
+  return existed ? 'updated' : 'created';
+}
+
+/** Remove an existing `[mcp_servers.coldstart]` table (and any sub-tables) from
+ *  TOML text, so we can append a fresh one without duplicating. Conservative:
+ *  drops the header line and everything until the next top-level `[` or EOF. */
+function stripCodexColdstartTable(toml: string): string {
+  const lines = toml.split('\n');
+  const out: string[] = [];
+  let skipping = false;
+  const isColdstartHeader = (l: string): boolean =>
+    /^\s*\[\[?mcp_servers\.coldstart(\..*)?\]\]?\s*$/.test(l);
+  const isTableHeader = (l: string): boolean => /^\s*\[\[?[^\]]+\]\]?\s*$/.test(l);
+  for (const line of lines) {
+    if (skipping) {
+      if (isColdstartHeader(line)) continue; // a coldstart sub-table — keep skipping
+      if (isTableHeader(line)) skipping = false; // a different table — stop skipping
+      else continue; // body of the coldstart table — drop
+    }
+    if (isColdstartHeader(line)) {
+      skipping = true;
+      continue;
+    }
+    out.push(line);
+  }
+  return out.join('\n');
+}
+
+/** Write `[mcp_servers.coldstart]` into `.codex/config.toml` (Codex's MCP config).
+ *  Hand-rolled minimal TOML merge — no dependency: strip a prior coldstart table,
+ *  then append a fresh one. Other config is preserved verbatim. */
+export function wireCodexMcp(
+  cwd: string,
+  entry: { command: string; args: string[] },
+): 'created' | 'updated' {
+  const dir = path.join(cwd, '.codex');
+  const filePath = path.join(dir, 'config.toml');
+  const existed = fs.existsSync(filePath);
+  let content = existed ? fs.readFileSync(filePath, 'utf8') : '';
+  content = stripCodexColdstartTable(content).replace(/\n+$/, '');
+
+  const args = entry.args.map((a) => JSON.stringify(a)).join(', ');
+  const block = `[mcp_servers.coldstart]\ncommand = ${JSON.stringify(entry.command)}\nargs = [${args}]\n`;
+
+  const next = content.length ? `${content}\n\n${block}` : block;
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(filePath, next);
+  return existed ? 'updated' : 'created';
+}
+
+// ---------------------------------------------------------------------------
+// Setup routines — one per client, keyed off the chosen experience
+// ---------------------------------------------------------------------------
+
+type Experience = 'cli' | 'mcp';
+type Client = 'claude' | 'cursor' | 'codex' | 'other';
+
+const FLAVOR = (exp: Experience): string => (exp === 'cli' ? 'CLI flavor' : 'MCP flavor');
+
+/** Resolve + report the MCP entry, or null + a printed reason on failure. */
+function mcpEntryOrNull(cwd: string): { command: string; args: string[] } | null {
+  try {
+    return mcpServerEntry(cwd);
+  } catch (e) {
+    out(`  (could not resolve a stable install path for the MCP server: ${e})`);
+    return null;
   }
 }
 
-function setupOther(cwd: string): void {
-  const mdResult = writeColdstartMd(cwd, 'mcp');
-  out(`  coldstart.md  — ${mdResult} (MCP flavor)`);
+function reportHooks(label: string, res: 'created' | 'updated' | { error: string }): void {
+  if (typeof res === 'object') out(`  ${label} — search hooks NOT wired: ${res.error}`);
+  else out(`  ${label} — ${res} find/gs search hooks (PreToolUse + PostToolUse)`);
+}
+
+function setupClaude(cwd: string, exp: Experience): void {
+  out(`  coldstart.md  — ${writeColdstartMd(cwd, exp)} (${FLAVOR(exp)})`);
+  const imp = wireClaudeImport(cwd);
+  out(`  CLAUDE.md     — ${imp === 'present' ? 'already imports @coldstart.md' : `${imp} @coldstart.md import`}`);
+  if (exp === 'mcp') {
+    const entry = mcpEntryOrNull(cwd);
+    if (entry) {
+      const r = wireJsonMcp(cwd, '.mcp.json', entry);
+      out(typeof r === 'object' ? `  .mcp.json — NOT written: ${r.error}` : `  .mcp.json     — ${r} coldstart MCP server`);
+    }
+  }
+  reportHooks('settings.json', wireClaudeHooks(cwd));
+}
+
+function setupCodex(cwd: string, exp: Experience): void {
+  out(`  coldstart.md  — ${writeColdstartMd(cwd, exp)} (${FLAVOR(exp)})`);
+  out(`  AGENTS.md     — ${wireCodexAgents(cwd)} coldstart navigation section`);
+  if (exp === 'mcp') {
+    const entry = mcpEntryOrNull(cwd);
+    if (entry) out(`  config.toml   — ${wireCodexMcp(cwd, entry)} [mcp_servers.coldstart]`);
+  }
+  reportHooks('hooks.json', wireCodexHooks(cwd));
+}
+
+function setupCursor(cwd: string, exp: Experience): void {
+  out(`  coldstart.md  — ${writeColdstartMd(cwd, exp)} (${FLAVOR(exp)})`);
+  out(`  coldstart.mdc — ${wireCursorRule(cwd)} .cursor/rules rule (references @coldstart.md)`);
+  if (exp === 'mcp') {
+    const entry = mcpEntryOrNull(cwd);
+    if (entry) {
+      const r = wireJsonMcp(cwd, path.join('.cursor', 'mcp.json'), entry);
+      out(typeof r === 'object' ? `  .cursor/mcp.json — NOT written: ${r.error}` : `  mcp.json      — ${r} .cursor coldstart MCP server`);
+    }
+  }
+  out('');
+  out('  Note: Cursor hooks are not wired — its after-tool hooks are');
+  out('  notification-only, so the behavioral nudge can\'t be delivered.');
+  out('  coldstart works best on Claude Code or Codex (full hook support).');
+}
+
+function setupOther(cwd: string, exp: Experience): void {
+  out(`  coldstart.md  — ${writeColdstartMd(cwd, exp)} (${FLAVOR(exp)})`);
   out('');
   out('  Wire it into your client:');
   out('  1. Add coldstart.md to your client\'s rules / instructions / skill');
   out('     (whatever your app uses — point it at this file or paste its contents).');
-  out('  2. Add the MCP server entry to your client\'s MCP config:');
-  out('');
-  let entry: { command: string; args: string[] };
-  try {
-    entry = mcpServerEntry(cwd);
-  } catch (e) {
-    out(`     (could not resolve a stable install path: ${e})`);
-    return;
+  if (exp === 'mcp') {
+    out('  2. Add the MCP server entry to your client\'s MCP config:');
+    out('');
+    const entry = mcpEntryOrNull(cwd);
+    if (entry) {
+      out('       ' + JSON.stringify({ mcpServers: { coldstart: entry } }, null, 2).split('\n').join('\n       '));
+    }
+  } else {
+    out('  2. Make sure the `coldstart` CLI is on PATH so the agent can run');
+    out('     `coldstart find` / `coldstart gs` (npm i -g coldstart).');
   }
-  out('       ' + JSON.stringify({ mcpServers: { coldstart: entry } }, null, 2).split('\n').join('\n       '));
+  out('');
+  out('  Note: behavioral hooks (the find-dedup guard + nudge) need a host that');
+  out('  supports Claude-style hooks. coldstart works best on Claude Code or Codex.');
 }
 
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
 
+/** Read `--flag value` or `--flag=value` from an argv slice. */
+function readFlag(argv: string[], flag: string): string | undefined {
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === flag) return argv[i + 1]?.trim().toLowerCase();
+    if (a.startsWith(`${flag}=`)) return a.slice(flag.length + 1).trim().toLowerCase();
+  }
+  return undefined;
+}
+
+function parseExperience(v: string | undefined): Experience | undefined {
+  if (v === 'cli' || v === '1') return 'cli';
+  if (v === 'mcp' || v === '2') return 'mcp';
+  return undefined;
+}
+
+function parseClient(v: string | undefined): Client | undefined {
+  if (v === 'claude' || v === 'claude-code' || v === '1') return 'claude';
+  if (v === 'cursor' || v === '2') return 'cursor';
+  if (v === 'codex' || v === '3') return 'codex';
+  if (v === 'other' || v === 'others' || v === '4') return 'other';
+  return undefined;
+}
+
 export async function runInit(): Promise<void> {
   const cwd = process.cwd();
-  const home = process.env.HOME ?? process.env.USERPROFILE ?? '';
-  const hasClaude = fs.existsSync(path.join(home, '.claude'));
+  const argv = process.argv.slice(3); // tokens after `init`
 
-  const rl = createInterface({ input: process.stdin, output: process.stderr });
-  const ask = async (question: string): Promise<string> => {
-    const answer = await rl.question(question);
-    return answer.trim().toLowerCase();
-  };
+  let experience = parseExperience(readFlag(argv, '--experience'));
+  let client = parseClient(readFlag(argv, '--client'));
 
   out('');
   out('coldstart init');
   out(DIVIDER);
-  out('');
 
-  let claude: boolean;
-  if (hasClaude) {
-    out('Detected: Claude Code');
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  const ask = async (q: string): Promise<string> => (await rl.question(q)).trim().toLowerCase();
+
+  if (!experience) {
     out('');
-    out('Will write:');
-    out('  coldstart.md  — agent guidance (CLI flavor)');
-    out('  CLAUDE.md     — import `@coldstart.md` (create if missing, append if present)');
-    out('  .claude/settings.json — register find/gs search hooks (PreToolUse + PostToolUse)');
+    out('How will the agent invoke coldstart?');
     out('');
-    const answer = await ask('Set up for Claude Code? [Y/n] ');
-    claude = answer === '' || answer === 'y';
-  } else {
+    out('  1  CLI  (recommended)  — runs `coldstart find` / `coldstart gs` (shell)');
+    out('  2  MCP                 — calls the `find` / `gs` MCP tools (no shell)');
+    out('');
+    experience = parseExperience(await ask('Choose [1/2]: ')) ?? 'cli';
+  }
+
+  if (!client) {
+    out('');
     out('Which client are you wiring coldstart into?');
     out('');
-    out('  1  Claude Code  (coldstart.md + @coldstart.md import in CLAUDE.md)');
-    out('  2  Other app    (coldstart.md only — you wire it as rules + add the MCP server)');
+    out('  1  Claude Code  — rules import + find/gs hooks');
+    out('  2  Cursor       — rules + MCP (no hooks; see note)');
+    out('  3  Codex        — rules + find/gs hooks');
+    out('  4  Other        — coldstart.md + wiring directions');
     out('');
-    const answer = await ask('Choose [1/2]: ');
-    claude = answer === '1';
+    client = parseClient(await ask('Choose [1/2/3/4]: ')) ?? 'other';
   }
 
   rl.close();
   out('');
 
-  if (claude) setupClaude(cwd);
-  else setupOther(cwd);
+  switch (client) {
+    case 'claude':
+      setupClaude(cwd, experience);
+      break;
+    case 'cursor':
+      setupCursor(cwd, experience);
+      break;
+    case 'codex':
+      setupCodex(cwd, experience);
+      break;
+    default:
+      setupOther(cwd, experience);
+  }
 
   // Warm the index now, while the user is here at setup, so the first lookup
   // isn't a cold build. ensureKeeper spawns the background keeper (detached) and
