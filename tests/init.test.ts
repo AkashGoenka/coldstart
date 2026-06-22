@@ -2,7 +2,17 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { coldstartMd, writeColdstartMd, wireClaudeImport, wireClaudeHooks } from '../src/init.js';
+import {
+  coldstartMd,
+  writeColdstartMd,
+  wireClaudeImport,
+  wireClaudeHooks,
+  wireCodexHooks,
+  wireCursorRule,
+  wireCodexAgents,
+  wireCodexMcp,
+  wireJsonMcp,
+} from '../src/init.js';
 
 // We can't easily test runInit interactively, but we can test that the
 // MCP entry structure is correct when it's generated. This is a basic
@@ -186,5 +196,139 @@ describe('wireClaudeHooks (settings.json hook wiring)', () => {
     expect(typeof res).toBe('object');
     expect((res as { error: string }).error).toContain('not valid JSON');
     expect(fs.readFileSync(settingsPath(), 'utf8')).toBe('{ not valid json'); // untouched
+  });
+});
+
+describe('rules-file writers (reference coldstart.md, never duplicate it)', () => {
+  let tempDir: string;
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coldstart-rules-test-'));
+  });
+  afterEach(() => {
+    if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true });
+  });
+
+  it('wireCursorRule writes an always-applied .mdc that references @coldstart.md', () => {
+    expect(wireCursorRule(tempDir)).toBe('created');
+    const body = fs.readFileSync(path.join(tempDir, '.cursor', 'rules', 'coldstart.mdc'), 'utf8');
+    expect(body).toContain('alwaysApply: true');
+    expect(body).toContain('@coldstart.md');
+    // re-run is an update, single reference (no duplication)
+    expect(wireCursorRule(tempDir)).toBe('updated');
+    const again = fs.readFileSync(path.join(tempDir, '.cursor', 'rules', 'coldstart.mdc'), 'utf8');
+    expect(again.match(/@coldstart\.md/g)!.length).toBe(1);
+  });
+
+  it('wireCodexAgents creates AGENTS.md with a marked coldstart section', () => {
+    expect(wireCodexAgents(tempDir)).toBe('created');
+    const body = fs.readFileSync(path.join(tempDir, 'AGENTS.md'), 'utf8');
+    expect(body).toContain('<!-- coldstart:start -->');
+    expect(body).toContain('<!-- coldstart:end -->');
+    expect(body).toContain('coldstart.md');
+  });
+
+  it('wireCodexAgents refreshes its block in place and preserves other content', () => {
+    fs.writeFileSync(path.join(tempDir, 'AGENTS.md'), '# AGENTS.md\n\nMy own house rules.\n');
+    expect(wireCodexAgents(tempDir)).toBe('updated');
+    expect(wireCodexAgents(tempDir)).toBe('updated'); // idempotent re-run
+    const body = fs.readFileSync(path.join(tempDir, 'AGENTS.md'), 'utf8');
+    expect(body).toContain('My own house rules.'); // foreign content preserved
+    expect(body.match(/<!-- coldstart:start -->/g)!.length).toBe(1); // exactly one block
+  });
+});
+
+describe('Codex hooks + MCP writers', () => {
+  let tempDir: string;
+  let homeDir: string;
+  let prevHome: string | undefined;
+  const hooksPath = (): string => path.join(tempDir, '.codex', 'hooks.json');
+  const readHooks = (): any => JSON.parse(fs.readFileSync(hooksPath(), 'utf8'));
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coldstart-codex-test-'));
+    homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coldstart-codex-home-'));
+    const version = JSON.parse(
+      fs.readFileSync(path.resolve(path.dirname(__filename), '..', 'package.json'), 'utf8'),
+    ).version as string;
+    const stable = path.join(homeDir, '.coldstart', 'versions', version, 'node_modules', 'coldstart');
+    fs.mkdirSync(path.join(stable, 'dist'), { recursive: true });
+    fs.writeFileSync(path.join(stable, 'dist', 'index.js'), '// stub');
+    fs.mkdirSync(path.join(stable, 'hooks'), { recursive: true });
+    prevHome = process.env.HOME;
+    process.env.HOME = homeDir;
+  });
+  afterEach(() => {
+    if (prevHome === undefined) delete process.env.HOME;
+    else process.env.HOME = prevHome;
+    for (const d of [tempDir, homeDir]) if (fs.existsSync(d)) fs.rmSync(d, { recursive: true });
+  });
+
+  it('wireCodexHooks writes .codex/hooks.json with Claude-style entries and .* match-all', () => {
+    expect(wireCodexHooks(tempDir)).toBe('created');
+    const c = readHooks();
+    expect(c.hooks.PreToolUse[0].matcher).toBe('Bash|mcp__coldstart__find');
+    expect(c.hooks.PreToolUse[0].hooks[0].command).toContain('find-preguard.mjs');
+    expect(c.hooks.PostToolUse[0].matcher).toBe('.*'); // Codex match-all, not '*'
+    expect(c.hooks.PostToolUse[0].hooks[0].command).toContain('find-nudge.mjs');
+    expect(c.hooks.PostToolUse[0].hooks[0].command).toContain('.coldstart/versions');
+  });
+
+  it('wireCodexHooks merges + is idempotent, preserving foreign hooks', () => {
+    fs.mkdirSync(path.join(tempDir, '.codex'), { recursive: true });
+    fs.writeFileSync(
+      hooksPath(),
+      JSON.stringify({ hooks: { PostToolUse: [{ matcher: 'Edit', hooks: [{ type: 'command', command: 'node /x.mjs' }] }] } }),
+    );
+    expect(wireCodexHooks(tempDir)).toBe('updated');
+    expect(wireCodexHooks(tempDir)).toBe('updated');
+    const c = readHooks();
+    expect(c.hooks.PostToolUse).toHaveLength(2);
+    expect(c.hooks.PostToolUse.filter((e: any) => e.matcher === 'Edit')).toHaveLength(1);
+    expect(c.hooks.PostToolUse.filter((e: any) => e.matcher === '.*')).toHaveLength(1);
+    expect(c.hooks.PreToolUse).toHaveLength(1);
+  });
+
+  it('wireCodexHooks refuses to clobber malformed hooks.json', () => {
+    fs.mkdirSync(path.join(tempDir, '.codex'), { recursive: true });
+    fs.writeFileSync(hooksPath(), '{ nope');
+    const res = wireCodexHooks(tempDir);
+    expect((res as { error: string }).error).toContain('not valid JSON');
+    expect(fs.readFileSync(hooksPath(), 'utf8')).toBe('{ nope');
+  });
+
+  it('wireCodexMcp writes a [mcp_servers.coldstart] table and replaces it on re-run', () => {
+    expect(wireCodexMcp(tempDir, { command: 'node', args: ['/abs/index.js', '--root', tempDir] })).toBe('created');
+    let toml = fs.readFileSync(path.join(tempDir, '.codex', 'config.toml'), 'utf8');
+    expect(toml).toContain('[mcp_servers.coldstart]');
+    expect(toml).toContain('command = "node"');
+    expect(toml).toContain('--root');
+    // re-run replaces, never duplicates the table
+    expect(wireCodexMcp(tempDir, { command: 'node', args: ['/abs/index.js', '--root', tempDir] })).toBe('updated');
+    toml = fs.readFileSync(path.join(tempDir, '.codex', 'config.toml'), 'utf8');
+    expect(toml.match(/\[mcp_servers\.coldstart\]/g)!.length).toBe(1);
+  });
+
+  it('wireCodexMcp preserves existing TOML content', () => {
+    fs.mkdirSync(path.join(tempDir, '.codex'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tempDir, '.codex', 'config.toml'),
+      'model = "gpt-5"\n\n[mcp_servers.other]\ncommand = "uvx"\nargs = ["other"]\n',
+    );
+    wireCodexMcp(tempDir, { command: 'node', args: ['/abs/index.js'] });
+    const toml = fs.readFileSync(path.join(tempDir, '.codex', 'config.toml'), 'utf8');
+    expect(toml).toContain('model = "gpt-5"');
+    expect(toml).toContain('[mcp_servers.other]');
+    expect(toml).toContain('[mcp_servers.coldstart]');
+  });
+
+  it('wireJsonMcp merges into a JSON MCP config and is fail-safe', () => {
+    const r = wireJsonMcp(tempDir, path.join('.cursor', 'mcp.json'), { command: 'node', args: ['/abs/index.js'] });
+    expect(r).toBe('created');
+    const cfg = JSON.parse(fs.readFileSync(path.join(tempDir, '.cursor', 'mcp.json'), 'utf8'));
+    expect(cfg.mcpServers.coldstart.command).toBe('node');
+    // malformed → untouched + error
+    fs.writeFileSync(path.join(tempDir, '.mcp.json'), '{ bad');
+    const bad = wireJsonMcp(tempDir, '.mcp.json', { command: 'node', args: [] });
+    expect((bad as { error: string }).error).toContain('not valid JSON');
   });
 });
