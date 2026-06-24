@@ -212,6 +212,17 @@ export function handleGetStructure(
     // follow-up is re-calling without the filter (a measured wasted call).
     // Return the full view instead, flagged via matchMissedSymbols.
     if (matchPredicate && filtered.length === 0 && baseFiltered.length > 0) {
+      // The fix: before falling back to the full symbol MENU (which the agent
+      // ignores, then re-reads the whole file — jmri Q1), try mapping the match
+      // terms to their enclosing method bodies. Same machinery the `--symbol`
+      // miss uses. Returns null (→ menu) when the toggle is off or nothing hits.
+      if (params.match) {
+        try {
+          const allLines = readFileSync(file.path, 'utf-8').split('\n');
+          const methodMatch = renderEnclosingMethodMatch(file, params.match, allLines);
+          if (methodMatch) return methodMatch;
+        } catch { /* unreadable — fall through to the menu */ }
+      }
       filtered = baseFiltered;
       matchMissedSymbols = true;
     }
@@ -623,6 +634,116 @@ function renderContentMatch(file: IndexedFile, spec: string, allLines: string[])
   return { __rawText: lines.join('\n') };
 }
 
+// ── In-body grep → ENCLOSING METHOD (the gs-trace-cost fix) ─────────────────
+// When neither a declared symbol (`--symbol`) nor a symbol-name filter
+// (`--match`) hits, the agent's intent was almost always "show me the body that
+// mentions these terms". The old answers were both wrong: `--symbol` miss dumped
+// raw ±2-line regions; `--match` miss dumped the full symbol MENU (which the
+// agent then ignored, re-reading ~950 lines — jmri Q1). This maps each body hit
+// to its INNERMOST enclosing symbol via [startLine,endLine] ranges and returns
+// those METHOD bodies, ranked by how many distinct terms each covers — the
+// meaningful unit, not a line window and not a menu.
+const METHOD_MATCH_SYMBOL_CAP = 4;    // distinct enclosing methods sliced
+const METHOD_MATCH_LINE_BUDGET = 240; // total body lines across all method slices
+const METHOD_MATCH_ORPHAN_CAP = 6;    // raw context lines for module-level hits
+// Returns null when the spec is a /regex/ or no body line matches — caller then
+// falls back to the existing menu / raw-region behavior.
+function renderEnclosingMethodMatch(
+  file: IndexedFile,
+  spec: string,
+  allLines: string[],
+): object | null {
+  const trimmed = spec.trim();
+  // Regex specs aren't word-splittable into terms; leave them to the old path.
+  if (trimmed.length >= 2 && trimmed.startsWith('/') && trimmed.endsWith('/')) return null;
+  const terms = trimmed.split(/[\s,|]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+  if (terms.length === 0) return null;
+
+  // hit line (1-based) → set of distinct terms found on it
+  const hitTermsByLine = new Map<number, Set<string>>();
+  for (let i = 0; i < allLines.length; i++) {
+    const low = allLines[i].toLowerCase();
+    const matched = terms.filter(t => low.includes(t));
+    if (matched.length) hitTermsByLine.set(i + 1, new Set(matched));
+  }
+  if (hitTermsByLine.size === 0) return null;
+
+  const candidates = file.symbols.filter(s =>
+    s.isExported || s.kind === 'class' || s.kind === 'function' || s.kind === 'method');
+
+  // Map each hit to its innermost enclosing symbol (smallest containing range);
+  // aggregate distinct terms per symbol. Hits inside no symbol = module-level.
+  type Agg = { sym: SymbolNode; terms: Set<string> };
+  const bySym = new Map<string, Agg>();
+  const orphanLines: number[] = [];
+  for (const [line, matchedTerms] of hitTermsByLine) {
+    let best: SymbolNode | null = null;
+    for (const s of candidates) {
+      if (s.startLine <= line && line <= s.endLine) {
+        if (!best || (s.endLine - s.startLine) < (best.endLine - best.startLine)) best = s;
+      }
+    }
+    if (!best) { orphanLines.push(line); continue; }
+    let agg = bySym.get(best.id);
+    if (!agg) { agg = { sym: best, terms: new Set() }; bySym.set(best.id, agg); }
+    for (const t of matchedTerms) agg.terms.add(t);
+  }
+  if (bySym.size === 0 && orphanLines.length === 0) return null;
+
+  // Rank methods by distinct-term coverage desc, then source order.
+  const ranked = [...bySym.values()].sort((a, b) =>
+    b.terms.size !== a.terms.size ? b.terms.size - a.terms.size : a.sym.startLine - b.sym.startLine);
+
+  const lines: string[] = [
+    `${file.relativePath} (${file.lineCount} lines) — no declared symbol matches "${spec}"; ` +
+    `${hitTermsByLine.size} content match${hitTermsByLine.size === 1 ? '' : 'es'}` +
+    (ranked.length ? ` in ${ranked.length} method${ranked.length === 1 ? '' : 's'}` : '') +
+    ` (in-tool grep → method body, so you don't have to):`,
+  ];
+
+  let spent = 0;
+  let shownSyms = 0;
+  for (const agg of ranked) {
+    if (shownSyms >= METHOD_MATCH_SYMBOL_CAP || spent >= METHOD_MATCH_LINE_BUDGET) {
+      const rest = ranked.slice(shownSyms).map(a => a.sym.name).join(', ');
+      lines.push('');
+      lines.push(`   … [+${ranked.length - shownSyms} more matching method${ranked.length - shownSyms === 1 ? '' : 's'}: ${rest} — re-call \`--symbol <name>\` for one]`);
+      break;
+    }
+    shownSyms++;
+    const s = agg.sym;
+    lines.push('');
+    lines.push(`━━ ${s.kind} ${s.name} [L${s.startLine}-${s.endLine}] — matches ${agg.terms.size}/${terms.length} terms: ${[...agg.terms].join(', ')} ━━`);
+    const want = s.endLine - s.startLine + 1;
+    const take = Math.min(want, Math.max(0, METHOD_MATCH_LINE_BUDGET - spent));
+    for (let i = s.startLine; i < s.startLine + take && i <= allLines.length; i++) {
+      lines.push(`${String(i).padStart(5)}  ${allLines[i - 1]}`);
+    }
+    if (take < want) lines.push(`   … [+${want - take} more lines — re-call \`--symbol ${s.name}\` for the full body]`);
+    spent += take;
+  }
+
+  // Module-level hits (no enclosing method): a short raw-context tail so an
+  // import/constant/decorator match isn't silently dropped.
+  if (orphanLines.length > 0) {
+    lines.push('');
+    lines.push(`Also matched outside any method (module level):`);
+    let shown = 0;
+    for (const ln of orphanLines) {
+      if (shown >= METHOD_MATCH_ORPHAN_CAP) {
+        lines.push(`   … [+${orphanLines.length - shown} more module-level match lines]`);
+        break;
+      }
+      lines.push(`${String(ln).padStart(5)}  ${allLines[ln - 1]}`);
+      shown++;
+    }
+  }
+
+  lines.push('');
+  lines.push('These are the methods whose bodies contain the term(s); grepping this file returns the same lines you already have. Follow up with `--symbol <name>` for a full body.');
+  return { __rawText: lines.join('\n') };
+}
+
 function renderSymbolSlice(
   index: CodebaseIndex,
   fileId: string,
@@ -645,7 +766,8 @@ function renderSymbolSlice(
   // so the agent gets the body text from the SAME call instead of shelling out
   // to grep and guessing spellings (q19's 5 empty greps).
   if (wanted.length === 0) {
-    return renderContentMatch(file, spec, allLines);
+    const methodMatch = renderEnclosingMethodMatch(file, spec, allLines);
+    return methodMatch ?? renderContentMatch(file, spec, allLines);
   }
 
   // Caller pointers: reuse the file-level builder (exported symbols only).
