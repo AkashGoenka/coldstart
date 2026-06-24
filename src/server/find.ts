@@ -164,7 +164,14 @@ export function parseTerms(raw: string): string[] {
 function listFilesExternal(searcher: Searcher, root: string, term: string): string[] {
   const argv: Record<Exclude<Searcher, 'node'>, string[]> = {
     rg: ['-l', '-i', '-F', '--', term, '.'],
-    gitgrep: ['grep', '-l', '-i', '-F', '-I', '-e', term],
+    // `-c grep.threads=1`: git grep defaults to one worker thread per core; on a
+    // large repo the per-file work is trivial, so the threads thrash on the work
+    // queue and burn the CPU in kernel scheduling (measured: ~15s sys / 100k+
+    // context switches for a 16k-file repo, vs ~1s single-threaded). One thread
+    // is both gentler on the CPU and faster in wall-clock here.
+    // `--untracked`: also search new, uncommitted files — the index includes them
+    // (the keeper watches live edits), but plain `git grep` only sees tracked files.
+    gitgrep: ['-c', 'grep.threads=1', 'grep', '--untracked', '-l', '-i', '-F', '-I', '-e', term],
     grep: ['-r', '-l', '-i', '-F', '-I', '--', term, '.'],
   };
   const bin = searcher === 'gitgrep' ? 'git' : searcher;
