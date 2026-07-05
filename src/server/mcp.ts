@@ -74,14 +74,37 @@ export const TOOL_DEFINITIONS = [
       required: ['file_path'],
     },
   },
+  {
+    name: 'kb_search',
+    description:
+      'Search the repo\'s NOTEBOOK — durable notes past agents wrote after finishing tasks here (file purposes, cross-file flows, traps/lessons, established absences). Try this BEFORE find when the task might have been seen before: a hit can answer outright or point straight at the right files, skipping a search. Pass plain task words (symptoms work: "logout loop after refresh"), symbol names, or file names.\n\n' +
+      'Results are inlined in full with a freshness stamp computed against the CURRENT code: [fresh] = the cited file is byte-identical to when the note was verified; [evidence changed: <path>] = that file drifted since — re-verify before relying on it (and correct the note if it proved wrong: `coldstart kb write`). Absence notes ("there is no X") are re-checked live. No hits or an empty notebook → fall through to find, no tax.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Plain task words, symptoms, symbol names, or file names. Same over-supply rule as find: pass every salient token.',
+        },
+      },
+      required: ['query'],
+    },
+  },
 ] as const;
 
 // ---------------------------------------------------------------------------
 // Shared handler registration — used by stdio server and HTTP daemon sessions
 // ---------------------------------------------------------------------------
+export interface McpServerOptions {
+  /** Custom cache dir (--cache-dir) — kb_search reads the keeper's
+   *  kb-notes.json from there; without it, the default cache dir. */
+  cacheDir?: string;
+}
+
 export function registerToolHandlers(
   server: Server,
   getContext: () => Promise<IndexContext>,
+  opts: McpServerOptions = {},
 ): void {
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: TOOL_DEFINITIONS,
@@ -107,7 +130,7 @@ export function registerToolHandlers(
 
     switch (name) {
       case 'find':
-        result = handleFind(index, {
+        result = await handleFind(index, {
           query: (params['query'] ?? params['domain_filter']) as string | undefined,
         });
         break;
@@ -120,6 +143,19 @@ export function registerToolHandlers(
           view: params['view'] as 'full' | 'symbols' | 'imports' | 'importers' | 'callers' | undefined,
         });
         break;
+
+      case 'kb_search': {
+        const { kbSearch, renderSearchPage } = await import('../kb/search.js');
+        const { loadKbNotesIndex } = await import('../kb/notes-index.js');
+        const query = String(params['query'] ?? '');
+        if (!query.trim()) {
+          result = { error: 'kb_search needs a `query`' };
+          break;
+        }
+        const searchResult = await kbSearch(index.rootDir, query, { notesIndex: loadKbNotesIndex(index.rootDir, opts.cacheDir), source: 'tool' });
+        result = { __rawText: renderSearchPage(index.rootDir, query, searchResult) };
+        break;
+      }
 
       default:
         result = { error: `Unknown tool: ${name}` };
@@ -141,12 +177,12 @@ export function registerToolHandlers(
 // ---------------------------------------------------------------------------
 // Factory — creates a fully wired MCP server (the stdio reader over the cache)
 // ---------------------------------------------------------------------------
-export function createMcpServer(getContext: () => Promise<IndexContext>): Server {
+export function createMcpServer(getContext: () => Promise<IndexContext>, opts: McpServerOptions = {}): Server {
   const server = new Server(
     { name: 'coldstart', version: getCurrentVersion() },
     { capabilities: { tools: {} } },
   );
-  registerToolHandlers(server, getContext);
+  registerToolHandlers(server, getContext, opts);
   return server;
 }
 
@@ -156,8 +192,9 @@ export function createMcpServer(getContext: () => Promise<IndexContext>): Server
 export async function startMCPServer(
   onReady: (clientRoots: string[]) => Promise<void>,
   getContext: () => Promise<IndexContext>,
+  opts: McpServerOptions = {},
 ): Promise<void> {
-  const server = createMcpServer(getContext);
+  const server = createMcpServer(getContext, opts);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

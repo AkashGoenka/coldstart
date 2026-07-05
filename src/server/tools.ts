@@ -86,10 +86,10 @@ function buildCallersForFile(
 // page out, regardless of transport. Everything heavy (grep-recall + AST
 // precision against the live root) lives in find.ts; this is a thin shim.
 // ============================================================================
-export function handleFind(
+export async function handleFind(
   index: CodebaseIndex,
   params: { query?: string; domain_filter?: string },
-): { __rawText?: string; error?: string } {
+): Promise<{ __rawText?: string; error?: string }> {
   const query = (params.query ?? params.domain_filter ?? "").trim();
   if (!query) {
     return {
@@ -99,7 +99,7 @@ export function handleFind(
         "e.g. \"ResourceInstance principaluser editable\".",
     };
   }
-  return { __rawText: buildRichPage(index, index.rootDir, query) };
+  return { __rawText: await buildRichPage(index, index.rootDir, query) };
 }
 
 // ============================================================================

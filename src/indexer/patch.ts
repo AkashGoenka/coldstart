@@ -1,7 +1,7 @@
 import { stat } from 'node:fs/promises';
 import { relative, extname } from 'node:path';
 import type { CodebaseIndex, IndexedFile, ParsedFile, Language } from '../types.js';
-import { EXTENSION_TO_LANGUAGE } from '../constants.js';
+import { EXTENSION_TO_LANGUAGE, DEFAULT_EXCLUDES } from '../constants.js';
 import { parseFile, buildFileId } from './parser.js';
 import { buildFileDomains, isTestPath } from './tokenize.js';
 import { resolveImportsForFiles, buildPackageIndex } from './resolvers/index.js';
@@ -58,13 +58,23 @@ export async function patchIndex(
     if (!lang) continue;
 
     const relPath = relative(rootDir, absPath).replace(/\\/g, '/');
+
+    // Mirror the walker's directory rules: it never descends into hidden or
+    // excluded dirs, so a patch must not index files from them either. Both
+    // batch producers leak such paths otherwise — the watcher (live edit to
+    // .claude/settings.json) and reconcile (porcelain lists it as untracked).
+    // Hidden FILES at the root (.rubocop.yml) are walked, so only dir
+    // segments are filtered.
+    const dirSegments = relPath.split('/').slice(0, -1);
+    if (dirSegments.some((s) => s.startsWith('.') || DEFAULT_EXCLUDES.has(s))) continue;
+
     const fileId = buildFileId(relPath);
 
     // Check existence first (covers deletions)
-    let exists = true;
-    try { await stat(absPath); } catch { exists = false; }
+    let liveStat: Awaited<ReturnType<typeof stat>> | null = null;
+    try { liveStat = await stat(absPath); } catch { /* deleted */ }
 
-    if (!exists) {
+    if (!liveStat) {
       plans.set(fileId, { absPath, fileId, plan: { action: 'delete' } });
       continue;
     }
@@ -79,6 +89,10 @@ export async function patchIndex(
     // Hash check: if content is identical, this was a false-positive watch event
     const oldFile = index.files.get(fileId);
     if (oldFile && oldFile.hash === parsed.hash) {
+      // Refresh the fingerprint anyway: a touch-without-change moved mtime,
+      // and a stale stamp would make reconcile/audit re-flag this file forever.
+      oldFile.mtimeMs = liveStat.mtimeMs;
+      oldFile.sizeBytes = liveStat.size;
       plans.set(fileId, { absPath, fileId, plan: { action: 'skip' } });
       continue;
     }
@@ -137,6 +151,16 @@ export async function patchIndex(
 
     // Remove ALL flat edges pointing to this deleted file (incoming edges)
     index.edges = index.edges.filter(e => e.to !== fileId);
+
+    // Remove symbolEdges pointing INTO the deleted file (other files' calls /
+    // extends / re-exports of its symbols). Phase 1 only strips edges FROM
+    // changed files; the callers aren't in the change set, and a dangling
+    // se.to fails the invariant lint and forces a full rebuild on every
+    // delete of a referenced file.
+    const deletedPrefix = fileId + '#';
+    index.symbolEdges = index.symbolEdges.filter(
+      se => se.to !== fileId && !se.to.startsWith(deletedPrefix),
+    );
 
     // Remove fileId from each importer's outEdges array
     for (const importerId of deletedImporters) {

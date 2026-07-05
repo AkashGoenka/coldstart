@@ -13,10 +13,10 @@
  * Diagnostics go to stderr; stdout carries only the answer.
  */
 import { resolve } from 'node:path';
-import { loadCachedIndex, saveCachedIndex } from './cache/disk-cache.js';
+import { loadCachedIndex, saveCachedIndex, type LoadProfile } from './cache/disk-cache.js';
 import { getGitHead } from './indexer/git.js';
 import { handleGetStructure } from './server/tools.js';
-import { ensureKeeper } from './keeper.js';
+import { ensureKeeper, waitForKeeperCache, waitForCacheAdvance } from './keeper.js';
 import type { CodebaseIndex } from './types.js';
 
 type BuildFn = (
@@ -75,29 +75,61 @@ function parseQueryArgs(argv: string[]): ParsedArgs {
 }
 
 /**
- * Load the index from cache (pure read). On cache miss or git-HEAD drift,
- * lazily build + save. Returns null only on hard failure.
+ * Load the index from cache (pure read). Readers NEVER build (B4): on a cache
+ * miss they wait for the keeper's first save; on git-HEAD drift they wait
+ * briefly for the keeper's reconcile re-save, then serve what exists. The
+ * in-process build survives only as a last resort when no keeper could be
+ * spawned at all. Returns null when a keeper is alive but still building —
+ * callers print the retry hint and exit non-zero.
  */
-async function getIndex(
+export async function getIndex(
   root: string,
   cacheDir: string | undefined,
   buildIndex: BuildFn,
+  profile: LoadProfile = 'full',
 ): Promise<CodebaseIndex | null> {
   const t0 = Date.now();
-  let index = await loadCachedIndex(root, cacheDir);
+  let index = await loadCachedIndex(root, cacheDir, profile);
   if (index) {
     const head = await getGitHead(root);
     if (head && index.gitHead && head !== index.gitHead) {
-      err('[coldstart] cache stale (git HEAD changed) — rebuilding');
-      index = null;
-    } else {
-      err(`[coldstart] cache hit (${Date.now() - t0}ms, ${index.files.size} files)`);
+      // Branch switch / pull while no keeper watched. ensureKeeper (already
+      // called by every CLI entry) spawned one, and its startup reconcile
+      // re-saves the cache — give that a short window before serving stale.
+      err('[coldstart] cache behind git HEAD — waiting for keeper reconcile');
+      if (await waitForCacheAdvance(root, cacheDir)) {
+        index = (await loadCachedIndex(root, cacheDir, profile)) ?? index;
+        err(`[coldstart] cache refreshed (${Date.now() - t0}ms, ${index.files.size} files)`);
+      } else {
+        err('[coldstart] keeper still reconciling — serving previous index (rerun shortly for fresh results)');
+      }
       return index;
     }
+    err(`[coldstart] cache hit (${Date.now() - t0}ms, ${index.files.size} files)`);
+    return index;
   }
 
-  // Lazy build+save. Run `coldstart index` once to avoid paying this per query.
-  if (!index) err('[coldstart] cache miss — building (run `coldstart index` once to prep)');
+  err('[coldstart] no cache yet — waiting for the keeper build (run `coldstart index` to prep manually)');
+  const wait = await waitForKeeperCache(root, cacheDir, 180_000, err);
+  if (wait === 'ready') {
+    // The save is segment-wise; tolerate a beat between meta and segments.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      index = await loadCachedIndex(root, cacheDir, profile);
+      if (index) {
+        err(`[coldstart] keeper build ready (${((Date.now() - t0) / 1000).toFixed(1)}s, ${index.files.size} files)`);
+        return index;
+      }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+  if (wait === 'timeout') {
+    err('[coldstart] keeper is still building this repo — retry in a minute');
+    return null;
+  }
+
+  // No keeper could be spawned (or its cache never materialized) — build
+  // in-process so the tool still answers. One-off, loudly labeled.
+  err('[coldstart] no keeper available — building in-process (one-off)');
   index = await buildIndex(root, [], [], true);
   try {
     await saveCachedIndex(index, cacheDir);
@@ -133,7 +165,7 @@ export async function runGs(argv: string[], buildIndex: BuildFn): Promise<number
   // Keep the on-disk cache live for uncommitted edits: ensure a background
   // keeper is running (cheap no-op when one already is).
   await ensureKeeper(root);
-  const index = await getIndex(root, flags.cacheDir, buildIndex);
+  const index = await getIndex(root, flags.cacheDir, buildIndex, 'gs');
   if (!index) { err('[coldstart] no index available'); return 1; }
 
   const result = handleGetStructure(index, {
@@ -159,11 +191,11 @@ export async function runFind(argv: string[], buildIndex: BuildFn): Promise<numb
   // Keep the on-disk cache live for uncommitted edits: ensure a background
   // keeper is running (cheap no-op when one already is).
   await ensureKeeper(root);
-  const index = await getIndex(root, flags.cacheDir, buildIndex);
+  const index = await getIndex(root, flags.cacheDir, buildIndex, 'find');
   if (!index) { err('[coldstart] no index available'); return 1; }
 
   const { buildRichPage } = await import('./server/find.js');
-  process.stdout.write(buildRichPage(index, root, query, flags.json, flags.via === true) + '\n');
+  process.stdout.write((await buildRichPage(index, root, query, flags.json, flags.via === true)) + '\n');
   return 0;
 }
 

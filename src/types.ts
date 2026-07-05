@@ -98,6 +98,8 @@ export interface IndexedFile {
   djangoConventionRefs?: Array<{ kind: string; value: string }>;  // Python only: Django convention string refs (middleware, auth backends, etc.)
   submoduleImportCandidates?: string[];  // Python only: `from pkg import sub` bonus specifiers — resolve to an edge if a file exists, but a miss is NOT counted as unresolved (most are symbol imports)
   contentTokens?: Record<string, number>;  // shaped full-body tokens → provenance bits (TOKEN_IN_CODE | TOKEN_IN_STRING); absent for excluded files (vendored, markdown)
+  mtimeMs?: number;         // fs.stat at index time — the cheap staleness fingerprint (with sizeBytes)
+  sizeBytes?: number;
 }
 
 export interface Edge {
@@ -118,6 +120,7 @@ export interface CodebaseIndex {
   contentTokenPostings: Map<string, string[]>;  // rare content token (df 2–5) → fileIds; derived from files' contentTokens, rebuilt on load/patch
   indexedAt: number;                    // Date.now()
   gitHead: string;                      // HEAD commit hash or ''
+  profile?: 'find' | 'gs' | 'full';     // set on partial cache loads; absent = full. A partial index must never be saved or patched.
 }
 
 export interface WalkedFile {

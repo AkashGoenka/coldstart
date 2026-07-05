@@ -184,30 +184,64 @@ export async function tryAcquireSpawnLock(rootDir: string): Promise<(() => Promi
  * If our lockfile is deleted (e.g., user ran `rm ~/.coldstart/daemon/foo.json`),
  * call onMissing() so the daemon can exit cleanly.
  *
+ * fs.watch drops events under load (observed live: a keeper surviving its
+ * lockfile deletion, then coexisting with its replacement — two keepers
+ * racing saves on one root). Two hardenings:
+ *   - a slow poll backstop, so a missed event only delays shutdown
+ *   - lock OWNERSHIP: if the lockfile exists but names a different pid,
+ *     another keeper has taken over this root — the old one must exit.
+ *
  * Returns a function to stop watching.
  */
-export function watchOwnLockfile(rootDir: string, onMissing: () => void): () => void {
+export const LOCK_POLL_INTERVAL_MS = 30_000;
+
+export function watchOwnLockfile(
+  rootDir: string,
+  onMissing: () => void,
+  pollIntervalMs = LOCK_POLL_INTERVAL_MS, // injectable so tests don't depend on fs.watch delivery
+): () => void {
   const lock = lockPath(rootDir);
   const parent = daemonDir();
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let watcher: ReturnType<typeof watch> | null = null;
+  let fired = false;
+
+  const lockLost = (): boolean => {
+    if (!existsSync(lock)) return true;
+    try {
+      const parsed = JSON.parse(readFileSync(lock, 'utf-8')) as Partial<DaemonLock>;
+      return typeof parsed.pid === 'number' && parsed.pid !== process.pid;
+    } catch {
+      return false; // unreadable mid-write — never shut down on a read race
+    }
+  };
+  const fire = (): void => {
+    if (fired) return;
+    fired = true;
+    onMissing();
+  };
+
+  const poll = setInterval(() => { if (lockLost()) fire(); }, pollIntervalMs);
+  poll.unref();
 
   try {
-    watcher = watch(parent, (_eventType, filename) => {
+    watcher = watch(parent, (_eventType, _filename) => {
       if (debounceTimer) clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
         debounceTimer = null;
-        if (!existsSync(lock)) {
-          onMissing();
-        }
+        if (lockLost()) fire();
       }, 200);
     });
   } catch (err) {
-    return () => {};
+    // Keep the poll backstop even when fs.watch is unavailable.
+    return () => {
+      clearInterval(poll);
+    };
   }
 
   return () => {
     if (debounceTimer) clearTimeout(debounceTimer);
+    clearInterval(poll);
     watcher?.close();
   };
 }
