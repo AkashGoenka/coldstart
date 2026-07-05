@@ -656,6 +656,14 @@ function makeCacheReader(
 // Main
 // ---------------------------------------------------------------------------
 async function main(): Promise<void> {
+  // Documented in TROUBLESHOOTING ("include `coldstart --version`") — without
+  // this, the flag fell through to the MCP server and hung on stdio.
+  if (process.argv[2] === '--version' || process.argv[2] === '-v') {
+    const { getCurrentVersion } = await import('./daemon-lock.js');
+    process.stdout.write(getCurrentVersion() + '\n');
+    return;
+  }
+
   if (process.argv[2] === 'init') {
     const { runInit } = await import('./init.js');
     await runInit();
