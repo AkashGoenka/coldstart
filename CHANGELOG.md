@@ -32,14 +32,61 @@ process model is rebuilt around a single background keeper with stateless reader
   bridge, HTTP server, or port. The lockfile drops `port`; `status` is HTTP-free
   (lockfile PID + cache `meta.json` mtime); the `doctor` command is removed (its
   "is my index fresh?" job is covered by `status`).
-- **`init` rewritten around a single `coldstart.md`.** `coldstart init` writes one
-  `coldstart.md` (CLI or MCP flavor) at the repo root carrying all agent guidance;
-  Claude Code gets `@coldstart.md` wired into `CLAUDE.md` **and the find/gs search
-  hooks registered in `.claude/settings.json`**, other apps wire it manually. No
-  per-IDE rules files, no skill. `init` also warms the index in the background so
-  the first lookup is instant.
+- **`init` rewritten around a single `coldstart.md`, multi-client.** `coldstart init`
+  asks two things — experience (`cli`/`mcp`) and client (`claude`/`cursor`/`codex`/
+  `other`, never auto-detected) — and writes one `coldstart.md` at the repo root
+  carrying all agent guidance. Claude Code gets `@coldstart.md` wired into `CLAUDE.md`
+  plus the find/gs hooks in `.claude/settings.json`; Codex gets an `AGENTS.md` section
+  plus the same hooks in `.codex/hooks.json`; Cursor gets `.cursor/rules/coldstart.mdc`
+  (no hooks — its after-tool hooks are notification-only); other clients get
+  `coldstart.md` + printed directions. All writers merge idempotently. `init` also
+  warms the index in the background so the first lookup is instant.
+- **Cache format v18 — consumer-scoped, gzipped, generational.** The single giant
+  JSON blob is replaced by gzipped segments split by consumer (find / gs / keeper)
+  over an interned file table, written in atomic **generations** (`meta.json` names
+  the current one and is written last; the previous generation is kept). Readers
+  load a **profile** — `find` loads a fraction of what the keeper needs — and can
+  never persist a partial index or read a mixed-generation cache. Old caches
+  auto-invalidate on first run. Measured on a 16k-file repo: disk 132 → 8.9 MB,
+  load 885 → ~350 ms.
+- **The cache TTL is removed.** Time never invalidates a correct index. Validity is
+  now format version + git HEAD + startup reconcile + the live watcher (see Added).
 
 ### Added
+- **Startup reconcile — the index is always fresh, without a TTL.** When the keeper
+  starts, it stat-checks every indexed file against a `[mtime, size]` fingerprint
+  stamped at parse time (~100–200 ms for 16k files) and diffs git against the
+  indexed HEAD (untracked via porcelain; non-git repos fall back to a walk), then
+  **patches** exactly what changed while nothing was watching. A branch switch that
+  used to force a 96 s rebuild on a 16k-file repo is now a ~3 s patch.
+- **Readers never build.** `find`/`gs`/MCP wait for the keeper's cache on a miss
+  (progress to stderr) and for its reconcile re-save on git-HEAD drift, instead of
+  silently running a full build inline — possibly several concurrently. In-process
+  build survives only as the no-keeper fallback and `coldstart index`.
+- **Ripgrep recall engine.** `find`'s repo-wide reference scan resolves a real
+  ripgrep — `COLDSTART_RG` → PATH → bundled `@vscode/ripgrep` → editor-app copies —
+  verifies it, and persists the winner in `~/.coldstart/searcher.json` (stat-revalidated,
+  auto-re-resolved on failure). Fallbacks: `git grep` → `grep` → pure-Node scan.
+  Warm `find` on a 16k-file repo: ~3.8 s → ~2 s, parity with a raw `rg` sweep.
+- **Self-checking index.** After every incremental patch the index is linted against
+  structural invariants (edge endpoints exist, adjacency mirrors edges, …); a
+  violation triggers an automatic rebuild. After every save a rotating 50-file
+  fingerprint audit catches watcher-missed events and re-patches the drift.
+- **Keeper observability.** `keeper-state.json` (last reconcile/patch/rebuild/save)
+  and `repair.jsonl` (append-only failure log, 256 KB cap, survives restarts) are
+  written beside the cache; `coldstart status` renders both. `coldstart restart`
+  gains `--root <dir>`. The patch threshold now scales with repo size
+  (max(30, 20% of indexed files)).
+- **Notebook (experimental): `coldstart kb`.** A repo-local, agent-written knowledge
+  base under `.coldstart/notebook/` — append-only `.raw` log as source of truth,
+  derived Markdown notes, anchor-freshness stamps from the index (a keeper-derived
+  `kb-notes.json` sidecar; `kb search` never loads the code index), two-phase
+  `kb write` (candidates → `--into <id>` or `--new`), plus opt-in capture/recall
+  hooks (`hooks/kb-elicit.mjs`, `hooks/kb-recall.mjs`). Not wired by `init` yet.
+  Verbs: `search` / `write` / `status` / `lint` / `render` / `init` / `migrate`.
+- **`gs` returns the enclosing method body on a `--match`/`--symbol` miss** instead
+  of an empty result.
+- **Search hooks wired by `init` (Claude Code + Codex).** `coldstart init` registers two
 - **Search hooks wired by `init` (Claude Code).** `coldstart init` now registers two
   hooks in `.claude/settings.json`, pointing at the version-pinned copies under
   `~/.coldstart/versions/<v>/hooks/`: a PostToolUse nudge that flags search behaviour
@@ -51,6 +98,24 @@ process model is rebuilt around a single background keeper with stateless reader
   via the CLI or the MCP tools. The hooks ship in the package (`hooks/`).
 
 ### Fixed
+- **Keeper could outlive a deleted/taken-over lockfile.** `fs.watch` can miss the
+  lockfile delete event, leaving an orphan keeper co-writing the cache with its
+  replacement. The keeper now also polls its lockfile (30 s) and exits when the file
+  is gone or names a foreign PID.
+- **Hidden/excluded dirs leaked into the index via patch.** The watcher and
+  reconcile's porcelain pass could feed `patchIndex` paths the walker would never
+  visit (`.claude/settings.json`, `.coldstart/` notebook writes, `node_modules/`).
+  The patch now mirrors the walker's directory rules. Regression test:
+  `tests/patch-hidden-dirs.test.ts`.
+- **Stale-HEAD reader stalls.** Two paths could save a cache whose recorded git HEAD
+  predated a checkout (reconcile-clean-with-drift, and the live-watcher path), making
+  every subsequent reader wait out the full drift window. HEAD is now refreshed at
+  save time.
+- **Keeper log was always empty** — the daemon inherited `--quiet` from its spawner;
+  it now ignores it (the log is its only observability channel).
+- **`find` untracked-file coverage + single-threaded scans.** The grep pass now also
+  searches untracked files and runs single-threaded per term — measured faster and
+  it stops stealing cores from the agent.
 - **Convention-edge freshness on incremental patch.** Editing a single Rails/Django/
   Laravel/C# convention file used to drop that file's synthetic convention edges
   (and reference fields) until the next full rebuild, because the incremental patch
