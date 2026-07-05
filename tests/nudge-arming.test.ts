@@ -109,6 +109,8 @@ describe('kb-recall pre-seeds the nudge state on injection', () => {
 
     const hit = runRecall('Where is the LoadStaging nodegroup cascade handled on graph restore?');
     expect(hit).toContain('additionalContext');
+    // the framing must pair the note with a companion find (anti-under-search)
+    expect(hit).toContain('coldstart find');
     const st = JSON.parse(fs.readFileSync(stateFile(), 'utf8'));
     expect(st.seen_find).toBe(true);
   });
