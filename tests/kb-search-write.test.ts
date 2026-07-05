@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { kbSearch, renderSearchPage, renderCompactPage } from '../src/kb/search.js';
+import { kbSearch, renderSearchPage, renderCompactPage, shouldImplantTop } from '../src/kb/search.js';
 import { kbWrite } from '../src/kb/write.js';
 import { kbLint } from '../src/kb/lint.js';
 import { hashFile } from '../src/kb/freshness.js';
@@ -130,21 +130,81 @@ describe('kb search', () => {
     expect(codeShapedUnderscore.hits.map((h) => h.note.id)).toContain('max-files-note');
   });
 
-  it('renderCompactPage: title + gist + freshness, no bodies, under the injection budget', async () => {
+  it('renderCompactPage: a sole hit passes the dominance gate and implants its FULL body', async () => {
     writeRepoFile('app/models/graph.py', 'class Graph: pass\n');
     seedLesson({
       body: 'restore_state never re-creates functions_x_graphs rows. '.repeat(30),
     });
     const res = await kbSearch(root, 'functions disappear after graph restore', { noMissLog: true });
+    expect(shouldImplantTop(res)).toBe(true); // sole hit → dominance
     const page = renderCompactPage('functions disappear after graph restore', res);
-    expect(page).toContain('Version restore silently drops function assignments');
-    expect(page).toContain('[lesson/bug-cause]');
-    expect(page).toContain('[evidence changed: app/models/graph.py]'); // seeded hash is stale
-    // gist is clamped; the repeated body must not be inlined wholesale
-    expect(page.length).toBeLessThan(600);
-    expect(page).not.toContain('## '); // no rendered-md sections
+    expect(page).toContain('## Version restore silently drops function assignments'); // full-note heading
+    expect(page).toContain('id: restore-drops-functions');
+    expect(page).toContain('restore_state never re-creates'); // body inlined, not clamped to a gist
+    expect(page).toContain('app/models/graph.py'); // freshness line rides with the body
     // zero hits keeps the sentinel the hook's skip check looks for
     expect(renderCompactPage('nope', { hits: [], terms: [], warnings: [] })).toContain('No notebook notes match');
+  });
+
+  it('implant gate: two near-equal hits without convergence stay gist-only (no bodies)', async () => {
+    writeRepoFile('app/a.py', 'pass\n');
+    writeRepoFile('app/b.py', 'pass\n');
+    appendRecord(root, {
+      id: 'spatialview-restore-breaks', type: 'lesson', op: 'put', kind: 'trap',
+      title: 'spatialview restore breaks silently',
+      body: 'first note body.', anchors: [{ path: 'app/a.py' }],
+    });
+    appendRecord(root, {
+      id: 'spatialview-restore-timeout', type: 'lesson', op: 'put', kind: 'trap',
+      title: 'spatialview restore timeout on large graphs',
+      body: 'second note body.', anchors: [{ path: 'app/b.py' }],
+    });
+    // filler corpus so the shared terms stay minority-df under strongOnly
+    for (const t of ['auth cookie parsing', 'webpack bundle size', 'csv importer quoting']) {
+      appendRecord(root, { id: t.replace(/ /g, '-'), type: 'lesson', op: 'put', kind: 'trap', title: t, body: t });
+    }
+    const res = await kbSearch(root, 'why does spatialview restore fail', { strongOnly: true, noMissLog: true });
+    expect(res.hits.length).toBe(2);
+    expect(res.hits[0].score).toBeLessThan(1.8 * res.hits[1].score); // near-equal → ambiguous
+    expect(shouldImplantTop(res)).toBe(false);
+    const page = renderCompactPage('why does spatialview restore fail', res);
+    expect(page).not.toContain('## '); // no full-note section — scent trail only
+    expect(page).not.toContain('id: spatialview-restore-breaks'); // implant header absent
+    expect(page).toContain('- **spatialview restore breaks silently**');
+    expect(page).toContain('- **spatialview restore timeout on large graphs**');
+  });
+
+  it('implant gate: symbol convergence (keeper notes index) opens the gate when dominance alone would not', async () => {
+    writeRepoFile('app/models/graph.py', 'class TileHelperRegistry: pass\n');
+    writeRepoFile('app/graph_utils.py', 'pass\n');
+    // The top note names the symbol ITSELF (own-text match); the inventory
+    // confirming it's declared in the note's anchor = the second channel.
+    appendRecord(root, {
+      id: 'graph-restore-note', type: 'lesson', op: 'put', kind: 'trap',
+      title: 'TileHelperRegistry graph restore drops rows',
+      body: 'anchored where the symbol lives.', anchors: [{ path: 'app/models/graph.py' }],
+    });
+    appendRecord(root, {
+      id: 'graph-restore-perf', type: 'lesson', op: 'put', kind: 'trap',
+      title: 'graph restore perf cliff',
+      body: 'a competing note.', anchors: [{ path: 'app/graph_utils.py' }],
+    });
+    for (const t of ['auth cookie parsing', 'webpack bundle size', 'csv importer quoting']) {
+      appendRecord(root, { id: t.replace(/ /g, '-'), type: 'lesson', op: 'put', kind: 'trap', title: t, body: t });
+    }
+    const notesIndex = await buildKbNotesIndex(fakeIndex({
+      'app/models/graph.py': ['TileHelperRegistry'], 'app/graph_utils.py': [],
+    }), root);
+    const res = await kbSearch(root, 'TileHelperRegistry graph restore', { strongOnly: true, notesIndex, noMissLog: true });
+    expect(res.hits[0].note.id).toBe('graph-restore-note');
+    expect(res.hits.length).toBe(2);
+    expect(res.hits[0].score).toBeLessThan(1.8 * res.hits[1].score); // dominance alone would NOT implant
+    expect(res.hits[0].convergence).toBe(true); // code index agrees with the text match
+    expect(shouldImplantTop(res)).toBe(true);
+    // without the notes index the same query has no convergence channel → gate stays shut
+    const blind = await kbSearch(root, 'TileHelperRegistry graph restore', { strongOnly: true, noMissLog: true });
+    expect(blind.hits[0].convergence).toBe(false);
+    expect(shouldImplantTop(blind)).toBe(false);
   });
 
   it('lane 2: a symbol name resolves via the keeper notes index to the anchored note', async () => {

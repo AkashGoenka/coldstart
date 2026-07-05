@@ -16,7 +16,7 @@
 import { resolve, join } from 'node:path';
 import { readFileSync, writeFileSync, existsSync, appendFileSync, mkdirSync } from 'node:fs';
 import { ensureKeeper } from '../keeper.js';
-import { kbSearch, renderSearchPage, renderCompactPage } from './search.js';
+import { kbSearch, renderSearchPage, renderCompactPage, shouldImplantTop } from './search.js';
 import { loadKbNotesIndex } from './notes-index.js';
 import { kbWrite, type WriteSpec } from './write.js';
 import { kbLint, lintSummary } from './lint.js';
@@ -123,9 +123,12 @@ async function cmdSearch(words: string[], flags: KbFlags): Promise<number> {
 
   // The keeper maintains the notes index (lane 2 + absence stamps); the reader
   // only picks it up from disk — the code index is NEVER loaded here (C1).
+  // Hook mode skips the keeper spawn (latency budget) but still reads the
+  // sidecar: the convergence implant gate lives there. Absent → null → the
+  // gate degrades to dominance-only.
   let notesIndex = null;
-  if (!flags.hook && !flags.noIndex) {
-    await ensureKeeper(flags.root);
+  if (!flags.noIndex) {
+    if (!flags.hook) await ensureKeeper(flags.root);
     notesIndex = loadKbNotesIndex(flags.root);
   }
 
@@ -136,6 +139,18 @@ async function cmdSearch(words: string[], flags: KbFlags): Promise<number> {
     strongOnly: flags.hook, // an arbitrary user sentence must not inject weak grazes
   });
   for (const w of result.warnings) err(`[coldstart kb] ${w}`);
+
+  // Every injection decision grows the calibration corpus (implant thresholds
+  // are re-derived from real runs, never hand-maintained).
+  if (flags.hook && result.hits.length) {
+    logMetric(flags.root, 'inject-log', {
+      query: query.slice(0, 200),
+      top: result.hits[0].note.id,
+      implant: shouldImplantTop(result),
+      convergence: result.hits[0].convergence,
+      scores: result.hits.map((h) => Math.round(h.score * 100) / 100),
+    });
+  }
 
   if (flags.json) {
     out(JSON.stringify({
@@ -150,8 +165,8 @@ async function cmdSearch(words: string[], flags: KbFlags): Promise<number> {
       })),
     }, null, 2));
   } else if (flags.hook) {
-    // Hook injections are re-read every turn — titles + gists only, the full
-    // note stays one `kb search` away.
+    // Tiered injection: full body for a gate-passing top hit (kills the
+    // fetch turn), titles + gists for the rest.
     out(renderCompactPage(query, result));
   } else {
     out(renderSearchPage(flags.root, query, result));

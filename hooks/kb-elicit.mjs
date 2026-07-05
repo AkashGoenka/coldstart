@@ -2,20 +2,24 @@
 /**
  * kb-elicit.mjs — Stop + SubagentStop hook. Notebook capture, task-shaped.
  *
- * When an agent that did REAL reads tries to stop, block once and hand it the
- * capture prompt: the gate ("capture what avoids a future read or wrong turn —
- * not because a file was touched"), the latency discriminator ("needs a read
- * you haven't done? then don't"), per-file existing-note annotations from
- * `coldstart kb status --json`, and the exact `kb write` invocation.
+ * ALWAYS FIRES when the agent touched ANY repo file this session — the old
+ * deep-read gate (whole-file Reads + `gs` only) is gone: read-modality
+ * classification proved unwinnable (windowed Reads, Bash cat/sed, MCP readers
+ * are all invisible to it — a q8-style session lost real knowledge to a
+ * FAST-EXIT). The hook does mechanical extraction only; THE AGENT decides
+ * whether anything is worth writing — the prompt's gate and "write NOTHING
+ * when" list carry that decision. FAST-EXIT remains only for sessions that
+ * touched zero repo files (pure orchestrators / Q&A turns).
  *
- * FAST-EXIT (the fix over the old prototype): zero deep reads in the
- * transcript → exit 0 WITHOUT blocking. Orchestrators and skimmers pass
- * through silently; only agents that got warm pay the one capture turn.
+ * Merge-vs-new is agent-curated: touched files are annotated with their
+ * existing notes (id + note file path, from `coldstart kb status --json`) so
+ * the agent can read a candidate and pass --into/--new on its FIRST kb write
+ * — the exit-3 candidates bounce is the safety net, not the mechanism.
  *
  * SubagentStop fires too (subagents often do the only real reads); duplication
  * is guarded by disjoint transcripts + firsthand-only + SubagentStop preceding
- * Stop (the sub's notes are on disk when the main agent's two-phase write
- * runs, so they surface as "candidates → reconcile, don't duplicate").
+ * Stop (the sub's notes are on disk when the main agent's write runs, so they
+ * surface as "candidates → reconcile, don't duplicate").
  *
  * Hooks never author or parse markdown — all facts come from `coldstart kb`.
  * Self-contained + fail-open: ANY error → exit 0 → the stop is allowed.
@@ -25,7 +29,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
-import { existsSync, writeFileSync, appendFileSync, readFileSync, mkdirSync } from "node:fs";
+import { existsSync, writeFileSync, appendFileSync, readFileSync, mkdirSync, statSync } from "node:fs";
 
 // hooks/ sits beside dist/ in both the repo and the published package.
 const CLI = fileURLToPath(new URL("../dist/index.js", import.meta.url));
@@ -37,7 +41,7 @@ function log(msg) {
   try { appendFileSync(LOG_FILE, `[${new Date().toISOString()}] elicit: ${msg}\n`); } catch { /* never fail logging */ }
 }
 
-// --- Deep-read detection (kept from the validated prototype) ------------------
+// --- Touched-file detection ----------------------------------------------------
 function normRel(root, p) {
   let s = String(p || "").trim();
   if (!s) return "";
@@ -48,13 +52,25 @@ function normRel(root, p) {
   return s.replace(/^\.\//, "");
 }
 
-// Files the agent read CLOSELY this run: a Read with no offset/limit (whole
-// body) or a `coldstart gs <file>`. Peeks (windowed Reads) don't count.
-function deepReadFiles(transcriptPath, root) {
+// Path-like tokens inside a shell command: anything with an extension, plus
+// whatever follows `coldstart gs`. Existence under root is checked by the
+// caller — this only extracts candidates.
+const BASH_PATH_RE = /(?:^|[\s"'`=(:;|])((?:\.{1,2}\/|\/)?[A-Za-z0-9_][A-Za-z0-9_.\/-]*\.[A-Za-z0-9]{1,8})(?=$|[\s"'`):;,|>])/gm;
+
+// EVERY repo file the agent touched this run, however it got there: Read
+// (windowed or not), Edit/Write, `coldstart gs`, or a path mentioned in a
+// Bash command (cat/sed/grep/head — the modalities the old deep-read gate was
+// blind to). Whether any of it is WORTH capturing is the agent's call.
+function touchedFiles(transcriptPath, root) {
   const out = [];
   const seen = new Set();
-  const add = (rel) => {
-    if (rel && !seen.has(rel) && !rel.startsWith(".coldstart/")) { seen.add(rel); out.push(rel); }
+  const add = (rel, mustExist) => {
+    if (!rel || seen.has(rel) || rel.startsWith(".coldstart/")) return;
+    if (mustExist) {
+      try { if (!statSync(join(root, rel)).isFile()) return; } catch { return; }
+    }
+    seen.add(rel);
+    out.push(rel);
   };
   let text = "";
   try { text = readFileSync(transcriptPath, "utf8"); } catch { return out; }
@@ -68,11 +84,15 @@ function deepReadFiles(transcriptPath, root) {
     for (const b of content) {
       if (!b || b.type !== "tool_use") continue;
       const inp = b.input || {};
-      if (b.name === "Read") {
-        if (inp.offset == null && inp.limit == null) add(normRel(root, inp.file_path));
+      if (b.name === "Read" || b.name === "Edit" || b.name === "Write" || b.name === "NotebookEdit") {
+        add(normRel(root, inp.file_path), false);
       } else if (b.name === "Bash") {
-        for (const g of String(inp.command || "").matchAll(/coldstart\s+gs\s+(\S+)/g)) {
-          add(normRel(root, g[1]));
+        const cmd = String(inp.command || "");
+        for (const g of cmd.matchAll(/coldstart\s+gs\s+(\S+)/g)) add(normRel(root, g[1]), false);
+        let n = 0;
+        for (const m of cmd.matchAll(BASH_PATH_RE)) {
+          if (++n > 12) break; // a single huge command must not dominate
+          add(normRel(root, m[1]), true); // shell tokens are guesses — verify on disk
         }
       }
     }
@@ -97,20 +117,31 @@ function noteAnnotations(root, files) {
   }
 }
 
+// Always-fire can surface long touch lists; the prompt stays bounded. Files
+// WITH existing notes always make the cut (they carry the merge decision).
+const MAX_PROMPT_FILES = 30;
+
 function filesBlock(root, files) {
   const notes = noteAnnotations(root, files);
+  let listed = files;
+  if (files.length > MAX_PROMPT_FILES) {
+    const noted = files.filter((f) => (notes.get(f) || []).length);
+    const bare = files.filter((f) => !(notes.get(f) || []).length);
+    listed = [...noted, ...bare].slice(0, MAX_PROMPT_FILES);
+  }
   const lines = [];
-  for (const rel of files) {
+  for (const rel of listed) {
     const anchored = notes.get(rel) || [];
     if (!anchored.length) { lines.push(`- ${rel}   [no notes yet]`); continue; }
     const parts = anchored.map((n) => {
       const flag = n.state === "changed" || n.state === "missing"
         ? ` — FLAGGED STALE: you just read this file, so fix or re-stamp it (list the path in "verified")`
         : "";
-      return `${n.id} [${n.type} · ${n.state}]${flag}`;
+      return `${n.id} [${n.type} · ${n.state}]${flag} (.coldstart/notebook/notes/${n.id}.md)`;
     });
     lines.push(`- ${rel}   has notes: ${parts.join("; ")}`);
   }
+  if (listed.length < files.length) lines.push(`- …and ${files.length - listed.length} more touched files`);
   return lines.join("\n");
 }
 
@@ -142,7 +173,8 @@ include the search terms that proved it.
 Rule of thumb: create a NEW note only for a distinct thing you'd reference from elsewhere; \
 otherwise edit the existing note (a detail is an edit, not a page).
 
-Files you read closely this run, with their existing notes:
+Files you touched this run, with their existing notes (note file paths given — read one if you \
+need to see what it already says before deciding):
 
 ${block}
 
@@ -166,8 +198,11 @@ Spec shapes (one call per note; only include fields you actually have):
 Never list a file you didn't open.
 - Correct an existing note: same spec + "id":"<its-id>" (fields merge; yours win).
 - Remove a wrong claim: {"type":"...","op":"retract","id":"<note-id>","target":{"kind":"behavior|feature|anchor|invariant|alias|note","key":"<concept_id|path|text>"}}
-- If kb write answers "candidates": one of them IS your concept → re-run with --into <id>; \
-truly new → re-run with --new. Reconcile first, then add.
+
+MERGE vs NEW is YOUR decision — make it BEFORE writing, from the notes listed above (read a \
+note's file if unsure): your knowledge extends one of them → pass --into <its-id> on the write; \
+genuinely distinct → pass --new. Deciding up front makes the write ONE call. Safety net: a \
+flag-less write may answer "candidates" — then reconcile and re-run with --into or --new.
 
 When your notes are written (or nothing qualified), stop.`;
 }
@@ -243,17 +278,19 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
       }
       transcriptPath = own;
     }
-    const files = transcriptPath ? deepReadFiles(transcriptPath, root) : [];
+    const files = transcriptPath ? touchedFiles(transcriptPath, root) : [];
 
-    // FAST-EXIT: no deep reads → this agent never got warm → no capture turn.
+    // FAST-EXIT only when the agent touched NO repo file at all (pure
+    // orchestration / Q&A). Anything touched → the agent judges what's worth
+    // capturing; the hook never guesses from read modality.
     if (!files.length) {
-      log(`FAST-EXIT zero deep reads session=${sid} agent=${aid} event=${input.hook_event_name || "?"}`);
+      log(`FAST-EXIT zero touched files session=${sid} agent=${aid} event=${input.hook_event_name || "?"}`);
       process.exit(0);
     }
 
     const prompt = buildCapturePrompt(root, filesBlock(root, files), sid);
-    logCaptureEvent(root, { event: "elicit", session: sid, agent: aid, deepReads: files.length, hook: input.hook_event_name });
-    log(`ELICIT session=${sid} agent=${aid} deepReads=${files.length} promptBytes=${prompt.length} event=${input.hook_event_name || "?"}`);
+    logCaptureEvent(root, { event: "elicit", session: sid, agent: aid, touched: files.length, hook: input.hook_event_name });
+    log(`ELICIT session=${sid} agent=${aid} touched=${files.length} promptBytes=${prompt.length} event=${input.hook_event_name || "?"}`);
     process.stdout.write(JSON.stringify({ decision: "block", reason: prompt }));
   } catch (e) {
     log(`handler ${e?.stack || e}`); // fail-open: no stdout → stop allowed

@@ -26,8 +26,9 @@ import { loadAll, logMetric } from './store.js';
 import { renderNote } from './render.js';
 
 export interface KbSearchOptions {
-  /** Keeper-maintained notes index for lane 2 + absence stamps. Omit (hook
-   *  mode) to skip both. Load via loadKbNotesIndex(root). */
+  /** Keeper-maintained notes index for lane 2, absence stamps, and the
+   *  convergence implant gate. Load via loadKbNotesIndex(root) — a plain
+   *  sidecar read, safe in hook mode too. Omit → those channels degrade. */
   notesIndex?: KbNotesIndex | null;
   maxResults?: number;
   /** Where the query came from — recorded in the miss-log. */
@@ -68,6 +69,11 @@ export interface KbSearchHit {
   stamped: StampedAnchor[];
   /** Absence-note re-run verdict line, when applicable. */
   absence?: string;
+  /** A code-shaped query term is DECLARED (per the keeper's per-anchor symbol
+   *  inventory) in one of this note's anchor files — the code index agreeing
+   *  with the text match. The high-precision implant gate; false when the
+   *  notes index wasn't provided. */
+  convergence: boolean;
 }
 
 export interface KbSearchResult {
@@ -135,6 +141,19 @@ function resolveTermToAnchors(kb: KbNotesIndex, term: string): Set<string> {
   return out;
 }
 
+/** Convergence channel: files where the term matches a DECLARED SYMBOL only —
+ *  stricter than lane 2 (path-segment grazes don't count). Calibrated on the
+ *  27q corpus: symbol agreement was 100%-precise at rank 0; path inclusion
+ *  wasn't part of that measurement, so it stays out of the gate. */
+function resolveTermToSymbolFiles(kb: KbNotesIndex, term: string): Set<string> {
+  const out = new Set<string>();
+  const t = norm(term);
+  for (const [path, symbols] of Object.entries(kb.anchors)) {
+    if (symbols.some((s) => norm(s).includes(t))) out.add(path);
+  }
+  return out;
+}
+
 /** An absence note's verdict comes from the keeper's stamp (it re-runs the
  *  stored search on every code/notebook change) — never from a live scan here. */
 function absenceVerdict(note: FoldedNote, kb: KbNotesIndex | null | undefined): string | undefined {
@@ -167,18 +186,31 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
   const idf = (k: number): number => Math.log(1 + notes.length / (1 + df[k]));
   const maxIdf = Math.max(1e-9, ...terms.map((_, k) => idf(k)));
 
-  const scored: { note: FoldedNote; score: number }[] = [];
+  // Convergence channel: code-shaped term → files where it's a declared symbol.
+  const symFiles = new Map<string, Set<string>>();
+  if (opts.notesIndex) {
+    for (const t of terms) if (isCodeShaped(t)) symFiles.set(t, resolveTermToSymbolFiles(opts.notesIndex, t));
+  }
+
+  const scored: { note: FoldedNote; score: number; convergence: boolean }[] = [];
   for (let i = 0; i < notes.length; i++) {
     const note = notes[i];
     const h = stacks[i];
     let covered = 0;
     let boost = 0;
     let strong = false;
+    let convergence = false;
     for (let k = 0; k < terms.length; k++) {
       const t = terms[k];
       const inName = hits(h.name, h.nameSquash, t);
       let inAnchor = hits(h.anchor, h.anchorSquash, t);
-      if (!inAnchor && termFiles.get(t)?.size) {
+      // Lane-2 admission (term matches ONLY via the keeper's symbol inventory)
+      // stays off in strongOnly: an arbitrary sentence sharing one symbol with
+      // a hub anchor file (datatypes.py declares hundreds) is a graze, not a
+      // hit — enabling it here produced false implants on the 27q replay. The
+      // convergence gate below still uses the inventory, but only to CONFIRM a
+      // term the note matched in its own text (two independent channels).
+      if (!inAnchor && !opts.strongOnly && termFiles.get(t)?.size) {
         const files = termFiles.get(t)!;
         inAnchor = note.anchors.some((a) => files.has(a.path));
       }
@@ -198,6 +230,8 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
       }
       covered++;
       if (inName || inAnchor) strong = true;
+      const files = symFiles.get(t);
+      if (files?.size && note.anchors.some((a) => files.has(a.path))) convergence = true;
       boost += ((inName ? 3 : 0) + (inAnchor ? 2 : 0) + (inBody ? 1 : 0)) * idf(k);
     }
     if (!covered) continue;
@@ -205,7 +239,7 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
     // Hook mode scores by idf-weighted channel boost alone: a rare-name match
     // ("principaluser") must dominate common-verb grazes ("save", "files") that
     // raw coverage counts as equals.
-    scored.push({ note, score: opts.strongOnly ? boost : covered * 3 + boost / maxIdf });
+    scored.push({ note, score: opts.strongOnly ? boost : covered * 3 + boost / maxIdf, convergence });
   }
 
   if (!scored.length) {
@@ -214,11 +248,11 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
   }
 
   // Freshness NOW for everything scored, then hard-tier: fresh+active first.
-  const withTier: KbSearchHit[] = scored.map(({ note, score }) => {
+  const withTier: KbSearchHit[] = scored.map(({ note, score, convergence }) => {
     const stamped = stampAnchors(root, note.anchors);
     const stale = stamped.some((s) => s.state === 'changed' || s.state === 'missing');
     const tier = note.status !== 'active' ? 2 : stale ? 1 : 0;
-    return { note, score, tier, stamped, absence: absenceVerdict(note, opts.notesIndex) };
+    return { note, score, tier, stamped, absence: absenceVerdict(note, opts.notesIndex), convergence };
   });
   withTier.sort((a, b) => a.tier - b.tier || b.score - a.score || (a.note.id < b.note.id ? -1 : 1));
 
@@ -238,30 +272,66 @@ function noteBody(note: FoldedNote): string {
   return end >= 0 ? md.slice(end + 5).trim() : md.trim();
 }
 
-/** Hook-mode page: title + one-line gist + aggregated freshness per note — a
- *  scent trail, not the notes themselves. The agent pulls a full note with
- *  `kb search <title words>` when a title matches its task. Kept small on
- *  purpose: injected context is re-read on every turn of the session, and
- *  >10KB hook payloads get spilled to a pointer file agents mostly ignore. */
+/** Implant gate — should the TOP hit's full body ride in the injection?
+ *
+ *  Layered, no absolute score constant (27q calibration, 2026-07-05):
+ *  1. convergence — a code-shaped query term is a declared symbol in the
+ *     note's anchor files (index agrees with text): 11/11 precise at rank 0.
+ *  2. dominance — sole surviving hit, or top score ≥ 1.8× the runner-up. A
+ *     scale-free ratio within one query's own result list; unlike an absolute
+ *     cut it doesn't drift with notebook size or repo vocabulary.
+ *  Together: 22/23 relevant implanted, zero false implants on that corpus.
+ *  Neither fires → gist tier, which is the pre-implant behavior. */
+export function shouldImplantTop(result: KbSearchResult): boolean {
+  const h = result.hits;
+  if (!h.length) return false;
+  if (h[0].convergence) return true;
+  return h.length === 1 || h[0].score >= 1.8 * h[1].score;
+}
+
+const gistLines = (hit: KbSearchHit): string[] => {
+  const n = hit.note;
+  const kind = n.type === 'lesson' && n.kind ? `/${n.kind}` : '';
+  const status = n.status !== 'active' ? ` · ${n.status.toUpperCase()}` : '';
+  const changed = hit.stamped.filter((s) => s.state === 'changed' || s.state === 'missing');
+  const fresh =
+    !hit.stamped.length ? '' :
+    changed.length ? ` · [evidence changed: ${changed.slice(0, 2).map((s) => s.path).join(', ')}${changed.length > 2 ? ` +${changed.length - 2}` : ''}]` :
+    hit.stamped.every((s) => s.state === 'fresh') ? ' · anchors [fresh]' : ' · [not fully verified]';
+  const gistSrc = (n.summary || n.body || n.invariants[0] || '').replace(/\s+/g, ' ').trim();
+  const lines = [`- **${n.title}**  [${n.type}${kind}${status}]${fresh}`];
+  if (gistSrc) lines.push(`  ${gistSrc.slice(0, 220)}${gistSrc.length > 220 ? '…' : ''}`);
+  if (hit.absence) lines.push(`  ${hit.absence}`);
+  return lines;
+};
+
+/** Hook-mode page. Two tiers:
+ *  - implant (gate passes): the top hit's FULL rendered note inline — the
+ *    fetch turn (`kb search` before using it) is the single biggest recall
+ *    cost, and the gate is calibrated so a wrong full-body implant is rarer
+ *    than the fetch turn it replaces. Freshness renders with it.
+ *  - gist (gate closed / non-top hits): title + one-line gist + freshness —
+ *    a scent trail; the agent pulls the full note with `kb search`.
+ *  Injected context is re-read every turn, so non-implant output stays small. */
 export function renderCompactPage(query: string, result: KbSearchResult): string {
   if (!result.hits.length) {
     return `No notebook notes match "${query}". Fall through to \`coldstart find\` as usual.`;
   }
   const lines: string[] = [];
-  for (const hit of result.hits) {
+  const rest = result.hits.slice(shouldImplantTop(result) ? 1 : 0);
+  if (rest.length < result.hits.length) {
+    const hit = result.hits[0];
     const n = hit.note;
-    const kind = n.type === 'lesson' && n.kind ? `/${n.kind}` : '';
-    const status = n.status !== 'active' ? ` · ${n.status.toUpperCase()}` : '';
-    const changed = hit.stamped.filter((s) => s.state === 'changed' || s.state === 'missing');
-    const fresh =
-      !hit.stamped.length ? '' :
-      changed.length ? ` · [evidence changed: ${changed.slice(0, 2).map((s) => s.path).join(', ')}${changed.length > 2 ? ` +${changed.length - 2}` : ''}]` :
-      hit.stamped.every((s) => s.state === 'fresh') ? ' · anchors [fresh]' : ' · [not fully verified]';
-    const gistSrc = (n.summary || n.body || n.invariants[0] || '').replace(/\s+/g, ' ').trim();
-    lines.push(`- **${n.title}**  [${n.type}${kind}${status}]${fresh}`);
-    if (gistSrc) lines.push(`  ${gistSrc.slice(0, 220)}${gistSrc.length > 220 ? '…' : ''}`);
-    if (hit.absence) lines.push(`  ${hit.absence}`);
+    const kind = n.type === 'lesson' && n.kind ? ` · ${n.kind}` : '';
+    lines.push(`## ${n.title}  [${n.type}${kind} · ${n.status}]`);
+    lines.push(`id: ${n.id}`);
+    if (n.aliases.length) lines.push(`aka: ${n.aliases.join(' · ')}`);
+    for (const s of hit.stamped) lines.push(freshnessLine(s));
+    if (hit.absence) lines.push(hit.absence);
+    lines.push('', noteBody(n), '');
+    if (rest.length) lines.push('Also matched (gist only — fetch with `coldstart kb search <title words>`):');
   }
+  for (const hit of rest) lines.push(...gistLines(hit));
   return lines.join('\n');
 }
 

@@ -109,8 +109,8 @@ export function renderIds(root: string, ids?: string[]): string[] {
   return rendered;
 }
 
-/** Append a metrics event (miss-log, capture events). Best-effort, never throws. */
-export function logMetric(root: string, file: 'miss-log' | 'capture', event: Record<string, unknown>): void {
+/** Append a metrics event (miss-log, capture, inject decisions). Best-effort, never throws. */
+export function logMetric(root: string, file: 'miss-log' | 'capture' | 'inject-log', event: Record<string, unknown>): void {
   try {
     mkdirSync(metricsDir(root), { recursive: true });
     appendFileSync(join(metricsDir(root), `${file}.jsonl`), JSON.stringify({ ts: new Date().toISOString(), ...event }) + '\n');
