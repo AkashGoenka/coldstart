@@ -73,8 +73,9 @@ describe('daemon-lock', () => {
   describe('watchOwnLockfile existence-check filter', () => {
     it('does NOT fire onMissing when the daemon writes its own lockfile', async () => {
       // Pre-create the lockfile so the watcher is observing a steady-state
-      // condition (keeper already running).
-      await writeLock(testRoot, 11111, '1.4.3');
+      // condition (keeper already running). "Its own" is literal since the
+      // ownership check landed: the lock must carry THIS process's pid.
+      await writeLock(testRoot, process.pid, '1.4.3');
 
       let onMissingCalls = 0;
       const stop = watchOwnLockfile(testRoot, () => { onMissingCalls++; });
@@ -83,8 +84,8 @@ describe('daemon-lock', () => {
         // Simulate the keeper re-writing its lockfile (periodic touch,
         // atomic-replace pattern). This MUST NOT trigger the onMissing
         // callback — that would be the infinite-loop bug.
-        await writeLock(testRoot, 11111, '1.4.3');
-        await writeLock(testRoot, 11111, '1.4.3');
+        await writeLock(testRoot, process.pid, '1.4.3');
+        await writeLock(testRoot, process.pid, '1.4.3');
 
         // Wait past the 200 ms debounce + a safety margin.
         await new Promise(r => setTimeout(r, 400));
@@ -98,7 +99,10 @@ describe('daemon-lock', () => {
       await writeLock(testRoot, 22222, '1.4.3');
 
       let onMissingCalls = 0;
-      const stop = watchOwnLockfile(testRoot, () => { onMissingCalls++; });
+      // Short poll interval: fs.watch drops events under parallel-suite load —
+      // assert the poll backstop's semantics ("fires, exactly once"), not
+      // fs.watch delivery timing (the historical ~1/3 flake).
+      const stop = watchOwnLockfile(testRoot, () => { onMissingCalls++; }, 150);
 
       try {
         // User runs `rm ~/.coldstart/daemon/foo.json`.
@@ -106,9 +110,35 @@ describe('daemon-lock', () => {
         const lockFile = fs.readdirSync(dir).find(f => f.endsWith('.json'))!;
         fs.unlinkSync(path.join(dir, lockFile));
 
-        // Wait past debounce + safety. fs.watch on macOS can be sluggish;
-        // give it room.
-        await new Promise(r => setTimeout(r, 500));
+        const deadline = Date.now() + 3_000;
+        while (onMissingCalls === 0 && Date.now() < deadline) {
+          await new Promise(r => setTimeout(r, 50));
+        }
+        await new Promise(r => setTimeout(r, 300)); // window for a double-fire
+        expect(onMissingCalls).toBe(1);
+      } finally {
+        stop();
+      }
+    });
+
+    it('fires onMissing when another keeper overwrites the lock (takeover)', async () => {
+      await writeLock(testRoot, process.pid, '1.4.3');
+
+      let onMissingCalls = 0;
+      // Short poll interval: fs.watch drops events under parallel-suite load
+      // (the reason the poll backstop exists) — the test asserts the backstop,
+      // not event delivery timing.
+      const stop = watchOwnLockfile(testRoot, () => { onMissingCalls++; }, 150);
+
+      try {
+        // A replacement keeper wrote its own pid over ours — the old keeper
+        // must notice (watch event or poll) and shut down exactly once.
+        await writeLock(testRoot, process.pid + 1, '1.4.3');
+        const deadline = Date.now() + 3_000;
+        while (onMissingCalls === 0 && Date.now() < deadline) {
+          await new Promise(r => setTimeout(r, 50));
+        }
+        await new Promise(r => setTimeout(r, 300)); // window for a double-fire
         expect(onMissingCalls).toBe(1);
       } finally {
         stop();

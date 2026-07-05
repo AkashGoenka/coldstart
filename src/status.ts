@@ -19,6 +19,7 @@ import {
   type DaemonLockListing,
 } from './daemon-lock.js';
 import { getCacheDir } from './cache/disk-cache.js';
+import { readKeeperState, readRepairTail, type KeeperEventStamp } from './keeper-state.js';
 
 function fileSize(path: string): string {
   try {
@@ -135,6 +136,34 @@ export async function runStatus(): Promise<void> {
   }
 
   process.stdout.write(lines.join('\n') + '\n');
+
+  // Per-root keeper activity: why the index is (or isn't) fresh, without
+  // digging through the daemon log. Sourced from keeper-state.json +
+  // repair.jsonl beside the cache segments.
+  const stampLine = (label: string, s: KeeperEventStamp | undefined): string | null =>
+    s ? `${label} ${relativeAge(Date.now() - s.at)} (${s.detail})` : null;
+  const detailLines: string[] = [];
+  for (const l of listings) {
+    const root = l.lock.rootDir;
+    if (!root) continue;
+    const state = readKeeperState(root);
+    const repairs = readRepairTail(root, 1);
+    if (!state && repairs.length === 0) continue;
+    const parts = [
+      stampLine('reconcile', state?.lastReconcile),
+      stampLine('patch', state?.lastPatch),
+      stampLine('rebuild', state?.lastRebuild),
+      stampLine('save', state?.lastSave),
+    ].filter((p): p is string => p !== null);
+    if (repairs.length > 0) {
+      const r = repairs[repairs.length - 1];
+      parts.push(`last failure ${relativeAge(Date.now() - r.at)}: ${r.event} (${r.detail})`);
+    }
+    if (parts.length > 0) detailLines.push(`${root}\n  ${parts.join('\n  ')}`);
+  }
+  if (detailLines.length > 0) {
+    process.stdout.write('\n' + detailLines.join('\n') + '\n');
+  }
 
   if (rows.some(r => r.status !== 'alive')) {
     process.stdout.write(

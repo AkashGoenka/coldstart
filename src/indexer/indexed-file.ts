@@ -1,3 +1,4 @@
+import { statSync } from 'node:fs';
 import type { IndexedFile, Language, ParsedFile } from '../types.js';
 
 /**
@@ -22,11 +23,22 @@ export function baseIndexedFile(
   IndexedFile,
   'domainMap' | 'isTestFile' | 'importedByCount' | 'transitiveImportedByCount' | 'isBarrel'
 > {
+  // Fingerprint stamped at parse time: the parser just read this exact content,
+  // so stat-now describes the bytes the index reflects. Reconcile compares
+  // stat-later against this pair to detect edits without hashing.
+  let mtimeMs: number | undefined, sizeBytes: number | undefined;
+  try {
+    const st = statSync(path);
+    mtimeMs = st.mtimeMs;
+    sizeBytes = st.size;
+  } catch { /* raced delete — fingerprint stays absent */ }
   return {
     id,
     path,
     relativePath,
     language,
+    mtimeMs,
+    sizeBytes,
     exports: parsed.exports,
     hasDefaultExport: parsed.hasDefaultExport,
     imports: parsed.imports,

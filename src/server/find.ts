@@ -18,26 +18,39 @@
  * out-rank lookalikes. The skill instructs the agent to pass every salient
  * identifier from the task — that is the load-bearing half of this command.
  */
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import type { CodebaseIndex, IndexedFile, SymbolNode } from '../types.js';
 import { deriveRelatedFiles } from '../indexer/content-tokens.js';
+import { resolveRg, invalidateRg, type RgBinary } from './searcher.js';
 
 /**
  * Candidate search is portable by design — no hard dependency on any external
- * binary. We try fast tools first and fall back to a pure-Node scan so the
- * command never silently returns empty on a machine without ripgrep/grep:
+ * binary. Ripgrep resolution (env var → PATH → bundled @vscode/ripgrep →
+ * editor-app copies) lives in searcher.ts; below it we fall back so the
+ * command never silently returns empty:
  *   rg → git grep → grep → in-process scan of indexed files.
- * The chosen backend is probed once per process.
+ * The chosen backend is probed once per process (rg additionally persists
+ * across processes via ~/.coldstart/searcher.json).
  */
-type Searcher = 'rg' | 'gitgrep' | 'grep' | 'node';
+type Searcher =
+  | { kind: 'rg'; rg: RgBinary }
+  | { kind: 'gitgrep' }
+  | { kind: 'grep' }
+  | { kind: 'node' };
 let _searcher: Searcher | null = null;
 
-function probe(bin: string, args: string[], cwd: string): boolean {
+/** Per-term scans run concurrently up to this cap, each scan single-threaded.
+ * Measured (jmri): 3 concurrent threads=1 git greps ≈ one combined pass (2.85s
+ * vs 2.65s) WITH per-term attribution, vs 0.7-2.5s × N terms sequentially. */
+const SCAN_CONCURRENCY = 4;
+
+function probe(bin: string, args: string[], cwd: string, requireSuccess = false): boolean {
   try {
     execFileSync(bin, args, { cwd, stdio: 'ignore', timeout: 4000 });
     return true;
   } catch (e: unknown) {
+    if (requireSuccess) return false;
     // ENOENT = binary absent (unusable); any other exit = present but errored (usable)
     return (e as { code?: string }).code !== 'ENOENT';
   }
@@ -45,10 +58,15 @@ function probe(bin: string, args: string[], cwd: string): boolean {
 
 function pickSearcher(root: string): Searcher {
   if (_searcher) return _searcher;
-  if (probe('rg', ['--version'], root)) _searcher = 'rg';
-  else if (probe('git', ['rev-parse', '--is-inside-work-tree'], root)) _searcher = 'gitgrep';
-  else if (probe('grep', ['--version'], root)) _searcher = 'grep';
-  else _searcher = 'node';
+  const rg = resolveRg();
+  if (rg) _searcher = { kind: 'rg', rg };
+  // The git probe MUST require exit 0: `rev-parse --is-inside-work-tree` is the
+  // work-tree test itself. With the lenient rule, any non-git root picked
+  // gitgrep, every `git grep` then failed, and find's body-content lane
+  // silently vanished (name/symbol matches only).
+  else if (probe('git', ['rev-parse', '--is-inside-work-tree'], root, true)) _searcher = { kind: 'gitgrep' };
+  else if (probe('grep', ['--version'], root)) _searcher = { kind: 'grep' };
+  else _searcher = { kind: 'node' };
   return _searcher;
 }
 
@@ -160,32 +178,62 @@ export function parseTerms(raw: string): string[] {
   return out;
 }
 
-/** Run the chosen external lister for one term; repo-relative paths ([] on miss/unsupported). */
-function listFilesExternal(searcher: Searcher, root: string, term: string): string[] {
-  const argv: Record<Exclude<Searcher, 'node'>, string[]> = {
-    rg: ['-l', '-i', '-F', '--', term, '.'],
-    // `-c grep.threads=1`: git grep defaults to one worker thread per core; on a
-    // large repo the per-file work is trivial, so the threads thrash on the work
-    // queue and burn the CPU in kernel scheduling (measured: ~15s sys / 100k+
-    // context switches for a 16k-file repo, vs ~1s single-threaded). One thread
-    // is both gentler on the CPU and faster in wall-clock here.
-    // `--untracked`: also search new, uncommitted files — the index includes them
-    // (the keeper watches live edits), but plain `git grep` only sees tracked files.
-    gitgrep: ['-c', 'grep.threads=1', 'grep', '--untracked', '-l', '-i', '-F', '-I', '-e', term],
-    grep: ['-r', '-l', '-i', '-F', '-I', '--', term, '.'],
-  };
-  const bin = searcher === 'gitgrep' ? 'git' : searcher;
-  try {
-    const out = execFileSync(bin, argv[searcher as Exclude<Searcher, 'node'>], {
-      cwd: root,
-      encoding: 'utf8',
-      maxBuffer: 64 * 1024 * 1024,
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    return out.split('\n').map((l) => l.replace(/^\.\//, '').trim()).filter(Boolean);
-  } catch {
-    return []; // non-zero exit = no matches
+/** argv for one single-threaded per-term scan (they parallelize ACROSS terms). */
+function scanArgv(searcher: Exclude<Searcher, { kind: 'node' }>, term: string): { bin: string; args: string[]; argv0?: string } {
+  switch (searcher.kind) {
+    case 'rg':
+      // `-j2`: two worker threads per scan — bounded so N concurrent finds can't
+      // thrash (unbounded default threads was the original mechanism, see PR#46),
+      // but measured on jmri/M1: -j1 3-term recall 1.04s, -j2 0.60s, -j4 0.70s
+      // with sys-time blowup. 12 simultaneous -j2 scans finish in 0.8s — no thrash.
+      // rg skips .gitignore'd + binary files and searches untracked by default.
+      return { bin: searcher.rg.bin, args: ['-l', '-i', '-F', '-j', '2', '--', term, '.'], ...(searcher.rg.argv0 ? { argv0: searcher.rg.argv0 } : {}) };
+    case 'gitgrep':
+      // `-c grep.threads=1`: same bounded-threads reasoning as rg -j1 above.
+      // `--untracked`: also search new, uncommitted files — the index includes them
+      // (the keeper watches live edits), but plain `git grep` only sees tracked files.
+      return { bin: 'git', args: ['-c', 'grep.threads=1', 'grep', '--untracked', '-l', '-i', '-F', '-I', '-e', term] };
+    case 'grep':
+      return { bin: 'grep', args: ['-r', '-l', '-i', '-F', '-I', '--', term, '.'] };
   }
+}
+
+/** Run one external scan; repo-relative paths, [] on no-match, null on SPAWN failure
+ * (binary vanished — distinct from exit 1 so the caller can re-resolve rg). */
+function listFilesExternal(searcher: Exclude<Searcher, { kind: 'node' }>, root: string, term: string): Promise<string[] | null> {
+  const { bin, args, argv0 } = scanArgv(searcher, term);
+  return new Promise((resolve) => {
+    execFile(
+      bin,
+      args,
+      {
+        cwd: root,
+        encoding: 'utf8',
+        maxBuffer: 64 * 1024 * 1024,
+        ...(argv0 ? { argv0 } : {}),
+      },
+      (err, stdout) => {
+        // execFile err: string `code` (ENOENT/EACCES) = spawn-level failure;
+        // numeric `code` = the tool ran and exited non-zero (= no matches).
+        if (err && typeof (err as { code?: unknown }).code === 'string') return resolve(null);
+        resolve((stdout ?? '').split('\n').map((l) => l.replace(/^\.\//, '').trim()).filter(Boolean));
+      },
+    );
+  });
+}
+
+/** Map with a concurrency cap; results stay index-aligned with `items`. */
+async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
 }
 
 /**
@@ -193,7 +241,7 @@ function listFilesExternal(searcher: Searcher, root: string, term: string): stri
  * Node fallback reads each indexed file once and tests all terms together.
  * Only files present in the index count (restricts to indexed code files).
  */
-function collectCoverage(index: CodebaseIndex, root: string, terms: string[]): Map<string, Set<string>> {
+export async function collectCoverage(index: CodebaseIndex, root: string, terms: string[]): Promise<Map<string, Set<string>>> {
   const coverage = new Map<string, Set<string>>();
   const add = (rel: string, term: string): void => {
     if (!index.files.has(rel)) return;
@@ -204,13 +252,29 @@ function collectCoverage(index: CodebaseIndex, root: string, terms: string[]): M
 
   const lowers = terms.map((t) => t.toLowerCase());
 
-  // (A) body-content matches — what grep sees.
-  const searcher = pickSearcher(root);
-  if (searcher !== 'node') {
-    for (const term of terms) {
-      for (const rel of listFilesExternal(searcher, root, term)) add(rel, term);
+  // (A) body-content matches — what grep sees. Terms scan concurrently (capped).
+  let searcher = pickSearcher(root);
+  if (searcher.kind !== 'node') {
+    const s = searcher;
+    let results = await mapLimit(terms, SCAN_CONCURRENCY, (t) => listFilesExternal(s, root, t));
+    if (searcher.kind === 'rg' && results.some((r) => r === null)) {
+      // The persisted rg vanished (app uninstalled, binary moved). Drop the
+      // record, re-resolve the whole chain once, and rerun the scans.
+      invalidateRg();
+      _searcher = null;
+      searcher = pickSearcher(root);
+      if (searcher.kind !== 'node') {
+        const s2 = searcher;
+        results = await mapLimit(terms, SCAN_CONCURRENCY, (t) => listFilesExternal(s2, root, t));
+      } else {
+        results = terms.map(() => []);
+      }
     }
-  } else {
+    for (let i = 0; i < terms.length; i++) {
+      for (const rel of results[i] ?? []) add(rel, terms[i]);
+    }
+  }
+  if (searcher.kind === 'node') {
     // Pure-Node fallback: one read per indexed file, all terms tested at once.
     for (const [rel, file] of index.files.entries()) {
       let text: string;
@@ -373,14 +437,14 @@ function convergencePreview(
   return out;
 }
 
-export function buildRichPage(index: CodebaseIndex, root: string, rawQuery: string, asData = false, via = false): string {
+export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery: string, asData = false, via = false): Promise<string> {
   const terms = parseTerms(rawQuery);
   if (terms.length === 0) {
     return 'find: no usable terms. Pass the salient identifiers from the task, e.g. `coldstart find ResourceInstance principaluser editable`.';
   }
 
   // 1. grep-recall: term → indexed files, accumulate distinct-term coverage.
-  const coverage = collectCoverage(index, root, terms);
+  const coverage = await collectCoverage(index, root, terms);
 
   if (coverage.size === 0) {
     return `find: no indexed file contains any of [${terms.join(', ')}].\nThese identifiers may not exist in the repo, or be in excluded/binary files. Reformulate, or grep directly.`;

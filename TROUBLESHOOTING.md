@@ -5,7 +5,7 @@ Almost every coldstart issue is the **keeper** — the background process that k
 State lives in two independent places:
 
 - `~/.coldstart/daemon/` — one set of `<basename>-<hash>.{json,log,log.prev}` per repo root (lockfile + logs).
-- `~/.coldstart/indexes/<basename>-<hash>/` — cached `meta.json`, `graph.json`, `files-N.json`.
+- `~/.coldstart/indexes/<basename>-<hash>/` — the cache: `meta.json` (commit marker, names the current generation), gzipped `g<N>-…` segments (file table, core chunks, graph, callgraph, build data), `fingerprints.json`, plus two observability files: `keeper-state.json` (last reconcile/patch/rebuild/save) and `repair.jsonl` (failure log).
 
 `<basename>` is your repo's directory name; `<hash>` is the first 16 chars of `sha256(absolute_path)`.
 
@@ -17,14 +17,15 @@ State lives in two independent places:
 coldstart status
 ```
 
-Lists every keeper on the machine — root path, PID, alive/dead, version, and **index freshness** (file count + age, read from the cache `meta.json` mtime). No network probe. This is also the answer to "is my index fresh?".
+Lists every keeper on the machine — root path, PID, alive/dead, version, **index freshness** (file count + age, from the cache `meta.json` mtime), the keeper's last **reconcile / patch / rebuild / save** stamps, and the tail of the **repair log** if anything has failed. No network probe. This answers both "is my index fresh?" and "why / why not?".
 
 ```bash
-coldstart restart        # current repo's keeper — respawns on next lookup
-coldstart restart --all  # every keeper
+coldstart restart              # current repo's keeper — respawns on next lookup
+coldstart restart --root DIR   # a specific repo's keeper, from anywhere
+coldstart restart --all        # every keeper
 ```
 
-`restart` SIGTERMs (5 s grace, then SIGKILL) and clears the lockfile. The next `coldstart find` (or MCP call) spawns a fresh keeper that reloads the cache, or rebuilds if it's missing. **This is the right answer for almost any "something feels off" situation** — suspected stale index, weird output, post-upgrade.
+`restart` SIGTERMs (5 s grace, then SIGKILL) and clears the lockfile. The next `coldstart find` (or MCP call) spawns a fresh keeper, which **reconciles on startup** — it stat-checks every indexed file and diffs against the indexed git HEAD, then patches exactly what changed. So a restarted keeper comes back *correct*, not just alive. **This is the right answer for almost any "something feels off" situation.**
 
 To read the keeper log directly:
 
@@ -32,21 +33,23 @@ To read the keeper log directly:
 tail -f ~/.coldstart/daemon/<basename>-<hash>.log
 ```
 
-Logs rotate at 1 MB; the previous run is in `.log.prev` (read it after a crash + respawn).
+Logs rotate at 1 MB; the previous run is in `.log.prev` (read it after a crash + respawn). For *persistent* failure history use `repair.jsonl` beside the cache — it survives restarts and log rotation, so a keeper that silently rebuilds every hour still shows up.
 
 ---
 
 ## Index seems out of date
 
-The watcher should keep the index current. If it missed an event (rare — happens on some network filesystems, or if the machine was suspended mid-edit):
+This should essentially not happen anymore — there are three layers catching drift:
 
-```bash
-coldstart restart
-```
+1. The **live watcher** patches edits within ~1 s of the debounce settling.
+2. **Startup reconcile** catches everything that changed while no keeper was running (branch switches, pulls, edits during downtime).
+3. A **fingerprint audit** after each save re-checks a rotating sample of files and re-patches drift from watcher-missed events (rare — some network filesystems, suspend mid-edit).
 
-If you changed branches or pulled a large diff, the git-HEAD check should force a rebuild automatically. If it didn't, `restart`.
+If it happens anyway: `coldstart restart` (reconcile catches it), and please file an issue with `coldstart status` output and the repair log — a stale index now indicates a real bug, not a missed TTL.
 
-**To force a full rebuild without restarting**, delete the cache commit marker — the running keeper detects it within ~200 ms and rebuilds in place:
+One true blind spot exists by design: an edit that preserves both a file's mtime **and** its byte size is invisible to reconcile's fingerprint check (the live watcher still catches it if the keeper was running).
+
+**To force a full rebuild without restarting**, delete the cache commit marker — the running keeper detects it and rebuilds in place:
 
 ```bash
 rm ~/.coldstart/indexes/<basename>-<hash>/meta.json
@@ -56,20 +59,20 @@ rm ~/.coldstart/indexes/<basename>-<hash>/meta.json
 
 ## First lookup is slow
 
-There's no separate index step — the first reader for a fresh repo builds the cache lazily. On a large repo (10k+ files, cold cache) that first build can take a while. Two ways to avoid paying it inline:
+There's no inline build anymore: readers **wait for the keeper** rather than building themselves. On a fresh repo the first `find` spawns the keeper and waits for its first save (progress to stderr, up to 3 minutes on very large repos). To avoid paying that inside a query:
 
 ```bash
 coldstart init     # warms the index in the background at setup
 coldstart index    # build + save the cache up front, with progress to stderr
 ```
 
-After either, `find`/`gs` hit a warm cache. `coldstart index` is also the **single-writer prep** step if you want a deterministic, non-lazy build (e.g. in CI).
+After either, `find`/`gs` hit a warm cache. `coldstart index` is also the **single-writer prep** step for deterministic builds (e.g. in CI). If a reader reports waiting and no keeper ever produces a cache, check the keeper log — the build itself is failing.
 
 ---
 
 ## Stale lockfile (keeper died but lock remains)
 
-Symptom: `coldstart status` shows `dead (stale lock)` — the JSON file exists but its PID is gone. Readers *should* detect this and respawn, but to force a clean state:
+Symptom: `coldstart status` shows `dead (stale lock)` — the JSON file exists but its PID is gone. Readers detect this and respawn, but to force a clean state:
 
 ```bash
 coldstart restart
@@ -79,6 +82,8 @@ rm ~/.coldstart/daemon/<basename>-<hash>.spawn   # if present
 ```
 
 The `.log`/`.log.prev` files stay for postmortem. The next lookup spawns a fresh keeper.
+
+The reverse problem — a keeper that *outlives* its lockfile and keeps writing the cache alongside its replacement — is fixed: the keeper polls its own lockfile (30 s backstop on top of `fs.watch`) and exits when the file is gone **or** names a different PID.
 
 ---
 
@@ -94,22 +99,23 @@ rm -rf ~/.coldstart/indexes/<basename>-<hash>
 rm -rf ~/.coldstart/indexes ~/.coldstart/daemon
 ```
 
-coldstart bumps `CACHE_VERSION` (`src/constants.ts`) when the index schema changes, auto-invalidating old caches on the next run. If you upgraded and an old cache is still being read, that's a bug — please file an issue with the version you came from.
+coldstart bumps `CACHE_VERSION` (`src/constants.ts`) when the index schema changes, auto-invalidating old caches on the next run. Saves are **generational** (a fresh `g<N>-` segment set is committed atomically by `meta.json`, and the previous generation is kept), so a torn or mixed-generation read is structurally impossible — if you upgraded and an old cache is still being read, that's a bug; please file an issue with the version you came from.
 
-To force a fresh build for a repo, delete its cache (or just the `meta.json` marker) and run the next lookup — the reader rebuilds on the miss:
-
-```bash
-rm -rf ~/.coldstart/indexes/<basename>-<hash>
-coldstart find <terms>   # rebuilds, then reads
-```
-
-(`--no-cache` is a flag for the keeper / MCP-server invocation, not for `find`/`gs`.)
+After a wipe, the next lookup spawns the keeper, which rebuilds; the reader waits for that first save. (`--no-cache` is a flag for the keeper / MCP-server invocation, not for `find`/`gs`.)
 
 ---
 
 ## Recovering after deleting the cache
 
-Cache recovery is **automatic**. The keeper watches the cache directory and rebuilds if `meta.json` disappears; and any reader lazily rebuilds on a cache miss. You don't need to do anything — the next `find`/`gs` works, just slower for that one call while it rebuilds. `coldstart index` is the manual way to pre-warm it.
+Automatic. The keeper watches the cache directory and rebuilds if `meta.json` disappears (it stands down while its own rebuild/save is in flight, so it never chases its own writes); a reader arriving at a cache miss waits for that rebuild. The next `find`/`gs` works — just slower for that one call. `coldstart index` is the manual pre-warm.
+
+---
+
+## Notebook (kb) issues
+
+- `kb search` returns nothing for a note you can see in `.coldstart/notebook/` → run `coldstart kb lint` (structure problems) and check `kb status`.
+- Freshness marks are all missing (`anchors [unverified]`) right after a keeper spawn → expected; the keeper derives the `kb-notes.json` sidecar on its first save. Query again after a few seconds.
+- A note's Markdown edits vanished → expected: `.md` files are *derived* from the `.raw` log and re-rendered; contribute via `kb write` (or an appended `.raw` record), not by editing the Markdown.
 
 ---
 
@@ -141,8 +147,9 @@ Include:
 - coldstart version (`coldstart --version`)
 - OS and Node.js version
 - Whether it reproduces with `--no-daemon` (isolates keeper vs. indexer bugs)
-- Output of `coldstart status`
+- Output of `coldstart status` (includes the keeper stamps + repair tail)
 - Last 100 lines of the keeper log (`~/.coldstart/daemon/<basename>-<hash>.log`) and `.log.prev` if relevant
+- `~/.coldstart/indexes/<basename>-<hash>/repair.jsonl` if it exists
 - Approximate repo size (file count) and language mix
 
 Issues: https://github.com/AkashGoenka/coldstart/issues

@@ -33,12 +33,17 @@ import { baseIndexedFile } from './indexer/indexed-file.js';
 import { buildContentTokenPostings } from './indexer/content-tokens.js';
 import { buildSymbolEdges } from './indexer/symbol-edges.js';
 import { getGitHead } from './indexer/git.js';
-import { loadCachedIndex, saveCachedIndex, getCacheDir } from './cache/disk-cache.js';
+import { reconcileChanges } from './indexer/reconcile.js';
+import { patchIndex } from './indexer/patch.js';
+import { lintIndexInvariants } from './indexer/invariants.js';
+import { updateKeeperState, appendRepairLog } from './keeper-state.js';
+import { patchThreshold } from './constants.js';
+import { loadCachedIndex, saveCachedIndex, getCacheDir, updateCachedGitHead } from './cache/disk-cache.js';
 import { startMCPServer } from './server/mcp.js';
 import { IndexManager } from './index-manager.js';
 import type { IndexContext } from './index-manager.js';
 import { readLock, writeLock, deleteLock, isDaemonAlive, getCurrentVersion, watchOwnLockfile } from './daemon-lock.js';
-import { ensureKeeper } from './keeper.js';
+import { ensureKeeper, waitForKeeperCache } from './keeper.js';
 import { attachDaemonLogger } from './daemon-log.js';
 import { migrateLegacyMcpConfig } from './migrate.js';
 import type { CodebaseIndex, IndexedFile, SymbolEdge } from './types.js';
@@ -440,13 +445,50 @@ async function buildManager(
   if (!noCache) {
     index = await loadCachedIndex(finalRoot, cacheDir);
     if (index) {
-      const currentHead = await getGitHead(finalRoot);
-      if (currentHead && index.gitHead && currentHead !== index.gitHead) {
-        log(quiet, '[coldstart] Git HEAD changed, rebuilding index...');
+      // Startup reconcile: the cache is trusted but files may have changed
+      // while no keeper watched (branch switch, edits, pulls). Patch the
+      // drift in place — a full rebuild only when the drift is repo-scale.
+      const rec = await reconcileChanges(index, finalRoot, excludes, includes);
+      const threshold = patchThreshold(index.files.size);
+      let outcome: string;
+      if (!rec) {
+        log(quiet, '[coldstart] Reconcile unavailable — rebuilding index...');
+        outcome = 'unavailable → rebuild';
         index = null;
+      } else if (rec.changed.size === 0) {
+        log(quiet, `[coldstart] Loaded from cache — fresh (${rec.reason})`);
+        outcome = `${rec.reason} → fresh`;
+        // HEAD can move with zero file drift (committing files the keeper
+        // already patched). Refresh the stored head or every reader pays the
+        // full HEAD-drift wait on every query, forever.
+        const head = await getGitHead(finalRoot);
+        if (head !== index.gitHead) {
+          index.gitHead = head;
+          try { await updateCachedGitHead(finalRoot, head, cacheDir); } catch { /* next full save fixes it */ }
+        }
+      } else if (rec.changed.size <= threshold) {
+        log(quiet, `[coldstart] Loaded from cache — patching ${rec.changed.size} drifted file(s) (${rec.reason})`);
+        try {
+          await patchIndex(index, rec.changed, finalRoot);
+          const problems = lintIndexInvariants(index);
+          if (problems.length > 0) throw new Error(`invariant violation: ${problems.join(' | ')}`);
+          index.gitHead = await getGitHead(finalRoot);
+          index.indexedAt = Date.now();
+          await saveCachedIndex(index, cacheDir);
+          log(quiet, '[coldstart] Reconcile patch done');
+          outcome = `${rec.reason} → patched`;
+        } catch (err) {
+          log(quiet, `[coldstart] Reconcile patch failed (${err}) — rebuilding index...`);
+          if (!noCache) await appendRepairLog(finalRoot, 'reconcile-failed', String(err), cacheDir);
+          outcome = `${rec.reason} → patch failed, rebuild`;
+          index = null;
+        }
       } else {
-        log(quiet, '[coldstart] Loaded from cache');
+        log(quiet, `[coldstart] ${rec.changed.size} file(s) drifted (> ${threshold}) — rebuilding index...`);
+        outcome = `${rec.reason} → over threshold, rebuild`;
+        index = null;
       }
+      if (!noCache) await updateKeeperState(finalRoot, { lastReconcile: { at: Date.now(), detail: outcome } }, cacheDir);
     }
   }
 
@@ -485,12 +527,19 @@ async function runKeeper(
   excludes: string[],
   includes: string[],
   cacheDir: string | undefined,
-  quiet: boolean,
+  _quiet: boolean,
   noCache: boolean,
 ): Promise<void> {
   // Attach the file-backed logger BEFORE the first log() call: the keeper is
   // auto-spawned with stdio: 'ignore', so the log file is the ONLY debug trace.
   const detachLogger = attachDaemonLogger(finalRoot);
+
+  // The keeper IGNORES --quiet: its stderr goes to the log file, never a
+  // console (readers spawn it with stdio 'ignore'), and an empty log makes
+  // every keeper incident undiagnosable. --quiet keeps its meaning for the
+  // MCP reader / --no-daemon modes, which do write to a real stderr.
+  const quiet = false;
+  void _quiet;
 
   log(quiet, `[coldstart] Keeper starting — root: ${finalRoot} (PID ${process.pid})`);
 
@@ -506,6 +555,7 @@ async function runKeeper(
   // compatibility) on upgrade.
   await writeLock(finalRoot, process.pid, getCurrentVersion());
   log(quiet, `[coldstart] Keeper lock written (PID ${process.pid})`);
+  if (!noCache) await updateKeeperState(finalRoot, { startedAt: Date.now() }, cacheDir);
 
   // Auto-migrate legacy npx-based .mcp.json entries (non-fatal).
   try { await migrateLegacyMcpConfig(finalRoot); } catch { /* ignore */ }
@@ -569,15 +619,32 @@ function makeCacheReader(
   return async () => {
     const m = currentMtime();
     if (!cached || (m > 0 && m > lastMtimeMs)) {
-      const fresh = await loadCachedIndex(finalRoot, cacheDir);
+      // 'gs' profile: everything the MCP tools (find/gs/kb_search) read, without
+      // the keeper-only build segment. The keeper is the only 'full' loader.
+      const fresh = await loadCachedIndex(finalRoot, cacheDir, 'gs');
       if (fresh) {
         cached = fresh;
         lastMtimeMs = m;
       } else if (!cached) {
-        // No cache yet (keeper still building its first index) — build once in
-        // this process so the first call works; the keeper takes over after.
-        cached = await buildIndex(finalRoot, [], [], quiet);
-        try { await saveCachedIndex(cached, cacheDir); } catch { /* ignore */ }
+        // No cache yet (keeper still building its first index). Readers never
+        // build (B4) — wait for the keeper's first save; in-process build only
+        // if no keeper exists at all.
+        const wait = await waitForKeeperCache(finalRoot, cacheDir, 180_000,
+          (msg) => log(quiet, msg));
+        if (wait === 'ready') {
+          for (let attempt = 0; attempt < 3 && !cached; attempt++) {
+            cached = await loadCachedIndex(finalRoot, cacheDir, 'gs');
+            if (!cached) await new Promise((r) => setTimeout(r, 500));
+          }
+        }
+        if (!cached) {
+          if (wait === 'timeout') {
+            throw new Error('coldstart: the keeper is still building the index for this repo — retry in a minute');
+          }
+          log(quiet, '[coldstart] no keeper available — building in-process (one-off)');
+          cached = await buildIndex(finalRoot, [], [], quiet);
+          try { await saveCachedIndex(cached, cacheDir); } catch { /* ignore */ }
+        }
         lastMtimeMs = currentMtime();
       }
     }
@@ -623,6 +690,11 @@ async function main(): Promise<void> {
   if (process.argv[2] === 'index') {
     const { runIndexPrep } = await import('./cli.js');
     process.exit(await runIndexPrep(process.argv.slice(3), buildIndex));
+  }
+  // Notebook KB — `kb search|write|status|lint|render|init|migrate`.
+  if (process.argv[2] === 'kb') {
+    const { runKb } = await import('./kb/cli.js');
+    process.exit(await runKb(process.argv.slice(3)));
   }
 
   const { root: cliRoot, rootExplicit, excludes, includes, cacheDir, quiet, noCache, daemon, noDaemon, probe } = parseArgs(process.argv);
@@ -680,6 +752,7 @@ async function main(): Promise<void> {
         await managerReady;
         return manager!.getContext();
       },
+      { cacheDir },
     );
 
     process.on('exit', () => manager?.stopWatching());
@@ -717,6 +790,7 @@ async function main(): Promise<void> {
         await readerReady;
         return reader!();
       },
+      { cacheDir },
     );
     return;
   }

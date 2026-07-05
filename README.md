@@ -86,6 +86,8 @@ coldstart find auth session cookie
 
 Pass **every salient identifier** from your task — the symbol, the domain noun, the rare token you half-remember — not one distilled keyword. `find` ranks files by how many of your terms each one covers and shows, per file, which terms it defines vs. imports and a preview of the lines where they cluster. Often that's enough to answer without opening anything.
 
+Speed-wise, `find` competes with raw grep: its repo-wide reference pass runs on **ripgrep** — yours from PATH, the bundled copy, or an editor's (`COLDSTART_RG` overrides) — with `git grep`/`grep` fallbacks, and the ranked page comes from the pre-built index, not a scan.
+
 **Flags:**
 - `--path GLOB` — scope to a glob (`--path 'app/**/*.py'`); comma-combine, `!` to exclude.
 - `--tests` — include test files (excluded by default).
@@ -132,20 +134,44 @@ coldstart is **one keeper, thin readers**:
 
 - A single **keeper** process per repo watches the filesystem and keeps the on-disk cache current. It does **not** answer queries.
 - The CLI readers (`find`/`gs`) and the MCP server are **stateless readers** over that cache. The first reader for a repo lazily spawns the keeper, so even uncommitted edits stay live.
+- **Readers never build the index.** On a cache miss they wait for the keeper's build (progress to stderr) instead of silently kicking off a multi-minute build inline — or three of them concurrently.
 - No HTTP, no ports, no bridge. The keeper logs to `~/.coldstart/daemon/<root>.log` and exits when its lockfile is removed.
 
-Edits are debounced (400 ms), then **patched incrementally** (≤30 changed files, ~2–5 ms/file) or trigger a **background full rebuild** (>30 files, served from the last good index until the swap). The cache re-saves ~5 s after edits settle. Branch switches / large pulls force a rebuild via a git-HEAD check.
+**There is no cache TTL.** The index is never discarded for being old — it's kept *correct* instead:
+
+- **While the keeper runs:** edits are debounced (400 ms), then **patched incrementally** (~2–5 ms/file, up to 30 files or 20% of the repo, whichever is larger) or trigger a **background full rebuild** above that (served from the last good index until the swap). The cache re-saves ~5 s after edits settle, in **atomic generations** — a reader can never load a half-written mix of old and new.
+- **When the keeper starts:** it **reconciles** — stat-checks every indexed file against its stored fingerprint (~150 ms even at 16k files) plus a git diff against the indexed HEAD — and patches exactly what changed while nothing was watching. A branch switch that used to force a 96-second rebuild on a 16k-file repo is now a ~3-second patch.
+- **As a backstop:** every patch is lint-checked against index invariants (a violation triggers an automatic rebuild and lands in a repair log that `status` shows), and a rotating fingerprint audit after each save catches watcher-missed events.
 
 ### Lifecycle commands
 
 ```bash
-coldstart status         # list keepers on this machine: alive? index freshness?
-coldstart restart        # kill the current repo's keeper (respawns on next lookup)
-coldstart restart --all  # kill every keeper
-coldstart index          # build + save the cache once, up front (single-writer prep)
+coldstart status              # keepers on this machine: alive? fresh? last patch/rebuild/save? repairs?
+coldstart restart             # kill the current repo's keeper (respawns on next lookup)
+coldstart restart --root DIR  # kill a specific repo's keeper from anywhere
+coldstart restart --all       # kill every keeper
+coldstart index               # build + save the cache once, up front (single-writer prep)
 ```
 
-`restart` is the right move whenever anything feels stale — a fresh keeper reloads the cache (or rebuilds if missing). `status` also covers the old "is my index fresh?" check: it reads the cache `meta.json` mtime, no network probe.
+`restart` is the right move whenever anything feels stale — a fresh keeper reconciles on start, so it comes back *correct*, not just alive. `status` answers "is my index fresh, and why?": liveness, cache age, the keeper's last reconcile/patch/rebuild/save stamps, and the tail of the repair log — no network probe.
+
+---
+
+## Notebook (experimental)
+
+`coldstart kb` is a repo-local notebook written and read by agents — notes about *how this codebase actually works*, captured after real tasks and recalled when a later task matches:
+
+```bash
+coldstart kb search tile save lifecycle   # plain task words, symbols, or file names
+coldstart kb write spec.json              # two-phase: candidates first, then --into <id> or --new
+coldstart kb status / lint / render / init / migrate
+```
+
+- Notes live in `.coldstart/notebook/` — an append-only `.raw` log is the source of truth (commit it; merges are unions); the Markdown notes are derived from it.
+- Notes carry **anchors** into real files/symbols, and coldstart's index stamps each anchor's freshness — a note whose evidence drifted is flagged `[evidence changed]`, not served as truth.
+- Two optional hooks close the loop for Claude-style hosts: a Stop-hook that elicits a note only when the session actually read code deeply, and a prompt-hook that injects matching notes as a compact title + gist block (hard-capped, framed as reference data, never instructions). Nothing matches → nothing injected.
+
+Experimental: `init` doesn't wire the hooks yet, and the design is still settling (the contract lives in an internal design doc).
 
 ---
 

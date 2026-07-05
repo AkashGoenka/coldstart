@@ -4,14 +4,20 @@ Lightweight navigation layer for AI agents. Answers one question: which files ar
 
 **Architecture — one keeper, thin readers.** The query surfaces are stateless readers over an on-disk cache; a single background **keeper** process keeps that cache fresh. It does NOT serve queries.
 - **Keeper** (`coldstart --daemon`, `src/index.ts` runKeeper + `src/index-manager.ts`): watches the repo, patches/rebuilds the index, debounce-saves it to the disk cache. Lazy-spawned by the first reader (`src/keeper.ts` ensureKeeper); logs to `~/.coldstart/daemon/<root>.log`; exits when its lockfile is removed. The lock carries pid/rootDir/version (no port — it serves nothing).
-- **CLI readers** (`coldstart find`/`gs`, `src/cli.ts`): load the cache, run the same engine, print, exit. They `ensureKeeper` so uncommitted edits stay live.
+- **CLI readers** (`coldstart find`/`gs`, `src/cli.ts`): load the cache under a load profile, run the same engine, print, exit. They `ensureKeeper` so uncommitted edits stay live. **Readers NEVER build**: cache miss → wait for the keeper's first save (180 s); git-HEAD drift → wait for its reconcile re-save (12 s); in-process build only on the no-keeper fallback.
 - **MCP reader** (default invocation, `src/server/mcp.ts` + `src/index.ts` makeCacheReader): a long-lived stdio server that reads the keeper's cache and mtime-reloads when it changes. The keeper is the single freshness authority; the server has no watcher of its own.
+
+**Freshness (no TTL — deleted in v18).** Validity = CACHE_VERSION + git HEAD + reconcile + live watcher. At keeper start, `src/indexer/reconcile.ts` stat-walks every indexed file against its `[mtimeMs,size]` fingerprint (stamped in baseIndexedFile) + git-diffs against the indexed HEAD, then patches exactly the changed set (branch switch = ~3 s patch, was a full rebuild). After every patch, `src/indexer/invariants.ts` lints the index (violation → auto-rebuild); after every save, a rotating 50-file fingerprint audit re-patches watcher-missed drift. `keeper-state.json` (last reconcile/patch/rebuild/save) + `repair.jsonl` (failures) sit beside the cache; `status` renders both. The keeper watches its own lockfile with pid-ownership + a 30 s poll backstop (foreign pid → exit).
+
+**`find` speed:** the repo-wide reference scan resolves a real ripgrep (`src/server/searcher.ts`: COLDSTART_RG → PATH → bundled @vscode/ripgrep → editor-app copies; winner persisted in `~/.coldstart/searcher.json`), falling back to git grep → grep → Node scan.
 
 For Rails repos: the Ruby parser emits synthetic edges for `has_many`/`belongs_to`/`has_one`/`has_and_belongs_to_many` (gated to `app/models/`), parses `config/routes.rb` resources, and adds bidirectional controller↔views edges. Polymorphic associations and gem-backed models stay unresolved (runtime DSL).
 
 **Index pipeline:** walk → parse (Tree-sitter for TS/JS/JSX/TSX/Java/Ruby/Python/Go/Rust/C#/PHP/Kotlin/C++/YAML/TOML/XML/Groovy; SFC script blocks extracted from Vue/Svelte/Astro before TS parsing; GraphQL/.env/AngularJS 1.x via regex extractors; Swift/Dart not indexed) → resolve imports → build graph (including cross-file call edge resolution) → save cache.
 
-**Live updates:** the keeper's `fs.watch` listener keeps the cache current. Changes are debounced (400 ms), then either patched incrementally (≤30 files, ~2–5 ms/file) or trigger a full background rebuild (>30 files), and the cache is re-saved ~5 s after edits settle. No restarts required.
+**Live updates:** the keeper's `fs.watch` listener keeps the cache current. Changes are debounced (400 ms), then either patched incrementally (≤ max(30, 20% of repo) files, ~2–5 ms/file) or trigger a full background rebuild, and the cache is re-saved ~5 s after edits settle — in atomic generations (`g<N>-` segments; `meta.json` names the gen and commits last; mixed-generation reads impossible). Patch mirrors the walker's dir rules (hidden/excluded dir segments rejected — the watcher/porcelain can feed paths the walker never would). No restarts required.
+
+**Notebook (`src/kb/`, experimental):** `coldstart kb search|write|status|lint|render|init|migrate`. `.coldstart/notebook/` holds an append-only `.raw` log (source of truth, committed) + derived md notes. kb readers NEVER load the code index — the keeper derives a `kb-notes.json` sidecar (anchor freshness stamps) single-flight at watch start / `.raw` batches / post-save. Two-phase `kb write` (exit 3 = candidates → `--into <id>` or `--new`). Opt-in hooks: `hooks/kb-elicit.mjs` (Stop/SubagentStop capture; deep-reads gate; on SubagentStop derives `<transcript-stem>/subagents/agent-<aid>.jsonl`) + `hooks/kb-recall.mjs` (UserPromptSubmit; strong title/alias/anchor match → compact title+gist block, 6 KB cap, else silence). NOT wired by `init` yet. Contract: `docs/notebook-kb-design.md`.
 
 **Setup:** `coldstart init` asks two things — **experience** (`cli`/`mcp`, also via `--experience`) and **client** (`claude`/`cursor`/`codex`/`other`, also via `--client`; never auto-detected) — then writes a single `coldstart.md` at the repo root (CLI- or MCP-flavored) carrying all agent guidance, and wires the chosen client (`src/init.ts`). **Claude Code:** `@coldstart.md` into CLAUDE.md + find/gs hooks (PostToolUse nudge + PreToolUse find-dedup guard) in `.claude/settings.json` (mcp experience also writes `.mcp.json`). **Codex:** a coldstart section in AGENTS.md + the **same** hooks in `.codex/hooks.json` (Codex shares Claude's hook protocol — same handlers, `.*` match-all; mcp experience also writes `[mcp_servers.coldstart]` into `.codex/config.toml`). **Cursor:** `.cursor/rules/coldstart.mdc` referencing `@coldstart.md` + (mcp) `.cursor/mcp.json` — **no hooks** (its after-tool hooks are notification-only, so the nudge can't be delivered). **Other:** coldstart.md + printed wiring directions. All writers merge idempotently and point at the version-pinned hooks in `~/.coldstart/versions/<v>/`; behavioral hooks need a Claude-style host, so coldstart "works best on Claude Code or Codex." The same hooks ship in the Claude Code plugin. Hook handlers normalize CLI (`coldstart find`/`gs`) and MCP (`mcp__coldstart__find`/`gs`) calls to one code path (`hooks/coldstart-call.mjs`).
 
@@ -20,13 +26,16 @@ Key files:
 - `src/index.ts` — entry point, index pipeline, keeper + MCP-reader wiring
 - `src/keeper.ts` — ensureKeeper (lazy-spawn the background keeper)
 - `src/cli.ts` — CLI readers (`find`/`gs`/`index`)
-- `src/indexer/` — walk / parse / resolve / graph / patch
+- `src/indexer/` — walk / parse / resolve / graph / patch / reconcile / invariants
 - `src/server/find.ts` — the `find` engine (buildRichPage), shared by CLI + MCP
+- `src/server/searcher.ts` — ripgrep resolution for find's scan pass
 - `src/server/tools.ts` — `gs` handler + symbol-body slicing
 - `src/server/mcp.ts` — MCP tool defs + stdio server
 - `src/index-manager.ts` — keeper state machine (watch → patch vs rebuild → save, atomic swap)
 - `src/watcher.ts` — debounced `fs.watch` wrapper
 - `src/status.ts` / `src/restart.ts` — keeper liveness/freshness + lifecycle control
 - `src/init.ts` — coldstart.md generation + CLAUDE.md import wiring
-- `src/cache/disk-cache.ts` — on-disk cache (24 h TTL, safety net only)
+- `src/cache/disk-cache.ts` — on-disk cache v18 (consumer-scoped gzipped segments, generations, load profiles, NO TTL)
+- `src/keeper-state.ts` — keeper-state.json + repair.jsonl (observability beside the cache)
+- `src/kb/` — notebook: store / raw-log / fold / render / search / write / freshness / notes-index / lint / cli
 - `src/types.ts`, `src/constants.ts`

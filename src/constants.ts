@@ -92,14 +92,24 @@ export const DEFAULT_EXCLUDES = new Set([
   "bower_components", // legacy JS
   "generated",
   "__generated__",
+  "notebook", // coldstart knowledge-base/memory notes — surfaced via find's KB section, never indexed as code (would out-rank real source)
 ]);
 
 // Cache version — bump when index schema changes to force re-index
-export const CACHE_VERSION = "17.0.0";
+// 18.0.0: consumer-scoped gzipped segments + fileId table + fingerprints;
+// TTL deleted (validity = version + git HEAD + the keeper's live watcher).
+// 18.1.0: generation-prefixed segments (g<N>-*) + gen in meta.json. Bumped so
+// no pre-generation cache survives — removes the mixed-format sweep window
+// entirely (18.0.0 never shipped beyond dev machines).
+export const CACHE_VERSION = "18.1.0";
 
 // Incremental patch threshold: if <= this many files changed, patch in place.
-// Above this, trigger a full rebuild (covers large AI agent write bursts, refactors, branch merges).
-export const PATCH_THRESHOLD = 30;
-
-// Cache TTL: 24h safety net. Primary freshness signal is now the file watcher.
-export const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+// Above this, trigger a full rebuild. Relative to repo size — patching is
+// ~2-5ms/file, so a flat cap punishes big repos: 30 files is 0.2% of jmri but
+// a full rebuild there is 96s. Floor of 30 keeps tiny repos rebuilding early
+// (patch overhead ≈ rebuild there anyway).
+export const PATCH_THRESHOLD_FLOOR = 30;
+export const PATCH_THRESHOLD_RATIO = 0.2;
+export function patchThreshold(fileCount: number): number {
+  return Math.max(PATCH_THRESHOLD_FLOOR, Math.ceil(fileCount * PATCH_THRESHOLD_RATIO));
+}
