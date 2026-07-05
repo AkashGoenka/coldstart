@@ -52,6 +52,8 @@ const FIND_RE = /coldstart\s+find\b|index\.js\s+find\b/;
 // coldstart gs (the GOOD reader — slices symbol bodies): read-equivalent for the
 // spiral, but with its own abuse modes (over-slice, re-guess after a menu fallback).
 const GS_RE = /coldstart\s+gs\b|index\.js\s+gs\b/;
+// coldstart kb (notebook search/write) — proves the session is coldstart-aware.
+const KB_RE = /coldstart\s+kb\b|index\.js\s+kb\b/;
 // the gs menu-fallback marker (printed when --symbol isn't a declared symbol)
 const GS_FALLBACK_RE = /NOT a declared symbol here|no declared symbol matches/;
 // search/shell that ISN'T coldstart find/gs — the spiral surface
@@ -135,6 +137,7 @@ export default function handle(input) {
   // classify this call
   const isFind = tool === "Bash" && FIND_RE.test(cmd);
   const isGs = tool === "Bash" && GS_RE.test(cmd);
+  const isKb = tool === "Bash" && KB_RE.test(cmd);
   let gsFile = "";
   if (isGs) {
     const gm = GS_FILE_RE.exec(cmd);
@@ -142,11 +145,11 @@ export default function handle(input) {
   }
   const prevFallback = st.last_gs_fallback || ""; // set by the PREVIOUS gs call's output
   const isRead = tool === "Read";
-  // gs/find are tools, not the grep-spiral, even when piped to head/grep
+  // gs/find/kb are tools, not the grep-spiral, even when piped to head/grep
   const isSearch =
     tool === "Grep" ||
     tool === "Glob" ||
-    (tool === "Bash" && !isFind && !isGs && SEARCH_RE.test(cmd));
+    (tool === "Bash" && !isFind && !isGs && !isKb && SEARCH_RE.test(cmd));
   const isNonfindShell = isSearch;
 
   const _ob = out !== null && out !== undefined ? out.trim().toLowerCase() : null;
@@ -158,6 +161,13 @@ export default function handle(input) {
       _ob === "no files found");
 
   st.total += 1;
+  // seen_find gates the spiral detectors (3/3b): they stay silent for sessions that
+  // never touch coldstart at all (deliberate — this hook must not nag non-users).
+  // Any coldstart surface proves awareness: find (set below on the find branch),
+  // gs, a kb call, or a kb-recall injection (kb-recall.mjs pre-seeds this flag) —
+  // a note-implanted session may legitimately skip `find` because the note handed
+  // it the files, and it still needs the anti-grep-spiral coverage (the q23 case).
+  if (isGs || isKb) st.seen_find = true;
   const msgs = []; // [priority, text]; lower priority number = more urgent, wins
 
   // --- evidence: what files THIS call touched, and which are genuinely NEW ---

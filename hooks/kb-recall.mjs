@@ -25,7 +25,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, appendFileSync } from "node:fs";
+import { existsSync, appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -118,6 +118,23 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     // host (and mostly ignored). Gist pages are ~1KB, implant pages ~3-5KB;
     // never exceed 8.5KB.
     if (block.length > 8500) block = block.slice(0, 8500) + "\n…(truncated)";
+
+    // Arm the PostToolUse nudge detectors (nudge-handler.mjs gates its spiral
+    // detectors on seen_find so it never nags sessions that don't use coldstart).
+    // An injected session IS coldstart-aware even if it never runs `find` — the
+    // implanted note may hand it the files directly, and exactly those sessions
+    // grep-spiral unguarded otherwise. Path/shape must match the handler's state
+    // file: literal /tmp + main-agent key = session_id.
+    try {
+      const sid = String(input.session_id || "");
+      if (sid && /^[\w-]+$/.test(sid)) {
+        const sf = `/tmp/find_nudge_${sid}.json`;
+        let st = {};
+        try { st = JSON.parse(readFileSync(sf, "utf8")); } catch { /* fresh */ }
+        st.seen_find = true;
+        writeFileSync(sf, JSON.stringify(st));
+      }
+    } catch { /* fail-open: arming is best-effort */ }
 
     log(`INJECT bytes=${block.length} full=${implanted ? 1 : 0}`);
     process.stdout.write(JSON.stringify({
