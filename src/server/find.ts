@@ -167,6 +167,17 @@ function computeImportRelations(index: CodebaseIndex, candidates: string[]): Map
   return rels;
 }
 
+/** Separator-fold for the NAME/PATH/SYMBOL channels: query vocabulary and code
+ * naming disagree on separators for the same compound — `spatial-view` vs
+ * `spatial_view` vs `SpatialView` vs `spatialview` are one concept. Folding
+ * `-`/`_` out of BOTH sides makes those channels separator-invariant (a strict
+ * superset of the literal matches). Body/grep matching stays literal — text is
+ * matched as written. (Root-caused from the q16 three-arm trace: the gold
+ * migration ranked tail-[1/3] purely because the agent hyphenated its query.) */
+export function foldSep(s: string): string {
+  return s.replace(/[-_]/g, '');
+}
+
 /** Clean a raw query into distinct, matchable terms (identifiers ≥3 chars). */
 export function parseTerms(raw: string): string[] {
   const out: string[] = [];
@@ -293,11 +304,13 @@ export async function collectCoverage(index: CodebaseIndex, root: string, terms:
   // or a declared symbol name is invisible to a body-content grep; without this
   // it sinks into a wall of equal-coverage lookalikes. This restores the
   // declared-name index that the two-tool GO surface ranked on.
+  // Separator-folded: `spatial-view` must hit `spatial_view_…filter.py`.
+  const folded = lowers.map(foldSep);
   for (const [rel, file] of index.files.entries()) {
-    const path = rel.toLowerCase();
+    const fpath = foldSep(rel.toLowerCase());
     for (let i = 0; i < terms.length; i++) {
-      const t = lowers[i];
-      if (path.includes(t) || file.symbols.some((s) => s.name.toLowerCase().includes(t))) {
+      const t = folded[i];
+      if (fpath.includes(t) || file.symbols.some((s) => foldSep(s.name.toLowerCase()).includes(t))) {
         add(rel, terms[i]);
       }
     }
@@ -457,8 +470,8 @@ export function buildNoteMap(root: string, lterms: string[]): Map<string, { note
     // Hub files anchor many notes — pick the one the QUERY is about (term
     // hits on the note's declared identity), not just the "best" type. An
     // off-topic annotation on a hub file is noise, not evidence.
-    const name = [note.title, ...note.aliases].join(' ').toLowerCase();
-    const hits = lterms.filter((t) => name.includes(t)).length;
+    const name = foldSep([note.title, ...note.aliases].join(' ').toLowerCase());
+    const hits = lterms.filter((t) => name.includes(foldSep(t))).length;
     for (const a of note.anchors) {
       const cur = out.get(a.path);
       if (cur && (cur.hits > hits || (cur.hits === hits && cur.rank <= rank))) continue;
@@ -501,6 +514,7 @@ export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery
   const df = docFreq(coverage, terms);
   const nFiles = index.files.size;
   const lterms = terms.map((t) => t.toLowerCase());
+  const flterms = lterms.map(foldSep); // name/path/symbol channels match separator-folded
   const rareTerms = terms.filter((t) => (df.get(t) ?? nFiles) / nFiles < RARE_FRAC);
 
   // Rarity (BM25-style IDF): a term hitting few files is a discriminator; a common domain
@@ -523,13 +537,13 @@ export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery
     let v = scoreCache.get(rel);
     if (v !== undefined) return v;
     const file = index.files.get(rel)!;
-    const pathLow = rel.toLowerCase();
+    const fpathLow = foldSep(rel.toLowerCase());
     let boost = 0;
     for (let k = 0; k < terms.length; k++) {
-      const t = lterms[k];
+      const t = flterms[k];
       if (!t) continue;
-      if (file.symbols.some((s) => s.name.toLowerCase().includes(t))) boost += NAME_W * idf(terms[k]);
-      if (pathLow.includes(t)) boost += PATH_W * idf(terms[k]);
+      if (file.symbols.some((s) => foldSep(s.name.toLowerCase()).includes(t))) boost += NAME_W * idf(terms[k]);
+      if (fpathLow.includes(t)) boost += PATH_W * idf(terms[k]);
     }
     v = coverage.get(rel)!.size * 3 + boost / maxIdf;
     scoreCache.set(rel, v);
@@ -555,11 +569,11 @@ export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery
   // to an out-edge whose target file is named for the term or declares a symbol of that name. Cheap:
   // walks only this file's out-edges. Lets the sentence say "imports X" (consumer) vs "mentions X".
   const importTargetFor = (rel: string, term: string): string | null => {
-    const tl = term.toLowerCase();
+    const tl = foldSep(term.toLowerCase());
     for (const tgt of index.outEdges.get(rel) ?? []) {
-      if (tgt.toLowerCase().includes(tl)) return tgt;
+      if (foldSep(tgt.toLowerCase()).includes(tl)) return tgt;
       const tf = index.files.get(tgt);
-      if (tf && tf.symbols.some((s) => s.name.toLowerCase().includes(tl))) return tgt;
+      if (tf && tf.symbols.some((s) => foldSep(s.name.toLowerCase()).includes(tl))) return tgt;
     }
     return null;
   };
@@ -586,13 +600,13 @@ export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery
     const discSet = new Set(discTermIdx.map((k) => lterms[k]));
     const rows = ranked.slice(0, 40).map(([rel]) => {
       const file = index.files.get(rel)!;
-      const pathLow = rel.toLowerCase();
+      const fpathLow = foldSep(rel.toLowerCase());
       const defines: string[] = [], inPath: string[] = [];
       for (let k = 0; k < terms.length; k++) {
-        const t = lterms[k];
+        const t = flterms[k];
         if (!t) continue;
-        if (file.symbols.some((s) => s.name.toLowerCase().includes(t))) defines.push(terms[k]);
-        if (pathLow.includes(t)) inPath.push(terms[k]);
+        if (file.symbols.some((s) => foldSep(s.name.toLowerCase()).includes(t))) defines.push(terms[k]);
+        if (fpathLow.includes(t)) inPath.push(terms[k]);
       }
       // does a DISCRIMINATING term bind to a declared symbol here? (Signal 1)
       const defsDisc = defines.filter((t) => discSet.has(t.toLowerCase()));
@@ -611,8 +625,8 @@ export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery
     const file = index.files.get(rel)!;
     if (file.lineCount < MATCHED_SYM_MIN_LINES) return [];
     const hits = file.symbols.filter((s) => {
-      const nl = s.name.toLowerCase();
-      return discTermIdx.some((k) => nl.includes(lterms[k]));
+      const nl = foldSep(s.name.toLowerCase());
+      return discTermIdx.some((k) => nl.includes(flterms[k]));
     });
     if (hits.length === 0) return [];
     // drop a symbol if it strictly contains another matched symbol (keep the inner, specific one)
@@ -622,8 +636,8 @@ export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery
     // rank by rarity-weighted term match (Σ idf of distinct discriminating terms in the name), so the
     // most query-specific methods win the cap; tiebreak by line order for readability.
     const symScore = (s: { name: string }): number => {
-      const nl = s.name.toLowerCase();
-      return discTermIdx.reduce((acc, k) => acc + (nl.includes(lterms[k]) ? idf(terms[k]) : 0), 0);
+      const nl = foldSep(s.name.toLowerCase());
+      return discTermIdx.reduce((acc, k) => acc + (nl.includes(flterms[k]) ? idf(terms[k]) : 0), 0);
     };
     return specific
       .sort((a, b) => symScore(b) - symScore(a) || a.startLine - b.startLine)
@@ -642,15 +656,15 @@ export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery
     const cached = evCache.get(rel);
     if (cached) return cached;
     const file = index.files.get(rel)!;
-    const pathLow = rel.toLowerCase();
+    const fpathLow = foldSep(rel.toLowerCase());
     const matched = coverage.get(rel)!;
     const declares: string[] = [], inPath: string[] = [], mentions: string[] = [];
     const imports: Array<{ term: string; from: string }> = [];
     for (let k = 0; k < terms.length; k++) {
       const t = terms[k];
       if (!matched.has(t)) continue;
-      if (file.symbols.some((s) => s.name.toLowerCase().includes(lterms[k]))) { declares.push(t); continue; }
-      if (pathLow.includes(lterms[k])) { inPath.push(t); continue; }
+      if (file.symbols.some((s) => foldSep(s.name.toLowerCase()).includes(flterms[k]))) { declares.push(t); continue; }
+      if (fpathLow.includes(flterms[k])) { inPath.push(t); continue; }
       if (!rareSet.has(t)) continue; // common body-only term → noise, omit
       const tgt = importTargetFor(rel, t);
       if (tgt) imports.push({ term: t, from: tgt });
