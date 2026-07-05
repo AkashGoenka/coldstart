@@ -21,8 +21,11 @@
 import { execFile, execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import type { CodebaseIndex, IndexedFile, SymbolNode } from '../types.js';
+import type { FoldedNote } from '../kb/types.js';
 import { deriveRelatedFiles } from '../indexer/content-tokens.js';
 import { resolveRg, invalidateRg, type RgBinary } from './searcher.js';
+import { loadAll, notebookExists } from '../kb/store.js';
+import { stampAnchors } from '../kb/freshness.js';
 
 /**
  * Candidate search is portable by design — no hard dependency on any external
@@ -437,6 +440,51 @@ function convergencePreview(
   return out;
 }
 
+// Notebook lane: agent-authored knowledge about a previewed file, shown at
+// the point where the read decision is made (49% of gold answer files were
+// note-anchored after one 27-question run). Evidence, not instruction — a
+// title + gist + freshness stamp; whether the file still needs opening stays
+// the agent's call. One note per file: file-note summary beats flow-step role
+// beats lesson title.
+export function buildNoteMap(root: string, lterms: string[]): Map<string, { note: FoldedNote; role?: string }> {
+  const out = new Map<string, { note: FoldedNote; role?: string; rank: number; hits: number }>();
+  if (!notebookExists(root)) return out;
+  let notes: FoldedNote[];
+  try { notes = loadAll(root).notes; } catch { return out; }
+  for (const note of notes) {
+    if (note.status !== 'active') continue;
+    const rank = note.type === 'file' ? 0 : note.type === 'flow' ? 1 : 2;
+    // Hub files anchor many notes — pick the one the QUERY is about (term
+    // hits on the note's declared identity), not just the "best" type. An
+    // off-topic annotation on a hub file is noise, not evidence.
+    const name = [note.title, ...note.aliases].join(' ').toLowerCase();
+    const hits = lterms.filter((t) => name.includes(t)).length;
+    for (const a of note.anchors) {
+      const cur = out.get(a.path);
+      if (cur && (cur.hits > hits || (cur.hits === hits && cur.rank <= rank))) continue;
+      const role = note.type === 'flow' ? note.steps.find((s) => s.path === a.path)?.role : undefined;
+      out.set(a.path, { note, role, rank, hits });
+    }
+  }
+  return out;
+}
+
+export function noteLine(root: string, rel: string, entry: { note: FoldedNote; role?: string }): string {
+  const { note, role } = entry;
+  const clamp = (s: string, n: number): string => {
+    const t = s.replace(/\s+/g, ' ').trim();
+    return t.length > n ? t.slice(0, n) + '…' : t;
+  };
+  const gist =
+    note.type === 'flow' ? `part of "${clamp(note.title, 80)}"${role ? ` — ${clamp(role, 90)}` : ''}` :
+    note.type === 'file' ? clamp(note.summary || note.title, 150) :
+    `${note.kind ?? 'lesson'}: ${clamp(note.title, 130)}`;
+  const anchor = note.anchors.find((a) => a.path === rel);
+  const state = anchor ? stampAnchors(root, [anchor])[0]?.state : undefined;
+  const fresh = state === 'fresh' ? ' [fresh]' : state === 'changed' || state === 'missing' ? ' [evidence changed]' : '';
+  return `   Note:  ${gist}${fresh} · kb: ${note.id}`;
+}
+
 export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery: string, asData = false, via = false): Promise<string> {
   const terms = parseTerms(rawQuery);
   if (terms.length === 0) {
@@ -700,6 +748,7 @@ export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery
       "Several of these top files reference each other (see Wired: below) — they're likely one connected answer set; the connected files belong in your answer even if you don't open each one.",
     );
   }
+  const noteMap = buildNoteMap(root, lterms);
   detailSet.forEach(([rel, ts]) => {
     const file = index.files.get(rel)!;
     lines.push('');
@@ -710,6 +759,8 @@ export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery
     if (syms.length) lines.push(`   Read:  ${syms.join(', ')}`);
     const rt = relText(rel, via);
     if (rt) lines.push(`   Wired: ${rt}`);
+    const noted = noteMap.get(rel);
+    if (noted) lines.push(noteLine(root, rel, noted));
     const specToTarget = index.edges
       .filter((e) => e.from === rel)
       .map((e) => ({ spec: e.specifier, target: index.files.get(e.to)?.relativePath ?? e.to }));
