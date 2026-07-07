@@ -21,8 +21,12 @@
 import { execFile, execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import type { CodebaseIndex, IndexedFile, SymbolNode } from '../types.js';
+import type { FoldedNote } from '../kb/types.js';
 import { deriveRelatedFiles } from '../indexer/content-tokens.js';
 import { resolveRg, invalidateRg, type RgBinary } from './searcher.js';
+import { loadAll, notebookExists } from '../kb/store.js';
+import { NOTES_REL } from '../kb/raw-log.js';
+import { stampAnchors } from '../kb/freshness.js';
 
 /**
  * Candidate search is portable by design — no hard dependency on any external
@@ -164,6 +168,17 @@ function computeImportRelations(index: CodebaseIndex, candidates: string[]): Map
   return rels;
 }
 
+/** Separator-fold for the NAME/PATH/SYMBOL channels: query vocabulary and code
+ * naming disagree on separators for the same compound — `spatial-view` vs
+ * `spatial_view` vs `SpatialView` vs `spatialview` are one concept. Folding
+ * `-`/`_` out of BOTH sides makes those channels separator-invariant (a strict
+ * superset of the literal matches). Body/grep matching stays literal — text is
+ * matched as written. (Root-caused from the q16 three-arm trace: the gold
+ * migration ranked tail-[1/3] purely because the agent hyphenated its query.) */
+export function foldSep(s: string): string {
+  return s.replace(/[-_]/g, '');
+}
+
 /** Clean a raw query into distinct, matchable terms (identifiers ≥3 chars). */
 export function parseTerms(raw: string): string[] {
   const out: string[] = [];
@@ -290,11 +305,13 @@ export async function collectCoverage(index: CodebaseIndex, root: string, terms:
   // or a declared symbol name is invisible to a body-content grep; without this
   // it sinks into a wall of equal-coverage lookalikes. This restores the
   // declared-name index that the two-tool GO surface ranked on.
+  // Separator-folded: `spatial-view` must hit `spatial_view_…filter.py`.
+  const folded = lowers.map(foldSep);
   for (const [rel, file] of index.files.entries()) {
-    const path = rel.toLowerCase();
+    const fpath = foldSep(rel.toLowerCase());
     for (let i = 0; i < terms.length; i++) {
-      const t = lowers[i];
-      if (path.includes(t) || file.symbols.some((s) => s.name.toLowerCase().includes(t))) {
+      const t = folded[i];
+      if (fpath.includes(t) || file.symbols.some((s) => foldSep(s.name.toLowerCase()).includes(t))) {
         add(rel, terms[i]);
       }
     }
@@ -437,6 +454,100 @@ function convergencePreview(
   return out;
 }
 
+// Notebook lane: agent-authored knowledge about a previewed file, shown at
+// the point where the read decision is made (49% of gold answer files were
+// note-anchored after one 27-question run). Evidence, not instruction — a
+// title + gist + freshness stamp; whether the file still needs opening stays
+// the agent's call. One note per file: file-note summary beats flow-step role
+// beats lesson title.
+export function buildNoteMap(root: string, lterms: string[]): Map<string, { note: FoldedNote; role?: string }> {
+  const out = new Map<string, { note: FoldedNote; role?: string; rank: number; hits: number }>();
+  if (!notebookExists(root)) return out;
+  let notes: FoldedNote[];
+  try { notes = loadAll(root).notes; } catch { return out; }
+  for (const note of notes) {
+    if (note.status !== 'active') continue;
+    const rank = note.type === 'file' ? 0 : note.type === 'flow' ? 1 : 2;
+    // Hub files anchor many notes — pick the one the QUERY is about (term
+    // hits on the note's declared identity), not just the "best" type. An
+    // off-topic annotation on a hub file is noise, not evidence. A file
+    // note's identity includes its facet SYMBOLS: a query naming GraphModel
+    // is about the models.py file note even though its title is just the
+    // path — without them, any flow sharing one query word steals the slot
+    // from the note that holds the answer.
+    const name = foldSep([note.title, ...note.aliases,
+      ...(note.type === 'file' ? note.facets.map((f) => f.symbol) : [])].join(' ').toLowerCase());
+    const hits = lterms.filter((t) => name.includes(foldSep(t))).length;
+    for (const a of note.anchors) {
+      const cur = out.get(a.path);
+      if (cur && (cur.hits > hits || (cur.hits === hits && cur.rank <= rank))) continue;
+      const role = note.type === 'flow' ? note.steps.find((s) => s.path === a.path)?.role : undefined;
+      out.set(a.path, { note, role, rank, hits });
+    }
+  }
+  return out;
+}
+
+/** First sentence (or first ~n chars) of a prose blob — the agent-authored
+ *  summary opener, which prompt v4 makes carry the file's non-obvious point. */
+function firstSentence(s: string, n: number): string {
+  const t = s.replace(/\s+/g, ' ').trim();
+  const stop = t.search(/[.!?](\s|$)/);
+  const cut = stop >= 20 ? t.slice(0, stop + 1) : t;
+  return cut.length > n ? cut.slice(0, n) + '…' : cut;
+}
+
+/** Empty line → the caller drops it: a Summary: that only restates the path is
+ *  noise, not evidence (a file note's title IS the path).
+ *  `summary` — the gist is summary-grade prose (a single's body sentence or a
+ *  query-matched facet detail): a past agent's verified description of THIS
+ *  file. find then drops the convergence preview for the file — the summary
+ *  IS the preview (user ruling 2026-07-06: file summaries live in find; flows
+ *  live in kb search). Stale notes still surface — most of a note survives
+ *  an edit — with [evidence changed] marking what to re-verify. */
+export function noteLine(root: string, rel: string, entry: { note: FoldedNote; role?: string }, lterms: string[] = []): { line: string; summary: boolean } {
+  const { note, role } = entry;
+  const clamp = (s: string, n: number): string => {
+    const t = s.replace(/\s+/g, ' ').trim();
+    return t.length > n ? t.slice(0, n) + '…' : t;
+  };
+  let gist = '';
+  let summary = false;
+  if (note.type === 'flow') {
+    // Full role text — the step role is the flow's statement about THIS
+    // file, and a clamp cuts exactly at the payload (q8 replay evidence).
+    const roleTxt = role ? role.replace(/\s+/g, ' ').trim() : '';
+    gist = `part of "${clamp(note.title, 80)}"${roleTxt ? ` — ${roleTxt}` : ''}`;
+  } else if (note.type === 'file') {
+    // Hub whose facet the query names → that facet's FULL detail (it replaces
+    // the preview, so untruncated is still a net page shrink; a clamp only
+    // hides the payload — 11-transcript replay showed agents never fetch the
+    // full note off a teaser line). Single → the WHOLE body: at ~400B the
+    // body IS the note (user ruling 2026-07-07). Otherwise the hub's symbol
+    // inventory (what the note knows, one lookup away).
+    const matched = lterms.length
+      ? note.facets.find((f) => { const fs = foldSep(f.symbol.toLowerCase()); return lterms.some((t) => fs.includes(foldSep(t))); })
+      : undefined;
+    const prose = (note.summary || note.body || '').replace(/\s+/g, ' ').trim();
+    if (matched) { gist = `${matched.symbol} — ${matched.detail.replace(/\s+/g, ' ').trim()}`; summary = true; }
+    else if (prose && note.character === 'single') { gist = prose; summary = true; }
+    else if (prose) { gist = firstSentence(prose, 220); summary = true; }
+    else if (note.facets.length) gist = clamp(`facets: ${note.facets.map((f) => f.symbol).join(', ')}`, 150);
+    else if (note.aliases.length) gist = clamp(note.aliases[0], 120);
+    else return { line: '', summary: false }; // nothing beyond the path — silence over noise
+  } else {
+    gist = `${note.kind ?? 'lesson'}: ${clamp(note.title, 130)}`;
+  }
+  const anchor = note.anchors.find((a) => a.path === rel);
+  const state = anchor ? stampAnchors(root, [anchor])[0]?.state : undefined;
+  const fresh = state === 'fresh' ? ' [fresh]' : state === 'changed' || state === 'missing' ? ' [evidence changed]' : '';
+  // "Summary:" (user ruling 2026-07-08): a past agent's high-level overview of
+  // THIS file — and the full note is a real markdown file the reader can open
+  // directly. A path is the one pointer agents reliably follow (grep→Read is
+  // trained-in; "re-search by title words" measurably is not).
+  return { line: `   Summary: ${gist}${fresh} · full note: ${NOTES_REL}/${note.id}.md`, summary };
+}
+
 export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery: string, asData = false, via = false): Promise<string> {
   const terms = parseTerms(rawQuery);
   if (terms.length === 0) {
@@ -453,6 +564,7 @@ export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery
   const df = docFreq(coverage, terms);
   const nFiles = index.files.size;
   const lterms = terms.map((t) => t.toLowerCase());
+  const flterms = lterms.map(foldSep); // name/path/symbol channels match separator-folded
   const rareTerms = terms.filter((t) => (df.get(t) ?? nFiles) / nFiles < RARE_FRAC);
 
   // Rarity (BM25-style IDF): a term hitting few files is a discriminator; a common domain
@@ -475,13 +587,13 @@ export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery
     let v = scoreCache.get(rel);
     if (v !== undefined) return v;
     const file = index.files.get(rel)!;
-    const pathLow = rel.toLowerCase();
+    const fpathLow = foldSep(rel.toLowerCase());
     let boost = 0;
     for (let k = 0; k < terms.length; k++) {
-      const t = lterms[k];
+      const t = flterms[k];
       if (!t) continue;
-      if (file.symbols.some((s) => s.name.toLowerCase().includes(t))) boost += NAME_W * idf(terms[k]);
-      if (pathLow.includes(t)) boost += PATH_W * idf(terms[k]);
+      if (file.symbols.some((s) => foldSep(s.name.toLowerCase()).includes(t))) boost += NAME_W * idf(terms[k]);
+      if (fpathLow.includes(t)) boost += PATH_W * idf(terms[k]);
     }
     v = coverage.get(rel)!.size * 3 + boost / maxIdf;
     scoreCache.set(rel, v);
@@ -507,11 +619,11 @@ export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery
   // to an out-edge whose target file is named for the term or declares a symbol of that name. Cheap:
   // walks only this file's out-edges. Lets the sentence say "imports X" (consumer) vs "mentions X".
   const importTargetFor = (rel: string, term: string): string | null => {
-    const tl = term.toLowerCase();
+    const tl = foldSep(term.toLowerCase());
     for (const tgt of index.outEdges.get(rel) ?? []) {
-      if (tgt.toLowerCase().includes(tl)) return tgt;
+      if (foldSep(tgt.toLowerCase()).includes(tl)) return tgt;
       const tf = index.files.get(tgt);
-      if (tf && tf.symbols.some((s) => s.name.toLowerCase().includes(tl))) return tgt;
+      if (tf && tf.symbols.some((s) => foldSep(s.name.toLowerCase()).includes(tl))) return tgt;
     }
     return null;
   };
@@ -538,13 +650,13 @@ export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery
     const discSet = new Set(discTermIdx.map((k) => lterms[k]));
     const rows = ranked.slice(0, 40).map(([rel]) => {
       const file = index.files.get(rel)!;
-      const pathLow = rel.toLowerCase();
+      const fpathLow = foldSep(rel.toLowerCase());
       const defines: string[] = [], inPath: string[] = [];
       for (let k = 0; k < terms.length; k++) {
-        const t = lterms[k];
+        const t = flterms[k];
         if (!t) continue;
-        if (file.symbols.some((s) => s.name.toLowerCase().includes(t))) defines.push(terms[k]);
-        if (pathLow.includes(t)) inPath.push(terms[k]);
+        if (file.symbols.some((s) => foldSep(s.name.toLowerCase()).includes(t))) defines.push(terms[k]);
+        if (fpathLow.includes(t)) inPath.push(terms[k]);
       }
       // does a DISCRIMINATING term bind to a declared symbol here? (Signal 1)
       const defsDisc = defines.filter((t) => discSet.has(t.toLowerCase()));
@@ -563,8 +675,8 @@ export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery
     const file = index.files.get(rel)!;
     if (file.lineCount < MATCHED_SYM_MIN_LINES) return [];
     const hits = file.symbols.filter((s) => {
-      const nl = s.name.toLowerCase();
-      return discTermIdx.some((k) => nl.includes(lterms[k]));
+      const nl = foldSep(s.name.toLowerCase());
+      return discTermIdx.some((k) => nl.includes(flterms[k]));
     });
     if (hits.length === 0) return [];
     // drop a symbol if it strictly contains another matched symbol (keep the inner, specific one)
@@ -574,8 +686,8 @@ export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery
     // rank by rarity-weighted term match (Σ idf of distinct discriminating terms in the name), so the
     // most query-specific methods win the cap; tiebreak by line order for readability.
     const symScore = (s: { name: string }): number => {
-      const nl = s.name.toLowerCase();
-      return discTermIdx.reduce((acc, k) => acc + (nl.includes(lterms[k]) ? idf(terms[k]) : 0), 0);
+      const nl = foldSep(s.name.toLowerCase());
+      return discTermIdx.reduce((acc, k) => acc + (nl.includes(flterms[k]) ? idf(terms[k]) : 0), 0);
     };
     return specific
       .sort((a, b) => symScore(b) - symScore(a) || a.startLine - b.startLine)
@@ -594,15 +706,15 @@ export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery
     const cached = evCache.get(rel);
     if (cached) return cached;
     const file = index.files.get(rel)!;
-    const pathLow = rel.toLowerCase();
+    const fpathLow = foldSep(rel.toLowerCase());
     const matched = coverage.get(rel)!;
     const declares: string[] = [], inPath: string[] = [], mentions: string[] = [];
     const imports: Array<{ term: string; from: string }> = [];
     for (let k = 0; k < terms.length; k++) {
       const t = terms[k];
       if (!matched.has(t)) continue;
-      if (file.symbols.some((s) => s.name.toLowerCase().includes(lterms[k]))) { declares.push(t); continue; }
-      if (pathLow.includes(lterms[k])) { inPath.push(t); continue; }
+      if (file.symbols.some((s) => foldSep(s.name.toLowerCase()).includes(flterms[k]))) { declares.push(t); continue; }
+      if (fpathLow.includes(flterms[k])) { inPath.push(t); continue; }
       if (!rareSet.has(t)) continue; // common body-only term → noise, omit
       const tgt = importTargetFor(rel, t);
       if (tgt) imports.push({ term: t, from: tgt });
@@ -700,6 +812,7 @@ export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery
       "Several of these top files reference each other (see Wired: below) — they're likely one connected answer set; the connected files belong in your answer even if you don't open each one.",
     );
   }
+  const noteMap = buildNoteMap(root, lterms);
   detailSet.forEach(([rel, ts]) => {
     const file = index.files.get(rel)!;
     lines.push('');
@@ -710,6 +823,19 @@ export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery
     if (syms.length) lines.push(`   Read:  ${syms.join(', ')}`);
     const rt = relText(rel, via);
     if (rt) lines.push(`   Wired: ${rt}`);
+    const noted = noteMap.get(rel);
+    let noteSummarized = false;
+    if (noted) {
+      const nl = noteLine(root, rel, noted, lterms);
+      if (nl.line) lines.push(nl.line);
+      noteSummarized = nl.summary;
+    }
+    // A summary-grade note replaces the convergence preview: the walls of
+    // preview text exist to tell the agent what's inside the file, and a
+    // past agent already wrote that answer down. Weak gists (symbol
+    // inventory, alias, flow-step role) keep the preview — they don't
+    // describe the file's content.
+    if (noteSummarized) return;
     const specToTarget = index.edges
       .filter((e) => e.from === rel)
       .map((e) => ({ spec: e.specifier, target: index.files.get(e.to)?.relativePath ?? e.to }));

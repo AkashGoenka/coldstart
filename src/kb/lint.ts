@@ -60,7 +60,8 @@ export async function kbLint(root: string, notesIndex?: KbNotesIndex | null): Pr
   const referenced = new Set<string>();
   for (const n of notes) {
     for (const f of n.features) referenced.add(f.concept_id);
-    for (const text of [n.summary ?? '', n.body ?? '', ...n.behaviors.map((b) => b.detail), ...n.invariants]) {
+    for (const f of n.facets) for (const id of f.flows ?? []) referenced.add(id);
+    for (const text of [n.summary ?? '', n.body ?? '', ...n.behaviors.map((b) => b.detail), ...n.facets.map((f) => f.detail), ...n.invariants]) {
       for (const m of text.matchAll(/\[\[([a-z0-9-]+)\]\]/g)) referenced.add(m[1]);
     }
   }

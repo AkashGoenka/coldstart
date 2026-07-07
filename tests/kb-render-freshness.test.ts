@@ -10,7 +10,7 @@ function baseNote(over: Partial<FoldedNote>): FoldedNote {
   return {
     id: 'n1', type: 'lesson', title: 'Title', aliases: [], anchors: [],
     status: 'active', updated: '2026-07-02T10:00:00.000Z', edits: 1,
-    behaviors: [], features: [], steps: [], invariants: [], extra: {},
+    facets: [], behaviors: [], features: [], steps: [], invariants: [], extra: {},
     ...over,
   };
 }

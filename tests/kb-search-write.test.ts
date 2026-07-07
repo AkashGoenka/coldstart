@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { kbSearch, renderSearchPage, renderCompactPage } from '../src/kb/search.js';
+import { kbSearch, renderSearchPage, renderCompactPage, shouldImplantTop } from '../src/kb/search.js';
 import { kbWrite } from '../src/kb/write.js';
 import { kbLint } from '../src/kb/lint.js';
 import { hashFile } from '../src/kb/freshness.js';
@@ -130,21 +130,86 @@ describe('kb search', () => {
     expect(codeShapedUnderscore.hits.map((h) => h.note.id)).toContain('max-files-note');
   });
 
-  it('renderCompactPage: title + gist + freshness, no bodies, under the injection budget', async () => {
+  it('renderCompactPage is PREVIEW-GRADE: even a dominant sole hit renders a clamped preview, never the full body', async () => {
     writeRepoFile('app/models/graph.py', 'class Graph: pass\n');
     seedLesson({
       body: 'restore_state never re-creates functions_x_graphs rows. '.repeat(30),
     });
     const res = await kbSearch(root, 'functions disappear after graph restore', { noMissLog: true });
+    expect(shouldImplantTop(res)).toBe(true); // the gate still computes (kept for a future A/B)…
     const page = renderCompactPage('functions disappear after graph restore', res);
-    expect(page).toContain('Version restore silently drops function assignments');
-    expect(page).toContain('[lesson/bug-cause]');
-    expect(page).toContain('[evidence changed: app/models/graph.py]'); // seeded hash is stale
-    // gist is clamped; the repeated body must not be inlined wholesale
-    expect(page.length).toBeLessThan(600);
-    expect(page).not.toContain('## '); // no rendered-md sections
+    expect(page).not.toContain('## '); // …but the page never implants (structural ruling 2026-07-06)
+    expect(page).toContain('- **Version restore silently drops function assignments**');
+    expect(page).toContain('→ open: .coldstart/notebook/notes/'); // depth is one Read away
+    // kb-search-shape preview (≤340 chars + ellipsis, wrapped), NOT the 1.7KB body:
+    // the repeated sentence (~57 chars) fits ≤ 6 times in the preview, 30 in the body.
+    const occurrences = page.split('restore_state never re-creates').length - 1;
+    expect(occurrences).toBeGreaterThan(0);
+    expect(occurrences).toBeLessThanOrEqual(6);
+    for (const line of page.split('\n')) expect(line.length).toBeLessThan(160); // wrapped, no wall-of-text line
     // zero hits keeps the sentinel the hook's skip check looks for
     expect(renderCompactPage('nope', { hits: [], terms: [], warnings: [] })).toContain('No notebook notes match');
+  });
+
+  it('implant gate: two near-equal hits without convergence stay gist-only (no bodies)', async () => {
+    writeRepoFile('app/a.py', 'pass\n');
+    writeRepoFile('app/b.py', 'pass\n');
+    appendRecord(root, {
+      id: 'spatialview-restore-breaks', type: 'lesson', op: 'put', kind: 'trap',
+      title: 'spatialview restore breaks silently',
+      body: 'first note body.', anchors: [{ path: 'app/a.py' }],
+    });
+    appendRecord(root, {
+      id: 'spatialview-restore-timeout', type: 'lesson', op: 'put', kind: 'trap',
+      title: 'spatialview restore timeout on large graphs',
+      body: 'second note body.', anchors: [{ path: 'app/b.py' }],
+    });
+    // filler corpus so the shared terms stay minority-df under strongOnly
+    for (const t of ['auth cookie parsing', 'webpack bundle size', 'csv importer quoting']) {
+      appendRecord(root, { id: t.replace(/ /g, '-'), type: 'lesson', op: 'put', kind: 'trap', title: t, body: t });
+    }
+    const res = await kbSearch(root, 'why does spatialview restore fail', { strongOnly: true, noMissLog: true });
+    expect(res.hits.length).toBe(2);
+    expect(res.hits[0].score).toBeLessThan(1.8 * res.hits[1].score); // near-equal → ambiguous
+    expect(shouldImplantTop(res)).toBe(false);
+    const page = renderCompactPage('why does spatialview restore fail', res);
+    expect(page).not.toContain('## '); // no full-note section — scent trail only
+    expect(page).not.toContain('id: spatialview-restore-breaks'); // implant header absent
+    expect(page).toContain('- **spatialview restore breaks silently**');
+    expect(page).toContain('- **spatialview restore timeout on large graphs**');
+  });
+
+  it('implant gate: symbol convergence (keeper notes index) opens the gate when dominance alone would not', async () => {
+    writeRepoFile('app/models/graph.py', 'class TileHelperRegistry: pass\n');
+    writeRepoFile('app/graph_utils.py', 'pass\n');
+    // The top note names the symbol ITSELF (own-text match); the inventory
+    // confirming it's declared in the note's anchor = the second channel.
+    appendRecord(root, {
+      id: 'graph-restore-note', type: 'lesson', op: 'put', kind: 'trap',
+      title: 'TileHelperRegistry graph restore drops rows',
+      body: 'anchored where the symbol lives.', anchors: [{ path: 'app/models/graph.py' }],
+    });
+    appendRecord(root, {
+      id: 'graph-restore-perf', type: 'lesson', op: 'put', kind: 'trap',
+      title: 'graph restore perf cliff',
+      body: 'a competing note.', anchors: [{ path: 'app/graph_utils.py' }],
+    });
+    for (const t of ['auth cookie parsing', 'webpack bundle size', 'csv importer quoting']) {
+      appendRecord(root, { id: t.replace(/ /g, '-'), type: 'lesson', op: 'put', kind: 'trap', title: t, body: t });
+    }
+    const notesIndex = await buildKbNotesIndex(fakeIndex({
+      'app/models/graph.py': ['TileHelperRegistry'], 'app/graph_utils.py': [],
+    }), root);
+    const res = await kbSearch(root, 'TileHelperRegistry graph restore', { strongOnly: true, notesIndex, noMissLog: true });
+    expect(res.hits[0].note.id).toBe('graph-restore-note');
+    expect(res.hits.length).toBe(2);
+    expect(res.hits[0].score).toBeLessThan(1.8 * res.hits[1].score); // dominance alone would NOT implant
+    expect(res.hits[0].convergence).toBe(true); // code index agrees with the text match
+    expect(shouldImplantTop(res)).toBe(true);
+    // without the notes index the same query has no convergence channel → gate stays shut
+    const blind = await kbSearch(root, 'TileHelperRegistry graph restore', { strongOnly: true, noMissLog: true });
+    expect(blind.hits[0].convergence).toBe(false);
+    expect(shouldImplantTop(blind)).toBe(false);
   });
 
   it('lane 2: a symbol name resolves via the keeper notes index to the anchored note', async () => {
@@ -249,7 +314,7 @@ describe('kb write — two-phase gate', () => {
 
   it('file notes derive their id from the path, anchor to it, and count it verified', async () => {
     writeRepoFile('src/kb/fold.ts', 'export function fold() {}\n');
-    const res = await kbWrite(root, { type: 'file', path: 'src/kb/fold.ts', summary: 'the fold' });
+    const res = await kbWrite(root, { type: 'file-single', path: 'src/kb/fold.ts', summary: 'the fold' });
     expect(res.status).toBe('written');
     const raw = fs.readFileSync(path.join(root, '.coldstart/notebook/.raw', `${(res as { id: string }).id}.jsonl`), 'utf8');
     const rec = JSON.parse(raw.trim());
@@ -258,6 +323,59 @@ describe('kb write — two-phase gate', () => {
     // same path again → same id, same log (update, not duplicate)
     const again = await kbWrite(root, { type: 'file', path: 'src/kb/fold.ts', summary: 'updated' });
     expect((again as { id: string }).id).toBe((res as { id: string }).id);
+  });
+
+  it('facet flow-refs: exact title resolves to the coined id; unresolvable refs are KEPT and warned, never rejected', async () => {
+    writeRepoFile('src/a.py', 'def entry(): pass\n');
+    const flow = await kbWrite(root, {
+      type: 'flow', title: 'How Saving Really Works',
+      summary: 's.', steps: [{ path: 'src/a.py', role: 'entry' }],
+    }, { isNew: true });
+    expect(flow.status).toBe('written');
+    const flowId = (flow as { id: string }).id;
+
+    // exact title (case/whitespace-insensitive) resolves to the coined id; a real id passes through
+    const w1 = await kbWrite(root, {
+      type: 'file-hub', path: 'src/a.py',
+      facets: [
+        { symbol: 'entry', detail: 'd.', flows: ['how   saving REALLY works'] },
+        { symbol: 'entry2', detail: 'd.', flows: [flowId] },
+      ],
+    });
+    expect(w1.status).toBe('written');
+    expect((w1 as { warnings?: string[] }).warnings).toBeUndefined();
+    const fileId = (w1 as { id: string }).id;
+    const rec = JSON.parse(fs.readFileSync(path.join(root, '.coldstart/notebook/.raw', `${fileId}.jsonl`), 'utf8').trim());
+    expect(rec.facets[0].flows).toEqual([flowId]);
+    expect(rec.facets[1].flows).toEqual([flowId]);
+
+    // typo → note still WRITTEN, ref kept as-is, warning printed (dangling beats lost)
+    const typo = await kbWrite(root, {
+      type: 'file-hub', path: 'src/a.py',
+      facets: [{ symbol: 'entry3', detail: 'd.', flows: ['how savng works'] }],
+    }, { into: fileId });
+    expect(typo.status).toBe('written');
+    expect((typo as { warnings: string[] }).warnings.join(' ')).toContain('matches no flow');
+    const rec2 = fs.readFileSync(path.join(root, '.coldstart/notebook/.raw', `${fileId}.jsonl`), 'utf8').trim().split('\n');
+    expect(JSON.parse(rec2[rec2.length - 1]).facets[0].flows).toEqual(['how savng works']);
+
+    // non-flow id → written + warned
+    seedLesson();
+    const wrongType = await kbWrite(root, {
+      type: 'file-hub', path: 'src/a.py',
+      facets: [{ symbol: 'entry4', detail: 'd.', flows: ['restore-drops-functions'] }],
+    }, { into: fileId });
+    expect(wrongType.status).toBe('written');
+    expect((wrongType as { warnings: string[] }).warnings.join(' ')).toContain('lesson');
+
+    // two active flows with the same title → written, ref kept, ambiguity warned
+    appendRecord(root, { id: 'dup-title-2', type: 'flow', op: 'put', title: 'How Saving Really Works', summary: 'x.' });
+    const ambig = await kbWrite(root, {
+      type: 'file-hub', path: 'src/a.py',
+      facets: [{ symbol: 'entry5', detail: 'd.', flows: ['How Saving Really Works'] }],
+    }, { into: fileId });
+    expect(ambig.status).toBe('written');
+    expect((ambig as { warnings: string[] }).warnings.join(' ')).toContain('ambiguous');
   });
 
   it('validates specs with actionable errors; supports retract/supersede ops', async () => {

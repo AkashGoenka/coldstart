@@ -13,8 +13,8 @@
  * The hidden `.coldstart/` dir keeps the notebook out of the code index
  * (walker skips hidden dirs), out of `find`, and out of rg/fd defaults.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync, appendFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync, appendFileSync, renameSync } from 'node:fs';
+import { join, dirname, basename } from 'node:path';
 import type { FoldedNote } from './types.js';
 import { fold } from './fold.js';
 import { renderNote } from './render.js';
@@ -87,11 +87,22 @@ export function loadAll(root: string): LoadResult {
   return { notes, warnings };
 }
 
+/** Temp-file + rename — a concurrent reader sees the old content or the new,
+ *  never a truncated file (agents Read notes/<id>.md and _index.md directly,
+ *  and writes race across sessions). Dot-prefixed temp names stay outside the
+ *  note-id namespace (ids must start [a-z0-9]). */
+function writeFileAtomic(p: string, data: string): void {
+  const tmp = join(dirname(p), `.tmp-${process.pid}-${basename(p)}`);
+  writeFileSync(tmp, data);
+  renameSync(tmp, p);
+}
+
 /** Render one folded note to its derived md file. */
 export function writeNoteMd(root: string, note: FoldedNote): string {
   mkdirSync(notesDir(root), { recursive: true });
   const p = notePath(root, note.id);
-  writeFileSync(p, renderNote(note));
+  writeFileAtomic(p, renderNote(note));
+  writeIndexMd(root);
   return p;
 }
 
@@ -109,8 +120,47 @@ export function renderIds(root: string, ids?: string[]): string[] {
   return rendered;
 }
 
-/** Append a metrics event (miss-log, capture events). Best-effort, never throws. */
-export function logMetric(root: string, file: 'miss-log' | 'capture', event: Record<string, unknown>): void {
+/**
+ * The notebook's table of contents — `notes/_index.md`, one line per active
+ * note, regenerated mechanically on every write/render (never by an LLM).
+ * The wiki-entrypoint pattern: an agent reads this page first and follows
+ * links, so retrieval works even with zero search. Leading underscore keeps
+ * it outside the note-id namespace (ids must start [a-z0-9]).
+ */
+export function writeIndexMd(root: string): string {
+  const active = loadAll(root).notes.filter((n) => n.status === 'active');
+  const files = active.filter((n) => n.type === 'file');
+  const flows = active.filter((n) => n.type === 'flow');
+  const lessons = active.filter((n) => n.type === 'lesson');
+  const lines = [
+    '# Notebook index',
+    '',
+    `${active.length} active note${active.length === 1 ? '' : 's'} (${files.length} file · ${flows.length} flow · ${lessons.length} lesson)`,
+  ];
+  if (files.length) {
+    lines.push('', '## Files', '');
+    for (const n of files) {
+      const path = n.anchors[0]?.path ?? n.title;
+      const facets = n.facets.length ? ` — ${n.facets.map((f) => f.symbol).join(', ')}` : '';
+      lines.push(`- [${path}](${n.id}.md) (${n.character ?? 'file'})${facets}`);
+    }
+  }
+  if (flows.length) {
+    lines.push('', '## Flows', '');
+    for (const n of flows) lines.push(`- [${n.title}](${n.id}.md)`);
+  }
+  if (lessons.length) {
+    lines.push('', '## Lessons', '');
+    for (const n of lessons) lines.push(`- [${n.title}](${n.id}.md)${n.kind ? ` (${n.kind})` : ''}`);
+  }
+  mkdirSync(notesDir(root), { recursive: true });
+  const p = join(notesDir(root), '_index.md');
+  writeFileAtomic(p, lines.join('\n') + '\n');
+  return p;
+}
+
+/** Append a metrics event (miss-log, capture, inject decisions). Best-effort, never throws. */
+export function logMetric(root: string, file: 'miss-log' | 'capture' | 'inject-log', event: Record<string, unknown>): void {
   try {
     mkdirSync(metricsDir(root), { recursive: true });
     appendFileSync(join(metricsDir(root), `${file}.jsonl`), JSON.stringify({ ts: new Date().toISOString(), ...event }) + '\n');

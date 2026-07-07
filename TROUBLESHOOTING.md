@@ -116,6 +116,7 @@ Automatic. The keeper watches the cache directory and rebuilds if `meta.json` di
 - `kb search` returns nothing for a note you can see in `.coldstart/notebook/` → run `coldstart kb lint` (structure problems) and check `kb status`.
 - Freshness marks are all missing (`anchors [unverified]`) right after a keeper spawn → expected; the keeper derives the `kb-notes.json` sidecar on its first save. Query again after a few seconds.
 - A note's Markdown edits vanished → expected: `.md` files are *derived* from the `.raw` log and re-rendered; contribute via `kb write` (or an appended `.raw` record), not by editing the Markdown.
+- Two near-duplicate notes, the second with a `-2` id suffix → two sessions captured the same concept at the same moment. This is by design (a visible duplicate beats a silent merge); reconcile with `kb write --into <survivor-id>` + a retract of the other.
 
 ---
 

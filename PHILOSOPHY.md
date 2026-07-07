@@ -30,6 +30,18 @@ coldstart's answer is to put that bridge where the knowledge already lives. The 
 
 Splitting the work the other way — a model guessing synonyms at index time, frozen and blind to the task — is strictly worse: it's the same guess for every future query, computed once, never corrected by the question that finally arrives. The agent, asked live, with the task in front of it, makes a better bridge every time.
 
+## Where semantics *do* belong: authored by the agent, kept honest by the index
+
+Rejecting pre-computed semantics is not rejecting semantics. There is exactly one party in the loop qualified to write down what a file *means*: the agent that just finished a real task in it, with the full context in hand. The notebook (`coldstart kb`) is that channel — durable notes about how the codebase actually works, written at task time by the reasoner that had the question, not at index time by a model that had none.
+
+This inverts the embedding trade rather than repeating it:
+
+- **An embedding is meaning computed before the question.** A note is meaning written *after* one — about the flow, trap, or invariant a real task actually turned on. The corpus grows exactly where the codebase gets worked, which is exactly where the next question will land.
+- **A stale vector fails silently.** A note can't: every claim is anchored to concrete files, and the index re-checks each anchor's content hash as the code changes. A drifted note is served flagged — `[evidence changed]` — so stale knowledge degrades into a labeled hypothesis instead of a confident wrong answer. The agent that finds a note wrong is told to correct it *in that session*, while the evidence is in its context.
+- **A semantic index interposes a second interpreter.** A note is the same species of interpreter — a frontier agent — talking to a later instance of itself, in prose, with citations.
+
+coldstart still computes no meaning of its own. It stores, anchors, freshness-checks, and routes the meaning agents author. That is the whole division of labor in one sentence: **the index keeps facts exact; the notebook keeps judgment honest; the agent supplies both.**
+
 ## So when *is* coldstart the wrong tool?
 
 Being honest about the boundary is part of the argument:

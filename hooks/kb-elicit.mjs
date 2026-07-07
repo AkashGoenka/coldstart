@@ -2,20 +2,24 @@
 /**
  * kb-elicit.mjs — Stop + SubagentStop hook. Notebook capture, task-shaped.
  *
- * When an agent that did REAL reads tries to stop, block once and hand it the
- * capture prompt: the gate ("capture what avoids a future read or wrong turn —
- * not because a file was touched"), the latency discriminator ("needs a read
- * you haven't done? then don't"), per-file existing-note annotations from
- * `coldstart kb status --json`, and the exact `kb write` invocation.
+ * ALWAYS FIRES when the agent touched ANY repo file this session — the old
+ * deep-read gate (whole-file Reads + `gs` only) is gone: read-modality
+ * classification proved unwinnable (windowed Reads, Bash cat/sed, MCP readers
+ * are all invisible to it — a q8-style session lost real knowledge to a
+ * FAST-EXIT). The hook does mechanical extraction only; THE AGENT decides
+ * whether anything is worth writing — the prompt's gate and "write NOTHING
+ * when" list carry that decision. FAST-EXIT remains only for sessions that
+ * touched zero repo files (pure orchestrators / Q&A turns).
  *
- * FAST-EXIT (the fix over the old prototype): zero deep reads in the
- * transcript → exit 0 WITHOUT blocking. Orchestrators and skimmers pass
- * through silently; only agents that got warm pay the one capture turn.
+ * Merge-vs-new is agent-curated: touched files are annotated with their
+ * existing notes (id + note file path, from `coldstart kb status --json`) so
+ * the agent can read a candidate and pass --into/--new on its FIRST kb write
+ * — the exit-3 candidates bounce is the safety net, not the mechanism.
  *
  * SubagentStop fires too (subagents often do the only real reads); duplication
  * is guarded by disjoint transcripts + firsthand-only + SubagentStop preceding
- * Stop (the sub's notes are on disk when the main agent's two-phase write
- * runs, so they surface as "candidates → reconcile, don't duplicate").
+ * Stop (the sub's notes are on disk when the main agent's write runs, so they
+ * surface as "candidates → reconcile, don't duplicate").
  *
  * Hooks never author or parse markdown — all facts come from `coldstart kb`.
  * Self-contained + fail-open: ANY error → exit 0 → the stop is allowed.
@@ -25,7 +29,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
-import { existsSync, writeFileSync, appendFileSync, readFileSync, mkdirSync } from "node:fs";
+import { existsSync, writeFileSync, appendFileSync, readFileSync, mkdirSync, statSync } from "node:fs";
 
 // hooks/ sits beside dist/ in both the repo and the published package.
 const CLI = fileURLToPath(new URL("../dist/index.js", import.meta.url));
@@ -37,7 +41,7 @@ function log(msg) {
   try { appendFileSync(LOG_FILE, `[${new Date().toISOString()}] elicit: ${msg}\n`); } catch { /* never fail logging */ }
 }
 
-// --- Deep-read detection (kept from the validated prototype) ------------------
+// --- Touched-file detection ----------------------------------------------------
 function normRel(root, p) {
   let s = String(p || "").trim();
   if (!s) return "";
@@ -48,13 +52,25 @@ function normRel(root, p) {
   return s.replace(/^\.\//, "");
 }
 
-// Files the agent read CLOSELY this run: a Read with no offset/limit (whole
-// body) or a `coldstart gs <file>`. Peeks (windowed Reads) don't count.
-function deepReadFiles(transcriptPath, root) {
+// Path-like tokens inside a shell command: anything with an extension, plus
+// whatever follows `coldstart gs`. Existence under root is checked by the
+// caller — this only extracts candidates.
+const BASH_PATH_RE = /(?:^|[\s"'`=(:;|])((?:\.{1,2}\/|\/)?[A-Za-z0-9_][A-Za-z0-9_.\/-]*\.[A-Za-z0-9]{1,8})(?=$|[\s"'`):;,|>])/gm;
+
+// EVERY repo file the agent touched this run, however it got there: Read
+// (windowed or not), Edit/Write, `coldstart gs`, or a path mentioned in a
+// Bash command (cat/sed/grep/head — the modalities the old deep-read gate was
+// blind to). Whether any of it is WORTH capturing is the agent's call.
+function touchedFiles(transcriptPath, root) {
   const out = [];
   const seen = new Set();
-  const add = (rel) => {
-    if (rel && !seen.has(rel) && !rel.startsWith(".coldstart/")) { seen.add(rel); out.push(rel); }
+  const add = (rel, mustExist) => {
+    if (!rel || seen.has(rel) || rel.startsWith(".coldstart/")) return;
+    if (mustExist) {
+      try { if (!statSync(join(root, rel)).isFile()) return; } catch { return; }
+    }
+    seen.add(rel);
+    out.push(rel);
   };
   let text = "";
   try { text = readFileSync(transcriptPath, "utf8"); } catch { return out; }
@@ -68,11 +84,15 @@ function deepReadFiles(transcriptPath, root) {
     for (const b of content) {
       if (!b || b.type !== "tool_use") continue;
       const inp = b.input || {};
-      if (b.name === "Read") {
-        if (inp.offset == null && inp.limit == null) add(normRel(root, inp.file_path));
+      if (b.name === "Read" || b.name === "Edit" || b.name === "Write" || b.name === "NotebookEdit") {
+        add(normRel(root, inp.file_path), false);
       } else if (b.name === "Bash") {
-        for (const g of String(inp.command || "").matchAll(/coldstart\s+gs\s+(\S+)/g)) {
-          add(normRel(root, g[1]));
+        const cmd = String(inp.command || "");
+        for (const g of cmd.matchAll(/coldstart\s+gs\s+(\S+)/g)) add(normRel(root, g[1]), false);
+        let n = 0;
+        for (const m of cmd.matchAll(BASH_PATH_RE)) {
+          if (++n > 12) break; // a single huge command must not dominate
+          add(normRel(root, m[1]), true); // shell tokens are guesses — verify on disk
         }
       }
     }
@@ -97,79 +117,129 @@ function noteAnnotations(root, files) {
   }
 }
 
+// Always-fire can surface long touch lists; the prompt stays bounded. Files
+// WITH existing notes always make the cut (they carry the merge decision).
+const MAX_PROMPT_FILES = 30;
+
 function filesBlock(root, files) {
   const notes = noteAnnotations(root, files);
+  let listed = files;
+  if (files.length > MAX_PROMPT_FILES) {
+    const noted = files.filter((f) => (notes.get(f) || []).length);
+    const bare = files.filter((f) => !(notes.get(f) || []).length);
+    listed = [...noted, ...bare].slice(0, MAX_PROMPT_FILES);
+  }
   const lines = [];
-  for (const rel of files) {
+  for (const rel of listed) {
     const anchored = notes.get(rel) || [];
     if (!anchored.length) { lines.push(`- ${rel}   [no notes yet]`); continue; }
     const parts = anchored.map((n) => {
       const flag = n.state === "changed" || n.state === "missing"
         ? ` — FLAGGED STALE: you just read this file, so fix or re-stamp it (list the path in "verified")`
         : "";
-      return `${n.id} [${n.type} · ${n.state}]${flag}`;
+      return `${n.id} [${n.type} · ${n.state}]${flag} (.coldstart/notebook/notes/${n.id}.md)`;
     });
     lines.push(`- ${rel}   has notes: ${parts.join("; ")}`);
   }
+  if (listed.length < files.length) lines.push(`- …and ${files.length - listed.length} more touched files`);
   return lines.join("\n");
 }
 
-// --- The capture prompt --------------------------------------------------------
+// --- The capture prompt (v4, 2026-07-07 — user-authored opening; validation-run
+// configuration: gates off via --force, capture-only) ---------------------------
 function buildCapturePrompt(root, block, sid) {
-  return `You just finished a task in this repo, which keeps a NOTEBOOK — durable notes from past \
-agents. One short pass now, using ONLY what is already in your head from this session.
+  return `You have completed a task now and have gathered knowledge as a part of that task or \
+process. We need to preserve the knowledge so that another agent in future can make use of your \
+findings. We are storing this in a notebook format and this notebook has to be backed by the \
+codebase you are working on.
 
-THE GATE: capture knowledge because it avoids a future read or wrong turn — NOT because a file was \
-touched. If writing something would need any read you have NOT already done this session, do not \
-write it. Only firsthand knowledge counts: never write claims that arrived secondhand (e.g. from a \
-subagent's report) without having verified them yourself.
+We need to save only the working knowledge of the codebase in a specific format so that it can \
+be searched and served to future cold agents. We don't need to store any general interaction you \
+had, just the knowledge about the codebase. As a part of your task, you must have done some \
+investigation, file reading, new file/feature addition or updated existing files or features. It \
+could have been a bug fix or any other operation on the codebase. We need to store it in the \
+below format —
 
-Write NOTHING when: the change was trivial or mechanical · a file's purpose is obvious from its \
-name and symbols · everything you used came from existing notes and nothing changed · you only \
-orchestrated other agents. Silence is correct — just stop.
+THE NOTEBOOK HAS THREE CONTAINERS. Put each piece of knowledge in its one home:
 
-Worth writing (judge by your task):
-- fixed a bug → a "lesson": the actual cause, titled by what it LOOKED like before you found it \
-(the symptom is what a future agent will search).
-- traced how something works across files → a "flow": the ordered story — which file hands to \
-which, and what must hold.
-- built something new → notes on what the code cannot say: the WHY, the trap, the constraint.
-- investigated a question → the conclusion; a confirmed ABSENCE ("there is no X") is a note too — \
-include the search terms that proved it.
-- a note you read this session is WRONG → correct it NOW. You are the warm agent; there is no "next".
-- you changed behavior in a file that has a note → update that note to the new reality.
+1. FILE notes — write one for EVERY file you actually read and understood this session. No \
+judgment call about whether it seems obvious. First decide the file's CHARACTER:
+   - hub    = the file has no single purpose (models.py, helpers, utils). Knowledge lives per \
+SYMBOL, as facets: one facet for each symbol you worked with this session. Only symbols you \
+have firsthand knowledge of — never enumerate the rest.
+   - single = the file has one purpose. One summary, 1-3 sentences.
+   The best facet/summary says: what it does that the name doesn't tell you, what to watch out \
+for when changing it, and which tests or checks matter.
 
-Rule of thumb: create a NEW note only for a distinct thing you'd reference from elsewhere; \
-otherwise edit the existing note (a detail is an edit, not a page).
+2. FLOW notes — when your task traced how something works ACROSS files: the ordered story. Each \
+step points at a file (path + symbols) with its role in the story. A step never restates what a \
+file note already says — the detail lives in the file's facet; the flow links to it.
 
-Files you read closely this run, with their existing notes:
+3. LESSON notes — rare. Only two things qualify:
+   - a confirmed ABSENCE ("there is no X in this repo"), with the search terms that proved it;
+   - a repo-wide rule that applies to any future task, regardless of area.
+   If it is about one file or one symbol, it is a facet, not a lesson.
+
+Fixed a bug? The actual cause goes into the culpable file's facet, and the SYMPTOM words go \
+into that file note's "aliases" — the symptom is what a future agent will search. If the cause \
+spans files, the story is a flow.
+
+Read a note this session that turned out WRONG? Correct it now — same spec with its "id" \
+(fields merge; yours win), or op "retract" for a wrong claim. You are the warm agent; there is \
+no "next".
+
+RULES:
+- Codebase knowledge only — never the interaction, the user, or your own process.
+- Firsthand only: if it arrived secondhand (e.g. a subagent's report) and you did not verify it \
+yourself, do not store it.
+- If a future agent would not act differently for knowing it, do not store it.
+- SEARCH BEFORE YOU WRITE a flow or lesson: run \`node ${CLI} kb search "<your task words>" \
+--root ${root}\` once. If an existing flow already tells this mechanism's story, UPDATE it \
+(same spec with its "id") instead of writing a near-duplicate.
+- Note ids are never composed by you. In facet "flows" backlinks, reference a flow by its \
+EXACT title (as written in your flow spec) or by an id copied from kb search output — the \
+tool resolves titles to ids at write time. A typo prints a WARNING (the ref is kept but \
+dangling) — fix any warning the write prints, in this session. Never guess an id.
+- "verified": list every anchor path you actually read THIS session — that re-stamps its \
+freshness. Never list a file you did not open.
+- Paths are join keys: always repo-relative, exactly as they appear in the repo. Fix any path \
+warning the write prints — a wrong path is a silently dangling link.
+
+Files you touched this run, with their existing notes (read one before writing if you need to \
+see what it already says — never create a second note for the same file):
 
 ${block}
 
-HOW TO WRITE — author a JSON spec, save it to a temp file, then run:
-  node ${CLI} kb write /tmp/spec.json --root ${root} --session ${sid}
+HOW TO WRITE — ONE Bash block TOTAL: author every spec with a heredoc and
+chain every write in the SAME block, flows before the file notes that
+reference them. Never author specs one-per-message with a file-editing tool —
+that is the single biggest waste of turns here.
+  cat > /tmp/spec-1.json <<'SPEC'
+  { ...flow... }
+SPEC
+  cat > /tmp/spec-2.json <<'SPEC'
+  { ...file note; facets reference the flow by its EXACT title... }
+SPEC
+  node ${CLI} kb write /tmp/spec-1.json --root ${root} --session ${sid} --force && \\
+  node ${CLI} kb write /tmp/spec-2.json --root ${root} --session ${sid} --force
+Chain the writes with && — if a flow write fails, its dependent file notes
+must not run. Never write the same note id twice.
 
-Spec shapes (one call per note; only include fields you actually have):
-  file:   {"type":"file","path":"src/x.py","summary":"what it's for + how (1-3 sentences)",
-           "behaviors":[{"concept_id":"short-key","symbols":["fn_name"],"detail":"the non-obvious thing"}],
-           "features":[{"concept_id":"<flow-note-id>","role":"this file's part"}]}
-  flow:   {"type":"flow","title":"how X happens","aliases":["other words for X"],"summary":"one paragraph",
-           "steps":[{"path":"src/a.py","symbols":["entry"],"role":"receives the request"}],
-           "invariants":["what must hold"],"verified":["src/a.py"]}
-  lesson: {"type":"lesson","kind":"trap|rule|bug-cause|rationale|absence",
-           "title":"the symptom or rule","aliases":["words a confused future agent would use"],
-           "body":"when it applies + the actual truth","anchors":[{"path":"src/x.py","symbols":["fn"]}],
-           "verified":["src/x.py"],"scope":{"terms":["search","terms"]}}   (scope: absence only)
+Spec shapes (only include fields you actually have):
+  file (hub):    {"type":"file-hub","path":"src/x.py","aliases":["symptom or search words"],
+                  "facets":[{"symbol":"ClassOrFn","detail":"the non-obvious thing about THIS symbol",
+                             "flows":["<flow-note-id or the flow's exact title>"]}]}
+  file (single): {"type":"file-single","path":"src/x.py",
+                  "summary":"its one purpose + how (1-3 sentences)"}
+  flow:          {"type":"flow","title":"how X happens","aliases":["other words for X"],
+                  "summary":"one paragraph",
+                  "steps":[{"path":"src/a.py","symbols":["entry"],"role":"receives the request"}],
+                  "invariants":["what must hold"],"verified":["src/a.py"]}
+  lesson:        {"type":"lesson","kind":"absence|rule","title":"the rule or absence",
+                  "body":"when it applies + the actual truth",
+                  "scope":{"terms":["search","terms"]}}          (scope: absence only)
 
-- "aliases": include error messages, observed behavior, and search terms BEFORE diagnosis (never title synonyms).
-- "verified": list every anchor path you actually read THIS session — that re-stamps its freshness. \
-Never list a file you didn't open.
-- Correct an existing note: same spec + "id":"<its-id>" (fields merge; yours win).
-- Remove a wrong claim: {"type":"...","op":"retract","id":"<note-id>","target":{"kind":"behavior|feature|anchor|invariant|alias|note","key":"<concept_id|path|text>"}}
-- If kb write answers "candidates": one of them IS your concept → re-run with --into <id>; \
-truly new → re-run with --new. Reconcile first, then add.
-
-When your notes are written (or nothing qualified), stop.`;
+When your notes are written, stop.`;
 }
 
 // --- stdin + guards -------------------------------------------------------------
@@ -243,17 +313,19 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
       }
       transcriptPath = own;
     }
-    const files = transcriptPath ? deepReadFiles(transcriptPath, root) : [];
+    const files = transcriptPath ? touchedFiles(transcriptPath, root) : [];
 
-    // FAST-EXIT: no deep reads → this agent never got warm → no capture turn.
+    // FAST-EXIT only when the agent touched NO repo file at all (pure
+    // orchestration / Q&A). Anything touched → the agent judges what's worth
+    // capturing; the hook never guesses from read modality.
     if (!files.length) {
-      log(`FAST-EXIT zero deep reads session=${sid} agent=${aid} event=${input.hook_event_name || "?"}`);
+      log(`FAST-EXIT zero touched files session=${sid} agent=${aid} event=${input.hook_event_name || "?"}`);
       process.exit(0);
     }
 
     const prompt = buildCapturePrompt(root, filesBlock(root, files), sid);
-    logCaptureEvent(root, { event: "elicit", session: sid, agent: aid, deepReads: files.length, hook: input.hook_event_name });
-    log(`ELICIT session=${sid} agent=${aid} deepReads=${files.length} promptBytes=${prompt.length} event=${input.hook_event_name || "?"}`);
+    logCaptureEvent(root, { event: "elicit", session: sid, agent: aid, touched: files.length, hook: input.hook_event_name });
+    log(`ELICIT session=${sid} agent=${aid} touched=${files.length} promptBytes=${prompt.length} event=${input.hook_event_name || "?"}`);
     process.stdout.write(JSON.stringify({ decision: "block", reason: prompt }));
   } catch (e) {
     log(`handler ${e?.stack || e}`); // fail-open: no stdout → stop allowed

@@ -9,11 +9,16 @@
  *
  * Per-field rules (docs/notebook-kb-implementation-plan.md §3):
  *   title/summary/kind/body/scope  last-writer-wins
+ *   character                      last-writer-wins (a file's character is a
+ *                                  revisable judgment, hence a field not a type)
  *   aliases/invariants             union by exact text (retractable)
+ *   facets                         keyed by symbol: detail replaces, flows
+ *                                  union, head stamped from the writing record
  *   behaviors                      keyed by concept_id: replace match, keep rest
  *   features                       union by concept_id, later role wins
- *   anchors                        union by path; hash updated only by records
- *                                  that carry one (i.e. verified at append time)
+ *   anchors                        union by path; symbols union by name (prune
+ *                                  = retract anchor + re-put); hash/head
+ *                                  updated only by records that carry them
  *   steps                          last-writer-wins whole array (ordered story)
  *   unknown fields                 shallow LWW into `extra`, preserved
  *
@@ -26,19 +31,20 @@
  * a newer major (`v > 1`) are skipped with a warning — never a hard error.
  */
 import type {
-  Anchor, Behavior, Feature, FlowStep, FoldedNote, LessonKind, NoteType, RetractTarget,
+  Anchor, Behavior, Facet, Feature, FlowStep, FoldedNote, LessonKind, NoteType, RetractTarget,
 } from './types.js';
 import { KB_RAW_VERSION } from './raw-log.js';
 
-const ENVELOPE_KEYS = new Set(['v', 'ts', 'id', 'type', 'op']);
+const ENVELOPE_KEYS = new Set(['v', 'ts', 'head', 'id', 'type', 'op']);
 const PUT_KEYS = new Set([
-  'title', 'aliases', 'anchors', 'verified', 'summary', 'behaviors', 'features',
-  'steps', 'invariants', 'kind', 'body', 'scope',
+  'title', 'aliases', 'anchors', 'verified', 'summary', 'character', 'facets',
+  'behaviors', 'features', 'steps', 'invariants', 'kind', 'body', 'scope',
 ]);
 const OP_KEYS = new Set(['target', 'by']);
 const NOTE_TYPES = new Set<string>(['file', 'flow', 'lesson']);
 const OPS = new Set<string>(['put', 'retract', 'supersede']);
 const LESSON_KINDS = new Set<string>(['trap', 'rule', 'bug-cause', 'rationale', 'absence']);
+const CHARACTERS = new Set<string>(['hub', 'single']);
 
 /** Canonical JSON (recursively key-sorted) — the deterministic ts tie-breaker. */
 export function stableStringify(value: unknown): string {
@@ -92,7 +98,7 @@ export function fold(id: string, rawRecords: unknown[]): FoldResult {
     id, type,
     title: '', aliases: [], anchors: [],
     status: 'active', updated: usable[0].ts, edits: 0,
-    behaviors: [], features: [], steps: [], invariants: [],
+    facets: [], behaviors: [], features: [], steps: [], invariants: [],
     extra: {},
   };
 
@@ -139,6 +145,11 @@ function applyPut(note: FoldedNote, rec: Rec, warnings: string[]): void {
     if (LESSON_KINDS.has(rec.kind)) note.kind = rec.kind as LessonKind;
     else warnings.push(`${note.id}: unknown lesson kind ${JSON.stringify(rec.kind)} — kept previous`);
   }
+  if (isStr(rec.character)) {
+    if (CHARACTERS.has(rec.character)) note.character = rec.character as FoldedNote['character'];
+    else warnings.push(`${note.id}: unknown character ${JSON.stringify(rec.character)} — kept previous`);
+  }
+  if (isStr(rec.head)) note.head = rec.head;
   if (rec.scope && typeof rec.scope === 'object') {
     const s = rec.scope as { terms?: unknown; globs?: unknown };
     note.scope = { terms: strArr(s.terms), ...(Array.isArray(s.globs) ? { globs: strArr(s.globs) } : {}) };
@@ -150,13 +161,46 @@ function applyPut(note: FoldedNote, rec: Rec, warnings: string[]): void {
       const inc = raw as Anchor;
       const existing = note.anchors.find((a) => a.path === inc.path);
       if (existing) {
-        if (Array.isArray(inc.symbols)) existing.symbols = strArr(inc.symbols);
+        // Symbols UNION (not replace): concurrent writers each stamp an array
+        // built from the note state THEY saw, so replace = last-writer-wins
+        // drops the others' symbols. Pruning a stale symbol = retract the
+        // anchor, re-put it with the trimmed list.
+        if (Array.isArray(inc.symbols)) {
+          const merged = existing.symbols ? [...existing.symbols] : [];
+          for (const s of strArr(inc.symbols)) if (!merged.includes(s)) merged.push(s);
+          existing.symbols = merged;
+        }
         if (isStr(inc.hash)) existing.hash = inc.hash; // only verified appends carry a hash
+        if (isStr(inc.head)) existing.head = inc.head;
       } else {
         note.anchors.push({
           path: inc.path,
           ...(Array.isArray(inc.symbols) ? { symbols: strArr(inc.symbols) } : {}),
           ...(isStr(inc.hash) ? { hash: inc.hash } : {}),
+          ...(isStr(inc.head) ? { head: inc.head } : {}),
+        });
+      }
+    }
+  }
+
+  if (Array.isArray(rec.facets)) {
+    for (const raw of rec.facets) {
+      if (!raw || typeof raw !== 'object') continue;
+      const f = raw as Facet;
+      if (!isStr(f.symbol) || !isStr(f.detail)) continue;
+      const existing = note.facets.find((x) => x.symbol === f.symbol);
+      const flows = strArr(f.flows);
+      if (existing) {
+        // Replace the knowledge, keep every flow that ever contributed.
+        existing.detail = f.detail;
+        for (const fl of flows) if (!existing.flows?.includes(fl)) (existing.flows ??= []).push(fl);
+        if (isStr(rec.head)) existing.head = rec.head as string;
+      } else {
+        note.facets.push({
+          symbol: f.symbol,
+          detail: f.detail,
+          ...(flows.length ? { flows } : {}),
+          ...(isStr(rec.head) ? { head: rec.head as string } : {}),
         });
       }
     }
@@ -211,6 +255,7 @@ function applyRetract(note: FoldedNote, rec: Rec, warnings: string[], at: string
   const key = target.key;
   switch (target.kind) {
     case 'behavior': note.behaviors = note.behaviors.filter((b) => b.concept_id !== key); return true;
+    case 'facet': note.facets = note.facets.filter((f) => f.symbol !== key); return true;
     case 'feature': note.features = note.features.filter((f) => f.concept_id !== key); return true;
     case 'anchor': note.anchors = note.anchors.filter((a) => a.path !== key); return true;
     case 'invariant': note.invariants = note.invariants.filter((t) => t !== key); return true;

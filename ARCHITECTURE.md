@@ -161,13 +161,15 @@ The watcher and reconcile's porcelain pass can hand `patchIndex` paths the walke
 
 ---
 
-## Notebook (`src/kb/`, experimental)
+## Notebook (`src/kb/`)
 
-A repo-local knowledge base written and read by agents: `coldstart kb search|write|status|lint|render|init|migrate`. The full design contract and solutioning live in internal design docs (`docs/` is untracked); architecture-relevant points only:
+A repo-local knowledge base written and read by agents: `coldstart kb search|lookup|write|commit|status|lint|render|init|migrate`. The full design contract and solutioning live in internal design docs (`docs/` is untracked); architecture-relevant points only:
 
-- **Storage:** `.coldstart/notebook/` — an append-only `.raw` event log as source of truth (commit it; merges are union), with human-readable Markdown notes *derived* from it (`kb render`; hand-edits are blown away). Hidden dir → structurally outside the code index.
+- **Storage:** `.coldstart/notebook/` — one append-only `.raw/<id>.jsonl` event log **per note** as source of truth (commit it; merges are union), with human-readable Markdown notes *derived* from it (`kb render`; hand-edits are blown away). Hidden dir → structurally outside the code index. A note's content is a pure fold of its log (ts-ordered, tie-broken by canonical JSON), so a same-branch append and a cross-branch git merge are the same operation.
+- **Concurrency (stress-validated):** multiple sessions write safely with no lock. Per-note logs mean distinct notes never contend; same-log appends are single O_APPEND writes (validated at 30 concurrent ~100KB records). Freshly-coined flow/lesson ids are created with `O_EXCL` — a coin race loses EEXIST and re-coins, so two same-moment captures become two visible notes, never a silent merge (`--into` merges stay non-exclusive). The fold **unions** anchor symbol lists (concurrent writers each stamp arrays built from the state they saw; replace semantics dropped symbols). Derived md (`notes/<id>.md`, `_index.md`) is written temp+rename — readers never see a truncated note. `kb write -` reads stdin as a stream (fd-0 `readFileSync` throws EAGAIN on pipes). Regression suites: `tests/kb-store-atomic.test.ts`, `tests/kb-concurrent-create.test.ts`.
 - **Decoupled from the code index:** `kb search` never loads the code index. The keeper derives a small `kb-notes.json` sidecar (anchor-symbol inventories + absence stamps for freshness rendering) — refreshed single-flight at watch start, on `.raw` batches, and post-save. kb readers degrade gracefully (freshness marks only) until the first stamp exists.
-- **Capture/recall hooks** (`hooks/kb-elicit.mjs`, `hooks/kb-recall.mjs`): Stop/SubagentStop elicits a note only when the session did deep reads (whole-file Reads / `gs` calls — "needs a read you haven't done? then don't write"); UserPromptSubmit injects, on a strong title/alias/anchor match only, a compact title+gist block (6 KB cap, framed as reference data, never instructions). Not wired by `init` yet — experimental.
+- **Git publishing:** `kb commit` is the one sanctioned path to git — it pathspec-commits only the notebook's committed surface (`.raw/`, `okf.yaml`, `.gitignore`), so note-writing cadence never rides inside feature commits, and it respects an owner's decision to gitignore the notebook entirely.
+- **Capture/recall hooks** (`hooks/kb-elicit.mjs`, `hooks/kb-recall.mjs`): Stop/SubagentStop elicits a note only when the session did deep reads (whole-file Reads / `gs` calls — "needs a read you haven't done? then don't write"); UserPromptSubmit injects, on a strong title/alias/anchor match only, a compact title+gist block (6 KB cap, framed as reference data, never instructions). Wired by `coldstart kb init` (the main `init` wires only the find/gs hooks).
 
 ---
 
