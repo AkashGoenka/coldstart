@@ -35,9 +35,15 @@
  * Ported 1:1 from find-nudge.py. Thresholds below are the same defaults.
  */
 
-import { readFileSync, writeFileSync, renameSync } from "node:fs";
+import { readFileSync, writeFileSync, renameSync, existsSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { canonicalFindKey } from "./canonical-find-key.mjs";
 import { normalizeColdstartCall } from "./coldstart-call.mjs";
+
+// hooks/ sits beside dist/ in both the repo and the published package.
+const KB_CLI = fileURLToPath(new URL("../dist/index.js", import.meta.url));
 
 // ---- detector thresholds (tune freely) ----
 const FINDS_BEFORE_READ = 2; // (1) nudge to read after this many finds w/o a Read/gs
@@ -94,6 +100,34 @@ function matchAllGroup(re, s, group) {
   if (!s) return found;
   for (const m of s.matchAll(re)) found.add(group ? m[group] : m[0]);
   return found;
+}
+
+/** The pattern the agent is grepping for — first quoted string or bare arg
+ *  after the grep/rg invocation. Empty when nothing sensible is extractable. */
+function grepPattern(cmd) {
+  const m = String(cmd || "").match(
+    /(?:^|[;&|]\s*|\s)(?:grep|egrep|fgrep|rg|git\s+grep)\s+(?:-{1,2}[\w=-]+\s+)*(?:"([^"]+)"|'([^']+)'|([^\s'"|;&-]\S*))/,
+  );
+  return m ? (m[1] || m[2] || m[3] || "").replace(/[\\^$.*+?()[\]{}]/g, " ").trim() : "";
+}
+
+/** Hit-gated notebook probe for the spiral nudge: ONE hook-mode kb search on
+ *  what the agent is grepping for. Returns the top note's title, or null —
+ *  and the nudge only mentions the notebook when a note actually exists
+ *  (a generic "try the notebook" would be boilerplate steering; a hit is a
+ *  report of fact). Fail-open and skipped entirely when there's no notebook. */
+function kbSpiralHit(root, pattern) {
+  try {
+    if (!pattern || !root || !existsSync(join(root, ".coldstart", "notebook", ".raw"))) return null;
+    const page = execFileSync(
+      "node", [KB_CLI, "kb", "search", "--hook", "--max", "1", "--root", root, pattern],
+      { encoding: "utf8", timeout: 2000, stdio: ["ignore", "pipe", "ignore"] },
+    );
+    const m = page.match(/^- \*\*(.+?)\*\*/m);
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -261,12 +295,19 @@ export default function handle(input) {
     } else if (st.nonfind_streak >= NONFIND_SHELL_STREAK && !st.shell_fired) {
       // (3) generic spiral fallback — non-find streak, but nothing was re-checked
       st.shell_fired = true;
+      // Hit-gated notebook pointer: if the notebook already has a note on what
+      // the agent is hunting, say so — that note may END the hunt.
+      const noteTitle = kbSpiralHit(input.cwd, grepPattern(cmd));
       msgs.push([
         3,
         `${st.nonfind_streak} non-find search/shell calls since your last \`coldstart find\`/Read — ` +
           "this is the spiral. `coldstart find` already body-scans the top files and ranks on filenames " +
           "and symbols, not just body text. Add the missing term and re-run it, or Read a candidate you " +
-          "already have. Reserve grep for a literal body string you KNOW exists.",
+          "already have. Reserve grep for a literal body string you KNOW exists." +
+          (noteTitle
+            ? ` Also: the repo notebook has a note matching what you're grepping for — "${noteTitle}". ` +
+              `Fetch it first: \`coldstart kb search ${noteTitle.split(/\s+/).slice(0, 5).join(" ")}\`.`
+            : ""),
       ]);
     }
   }

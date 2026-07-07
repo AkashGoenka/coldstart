@@ -86,6 +86,7 @@ ${invocation} that answer "where does this live?" and "what is this file?" witho
 ${flags}
 ## Reading the output
 - Top files are marked \`▸ <path>  [covered/total]\` — how many of your query terms they cover — with a \`Role:\` line (which terms each defines/imports) and an inline preview of the body lines where your terms cluster. Often enough to answer WITHOUT a Read.
+- A \`Summary:\` line (repos with a notebook) is a past agent's verified high-level overview of that file. \`[fresh]\` = the file is byte-identical to when the summary was verified — rely on it without re-reading the file. The full note is a markdown file at the \`full note:\` path; open it for per-symbol detail and the flows through the file.
 - A \`Wired:\` line shows relations: \`uses\`/\`used by\` = import edges; \`near\` = a name-reference relation the import graph can't see (the files share a rare identifier/string token — migration↔model, config-by-name, cross-language). Treat wired files as one unit: if one is worth opening, the others usually belong in your answer too.
 - "no indexed file contains any of [...]" = those identifiers aren't in the repo. Don't grep spelling variants.
 - \`gs\` Importers with \`match\` lists every file whose content references the term — exhaustive, so a subsystem absent from it does NOT use the symbol. Don't grep to re-verify.

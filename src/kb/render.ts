@@ -20,6 +20,7 @@ export function renderNote(note: FoldedNote): string {
   const fm: string[] = ['---'];
   fm.push(`id: ${note.id}`);
   fm.push(`type: ${note.type}`);
+  if (note.character) fm.push(`character: ${note.character}`);
   if (note.kind) fm.push(`kind: ${note.kind}`);
   fm.push(`title: ${yamlStr(note.title)}`);
   if (note.aliases.length) fm.push(`aliases: [${note.aliases.map(yamlStr).join(', ')}]`);
@@ -56,6 +57,14 @@ export function renderNote(note: FoldedNote): string {
 
 function renderFileBody(note: FoldedNote, body: string[]): void {
   if (note.summary) body.push(note.summary, '');
+  if (note.facets.length) {
+    body.push('## Facets', '');
+    for (const f of note.facets) {
+      const flows = f.flows?.length ? ` — ${f.flows.map((x) => `[[${x}]]`).join(' ')}` : '';
+      body.push(`- **${f.symbol}** — ${f.detail}${flows}`);
+    }
+    body.push('');
+  }
   if (note.behaviors.length) {
     body.push('## Behaviors', '');
     for (const b of note.behaviors) {

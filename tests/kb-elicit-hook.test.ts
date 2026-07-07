@@ -54,7 +54,9 @@ describe('kb-elicit always-fire', () => {
     const res = JSON.parse(out);
     expect(res.decision).toBe('block');
     expect(res.reason).toContain('src/app.py');
-    expect(res.reason).toContain('MERGE vs NEW is YOUR decision');
+    expect(res.reason).toContain('THE NOTEBOOK HAS THREE CONTAINERS');
+    expect(res.reason).toContain('SEARCH BEFORE YOU WRITE'); // v5: pre-write dedup discipline
+    expect(res.reason).toContain('EXACT title'); // v6: flow refs by exact title or copied id — the tool resolves, never the agent
   });
 
   it('a Bash cat/sed path elicits when the file exists; nonexistent shell tokens are ignored', () => {

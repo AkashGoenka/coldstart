@@ -66,13 +66,13 @@ describe('find note lane', () => {
       anchors: [{ path: 'app/models.py', hash: goodHash }],
     });
     const map = buildNoteMap(root, ['trap', 'models']);
-    const line = noteLine(root, 'app/models.py', map.get('app/models.py')!);
-    expect(line).toContain('Note:  trap: a trap about models');
+    const line = noteLine(root, 'app/models.py', map.get('app/models.py')!).line;
+    expect(line).toContain('Summary: trap: a trap about models');
     expect(line).toContain('[fresh]');
-    expect(line).toContain('kb: fresh-lesson');
+    expect(line).toContain('full note: .coldstart/notebook/notes/fresh-lesson.md');
 
     fs.writeFileSync(path.join(root, 'app/models.py'), 'v2 drifted\n');
-    expect(noteLine(root, 'app/models.py', map.get('app/models.py')!)).toContain('[evidence changed]');
+    expect(noteLine(root, 'app/models.py', map.get('app/models.py')!).line).toContain('[evidence changed]');
 
     appendRecord(root, {
       id: 'a-flow', type: 'flow', op: 'put', title: 'how saving works',
@@ -81,9 +81,10 @@ describe('find note lane', () => {
     });
     writeRepoFile('app/save.py', 'x\n');
     const flowMap = buildNoteMap(root, ['saving']);
-    const flowLine = noteLine(root, 'app/save.py', flowMap.get('app/save.py')!);
-    expect(flowLine).toContain('part of "how saving works"');
-    expect(flowLine).toContain('receives the request');
+    const flowRes = noteLine(root, 'app/save.py', flowMap.get('app/save.py')!);
+    expect(flowRes.line).toContain('part of "how saving works"');
+    expect(flowRes.line).toContain('receives the request');
+    expect(flowRes.summary).toBe(false); // a flow-step role is a pointer — the preview stays
   });
 
   it('superseded notes never annotate', () => {

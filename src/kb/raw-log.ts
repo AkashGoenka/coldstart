@@ -11,9 +11,15 @@ import { readFileSync, appendFileSync, mkdirSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { NewRecordInput, RawRecord, Anchor } from './types.js';
 import { hashFile } from './freshness.js';
+import { gitHeadSha } from './git.js';
 import { isValidId } from './ids.js';
 
 export const KB_RAW_VERSION = 1;
+
+/** Repo-relative notes dir — the openable-path pointer printed on query
+ *  surfaces (find Summary: line, kb search results). Agents run from the repo
+ *  root, so `<NOTES_REL>/<id>.md` is directly Read-able. */
+export const NOTES_REL = '.coldstart/notebook/notes';
 
 export function notebookDir(root: string): string {
   return join(root, '.coldstart', 'notebook');
@@ -25,31 +31,45 @@ export function rawPath(root: string, id: string): string {
   return join(rawDir(root), `${id}.jsonl`);
 }
 
+export interface AppendOptions {
+  /** Fail with EEXIST if the log already exists (O_EXCL). Used when a freshly
+   *  COINED flow/lesson id is first written: two concurrent sessions can coin
+   *  the same id (both list the dir before either creates the file), and
+   *  without exclusivity their records silently merge into one note. The
+   *  caller catches EEXIST and re-coins. Never used for file notes — their id
+   *  is derived from the path, so concurrent writers SHOULD share one log. */
+  exclusive?: boolean;
+}
+
 /**
  * Stamp `v`/`ts`, inject hashes for `verified` paths, append one line.
  * Returns the record as written. Throws on an invalid envelope — append is the
  * write gate; tolerance belongs to the READ side.
  */
-export function appendRecord(root: string, input: NewRecordInput): RawRecord {
+export function appendRecord(root: string, input: NewRecordInput, opts: AppendOptions = {}): RawRecord {
   if (!input.id || !isValidId(input.id)) throw new Error(`invalid note id: ${JSON.stringify(input.id)}`);
   if (!['file', 'flow', 'lesson'].includes(input.type)) throw new Error(`invalid note type: ${JSON.stringify(input.type)}`);
   if (!['put', 'retract', 'supersede'].includes(input.op)) throw new Error(`invalid op: ${JSON.stringify(input.op)}`);
 
   const record: RawRecord = { ...input, v: KB_RAW_VERSION, ts: new Date().toISOString() };
+  // Provenance stamp — tool-supplied like ts; an agent-written head is overridden.
+  const head = gitHeadSha(root);
+  if (head) record.head = head;
+  else delete record.head;
 
   if (record.op === 'put' && Array.isArray(record.verified) && record.verified.length) {
     const anchors: Anchor[] = Array.isArray(record.anchors) ? record.anchors.map((a) => ({ ...a })) : [];
     for (const rel of record.verified) {
       const hash = hashFile(root, rel);
       const existing = anchors.find((a) => a.path === rel);
-      if (existing) existing.hash = hash;
-      else anchors.push({ path: rel, hash });
+      if (existing) { existing.hash = hash; if (head) existing.head = head; }
+      else anchors.push({ path: rel, hash, ...(head ? { head } : {}) });
     }
     record.anchors = anchors;
   }
 
   mkdirSync(rawDir(root), { recursive: true });
-  appendFileSync(rawPath(root, record.id), JSON.stringify(record) + '\n');
+  appendFileSync(rawPath(root, record.id), JSON.stringify(record) + '\n', opts.exclusive ? { flag: 'ax' } : undefined);
   return record;
 }
 

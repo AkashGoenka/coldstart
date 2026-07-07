@@ -25,6 +25,7 @@ import type { FoldedNote } from '../kb/types.js';
 import { deriveRelatedFiles } from '../indexer/content-tokens.js';
 import { resolveRg, invalidateRg, type RgBinary } from './searcher.js';
 import { loadAll, notebookExists } from '../kb/store.js';
+import { NOTES_REL } from '../kb/raw-log.js';
 import { stampAnchors } from '../kb/freshness.js';
 
 /**
@@ -469,8 +470,13 @@ export function buildNoteMap(root: string, lterms: string[]): Map<string, { note
     const rank = note.type === 'file' ? 0 : note.type === 'flow' ? 1 : 2;
     // Hub files anchor many notes — pick the one the QUERY is about (term
     // hits on the note's declared identity), not just the "best" type. An
-    // off-topic annotation on a hub file is noise, not evidence.
-    const name = foldSep([note.title, ...note.aliases].join(' ').toLowerCase());
+    // off-topic annotation on a hub file is noise, not evidence. A file
+    // note's identity includes its facet SYMBOLS: a query naming GraphModel
+    // is about the models.py file note even though its title is just the
+    // path — without them, any flow sharing one query word steals the slot
+    // from the note that holds the answer.
+    const name = foldSep([note.title, ...note.aliases,
+      ...(note.type === 'file' ? note.facets.map((f) => f.symbol) : [])].join(' ').toLowerCase());
     const hits = lterms.filter((t) => name.includes(foldSep(t))).length;
     for (const a of note.anchors) {
       const cur = out.get(a.path);
@@ -482,20 +488,64 @@ export function buildNoteMap(root: string, lterms: string[]): Map<string, { note
   return out;
 }
 
-export function noteLine(root: string, rel: string, entry: { note: FoldedNote; role?: string }): string {
+/** First sentence (or first ~n chars) of a prose blob — the agent-authored
+ *  summary opener, which prompt v4 makes carry the file's non-obvious point. */
+function firstSentence(s: string, n: number): string {
+  const t = s.replace(/\s+/g, ' ').trim();
+  const stop = t.search(/[.!?](\s|$)/);
+  const cut = stop >= 20 ? t.slice(0, stop + 1) : t;
+  return cut.length > n ? cut.slice(0, n) + '…' : cut;
+}
+
+/** Empty line → the caller drops it: a Summary: that only restates the path is
+ *  noise, not evidence (a file note's title IS the path).
+ *  `summary` — the gist is summary-grade prose (a single's body sentence or a
+ *  query-matched facet detail): a past agent's verified description of THIS
+ *  file. find then drops the convergence preview for the file — the summary
+ *  IS the preview (user ruling 2026-07-06: file summaries live in find; flows
+ *  live in kb search). Stale notes still surface — most of a note survives
+ *  an edit — with [evidence changed] marking what to re-verify. */
+export function noteLine(root: string, rel: string, entry: { note: FoldedNote; role?: string }, lterms: string[] = []): { line: string; summary: boolean } {
   const { note, role } = entry;
   const clamp = (s: string, n: number): string => {
     const t = s.replace(/\s+/g, ' ').trim();
     return t.length > n ? t.slice(0, n) + '…' : t;
   };
-  const gist =
-    note.type === 'flow' ? `part of "${clamp(note.title, 80)}"${role ? ` — ${clamp(role, 90)}` : ''}` :
-    note.type === 'file' ? clamp(note.summary || note.title, 150) :
-    `${note.kind ?? 'lesson'}: ${clamp(note.title, 130)}`;
+  let gist = '';
+  let summary = false;
+  if (note.type === 'flow') {
+    // Full role text — the step role is the flow's statement about THIS
+    // file, and a clamp cuts exactly at the payload (q8 replay evidence).
+    const roleTxt = role ? role.replace(/\s+/g, ' ').trim() : '';
+    gist = `part of "${clamp(note.title, 80)}"${roleTxt ? ` — ${roleTxt}` : ''}`;
+  } else if (note.type === 'file') {
+    // Hub whose facet the query names → that facet's FULL detail (it replaces
+    // the preview, so untruncated is still a net page shrink; a clamp only
+    // hides the payload — 11-transcript replay showed agents never fetch the
+    // full note off a teaser line). Single → the WHOLE body: at ~400B the
+    // body IS the note (user ruling 2026-07-07). Otherwise the hub's symbol
+    // inventory (what the note knows, one lookup away).
+    const matched = lterms.length
+      ? note.facets.find((f) => { const fs = foldSep(f.symbol.toLowerCase()); return lterms.some((t) => fs.includes(foldSep(t))); })
+      : undefined;
+    const prose = (note.summary || note.body || '').replace(/\s+/g, ' ').trim();
+    if (matched) { gist = `${matched.symbol} — ${matched.detail.replace(/\s+/g, ' ').trim()}`; summary = true; }
+    else if (prose && note.character === 'single') { gist = prose; summary = true; }
+    else if (prose) { gist = firstSentence(prose, 220); summary = true; }
+    else if (note.facets.length) gist = clamp(`facets: ${note.facets.map((f) => f.symbol).join(', ')}`, 150);
+    else if (note.aliases.length) gist = clamp(note.aliases[0], 120);
+    else return { line: '', summary: false }; // nothing beyond the path — silence over noise
+  } else {
+    gist = `${note.kind ?? 'lesson'}: ${clamp(note.title, 130)}`;
+  }
   const anchor = note.anchors.find((a) => a.path === rel);
   const state = anchor ? stampAnchors(root, [anchor])[0]?.state : undefined;
   const fresh = state === 'fresh' ? ' [fresh]' : state === 'changed' || state === 'missing' ? ' [evidence changed]' : '';
-  return `   Note:  ${gist}${fresh} · kb: ${note.id}`;
+  // "Summary:" (user ruling 2026-07-08): a past agent's high-level overview of
+  // THIS file — and the full note is a real markdown file the reader can open
+  // directly. A path is the one pointer agents reliably follow (grep→Read is
+  // trained-in; "re-search by title words" measurably is not).
+  return { line: `   Summary: ${gist}${fresh} · full note: ${NOTES_REL}/${note.id}.md`, summary };
 }
 
 export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery: string, asData = false, via = false): Promise<string> {
@@ -774,7 +824,18 @@ export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery
     const rt = relText(rel, via);
     if (rt) lines.push(`   Wired: ${rt}`);
     const noted = noteMap.get(rel);
-    if (noted) lines.push(noteLine(root, rel, noted));
+    let noteSummarized = false;
+    if (noted) {
+      const nl = noteLine(root, rel, noted, lterms);
+      if (nl.line) lines.push(nl.line);
+      noteSummarized = nl.summary;
+    }
+    // A summary-grade note replaces the convergence preview: the walls of
+    // preview text exist to tell the agent what's inside the file, and a
+    // past agent already wrote that answer down. Weak gists (symbol
+    // inventory, alias, flow-step role) keep the preview — they don't
+    // describe the file's content.
+    if (noteSummarized) return;
     const specToTarget = index.edges
       .filter((e) => e.from === rel)
       .map((e) => ({ spec: e.specifier, target: index.files.get(e.to)?.relativePath ?? e.to }));

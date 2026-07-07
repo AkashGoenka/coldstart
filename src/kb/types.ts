@@ -15,13 +15,29 @@ export type LessonKind = 'trap' | 'rule' | 'bug-cause' | 'rationale' | 'absence'
 export type NoteStatus = 'active' | 'superseded' | 'retracted';
 export type RawOp = 'put' | 'retract' | 'supersede';
 
-/** An anchor as stored in a `.raw` record / folded note. `hash` is present only
- *  once some record verified the path (injected by the tool at append time —
- *  the agent never writes a hash). */
+/** A file note's declared character — the agent that read the file judges it.
+ *  hub: no single purpose; knowledge lives as symbol-keyed facets.
+ *  single: one purpose; one summary paragraph. */
+export type FileCharacter = 'hub' | 'single';
+
+/** An anchor as stored in a `.raw` record / folded note. `hash` and `head` are
+ *  present only once some record verified the path (injected by the tool at
+ *  append time — the agent never writes either). */
 export interface Anchor {
   path: string;
   symbols?: string[];
   hash?: string; // "sha256:<12 hex>" | "missing"
+  head?: string; // git HEAD (12 hex) at last verify — provenance, not a verdict
+}
+
+/** Hub file-note: one symbol's knowledge, addressed by (file path, symbol).
+ *  `flows` are back-refs to flow-note ids that contributed the knowledge.
+ *  `head` is tool-stamped from the writing record (never agent-supplied). */
+export interface Facet {
+  symbol: string;
+  detail: string;
+  flows?: string[];
+  head?: string;
 }
 
 /** File-note: a non-obvious behavior, keyed by concept. Symbols are pointers. */
@@ -50,10 +66,11 @@ export interface AbsenceScope {
   globs?: string[];
 }
 
-/** Retract tombstone target. `key` is a concept_id (behavior/feature), a path
- *  (anchor), exact text (invariant/alias), or omitted for kind "note". */
+/** Retract tombstone target. `key` is a concept_id (behavior/feature), a
+ *  symbol (facet), a path (anchor), exact text (invariant/alias), or omitted
+ *  for kind "note". */
 export interface RetractTarget {
-  kind: 'behavior' | 'feature' | 'anchor' | 'invariant' | 'alias' | 'note';
+  kind: 'behavior' | 'feature' | 'facet' | 'anchor' | 'invariant' | 'alias' | 'note';
   key?: string;
 }
 
@@ -67,6 +84,8 @@ export interface RecordPayload {
   /** Paths the agent re-inspected this session; the tool hashes exactly these. */
   verified?: string[];
   summary?: string; // file + flow
+  character?: FileCharacter; // file
+  facets?: Facet[]; // file (hub)
   behaviors?: Behavior[]; // file
   features?: Feature[]; // file
   steps?: FlowStep[]; // flow
@@ -89,6 +108,7 @@ export interface RecordPayload {
 export interface RawRecord extends RecordPayload {
   v: number;
   ts: string; // ISO, tool-stamped at append — never agent-supplied
+  head?: string; // git HEAD (12 hex) at append, tool-stamped; absent outside git
   id: string;
   type: NoteType;
   op: RawOp;
@@ -118,6 +138,8 @@ export interface FoldedNote {
   edits: number; // count of applied records
 
   summary?: string;
+  character?: FileCharacter;
+  facets: Facet[];
   behaviors: Behavior[];
   features: Feature[];
   steps: FlowStep[];
@@ -125,6 +147,8 @@ export interface FoldedNote {
   kind?: LessonKind;
   body?: string;
   scope?: AbsenceScope;
+  /** git HEAD of the last applied record that carried one. */
+  head?: string;
 
   /** Unknown record fields, shallow-merged last-writer-wins. Preserved into frontmatter. */
   extra: Record<string, unknown>;
