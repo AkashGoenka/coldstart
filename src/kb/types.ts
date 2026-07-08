@@ -11,7 +11,7 @@
  */
 
 export type NoteType = 'file' | 'flow' | 'lesson';
-export type LessonKind = 'trap' | 'rule' | 'bug-cause' | 'rationale' | 'absence';
+export type LessonKind = 'absence';
 export type NoteStatus = 'active' | 'superseded' | 'retracted';
 export type RawOp = 'put' | 'retract' | 'supersede';
 

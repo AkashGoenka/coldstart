@@ -43,7 +43,7 @@ const PUT_KEYS = new Set([
 const OP_KEYS = new Set(['target', 'by']);
 const NOTE_TYPES = new Set<string>(['file', 'flow', 'lesson']);
 const OPS = new Set<string>(['put', 'retract', 'supersede']);
-const LESSON_KINDS = new Set<string>(['trap', 'rule', 'bug-cause', 'rationale', 'absence']);
+const LESSON_KINDS = new Set<string>(['absence']);
 const CHARACTERS = new Set<string>(['hub', 'single']);
 
 /** Canonical JSON (recursively key-sorted) — the deterministic ts tie-breaker. */

@@ -87,6 +87,13 @@ export interface KbSearchResult {
   hits: KbSearchHit[];
   terms: string[];
   warnings: string[];
+  /** Hits the cap dropped that still cleared the results floor — a real second
+   *  page, not tail grazes. The number the --max footer advertises; absent/0
+   *  means nothing was worth widening for. */
+  omitted?: number;
+  /** The cap actually applied (opts.maxResults ?? default) — the base for the
+   *  footer's suggested --max value. */
+  maxUsed?: number;
 }
 
 const norm = (s: string): string => s.toLowerCase();
@@ -128,6 +135,13 @@ function haystacksFor(note: FoldedNote): Haystacks {
 const BM25_K1 = 1.2;
 const BM25_B = 0.75;
 const CHANNEL_W = { name: 3, anchor: 2, body: 1 } as const;
+
+/** Results-page relevance floor: a hit scoring below this fraction of the top
+ *  hit is a graze, not an answer. Two uses, one constant: renderResultsPage
+ *  drops sub-floor hits from the page, and kbSearch counts cap-omitted hits
+ *  ABOVE it to decide whether the --max footer is worth showing (a floor-only
+ *  tail isn't — widening would surface nothing new). */
+const RESULTS_FLOOR = 0.25;
 
 /** Hook-mode injection gate: the top hit must be matched by at least one
  *  DISCRIMINATING term — df ≤ ceil(N/DIVISOR) (rare in this notebook's own
@@ -362,7 +376,13 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
     ? withTier.filter((h) => h.score >= 0.4 * withTier[0].score)
     : withTier;
 
-  return { hits: trimmed.slice(0, max), terms, warnings };
+  // Hits the cap dropped that still clear the results floor — a genuine second
+  // page. The footer offers --max only when this is non-zero; a tail trimmed
+  // by the floor (not the cap) isn't worth widening for.
+  const top = trimmed[0]?.score ?? 0;
+  const omitted = trimmed.slice(max).filter((h) => h.score >= RESULTS_FLOOR * top).length;
+
+  return { hits: trimmed.slice(0, max), terms, warnings, omitted, maxUsed: max };
 }
 
 /** Body section of the rendered md (frontmatter stripped) for inlining. */
@@ -444,7 +464,7 @@ export function renderResultsPage(query: string, result: KbSearchResult): string
   if (!result.hits.length) {
     return `No notebook notes match "${query}". Fall through to \`coldstart find\` as usual.`;
   }
-  const shown = result.hits.filter((h) => h.score >= 0.25 * result.hits[0].score);
+  const shown = result.hits.filter((h) => h.score >= RESULTS_FLOOR * result.hits[0].score);
   const parts: string[] = [`# Notebook results for: ${query}  (${shown.length} match${shown.length === 1 ? '' : 'es'})`, ''];
   shown.forEach((hit, i) => {
     const n = hit.note;
@@ -464,6 +484,13 @@ export function renderResultsPage(query: string, result: KbSearchResult): string
     if (hit.absence) parts.push(`   ${hit.absence}`);
     parts.push('');
   });
+  if (result.omitted && result.omitted > 0) {
+    const next = (result.maxUsed ?? shown.length) + result.omitted;
+    parts.push(
+      `+${result.omitted} more note${result.omitted === 1 ? '' : 's'} matched above the relevance floor but were cut by the result cap — re-run with \`--max ${next}\` to see them.`,
+      '',
+    );
+  }
   parts.push(
     'Open a result\'s note file (Read/cat) for the full detail — flow steps, invariants, per-symbol facets, exact anchors. ' +
     'Anything marked [evidence changed] must be re-verified against the cited file before you rely on it.',

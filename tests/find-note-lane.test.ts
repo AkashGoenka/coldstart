@@ -43,7 +43,7 @@ describe('find note lane', () => {
     });
     // lesson (rank 2) is what the query is actually about
     appendRecord(root, {
-      id: 'spatialview-dropdown', type: 'lesson', op: 'put', kind: 'bug-cause',
+      id: 'spatialview-dropdown', type: 'lesson', op: 'put', kind: 'absence',
       title: 'spatialview geometrynode dropdown shows wrong nodes',
       body: 'limit_choices_to filters datatype only.',
       anchors: [{ path: 'app/models.py' }],
@@ -61,13 +61,13 @@ describe('find note lane', () => {
     writeRepoFile('app/models.py', 'v1\n');
     const goodHash = hashFile(root, 'app/models.py');
     appendRecord(root, {
-      id: 'fresh-lesson', type: 'lesson', op: 'put', kind: 'trap',
+      id: 'fresh-lesson', type: 'lesson', op: 'put', kind: 'absence',
       title: 'a trap about models', body: 'body.',
       anchors: [{ path: 'app/models.py', hash: goodHash }],
     });
     const map = buildNoteMap(root, ['trap', 'models']);
     const line = noteLine(root, 'app/models.py', map.get('app/models.py')!).line;
-    expect(line).toContain('Summary: trap: a trap about models');
+    expect(line).toContain('Summary: absence: a trap about models');
     expect(line).toContain('[fresh]');
     expect(line).toContain('full note: .coldstart/notebook/notes/fresh-lesson.md');
 
@@ -90,7 +90,7 @@ describe('find note lane', () => {
   it('superseded notes never annotate', () => {
     writeRepoFile('app/x.py', 'x\n');
     appendRecord(root, {
-      id: 'dead', type: 'lesson', op: 'put', kind: 'trap', title: 'old truth about xpy',
+      id: 'dead', type: 'lesson', op: 'put', kind: 'absence', title: 'old truth about xpy',
       body: 'b.', anchors: [{ path: 'app/x.py' }],
     });
     appendRecord(root, { id: 'dead', type: 'lesson', op: 'supersede', by: 'dead' });

@@ -29,9 +29,11 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { ensureKeeper } from './keeper.js';
+import { initSkeleton, logMetric } from './kb/store.js';
 
 const __filename = fileURLToPath(import.meta.url);
 
@@ -43,61 +45,24 @@ function out(msg: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// coldstart.md content — one doc, two invocation flavors
+// coldstart.md content — two checked-in flavors under templates/, one written
+// per experience. Editing docs = editing plain markdown (templates/coldstart.
+// {cli,mcp}.md), not escaped TS template strings. templates/ ships in the npm
+// package (package.json "files") beside dist/, so it resolves from the running
+// install. Trade-off: the ~shared prose lives in both files — keep them in sync
+// when you edit shared guidance (only the find/gs phrasing + notebook commands
+// genuinely differ between flavors).
 // ---------------------------------------------------------------------------
 
+/** Absolute path to a flavored coldstart.md template. templates/ sits beside
+ *  dist/ in both the checkout and the published package (dist/init.js → ..). */
+function coldstartMdTemplatePath(mode: 'cli' | 'mcp'): string {
+  return path.resolve(path.dirname(path.dirname(__filename)), 'templates', `coldstart.${mode}.md`);
+}
+
+/** The coldstart.md body for a flavor, read from its checked-in template. */
 export function coldstartMd(mode: 'cli' | 'mcp'): string {
-  const cli = mode === 'cli';
-  const find = cli ? '`coldstart find <terms...>`' : 'the `find` tool';
-  const gs = cli ? '`coldstart gs <file>`' : 'the `gs` tool';
-  const invocation = cli
-    ? 'Two local, instant shell commands'
-    : 'Two local, instant MCP tools';
-  const flags = cli
-    ? `## Load-bearing flags
-- \`find --path GLOB\` — scope to a glob (\`--path 'app/**/*.py'\`); \`,\` to combine, \`!\` to exclude.
-- \`find --tests\` — include test files (excluded by default).
-- \`gs --match TERM\` — on a god-file, filter to one area (\`--match tile\`); \`a|b\` = OR, \`/regex/\` = regex.
-- \`gs --view symbols|imports|importers|callers\` — one section instead of the full page.
-- \`gs <file> --symbol a,b\` — deliver named method bodies inline + caller/callee pointers.
-
-## Batch independent lookups in one call
-\`coldstart find auth; coldstart find 'session cookie'; coldstart gs src/auth/service.ts\`
-`
-    : `## Load-bearing params
-- \`find\` \`path\` — scope to a glob (\`app/**/*.py\`); \`,\` to combine, \`!\` to exclude.
-- \`gs\` \`match\` — on a god-file, filter to one area (\`tile\`); \`a|b\` = OR, \`/regex/\` = regex.
-- \`gs\` \`view\` (symbols|imports|importers|callers) — one section instead of the full page.
-- \`gs\` \`symbol\` (\`a,b\`) — deliver named method bodies inline + caller/callee pointers.
-`;
-
-  return `# coldstart — fast codebase navigation
-
-${invocation} that answer "where does this live?" and "what is this file?" without a model call. Reach for them BEFORE Grep/Glob/Read when orienting in a codebase or locating code.
-
-- ${find} — locate the files relevant to a concept. Pass EVERY salient identifier (symbol, domain noun, the rare token you half-remember), not one keyword. Ranks files by how many of your terms they cover.
-- ${gs} — drill into one file: its symbols (with line ranges), who imports it, who calls each symbol, and name-related neighbors. This is the answer to "who uses this file / who calls this symbol" — not grep.
-
-## Flow
-1. ${find} on a concept → pick the best path.
-2. ${gs} on that file → shape + who uses it.
-3. \`Read\` only for the implementation inside a method body.
-
-${flags}
-## Reading the output
-- Top files are marked \`▸ <path>  [covered/total]\` — how many of your query terms they cover — with a \`Role:\` line (which terms each defines/imports) and an inline preview of the body lines where your terms cluster. Often enough to answer WITHOUT a Read.
-- A \`Summary:\` line (repos with a notebook) is a past agent's verified high-level overview of that file. \`[fresh]\` = the file is byte-identical to when the summary was verified — rely on it without re-reading the file. The full note is a markdown file at the \`full note:\` path; open it for per-symbol detail and the flows through the file.
-- A \`Wired:\` line shows relations: \`uses\`/\`used by\` = import edges; \`near\` = a name-reference relation the import graph can't see (the files share a rare identifier/string token — migration↔model, config-by-name, cross-language). Treat wired files as one unit: if one is worth opening, the others usually belong in your answer too.
-- "no indexed file contains any of [...]" = those identifiers aren't in the repo. Don't grep spelling variants.
-- \`gs\` Importers with \`match\` lists every file whose content references the term — exhaustive, so a subsystem absent from it does NOT use the symbol. Don't grep to re-verify.
-
-## Stop rule
-Ran \`gs\` on 5+ files for one question → you're enumerating. Go back to \`find\` with a sharper \`path\` scope or a different concept token.
-
-## When NOT to use it
-- A literal string/phrase/regex inside file bodies → Grep.
-- Reading an implementation → Read, after \`gs\` gives the shape.
-`;
+  return fs.readFileSync(coldstartMdTemplatePath(mode), 'utf8');
 }
 
 // ---------------------------------------------------------------------------
@@ -155,6 +120,150 @@ function mcpServerEntry(cwd: string): { command: string; args: string[] } {
 function resolveHooksDir(): string {
   const entryPath = getOrInstallStableVersion(); // <stable>/node_modules/<pkg>/dist/index.js
   return path.join(path.dirname(path.dirname(entryPath)), 'hooks');
+}
+
+// ---------------------------------------------------------------------------
+// Notebook (kb) setup — skeleton, git wiring, and the Claude recall/capture
+// hooks. Shared by `coldstart init` (always) and the `coldstart kb init` alias.
+// ---------------------------------------------------------------------------
+
+// The notebook recall (UserPromptSubmit) + capture (Stop/SubagentStop) hook
+// entry files, in the shipped hooks/ dir. Distinct from the find/gs hooks, so
+// they merge into settings.json independently.
+const KB_HOOK_RECALL = 'kb-recall.mjs';
+const KB_HOOK_ELICIT = 'kb-elicit.mjs';
+
+/** True if a hook-array entry is one of OUR kb hooks (by filename) — so re-init
+ *  strips + refreshes instead of duplicating. */
+function isKbHookEntry(entry: unknown): boolean {
+  const hooks = (entry as { hooks?: unknown })?.hooks;
+  if (!Array.isArray(hooks)) return false;
+  return hooks.some((h) => {
+    const cmd = (h as { command?: unknown })?.command;
+    return typeof cmd === 'string' && (cmd.includes(KB_HOOK_RECALL) || cmd.includes(KB_HOOK_ELICIT));
+  });
+}
+
+/**
+ * Merge the notebook recall/capture hooks into `.claude/settings.json`.
+ * Idempotent (strips prior kb entries, re-adds), preserves the find/gs hooks
+ * and any foreign entries, fail-safe on invalid JSON. Points at the same
+ * version-pinned stable hooks dir the find/gs hooks use (survives npm update).
+ */
+export function wireClaudeKbHooks(cwd: string): 'created' | 'updated' | { error: string } {
+  let hooksDir: string;
+  try {
+    hooksDir = resolveHooksDir();
+  } catch (e) {
+    return { error: `could not resolve a stable install path (${e})` };
+  }
+  const dir = path.join(cwd, '.claude');
+  const filePath = path.join(dir, 'settings.json');
+
+  let settings: Record<string, unknown> = {};
+  const existed = fs.existsSync(filePath);
+  if (existed) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      if (parsed && typeof parsed === 'object') settings = parsed as Record<string, unknown>;
+    } catch {
+      return { error: `${filePath} is not valid JSON — left untouched; wire the kb hooks manually` };
+    }
+  }
+  const hooksCfg = (settings.hooks && typeof settings.hooks === 'object' ? settings.hooks : {}) as Record<string, unknown>;
+  const stripOurs = (arr: unknown): unknown[] => (Array.isArray(arr) ? arr : []).filter((e) => !isKbHookEntry(e));
+  const entry = (file: string): unknown => ({ hooks: [{ type: 'command', command: `node ${path.join(hooksDir, file)}` }] });
+  hooksCfg.UserPromptSubmit = [...stripOurs(hooksCfg.UserPromptSubmit), entry(KB_HOOK_RECALL)];
+  hooksCfg.Stop = [...stripOurs(hooksCfg.Stop), entry(KB_HOOK_ELICIT)];
+  hooksCfg.SubagentStop = [...stripOurs(hooksCfg.SubagentStop), entry(KB_HOOK_ELICIT)];
+  settings.hooks = hooksCfg;
+
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(settings, null, 2) + '\n');
+  return existed ? 'updated' : 'created';
+}
+
+/** Is any `.raw` note file already git-tracked? If so the repo is (or was)
+ *  sharing its notebook — adding an ignore line would create a confusing
+ *  tracked-but-ignored divergence, so we leave it shared. */
+function notebookRawTracked(cwd: string): boolean {
+  try {
+    const listed = execFileSync('git', ['ls-files', '.coldstart/notebook/.raw'], {
+      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return listed.trim().length > 0;
+  } catch {
+    return false; // not a git repo, or git unavailable — treat as untracked
+  }
+}
+
+const NOTEBOOK_IGNORE_LINE = '.coldstart/';
+const hasNotebookIgnore = (text: string): boolean =>
+  text.split('\n').some((l) => { const t = l.trim(); return t === '.coldstart/' || t === '.coldstart'; });
+
+/** Privacy default: add `.coldstart/` to the repo's root .gitignore so the
+ *  notebook stays local. Skipped when `.raw` is already tracked (don't flip an
+ *  existing shared repo). */
+function addNotebookGitignore(cwd: string): 'added' | 'present' | 'kept-shared' {
+  if (notebookRawTracked(cwd)) return 'kept-shared';
+  const giPath = path.join(cwd, '.gitignore');
+  let gi = '';
+  try { gi = fs.existsSync(giPath) ? fs.readFileSync(giPath, 'utf8') : ''; } catch { /* create below */ }
+  if (hasNotebookIgnore(gi)) return 'present';
+  fs.appendFileSync(giPath, (gi && !gi.endsWith('\n') ? '\n' : '') + NOTEBOOK_IGNORE_LINE + '\n');
+  return 'added';
+}
+
+/** Opt-in to share: drop the `.coldstart/` ignore line if we (or the user) added
+ *  it, so `.raw` becomes committable. The inner notebook .gitignore still keeps
+ *  notes/ + .metrics/ out. */
+function removeNotebookGitignore(cwd: string): 'removed' | 'absent' {
+  const giPath = path.join(cwd, '.gitignore');
+  if (!fs.existsSync(giPath)) return 'absent';
+  const lines = fs.readFileSync(giPath, 'utf8').split('\n');
+  const kept = lines.filter((l) => { const t = l.trim(); return t !== '.coldstart/' && t !== '.coldstart'; });
+  if (kept.length === lines.length) return 'absent';
+  fs.writeFileSync(giPath, kept.join('\n'));
+  return 'removed';
+}
+
+/** merge=union on the append-only .raw logs — concurrent appends conflict at
+ *  EOF under naive merge; union keeps both sides and the ts-sorted fold makes
+ *  interleave order irrelevant. */
+function ensureGitattributes(cwd: string): void {
+  const gaPath = path.join(cwd, '.gitattributes');
+  const line = '.coldstart/notebook/.raw/*.jsonl merge=union';
+  let ga = '';
+  try { ga = fs.existsSync(gaPath) ? fs.readFileSync(gaPath, 'utf8') : ''; } catch { /* create below */ }
+  if (ga.includes(line)) return;
+  try {
+    fs.appendFileSync(gaPath, (ga && !ga.endsWith('\n') ? '\n' : '') + line + '\n');
+  } catch (e) {
+    out(`  (could not write .gitattributes: ${e instanceof Error ? e.message : e})`);
+  }
+}
+
+/**
+ * Notebook file setup — client-agnostic. Creates the skeleton, sets the
+ * merge=union attribute, and applies the storage choice: private by default
+ * (gitignore `.coldstart/`), or committable when `commit` is set. Does NOT wire
+ * hooks — those are Claude-specific (see wireClaudeKbHooks).
+ */
+export function setupNotebook(cwd: string, commit: boolean): void {
+  initSkeleton(cwd);
+  ensureGitattributes(cwd);
+  if (commit) {
+    const r = removeNotebookGitignore(cwd);
+    out(`  notebook      — shared: .raw + okf.yaml committable, publish with \`coldstart kb commit\`${r === 'removed' ? ' (removed prior ignore rule)' : ''}`);
+  } else {
+    const r = addNotebookGitignore(cwd);
+    const note =
+      r === 'kept-shared' ? 'left shared (.raw already git-tracked)'
+      : r === 'added' ? 'private: .coldstart/ gitignored (share later with `coldstart init --commit-notebook`)'
+      : 'private: .coldstart/ already gitignored';
+    out(`  notebook      — ${note}`);
+  }
+  logMetric(cwd, 'capture', { event: 'init' });
 }
 
 // ---------------------------------------------------------------------------
@@ -504,6 +613,10 @@ function setupClaude(cwd: string, exp: Experience): void {
     }
   }
   reportHooks('settings.json', wireClaudeHooks(cwd));
+  const kb = wireClaudeKbHooks(cwd);
+  out(typeof kb === 'object'
+    ? `  settings.json — notebook hooks NOT wired: ${kb.error}`
+    : `  settings.json — ${kb} notebook recall + capture hooks (UserPromptSubmit + Stop/SubagentStop)`);
 }
 
 function setupCodex(cwd: string, exp: Experience): void {
@@ -588,6 +701,9 @@ export async function runInit(): Promise<void> {
 
   let experience = parseExperience(readFlag(argv, '--experience'));
   let client = parseClient(readFlag(argv, '--client'));
+  // Storage default is private (notebook gitignored); --commit-notebook opts in
+  // to committing .raw so the notebook can be shared with the team.
+  const commitNotebook = argv.includes('--commit-notebook');
 
   out('');
   out('coldstart init');
@@ -634,6 +750,10 @@ export async function runInit(): Promise<void> {
     default:
       setupOther(cwd, experience);
   }
+
+  // The notebook is always set up (files + git wiring); hooks are Claude-only
+  // and were wired above in setupClaude. Codex/Cursor kb wiring lands later.
+  setupNotebook(cwd, commitNotebook);
 
   // Warm the index now, while the user is here at setup, so the first lookup
   // isn't a cold build. ensureKeeper spawns the background keeper (detached) and

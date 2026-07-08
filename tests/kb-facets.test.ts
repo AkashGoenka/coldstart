@@ -188,14 +188,14 @@ describe('kb write: facet clash gate (show-then-confirm)', () => {
 describe('kb write: exact (path,symbol) dedup for anchored lessons', () => {
   it('gates on an existing lesson at the same address — never on title words', async () => {
     appendRecord(root, {
-      id: 'loadstaging-nullable', type: 'lesson', op: 'put', kind: 'trap',
+      id: 'loadstaging-nullable', type: 'lesson', op: 'put', kind: 'absence',
       title: 'LoadStaging nodegroup is already nullable',
       body: 'The FK is guarded, not deleted.',
       anchors: [{ path: 'models.py', symbols: ['LoadStaging'] }],
     });
     // Same address, deliberately DIFFERENT title words → still gated (exact match).
     const gated = await kbWrite(root, {
-      type: 'lesson', kind: 'trap',
+      type: 'lesson', kind: 'absence',
       title: 'graph restore keeps staging rows',
       body: 'restore guards the FK',
       anchors: [{ path: 'models.py', symbols: ['LoadStaging'] }],
@@ -205,9 +205,10 @@ describe('kb write: exact (path,symbol) dedup for anchored lessons', () => {
 
     // Different symbol on the same file → different address → written.
     const other = await kbWrite(root, {
-      type: 'lesson', kind: 'trap',
+      type: 'lesson', kind: 'absence',
       title: 'LoadStaging nodegroup is already nullable', // same words as the seed!
       body: 'different fact about a different symbol',
+      scope: { terms: ['Node', 'nullable'] },
       anchors: [{ path: 'models.py', symbols: ['Node'] }],
     });
     expect(other.status).toBe('written');
@@ -215,24 +216,27 @@ describe('kb write: exact (path,symbol) dedup for anchored lessons', () => {
 
   it('file-level and symbol-level addresses do not cross-match; --new bypasses', async () => {
     appendRecord(root, {
-      id: 'models-general', type: 'lesson', op: 'put', kind: 'rule',
+      id: 'models-general', type: 'lesson', op: 'put', kind: 'absence',
       title: 'models.py imports must stay lazy', body: 'circular import trap',
       anchors: [{ path: 'models.py' }],
     });
     const symbolLevel = await kbWrite(root, {
-      type: 'lesson', kind: 'trap', title: 'plugin ordering trap', body: 'x',
+      type: 'lesson', kind: 'absence', title: 'plugin ordering trap', body: 'x',
+      scope: { terms: ['plugin', 'ordering'] },
       anchors: [{ path: 'models.py', symbols: ['Plugin'] }],
     });
     expect(symbolLevel.status).toBe('written'); // file-level lesson is a different granularity
 
     const fileLevel = await kbWrite(root, {
-      type: 'lesson', kind: 'rule', title: 'another models rule', body: 'y',
+      type: 'lesson', kind: 'absence', title: 'another models rule', body: 'y',
+      scope: { terms: ['models', 'rule'] },
       anchors: [{ path: 'models.py' }],
     });
     expect(fileLevel.status).toBe('candidates'); // same file-level address
 
     const forced = await kbWrite(root, {
-      type: 'lesson', kind: 'rule', title: 'another models rule', body: 'y',
+      type: 'lesson', kind: 'absence', title: 'another models rule', body: 'y',
+      scope: { terms: ['models', 'rule'] },
       anchors: [{ path: 'models.py' }],
     }, { isNew: true });
     expect(forced.status).toBe('written');
@@ -245,7 +249,7 @@ describe('kb write: exact (path,symbol) dedup for anchored lessons', () => {
       facets: [{ symbol: 'LoadStaging', detail: 'FK guarded, not deleted' }],
     });
     const r = await kbWrite(root, {
-      type: 'lesson', kind: 'trap', title: 'staging rows survive restore', body: 'z',
+      type: 'lesson', kind: 'absence', title: 'staging rows survive restore', body: 'z',
       anchors: [{ path: 'models.py', symbols: ['LoadStaging'] }],
     });
     expect(r.status).toBe('candidates');
@@ -306,7 +310,7 @@ describe('kb lookup', () => {
       steps: [{ path: 'models.py', role: 'save() dispatches lifecycle handlers' }], // no symbols declared
     });
     appendRecord(root, {
-      id: 'loadstaging-nullable', type: 'lesson', op: 'put', kind: 'trap',
+      id: 'loadstaging-nullable', type: 'lesson', op: 'put', kind: 'absence',
       title: 'LoadStaging nodegroup already nullable', body: 'guarded, not deleted.',
       anchors: [{ path: 'models.py', symbols: ['LoadStaging'] }],
     });
@@ -360,11 +364,12 @@ describe('kb write: --force (validation mode) + path warnings', () => {
 
     // exact-address lesson gate: skipped under force
     appendRecord(root, {
-      id: 'seed-lesson', type: 'lesson', op: 'put', kind: 'trap', title: 'seed', body: 'x',
+      id: 'seed-lesson', type: 'lesson', op: 'put', kind: 'absence', title: 'seed', body: 'x',
       anchors: [{ path: 'models.py', symbols: ['Plugin'] }],
     });
     const lesson = await kbWrite(root, {
-      type: 'lesson', kind: 'trap', title: 'another take', body: 'y',
+      type: 'lesson', kind: 'absence', title: 'another take', body: 'y',
+      scope: { terms: ['plugin', 'take'] },
       anchors: [{ path: 'models.py', symbols: ['Plugin'] }],
     }, { force: true });
     expect(lesson.status).toBe('written');

@@ -19,7 +19,7 @@ describe('kb render — golden shapes', () => {
   it('lesson note: frontmatter contract + body + absence scope', () => {
     const md = renderNote(baseNote({
       id: 'graph-restore-drops-functions',
-      kind: 'bug-cause',
+      kind: 'absence',
       title: 'Version restore silently drops function assignments',
       aliases: ['functions disappear after graph restore'],
       anchors: [{ path: 'arches/app/models/graph.py', symbols: ['restore_state'], hash: 'sha256:ab12cd34ef56' }],
@@ -29,7 +29,7 @@ describe('kb render — golden shapes', () => {
     }));
     expect(md).toContain('id: graph-restore-drops-functions');
     expect(md).toContain('type: lesson');
-    expect(md).toContain('kind: bug-cause');
+    expect(md).toContain('kind: absence');
     expect(md).toContain('aliases: ["functions disappear after graph restore"]');
     // anchors render as one JSON object per line — machine-readable back
     const anchorLine = md.split('\n').find((l) => l.trim().startsWith('- {'));

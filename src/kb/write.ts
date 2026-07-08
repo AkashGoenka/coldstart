@@ -21,7 +21,7 @@ import { loadNote, loadAll, writeNoteMd, logMetric } from './store.js';
 import { kbSearch } from './search.js';
 
 const NOTE_TYPES = new Set(['file', 'flow', 'lesson']);
-const LESSON_KINDS = new Set(['trap', 'rule', 'bug-cause', 'rationale', 'absence']);
+const LESSON_KINDS = new Set(['absence']);
 const CHARACTERS = new Set(['hub', 'single']);
 
 /** The agent-authored spec (JSON). Flat; unknown fields ride into the record.
@@ -93,7 +93,7 @@ export async function kbWrite(root: string, spec: WriteSpec, opts: WriteOptions 
     character = sugared;
     type = 'file';
   }
-  if (!type || !NOTE_TYPES.has(type)) return err('spec needs a `type`: "file" (one real file — or shorthand "file-hub"/"file-single"), "flow" (a cross-file story), or "lesson" (a trap/rule/bug-cause/rationale/absence)');
+  if (!type || !NOTE_TYPES.has(type)) return err('spec needs a `type`: "file" (one real file — or shorthand "file-hub"/"file-single"), "flow" (a cross-file story), or "lesson" (a confirmed absence — "there is no X in this repo", with the search terms that proved it)');
   if (character !== undefined && !CHARACTERS.has(character)) return err('`character` must be "hub" (no single purpose — knowledge lives as symbol-keyed facets) or "single" (one purpose, one summary)');
   if (character !== undefined && type !== 'file') return err('`character` belongs to file notes');
 
@@ -201,7 +201,7 @@ export async function kbWrite(root: string, spec: WriteSpec, opts: WriteOptions 
       }
     }
     if (type === 'lesson') {
-      if (!spec.kind || !LESSON_KINDS.has(spec.kind)) return err('a lesson needs `kind`: trap | rule | bug-cause | rationale | absence');
+      if (!spec.kind || !LESSON_KINDS.has(spec.kind)) return err('a lesson needs `kind`: absence (the only lesson kind — a confirmed "there is no X", with the search that proved it)');
       if (spec.kind === 'absence' && !spec.scope?.terms?.length) return err('an absence lesson needs `scope.terms` — the search that proved the absence (freshness = re-running it)');
       if (!spec.body && !spec.id && !opts.into) return err('a lesson needs a `body` — when it applies + the actual truth');
     }
