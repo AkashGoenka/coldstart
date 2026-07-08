@@ -1,8 +1,27 @@
-# coldstart
+<div align="center">
 
-**[Website](https://akashgoenka.github.io/coldstart/) · [Docs](https://akashgoenka.github.io/coldstart/docs.html) · [npm](https://www.npmjs.com/package/@cstart/coldstart)**
+<h1>❄️&nbsp; coldstart</h1>
 
-Codebase navigation **and a codebase notebook** for AI agents.
+<p>
+  <b>Codebase navigation and a codebase notebook for AI agents.</b><br/>
+  Find the right file in milliseconds — and remember what the last session figured out.
+</p>
+
+<p>
+  <a href="https://www.npmjs.com/package/@cstart/coldstart"><img alt="npm version" src="https://img.shields.io/npm/v/%40cstart%2Fcoldstart?style=flat-square&amp;label=npm&amp;color=16708f&amp;labelColor=0d1520"></a>
+  <img alt="node &gt;= 18" src="https://img.shields.io/badge/node-%E2%89%A5%2018-16708f?style=flat-square&amp;labelColor=0d1520">
+  <a href="#license"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-16708f?style=flat-square&amp;labelColor=0d1520"></a>
+  <img alt="for Claude Code, Codex, Cursor" src="https://img.shields.io/badge/for-Claude%20Code%2C%20Codex%2C%20Cursor-c26714?style=flat-square&amp;labelColor=0d1520">
+</p>
+
+<p>
+  <a href="https://akashgoenka.github.io/coldstart/"><b>Website</b></a> &nbsp;·&nbsp;
+  <a href="https://akashgoenka.github.io/coldstart/docs.html"><b>Docs</b></a> &nbsp;·&nbsp;
+  <a href="./PHILOSOPHY.md"><b>Philosophy</b></a> &nbsp;·&nbsp;
+  <a href="https://www.npmjs.com/package/@cstart/coldstart"><b>npm</b></a>
+</p>
+
+</div>
 
 Two layers, one tool:
 
@@ -33,6 +52,7 @@ coldstart kb init   # notebook: skeleton + capture/recall hooks (optional but re
 
 `init` then warms the index in the background, so your first lookup is instant. Re-running either init is safe — they never duplicate entries.
 
+> [!IMPORTANT]
 > **Why `--legacy-peer-deps`?** The tree-sitter grammar packages under-declare their peer-dep ranges (some say `^0.21.x`, others `^0.22.x`). Without the flag npm's strict resolver enters a long retry loop on a cold cache and can appear to hang. The flag tells npm to use our tested versions as-is. We can't set it from inside the package — npm reads install config only from your environment.
 
 ### Upgrading
@@ -44,6 +64,7 @@ coldstart init   # re-run in each project to refresh coldstart.md
 
 A version stamp in the keeper's lockfile makes the old background keeper shut down on the next lookup; a fresh one spawns from the new binary. No manual restart needed.
 
+> [!NOTE]
 > **Migrating from `coldstart-mcp`:** the package was renamed `coldstart-mcp` → **`coldstart`** at 2.0.0 (the CLI is now the primary surface). `coldstart-mcp` is deprecated but still installs; switch with `npm uninstall -g coldstart-mcp && npm install -g coldstart --legacy-peer-deps && coldstart init`. The `coldstart-mcp` binary name is kept as an alias, so existing MCP configs keep working.
 
 ---
@@ -81,7 +102,8 @@ coldstart kb status / lint / render / init / migrate
 
 **Language-agnostic.** The notebook's freshness machinery is content-hash based, so it works on any codebase — including languages the navigation index doesn't parse. Where the index does parse, notes additionally get symbol-level freshness.
 
-The notebook is young. What's verified today: notes written by agents in real sessions checked out accurate against the code; the stale-note loop closes end-to-end (flag → re-read → correction); capture, recall, and concurrent writes hold up under stress. The bet — stated as a bet — is that a corpus like this compounds over a repo's lifetime: the second time any question comes up, the answer is one `Read` away instead of a re-derivation.
+> [!NOTE]
+> **The notebook is young.** What's verified today: notes written by agents in real sessions checked out accurate against the code; the stale-note loop closes end-to-end (flag → re-read → correction); capture, recall, and concurrent writes hold up under stress. The bet — stated as a bet — is that a corpus like this compounds over a repo's lifetime: the second time any question comes up, the answer is one `Read` away instead of a re-derivation.
 
 ---
 
@@ -94,13 +116,21 @@ The notebook is young. What's verified today: notes written by agents in real se
 
 The intended flow: **`find`** a concept → pick the best path → **`gs`** that file for its shape and who uses it → `Read` only for the implementation inside a method body. Notebook summaries ride along on `find` results, so often the orientation step answers itself.
 
+```mermaid
+flowchart LR
+    A["coldstart find<br/>which files?"]:::cold --> B["coldstart gs<br/>what is it? who uses it?"]:::cold --> C["Read<br/>just the method body"]:::warm
+    classDef cold stroke:#16708f,stroke-width:2px;
+    classDef warm stroke:#c26714,stroke-width:2px;
+```
+
 ### `find` — locate the files for a concept
 
 ```bash
 coldstart find auth session cookie
 ```
 
-Pass **every salient identifier** from your task — the symbol, the domain noun, the rare token you half-remember — not one distilled keyword. `find` ranks files by how many of your terms each one covers and shows, per file, which terms it defines vs. imports and a preview of the lines where they cluster. Often that's enough to answer without opening anything.
+> [!TIP]
+> **Pass every salient identifier** from your task — the symbol, the domain noun, the rare token you half-remember — not one distilled keyword. `find` ranks files by how many of your terms each one covers and shows, per file, which terms it defines vs. imports and a preview of the lines where they cluster. Often that's enough to answer without opening anything.
 
 Speed-wise, `find` competes with raw grep: its repo-wide reference pass runs on **ripgrep** — yours from PATH, the bundled copy, or an editor's (`COLDSTART_RG` overrides) — with `git grep`/`grep` fallbacks, and the ranked page comes from the pre-built index, not a scan.
 
@@ -149,16 +179,14 @@ The notebook is the same philosophy applied to memory: coldstart still computes 
 
 coldstart is **one keeper, thin readers**:
 
-```
-            ┌─────────────────────────────────────────────┐
-            │  keeper  (coldstart --daemon)                │
-            │  watches repo → patch/rebuild → save cache   │   ← keeps the cache fresh, serves nothing
-            └───────────────────────┬─────────────────────┘
-                                    │ on-disk cache
-        ┌───────────────────────────┼───────────────────────────┐
-        │                           │                           │
-  coldstart find            coldstart gs                  MCP server
-  (reads cache, prints)     (reads cache, prints)   (reads cache, stdio to client)
+```mermaid
+flowchart TD
+    K["keeper &nbsp;·&nbsp; coldstart --daemon<br/>watches repo → patch / rebuild → save cache<br/>· serves nothing ·"]:::cold
+    K -->|debounced save| C[("on-disk cache")]
+    C --> F["coldstart find<br/>reads cache, prints"]
+    C --> G["coldstart gs<br/>reads cache, prints"]
+    C --> M["MCP server<br/>reads cache, stdio"]
+    classDef cold stroke:#16708f,stroke-width:2px;
 ```
 
 - A single **keeper** process per repo watches the filesystem and keeps the on-disk cache current. It does **not** answer queries.
