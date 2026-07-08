@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - Unreleased
+## [2.0.0] - 2026-07-08
 
 Major release. The package is renamed, the CLI is now the primary surface, and the
 process model is rebuilt around a single background keeper with stateless readers.
@@ -35,12 +35,12 @@ process model is rebuilt around a single background keeper with stateless reader
 - **`init` rewritten around a single `coldstart.md`, multi-client.** `coldstart init`
   asks two things — experience (`cli`/`mcp`) and client (`claude`/`cursor`/`codex`/
   `other`, never auto-detected) — and writes one `coldstart.md` at the repo root
-  carrying all agent guidance. Claude Code gets `@coldstart.md` wired into `CLAUDE.md`
-  plus the find/gs hooks in `.claude/settings.json`; Codex gets an `AGENTS.md` section
-  plus the same hooks in `.codex/hooks.json`; Cursor gets `.cursor/rules/coldstart.mdc`
-  (no hooks — its after-tool hooks are notification-only); other clients get
-  `coldstart.md` + printed directions. All writers merge idempotently. `init` also
-  warms the index in the background so the first lookup is instant.
+  carrying all agent guidance. **Claude Code, Codex, and Cursor are all first-class**
+  — each gets platform-specific find/gs navigation hooks plus notebook recall/capture
+  hooks: Claude via `.claude/settings.json`, Codex via `.codex/hooks.json` (with an
+  `AGENTS.md` section), Cursor via `.cursor/hooks.json` (with a `.cursor/rules/coldstart.mdc`
+  rule). Other clients get `coldstart.md` + printed directions. All writers merge
+  idempotently. `init` also warms the index in the background so the first lookup is instant.
 - **Cache format v18 — consumer-scoped, gzipped, generational.** The single giant
   JSON blob is replaced by gzipped segments split by consumer (find / gs / keeper)
   over an interned file table, written in atomic **generations** (`meta.json` names
@@ -81,21 +81,26 @@ process model is rebuilt around a single background keeper with stateless reader
   base under `.coldstart/notebook/` — append-only `.raw` log as source of truth,
   derived Markdown notes, anchor-freshness stamps from the index (a keeper-derived
   `kb-notes.json` sidecar; `kb search` never loads the code index), two-phase
-  `kb write` (candidates → `--into <id>` or `--new`), plus opt-in capture/recall
-  hooks (`hooks/kb-elicit.mjs`, `hooks/kb-recall.mjs`). Not wired by `init` yet.
-  Verbs: `search` / `write` / `status` / `lint` / `render` / `init` / `migrate`.
+  `kb write` (candidates → `--into <id>` or `--new`), plus capture/recall hooks
+  wired by `init` for Claude Code, Codex, and Cursor. The read/write surface is also
+  exposed as MCP tools (`kb_search` / `kb_lookup` / `kb_write` / `kb_status`) for
+  no-shell clients; `kb commit` stays CLI/human-only. Verbs: `search` / `lookup` /
+  `write` / `commit` / `status` / `lint` / `render` / `view` / `init` / `migrate`
+  (`kb view` opens a single-file HTML browser of the notebook).
 - **`gs` returns the enclosing method body on a `--match`/`--symbol` miss** instead
   of an empty result.
-- **Search hooks wired by `init` (Claude Code + Codex).** `coldstart init` registers two
-- **Search hooks wired by `init` (Claude Code).** `coldstart init` now registers two
-  hooks in `.claude/settings.json`, pointing at the version-pinned copies under
-  `~/.coldstart/versions/<v>/hooks/`: a PostToolUse nudge that flags search behaviour
-  going wrong, and a PreToolUse guard that denies an exact `find` re-run. Merged
-  idempotently — every other setting and any foreign hooks are preserved, a malformed
-  `settings.json` is left untouched. The handlers are surface-agnostic: a shared
-  `normalizeColdstartCall` rewrites an MCP `find`/`gs` call into the equivalent CLI
-  command string, so the detectors run unchanged whether the agent reached coldstart
-  via the CLI or the MCP tools. The hooks ship in the package (`hooks/`).
+- **Navigation + notebook hooks wired by `init` (Claude Code, Codex, Cursor).**
+  A PostToolUse/`postToolUse` nudge that flags search behaviour going wrong, a
+  PreToolUse/`preToolUse` guard that denies an exact `find` re-run, plus notebook
+  capture (session/subagent end) and recall (prompt time). Merged idempotently —
+  every other setting and any foreign hooks are preserved; a malformed config is
+  left untouched. The handlers are surface-agnostic: a shared `normalizeColdstartCall`
+  rewrites an MCP `find`/`gs` call into the equivalent CLI command string, so the
+  detectors run unchanged whether the agent reached coldstart via the CLI or the MCP
+  tools. Claude/Codex/Cursor share one protocol-neutral detector core, differing only
+  in input adaptation, transcript walk, and output envelope. Hooks point at the running
+  install (`installRoot()`) — no version-pinned copy — so `npm update` is picked up
+  automatically and `npm uninstall` disables them. The hooks ship in the package (`hooks/`).
 
 ### Fixed
 - **Keeper could outlive a deleted/taken-over lockfile.** `fs.watch` can miss the
