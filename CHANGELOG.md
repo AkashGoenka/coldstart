@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2026-07-09
+
+### Changed
+- Moved the **Install** section to the top of the README (right after the intro),
+  ahead of the conceptual sections.
+- Added a `homepage` field pointing to the docs site
+  (https://akashgoenka.github.io/coldstart/) and a `bugs` issues link, so the npm
+  package page links to the site instead of falling back to the repo.
+
+### Fixed
+- Bumped the transitive `fast-uri` dependency `3.1.2 → 3.1.3` (CVE-2026-13676).
+  Not exploitable here — `ajv` uses it only for JSON-Schema `uri`-format validation,
+  not host-based security decisions — but this clears the Snyk alert.
+
 ## [2.0.0] - 2026-07-08
 
 Major release. The package is renamed, the CLI is now the primary surface, and the
