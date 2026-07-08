@@ -14,17 +14,16 @@
  *        - Claude Code → CLAUDE.md imports `@coldstart.md`; find/gs hooks in
  *          `.claude/settings.json`. (MCP experience also writes `.mcp.json`.)
  *        - Cursor      → `.cursor/rules/coldstart.mdc` references coldstart.md;
- *          (MCP) `.cursor/mcp.json`. No hooks — Cursor's after-hooks are
- *          notification-only, so the nudge can't be delivered.
- *        - Codex       → AGENTS.md points at coldstart.md; find/gs hooks in
- *          `.codex/hooks.json` (Claude-style, same handlers). (MCP) writes
+ *          Cursor-specific navigation + notebook hooks in `.cursor/hooks.json`.
+ *          (MCP) also writes `.cursor/mcp.json`.
+ *        - Codex       → AGENTS.md points at coldstart.md; Codex-specific
+ *          navigation + notebook hooks in `.codex/hooks.json`. (MCP) writes
  *          `[mcp_servers.coldstart]` into `.codex/config.toml`.
  *        - Other       → write coldstart.md only; print wiring directions.
  *
- * Hooks (the find-dedup guard + behavioral nudge) are the same shipped handlers
- * for Claude and Codex — both share Claude's `permissionDecision`/
- * `additionalContext` protocol. Tools that can't deliver the nudge get rules +
- * MCP only, and we tell the user it "works best on Claude Code or Codex".
+ * Claude, Codex, and Cursor receive separate hook entrypoints. They share the
+ * protocol-neutral detector core; only input adaptation, the transcript walk,
+ * and the output envelope differ per host (Cursor capture parses its own JSONL).
  */
 
 import * as fs from 'node:fs';
@@ -70,56 +69,39 @@ export function coldstartMd(mode: 'cli' | 'mcp'): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Resolve the absolute path to a stable install of coldstart. If
- * `~/.coldstart/versions/<version>/` already has it, reuse it; otherwise copy
- * the running install there. `init` always runs from a complete on-disk
- * install (npx cache, global, or local devDep), so the source tree exists.
+ * Package root of the running coldstart install — the dir holding `dist/`,
+ * `hooks/`, `templates/`, and `package.json`. Derived from THIS module's own
+ * location, so it resolves identically whether we run compiled (`dist/init.js`)
+ * or from source (`src/init.ts`); no HOME lookup, no copy.
+ *
+ * We point hooks and MCP config straight at this live install. `npx` is no
+ * longer a supported flow (install is `npm i -g coldstart` then `coldstart
+ * init`), so the running path is always stable — which makes the old
+ * version-pinned copy into `~/.coldstart/versions/<v>/` pure liability:
+ *   - `npm update -g coldstart` is now picked up automatically (no stale snapshot).
+ *   - `npm uninstall -g coldstart` actually disables the wired hooks, instead of
+ *     a hidden copy that keeps executing on every tool call after removal.
  */
-function getOrInstallStableVersion(): string {
-  const home = process.env.HOME ?? process.env.USERPROFILE ?? '';
-  if (!home) throw new Error('Could not determine HOME directory');
-
-  const pkgPath = path.resolve(path.dirname(path.dirname(__filename)), 'package.json');
-  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version?: string; name?: string };
-  const version = pkg.version;
-  if (!version) throw new Error('Could not determine version from package.json');
-  // Derive the install dir name from package.json so the rename (coldstart-mcp →
-  // coldstart) — or any future rename — doesn't break stable-install resolution.
-  const pkgName = pkg.name ?? 'coldstart';
-
-  const versionDir = path.join(home, '.coldstart', 'versions', version);
-  const entryPath = path.join(versionDir, 'node_modules', pkgName, 'dist', 'index.js');
-  if (fs.existsSync(entryPath)) return entryPath;
-
-  const running = fs.realpathSync(process.argv[1]);
-  const sourceNm = path.resolve(running, '..', '..', '..');
-  if (!fs.existsSync(path.join(sourceNm, pkgName, 'package.json'))) {
-    throw new Error(`Cannot locate the running ${pkgName} install from ${running}.`);
+function installRoot(): string {
+  const root = path.dirname(path.dirname(__filename)); // <install>/dist/init.js → <install>
+  if (!fs.existsSync(path.join(root, 'hooks'))) {
+    throw new Error(`coldstart install at ${root} is missing hooks/ — reinstall coldstart`);
   }
-
-  out(`Copying coldstart-mcp@${version} to ~/.coldstart/versions/${version}/ …`);
-  fs.mkdirSync(versionDir, { recursive: true });
-  fs.cpSync(sourceNm, path.join(versionDir, 'node_modules'), { recursive: true });
-  if (!fs.existsSync(entryPath)) {
-    throw new Error(`Copy completed but entry file not found at ${entryPath}`);
-  }
-  return entryPath;
+  return root;
 }
 
 function mcpServerEntry(cwd: string): { command: string; args: string[] } {
-  const entryPath = getOrInstallStableVersion();
+  const entryPath = path.join(installRoot(), 'dist', 'index.js');
   return { command: 'node', args: [entryPath, '--root', cwd] };
 }
 
 /**
- * Absolute path to the shipped hooks dir, inside the version-pinned stable
- * install (sibling of `dist/`). Pinning to the stable copy means the path we
- * write into settings.json survives a later `npm update`/uninstall of the live
- * package. Throws (same as mcpServerEntry) if no install can be located.
+ * Absolute path to the shipped hooks dir (sibling of `dist/`) in the running
+ * install. The path written into settings.json / hooks.json points at the live
+ * install, so uninstalling coldstart disables the hooks (see installRoot).
  */
 function resolveHooksDir(): string {
-  const entryPath = getOrInstallStableVersion(); // <stable>/node_modules/<pkg>/dist/index.js
-  return path.join(path.dirname(path.dirname(entryPath)), 'hooks');
+  return path.join(installRoot(), 'hooks');
 }
 
 // ---------------------------------------------------------------------------
@@ -295,6 +277,15 @@ export function wireClaudeImport(cwd: string): 'created' | 'added' | 'present' {
 // search-behaviour advice; the PreToolUse guard denies an exact find re-run.
 const HOOK_PRE = 'find-preguard.mjs';
 const HOOK_POST = 'find-nudge.mjs';
+const CODEX_HOOK_PRE = 'codex-find-preguard.mjs';
+const CODEX_HOOK_POST = 'codex-find-nudge.mjs';
+const CODEX_KB_HOOK_RECALL = 'codex-kb-recall.mjs';
+const CODEX_KB_HOOK_ELICIT = 'codex-kb-elicit.mjs';
+
+const CURSOR_HOOK_PRE = 'cursor-find-preguard.mjs';
+const CURSOR_HOOK_POST = 'cursor-find-nudge.mjs';
+const CURSOR_KB_HOOK_RECALL = 'cursor-kb-recall.mjs';
+const CURSOR_KB_HOOK_ELICIT = 'cursor-kb-elicit.mjs';
 
 // PreToolUse matcher — surface-agnostic: fires for the CLI `coldstart find`
 // (Bash) AND the `mcp__coldstart__find` tool. A plain regex alternation, so it
@@ -322,6 +313,17 @@ function isColdstartHookEntry(entry: unknown): boolean {
   return hooks.some((h) => {
     const cmd = (h as { command?: unknown })?.command;
     return typeof cmd === 'string' && (cmd.includes(HOOK_PRE) || cmd.includes(HOOK_POST));
+  });
+}
+
+function isCodexHookEntry(entry: unknown): boolean {
+  const hooks = (entry as { hooks?: unknown })?.hooks;
+  if (!Array.isArray(hooks)) return false;
+  const owned = [HOOK_PRE, HOOK_POST, KB_HOOK_RECALL, KB_HOOK_ELICIT,
+    CODEX_HOOK_PRE, CODEX_HOOK_POST, CODEX_KB_HOOK_RECALL, CODEX_KB_HOOK_ELICIT];
+  return hooks.some((h) => {
+    const cmd = (h as { command?: unknown })?.command;
+    return typeof cmd === 'string' && owned.some((file) => cmd.includes(file));
   });
 }
 
@@ -392,14 +394,9 @@ export function wireClaudeHooks(cwd: string): 'created' | 'updated' | { error: s
 }
 
 /**
- * Register the find/gs search hooks in the project's `.codex/hooks.json`.
- *
- * Codex hooks are Claude-style: same `PreToolUse`/`PostToolUse` events, the same
- * `permissionDecision: "deny"` (guard) and `hookSpecificOutput.additionalContext`
- * (nudge), and the same `tool_name`/`tool_input`/`tool_response` stdin — so the
- * SAME shipped handlers run unchanged. The only differences vs Claude: the file
- * lives at `.codex/hooks.json` with a top-level `hooks` object, and Codex's
- * match-all is the regex `.*` (Claude uses `*`).
+ * Register Codex-specific navigation and notebook hooks. Event envelopes are
+ * intentionally handled by separate files so Codex rollout/subagent behavior
+ * can evolve without risking the Claude integration.
  */
 export function wireCodexHooks(cwd: string): 'created' | 'updated' | { error: string } {
   let hooksDir: string;
@@ -427,8 +424,96 @@ export function wireCodexHooks(cwd: string): 'created' | 'updated' | { error: st
     config.hooks && typeof config.hooks === 'object'
       ? (config.hooks as Record<string, unknown>)
       : {};
-  mergeHooks(hooksCfg, coldstartHooks(hooksDir, '.*'));
+  const stripOurs = (arr: unknown): unknown[] =>
+    (Array.isArray(arr) ? arr : []).filter((entry) => !isCodexHookEntry(entry));
+  const command = (file: string): HookCommand => ({ type: 'command', command: `node ${path.join(hooksDir, file)}` });
+  hooksCfg.PreToolUse = [
+    ...stripOurs(hooksCfg.PreToolUse),
+    { matcher: PRE_MATCHER, hooks: [command(CODEX_HOOK_PRE)] },
+  ];
+  hooksCfg.PostToolUse = [
+    ...stripOurs(hooksCfg.PostToolUse),
+    { matcher: '.*', hooks: [command(CODEX_HOOK_POST)] },
+  ];
+  hooksCfg.UserPromptSubmit = [
+    ...stripOurs(hooksCfg.UserPromptSubmit),
+    { hooks: [command(CODEX_KB_HOOK_RECALL)] },
+  ];
+  hooksCfg.Stop = [
+    ...stripOurs(hooksCfg.Stop),
+    { hooks: [command(CODEX_KB_HOOK_ELICIT)] },
+  ];
+  hooksCfg.SubagentStop = [
+    ...stripOurs(hooksCfg.SubagentStop),
+    { matcher: '.*', hooks: [command(CODEX_KB_HOOK_ELICIT)] },
+  ];
   config.hooks = hooksCfg;
+
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(config, null, 2) + '\n');
+  return existed ? 'updated' : 'created';
+}
+
+/** True if a `.cursor/hooks.json` entry (`{command}`) is one WE wrote. Cursor's
+ *  entry shape is flatter than Codex's ({command} vs {matcher,hooks:[…]}), so it
+ *  gets its own detector. */
+function isCursorHookEntry(entry: unknown): boolean {
+  const cmd = (entry as { command?: unknown })?.command;
+  const owned = [CURSOR_HOOK_PRE, CURSOR_HOOK_POST, CURSOR_KB_HOOK_RECALL, CURSOR_KB_HOOK_ELICIT];
+  return typeof cmd === 'string' && owned.some((file) => cmd.includes(file));
+}
+
+/**
+ * Register Cursor navigation + notebook hooks in `.cursor/hooks.json`.
+ *
+ * Cursor's config differs from Codex/Claude: a top-level `version` + a `hooks`
+ * map whose events hold FLAT `{command}` entries (no matcher / no nested hooks).
+ * `preToolUse`/`postToolUse` are generic (fire for Shell + Read + MCP), so no
+ * matcher is needed — the handler filters. The SAME hooks serve both experiences;
+ * the handlers normalize a Shell `coldstart find` (cli) and an MCP find (mcp) to
+ * one shape, mirroring Codex. Recall rides `beforeSubmitPrompt` (Cursor honors
+ * its `additional_context` despite the docs); capture rides `stop`+`subagentStop`.
+ *
+ * Merges idempotently (strips our prior entries by filename, preserves foreign
+ * ones) and is fail-safe on invalid JSON.
+ */
+export function wireCursorHooks(cwd: string): 'created' | 'updated' | { error: string } {
+  let hooksDir: string;
+  try {
+    hooksDir = resolveHooksDir();
+  } catch (e) {
+    return { error: `could not resolve a stable install path (${e})` };
+  }
+
+  const dir = path.join(cwd, '.cursor');
+  const filePath = path.join(dir, 'hooks.json');
+
+  let config: Record<string, unknown> = {};
+  const existed = fs.existsSync(filePath);
+  if (existed) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      if (parsed && typeof parsed === 'object') config = parsed as Record<string, unknown>;
+    } catch {
+      return { error: `${filePath} is not valid JSON — left untouched; wire hooks manually` };
+    }
+  }
+
+  const hooksCfg =
+    config.hooks && typeof config.hooks === 'object'
+      ? (config.hooks as Record<string, unknown>)
+      : {};
+  const stripOurs = (arr: unknown): unknown[] =>
+    (Array.isArray(arr) ? arr : []).filter((entry) => !isCursorHookEntry(entry));
+  const command = (file: string): { command: string } => ({ command: `node ${path.join(hooksDir, file)}` });
+
+  hooksCfg.preToolUse = [...stripOurs(hooksCfg.preToolUse), command(CURSOR_HOOK_PRE)];
+  hooksCfg.postToolUse = [...stripOurs(hooksCfg.postToolUse), command(CURSOR_HOOK_POST)];
+  hooksCfg.beforeSubmitPrompt = [...stripOurs(hooksCfg.beforeSubmitPrompt), command(CURSOR_KB_HOOK_RECALL)];
+  hooksCfg.stop = [...stripOurs(hooksCfg.stop), command(CURSOR_KB_HOOK_ELICIT)];
+  hooksCfg.subagentStop = [...stripOurs(hooksCfg.subagentStop), command(CURSOR_KB_HOOK_ELICIT)];
+  config.hooks = hooksCfg;
+  if (config.version === undefined) config.version = 1;
 
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(filePath, JSON.stringify(config, null, 2) + '\n');
@@ -626,7 +711,10 @@ function setupCodex(cwd: string, exp: Experience): void {
     const entry = mcpEntryOrNull(cwd);
     if (entry) out(`  config.toml   — ${wireCodexMcp(cwd, entry)} [mcp_servers.coldstart]`);
   }
-  reportHooks('hooks.json', wireCodexHooks(cwd));
+  const hooks = wireCodexHooks(cwd);
+  out(typeof hooks === 'object'
+    ? `  hooks.json    — Codex hooks NOT wired: ${hooks.error}`
+    : `  hooks.json    — ${hooks} Codex navigation + notebook hooks`);
 }
 
 function setupCursor(cwd: string, exp: Experience): void {
@@ -639,10 +727,10 @@ function setupCursor(cwd: string, exp: Experience): void {
       out(typeof r === 'object' ? `  .cursor/mcp.json — NOT written: ${r.error}` : `  mcp.json      — ${r} .cursor coldstart MCP server`);
     }
   }
-  out('');
-  out('  Note: Cursor hooks are not wired — its after-tool hooks are');
-  out('  notification-only, so the behavioral nudge can\'t be delivered.');
-  out('  coldstart works best on Claude Code or Codex (full hook support).');
+  const hooks = wireCursorHooks(cwd);
+  out(typeof hooks === 'object'
+    ? `  hooks.json    — Cursor hooks NOT wired: ${hooks.error}`
+    : `  hooks.json    — ${hooks} Cursor navigation + notebook hooks`);
 }
 
 function setupOther(cwd: string, exp: Experience): void {
@@ -663,8 +751,8 @@ function setupOther(cwd: string, exp: Experience): void {
     out('     `coldstart find` / `coldstart gs` (npm i -g coldstart).');
   }
   out('');
-  out('  Note: behavioral hooks (the find-dedup guard + nudge) need a host that');
-  out('  supports Claude-style hooks. coldstart works best on Claude Code or Codex.');
+  out('  Note: behavioral hooks need a supported host. coldstart ships separate');
+  out('  hook implementations for Claude Code and Codex.');
 }
 
 // ---------------------------------------------------------------------------
@@ -727,8 +815,8 @@ export async function runInit(): Promise<void> {
     out('Which client are you wiring coldstart into?');
     out('');
     out('  1  Claude Code  — rules import + find/gs hooks');
-    out('  2  Cursor       — rules + MCP (no hooks; see note)');
-    out('  3  Codex        — rules + find/gs hooks');
+    out('  2  Cursor       — rules + navigation/notebook hooks');
+    out('  3  Codex        — rules + navigation/notebook hooks');
     out('  4  Other        — coldstart.md + wiring directions');
     out('');
     client = parseClient(await ask('Choose [1/2/3/4]: ')) ?? 'other';
@@ -751,8 +839,8 @@ export async function runInit(): Promise<void> {
       setupOther(cwd, experience);
   }
 
-  // The notebook is always set up (files + git wiring); hooks are Claude-only
-  // and were wired above in setupClaude. Codex/Cursor kb wiring lands later.
+  // The notebook is always set up (files + git wiring). Claude and Codex hooks
+  // are wired by their client setup above; Cursor/other use the explicit CLI.
   setupNotebook(cwd, commitNotebook);
 
   // Warm the index now, while the user is here at setup, so the first lookup
