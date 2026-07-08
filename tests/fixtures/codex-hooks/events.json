@@ -1,0 +1,31 @@
+{
+  "userPromptSubmit": {
+    "session_id": "session-fixture",
+    "turn_id": "turn-fixture",
+    "transcript_path": null,
+    "cwd": "__ROOT__",
+    "hook_event_name": "UserPromptSubmit",
+    "prompt": "Where is graph restore handled?"
+  },
+  "postToolUse": {
+    "session_id": "session-fixture",
+    "turn_id": "turn-fixture",
+    "cwd": "__ROOT__",
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Bash",
+    "tool_input": {"command": "coldstart find graph restore"},
+    "tool_response": "src/app.py: restoreGraph"
+  },
+  "subagentStop": {
+    "session_id": "session-fixture",
+    "turn_id": "sub-turn-fixture",
+    "transcript_path": "__PARENT_TRANSCRIPT__",
+    "agent_transcript_path": "__AGENT_TRANSCRIPT__",
+    "cwd": "__ROOT__",
+    "hook_event_name": "SubagentStop",
+    "stop_hook_active": false,
+    "agent_id": "agent-fixture",
+    "agent_type": "default",
+    "last_assistant_message": "done"
+  }
+}

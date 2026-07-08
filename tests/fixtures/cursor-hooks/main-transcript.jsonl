@@ -1,0 +1,6 @@
+{"role":"user","message":{"content":[{"type":"text","text":"turn 1: look at the old file"}]}}
+{"role":"assistant","message":{"content":[{"type":"text","text":"reading"},{"type":"tool_use","name":"Read","input":{"path":"__ROOT__/src/old.py"}}]}}
+{"type":"turn_ended","status":"success"}
+{"role":"user","message":{"content":[{"type":"text","text":"turn 2: now the app"}]}}
+{"role":"assistant","message":{"content":[{"type":"text","text":"reading and grepping"},{"type":"tool_use","name":"Read","input":{"path":"__ROOT__/src/app.py"}},{"type":"tool_use","name":"Shell","input":{"command":"grep -n restoreGraph src/helper.py"}}]}}
+{"type":"turn_ended","status":"success"}

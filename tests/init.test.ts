@@ -8,6 +8,7 @@ import {
   wireClaudeImport,
   wireClaudeHooks,
   wireCodexHooks,
+  wireCursorHooks,
   wireCursorRule,
   wireCodexAgents,
   wireCodexMcp,
@@ -44,16 +45,18 @@ describe('init MCP entry format', () => {
     // Check that it now returns 'node' command
     expect(initSource).toMatch(/command:\s*['"]node['"]/);
 
-    // Check that getOrInstallStableVersion is being called
-    expect(initSource).toContain('getOrInstallStableVersion()');
+    // Check that the path is resolved from the running install
+    expect(initSource).toContain('installRoot()');
   });
 
-  it('should reference .coldstart/versions in the install logic', async () => {
+  it('points at the running install, not a copied version dir', async () => {
     const initPath = path.resolve(path.dirname(__filename), '..', 'src', 'init.ts');
     const initSource = fs.readFileSync(initPath, 'utf8');
 
-    // Verify the stable version directory is being used
-    expect(initSource).toContain('.coldstart/versions');
+    // The version-pinned copy is gone: no versions dir, no tree copy. Pointing
+    // at the live install means `npm uninstall` disables the wired hooks.
+    expect(initSource).not.toContain("'.coldstart', 'versions'");
+    expect(initSource).not.toContain('cpSync');
   });
 
   it('should pass node_modules path as absolute, not tilde-expanded', async () => {
@@ -131,31 +134,19 @@ describe('init wiring (coldstart.md import model)', () => {
 
 describe('wireClaudeHooks (settings.json hook wiring)', () => {
   let tempDir: string; // the project being wired
-  let homeDir: string; // fake HOME holding a pre-seeded stable install (no copy)
-  let prevHome: string | undefined;
+  // Hooks are wired against the running install (this repo). In tests, init.ts's
+  // module path resolves the package root to the repo, so hook commands point at
+  // <repo>/hooks — no HOME lookup, no version-pinned copy.
+  const hooksDir = path.resolve(path.dirname(__filename), '..', 'hooks');
   const settingsPath = (): string => path.join(tempDir, '.claude', 'settings.json');
   const readSettings = (): any => JSON.parse(fs.readFileSync(settingsPath(), 'utf8'));
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coldstart-hooks-test-'));
-    homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coldstart-home-test-'));
-    // Pre-seed the version-pinned stable install so getOrInstallStableVersion
-    // early-returns (entry exists) instead of copying anything.
-    const version = JSON.parse(
-      fs.readFileSync(path.resolve(path.dirname(__filename), '..', 'package.json'), 'utf8'),
-    ).version as string;
-    const stable = path.join(homeDir, '.coldstart', 'versions', version, 'node_modules', 'coldstart');
-    fs.mkdirSync(path.join(stable, 'dist'), { recursive: true });
-    fs.writeFileSync(path.join(stable, 'dist', 'index.js'), '// stub');
-    fs.mkdirSync(path.join(stable, 'hooks'), { recursive: true });
-    prevHome = process.env.HOME;
-    process.env.HOME = homeDir;
   });
 
   afterEach(() => {
-    if (prevHome === undefined) delete process.env.HOME;
-    else process.env.HOME = prevHome;
-    for (const d of [tempDir, homeDir]) if (fs.existsSync(d)) fs.rmSync(d, { recursive: true });
+    if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true });
   });
 
   it('creates settings.json with surface-agnostic find/gs hook matchers', () => {
@@ -165,8 +156,8 @@ describe('wireClaudeHooks (settings.json hook wiring)', () => {
     expect(s.hooks.PreToolUse[0].hooks[0].command).toContain('find-preguard.mjs');
     expect(s.hooks.PostToolUse[0].matcher).toBe('*');
     expect(s.hooks.PostToolUse[0].hooks[0].command).toContain('find-nudge.mjs');
-    // path points at the version-pinned stable install, not a tilde
-    expect(s.hooks.PostToolUse[0].hooks[0].command).toContain('.coldstart/versions');
+    // path points at the running install's hooks dir (absolute), not a tilde
+    expect(s.hooks.PostToolUse[0].hooks[0].command).toContain(hooksDir);
   });
 
   it('merges into existing settings without clobbering and is idempotent', () => {
@@ -237,40 +228,86 @@ describe('rules-file writers (reference coldstart.md, never duplicate it)', () =
   });
 });
 
+describe('Cursor hooks', () => {
+  let tempDir: string;
+  const hooksDir = path.resolve(path.dirname(__filename), '..', 'hooks');
+  const hooksPath = (): string => path.join(tempDir, '.cursor', 'hooks.json');
+  const readHooks = (): any => JSON.parse(fs.readFileSync(hooksPath(), 'utf8'));
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coldstart-cursor-test-'));
+  });
+  afterEach(() => {
+    if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true });
+  });
+
+  it('wireCursorHooks writes flat {command} entries for all four hooks at the live install', () => {
+    expect(wireCursorHooks(tempDir)).toBe('created');
+    const c = readHooks();
+    expect(c.version).toBe(1);
+    // Cursor entries are flat {command} — no matcher, no nested hooks.
+    expect(c.hooks.preToolUse[0].command).toContain('cursor-find-preguard.mjs');
+    expect(c.hooks.preToolUse[0].command).toContain(hooksDir);
+    expect(c.hooks.preToolUse[0].matcher).toBeUndefined();
+    expect(c.hooks.postToolUse[0].command).toContain('cursor-find-nudge.mjs');
+    expect(c.hooks.beforeSubmitPrompt[0].command).toContain('cursor-kb-recall.mjs');
+    expect(c.hooks.stop[0].command).toContain('cursor-kb-elicit.mjs');
+    expect(c.hooks.subagentStop[0].command).toContain('cursor-kb-elicit.mjs');
+  });
+
+  it('wireCursorHooks merges + is idempotent, preserving foreign hooks', () => {
+    fs.mkdirSync(path.join(tempDir, '.cursor'), { recursive: true });
+    fs.writeFileSync(hooksPath(), JSON.stringify({
+      version: 1,
+      hooks: {
+        preToolUse: [{ command: 'node /mine/guard.mjs' }],
+        afterFileEdit: [{ command: 'node /mine/format.mjs' }],
+      },
+    }));
+    expect(wireCursorHooks(tempDir)).toBe('updated');
+    expect(wireCursorHooks(tempDir)).toBe('updated');
+    const c = readHooks();
+    expect(c.hooks.preToolUse).toHaveLength(2); // foreign + exactly one of ours
+    expect(c.hooks.preToolUse.filter((e: any) => e.command.includes('/mine/guard.mjs'))).toHaveLength(1);
+    expect(c.hooks.preToolUse.filter((e: any) => e.command.includes('cursor-find-preguard'))).toHaveLength(1);
+    expect(c.hooks.afterFileEdit[0].command).toContain('/mine/format.mjs'); // untouched
+    expect(c.hooks.stop).toHaveLength(1);
+  });
+
+  it('wireCursorHooks refuses to clobber malformed hooks.json', () => {
+    fs.mkdirSync(path.join(tempDir, '.cursor'), { recursive: true });
+    fs.writeFileSync(hooksPath(), '{ nope');
+    const res = wireCursorHooks(tempDir);
+    expect((res as { error: string }).error).toContain('not valid JSON');
+    expect(fs.readFileSync(hooksPath(), 'utf8')).toBe('{ nope');
+  });
+});
+
 describe('Codex hooks + MCP writers', () => {
   let tempDir: string;
-  let homeDir: string;
-  let prevHome: string | undefined;
+  const hooksDir = path.resolve(path.dirname(__filename), '..', 'hooks');
   const hooksPath = (): string => path.join(tempDir, '.codex', 'hooks.json');
   const readHooks = (): any => JSON.parse(fs.readFileSync(hooksPath(), 'utf8'));
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coldstart-codex-test-'));
-    homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coldstart-codex-home-'));
-    const version = JSON.parse(
-      fs.readFileSync(path.resolve(path.dirname(__filename), '..', 'package.json'), 'utf8'),
-    ).version as string;
-    const stable = path.join(homeDir, '.coldstart', 'versions', version, 'node_modules', 'coldstart');
-    fs.mkdirSync(path.join(stable, 'dist'), { recursive: true });
-    fs.writeFileSync(path.join(stable, 'dist', 'index.js'), '// stub');
-    fs.mkdirSync(path.join(stable, 'hooks'), { recursive: true });
-    prevHome = process.env.HOME;
-    process.env.HOME = homeDir;
   });
   afterEach(() => {
-    if (prevHome === undefined) delete process.env.HOME;
-    else process.env.HOME = prevHome;
-    for (const d of [tempDir, homeDir]) if (fs.existsSync(d)) fs.rmSync(d, { recursive: true });
+    if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true });
   });
 
-  it('wireCodexHooks writes .codex/hooks.json with Claude-style entries and .* match-all', () => {
+  it('wireCodexHooks writes separate Codex navigation and notebook entries', () => {
     expect(wireCodexHooks(tempDir)).toBe('created');
     const c = readHooks();
     expect(c.hooks.PreToolUse[0].matcher).toBe('Bash|mcp__coldstart__find');
-    expect(c.hooks.PreToolUse[0].hooks[0].command).toContain('find-preguard.mjs');
+    expect(c.hooks.PreToolUse[0].hooks[0].command).toContain('codex-find-preguard.mjs');
     expect(c.hooks.PostToolUse[0].matcher).toBe('.*'); // Codex match-all, not '*'
-    expect(c.hooks.PostToolUse[0].hooks[0].command).toContain('find-nudge.mjs');
-    expect(c.hooks.PostToolUse[0].hooks[0].command).toContain('.coldstart/versions');
+    expect(c.hooks.PostToolUse[0].hooks[0].command).toContain('codex-find-nudge.mjs');
+    expect(c.hooks.PostToolUse[0].hooks[0].command).toContain(hooksDir);
+    expect(c.hooks.UserPromptSubmit[0].hooks[0].command).toContain('codex-kb-recall.mjs');
+    expect(c.hooks.Stop[0].hooks[0].command).toContain('codex-kb-elicit.mjs');
+    expect(c.hooks.SubagentStop[0].hooks[0].command).toContain('codex-kb-elicit.mjs');
+    expect(JSON.stringify(c)).not.toContain('node /other');
   });
 
   it('wireCodexHooks merges + is idempotent, preserving foreign hooks', () => {
@@ -286,6 +323,23 @@ describe('Codex hooks + MCP writers', () => {
     expect(c.hooks.PostToolUse.filter((e: any) => e.matcher === 'Edit')).toHaveLength(1);
     expect(c.hooks.PostToolUse.filter((e: any) => e.matcher === '.*')).toHaveLength(1);
     expect(c.hooks.PreToolUse).toHaveLength(1);
+    expect(c.hooks.UserPromptSubmit).toHaveLength(1);
+    expect(c.hooks.Stop).toHaveLength(1);
+    expect(c.hooks.SubagentStop).toHaveLength(1);
+  });
+
+  it('replaces legacy shared hook entries while preserving foreign hooks', () => {
+    fs.mkdirSync(path.join(tempDir, '.codex'), { recursive: true });
+    fs.writeFileSync(hooksPath(), JSON.stringify({ hooks: {
+      PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'node /old/find-preguard.mjs' }] }],
+      UserPromptSubmit: [{ hooks: [{ type: 'command', command: 'node /old/kb-recall.mjs' }] }],
+      Stop: [{ hooks: [{ type: 'command', command: 'node /foreign/stop.mjs' }] }],
+    } }));
+    expect(wireCodexHooks(tempDir)).toBe('updated');
+    const body = JSON.stringify(readHooks());
+    expect(body).not.toContain('/old/');
+    expect(body).toContain('/foreign/stop.mjs');
+    expect(body).toContain('codex-kb-recall.mjs');
   });
 
   it('wireCodexHooks refuses to clobber malformed hooks.json', () => {

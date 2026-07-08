@@ -33,53 +33,17 @@ function isLegacyNpxEntry(entry: unknown): boolean {
 }
 
 /**
- * Resolve the path to a stable coldstart-mcp install.
+ * Resolve the `dist/index.js` of the running coldstart install.
  *
- * Logic:
- * - If process.argv[1] is NOT inside ~/.npm/_npx/ and the parent has a package.json
- *   with "name": "coldstart-mcp", use it (we're running from a stable install).
- * - Otherwise, check if ~/.coldstart/versions/<our-version>/node_modules/coldstart-mcp/dist/index.js exists.
- * - Otherwise return null.
+ * Derived from this module's own location (`<install>/dist/migrate.js`), so it
+ * points at the live install regardless of how it was launched. There is no
+ * version-pinned copy to consult — `npx` is no longer a supported flow, so the
+ * running path is always stable.
  */
 async function findStableInstall(): Promise<string | null> {
   try {
-    // Read our package.json to get the version
-    const pkgPath = path.resolve(path.dirname(path.dirname(__filename)), 'package.json');
-    if (!fs.existsSync(pkgPath)) return null;
-
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version?: string; name?: string };
-    const ourVersion = pkg.version;
-    if (!ourVersion) return null;
-    // Accept both the current name and the legacy one so a stable install resolves
-    // across the coldstart-mcp → coldstart rename.
-    const names = new Set([pkg.name ?? 'coldstart', 'coldstart', 'coldstart-mcp']);
-
-    // Check if we're in a stable install (not in ~/.npm/_npx/)
-    const argv1 = process.argv[1];
-    if (argv1 && !argv1.includes('.npm/_npx/')) {
-      const parent = path.dirname(argv1);
-      const parentPkg = path.join(parent, '..', 'package.json');
-      if (fs.existsSync(parentPkg)) {
-        const parentJson = JSON.parse(fs.readFileSync(parentPkg, 'utf8')) as { name?: string };
-        if (parentJson.name && names.has(parentJson.name)) {
-          const entryPath = path.resolve(parent, '..', 'dist', 'index.js');
-          if (fs.existsSync(entryPath)) {
-            return entryPath;
-          }
-        }
-      }
-    }
-
-    // Check ~/.coldstart/versions/<version>/
-    const home = process.env.HOME ?? process.env.USERPROFILE ?? '';
-    if (!home) return null;
-
-    const versionedPath = path.join(home, '.coldstart', 'versions', ourVersion, 'node_modules', pkg.name ?? 'coldstart', 'dist', 'index.js');
-    if (fs.existsSync(versionedPath)) {
-      return versionedPath;
-    }
-
-    return null;
+    const entryPath = path.join(path.dirname(path.dirname(__filename)), 'dist', 'index.js');
+    return fs.existsSync(entryPath) ? entryPath : null;
   } catch {
     return null;
   }
@@ -130,7 +94,7 @@ export async function migrateLegacyMcpConfig(rootDir: string): Promise<void> {
     // Resolve a stable install
     const newEntry = await buildFastEntry(rootDir);
     if (!newEntry) {
-      process.stderr.write('[coldstart] Detected legacy npx-based .mcp.json but could not resolve a stable install path. Run `npx -y coldstart@latest init` to migrate.\n');
+      process.stderr.write('[coldstart] Detected legacy npx-based .mcp.json but could not resolve the running install path. Reinstall (`npm i -g coldstart`) and run `coldstart init` to migrate.\n');
       continue;
     }
 

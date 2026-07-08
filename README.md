@@ -20,6 +20,7 @@ coldstart kb search tile save lifecycle   # plain task words, symbols, or file n
 coldstart kb lookup src/models.py Tile    # everything known at one exact address
 coldstart kb write spec.json              # the write gate (two-phase dedup)
 coldstart kb commit                       # publish notes to git, nothing else rides along
+coldstart kb view                         # open a single-file HTML browser of the notebook
 coldstart kb status / lint / render / init / migrate
 ```
 
@@ -95,7 +96,7 @@ coldstart ships as one binary with two front doors:
 
 Same engine, same index, same results. Pick whichever your agent can reach.
 
-It works best with **Claude Code** and **Codex**: both get the fast CLI path *and* the find/gs search hooks from `coldstart init` (the find-dedup guard + behavioral nudge). On Claude Code, `coldstart kb init` additionally wires the notebook's capture/recall hooks. **Cursor** is auto-wired for rules + MCP (no hooks — its after-tool hooks are notification-only); any other client gets `coldstart.md` plus printed wiring directions.
+It works best with **Claude Code**, **Codex**, and **Cursor**: all three get platform-specific find/gs hooks and notebook recall/capture hooks from `coldstart init`. Any other client gets `coldstart.md` plus printed wiring directions.
 
 ---
 
@@ -121,8 +122,8 @@ coldstart kb init   # notebook: skeleton + capture/recall hooks (optional but re
 `init` asks two things — the **experience** (`cli`, recommended, or `mcp`) and the **client** — then writes a single `coldstart.md` at your repo root (the agent-facing guidance) and wires it in. Pass `--experience` / `--client` to skip the prompts. The client is never auto-detected; you always pick it.
 
 - **Claude Code** → ensures `CLAUDE.md` imports it via `@coldstart.md`, and registers the find/gs search hooks in `.claude/settings.json` (a PostToolUse nudge + a PreToolUse find-dedup guard — merged into any existing settings, never overwriting them). The `mcp` experience also writes `.mcp.json`.
-- **Codex** → adds a coldstart section to `AGENTS.md` and registers the same find/gs hooks in `.codex/hooks.json` (Codex uses the same Claude-style hook protocol, so the shipped handlers run unchanged). The `mcp` experience also writes `[mcp_servers.coldstart]` into `.codex/config.toml`.
-- **Cursor** → writes `.cursor/rules/coldstart.mdc` (an always-applied rule referencing `@coldstart.md`) and, for the `mcp` experience, `.cursor/mcp.json`. No hooks: Cursor's after-tool hooks are notification-only, so the behavioral nudge can't be delivered.
+- **Codex** → adds a coldstart section to `AGENTS.md` and registers Codex-specific navigation plus notebook hooks in `.codex/hooks.json`. The capture hook understands Codex rollout and subagent transcripts. The `mcp` experience also writes `[mcp_servers.coldstart]` into `.codex/config.toml`.
+- **Cursor** → writes `.cursor/rules/coldstart.mdc` (an always-applied rule referencing `@coldstart.md`) and registers Cursor-specific navigation plus notebook hooks in `.cursor/hooks.json` (a `preToolUse` find-dedup guard, a `postToolUse` nudge, `beforeSubmitPrompt` recall, and `stop`/`subagentStop` capture — merged into any existing hooks). The capture hook parses Cursor's own conversation transcript. The `mcp` experience also writes `.cursor/mcp.json`.
 - **Other** → writes `coldstart.md` only, and prints the wiring directions (plus the MCP server entry for the `mcp` experience).
 
 `init` then warms the index in the background, so your first lookup is instant. Re-running either init is safe — they never duplicate entries.
