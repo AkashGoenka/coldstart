@@ -94,7 +94,7 @@ export async function migrateLegacyMcpConfig(rootDir: string): Promise<void> {
     // Resolve a stable install
     const newEntry = await buildFastEntry(rootDir);
     if (!newEntry) {
-      process.stderr.write('[coldstart] Detected legacy npx-based .mcp.json but could not resolve the running install path. Reinstall (`npm i -g coldstart`) and run `coldstart init` to migrate.\n');
+      process.stderr.write('[coldstart] Detected legacy npx-based .mcp.json but could not resolve the running install path. Reinstall (`npm i -g @cstart/coldstart`) and run `coldstart init` to migrate.\n');
       continue;
     }
 

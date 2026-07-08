@@ -113,7 +113,7 @@ The notebook is the same philosophy applied to memory: coldstart still computes 
 Requires Node.js 18+.
 
 ```bash
-npm install -g coldstart --legacy-peer-deps
+npm install -g @cstart/coldstart --legacy-peer-deps
 cd your-project
 coldstart init      # navigation: coldstart.md + client wiring + background index warm-up
 coldstart kb init   # notebook: skeleton + capture/recall hooks (optional but recommended)
@@ -133,7 +133,7 @@ coldstart kb init   # notebook: skeleton + capture/recall hooks (optional but re
 ### Upgrading
 
 ```bash
-npm install -g coldstart@latest --legacy-peer-deps
+npm install -g @cstart/coldstart@latest --legacy-peer-deps
 coldstart init   # re-run in each project to refresh coldstart.md
 ```
 

@@ -75,11 +75,11 @@ export function coldstartMd(mode: 'cli' | 'mcp'): string {
  * or from source (`src/init.ts`); no HOME lookup, no copy.
  *
  * We point hooks and MCP config straight at this live install. `npx` is no
- * longer a supported flow (install is `npm i -g coldstart` then `coldstart
+ * longer a supported flow (install is `npm i -g @cstart/coldstart` then `coldstart
  * init`), so the running path is always stable — which makes the old
  * version-pinned copy into `~/.coldstart/versions/<v>/` pure liability:
- *   - `npm update -g coldstart` is now picked up automatically (no stale snapshot).
- *   - `npm uninstall -g coldstart` actually disables the wired hooks, instead of
+ *   - `npm update -g @cstart/coldstart` is now picked up automatically (no stale snapshot).
+ *   - `npm uninstall -g @cstart/coldstart` actually disables the wired hooks, instead of
  *     a hidden copy that keeps executing on every tool call after removal.
  */
 function installRoot(): string {
@@ -748,7 +748,7 @@ function setupOther(cwd: string, exp: Experience): void {
     }
   } else {
     out('  2. Make sure the `coldstart` CLI is on PATH so the agent can run');
-    out('     `coldstart find` / `coldstart gs` (npm i -g coldstart).');
+    out('     `coldstart find` / `coldstart gs` (npm i -g @cstart/coldstart).');
   }
   out('');
   out('  Note: behavioral hooks need a supported host. coldstart ships separate');
