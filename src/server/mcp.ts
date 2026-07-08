@@ -90,6 +90,66 @@ export const TOOL_DEFINITIONS = [
       required: ['query'],
     },
   },
+  {
+    name: 'kb_lookup',
+    description:
+      'Read everything the NOTEBOOK knows at ONE exact address — the file you are about to edit. Address-keyed, not concept-keyed: unlike kb_search (fuzzy, ranked), this filters notes by exact anchor path, so it is exhaustive at that path. Returns the file note\'s facets, every cross-file flow that passes THROUGH this file, and lessons/absences anchored here — each with a live freshness stamp against the current code.\n\n' +
+      'Reach for this the moment you have DECIDED on a file and are about to modify it: it surfaces the flow you might break, the absence you are about to violate, the rationale for the code\'s shape. A clean result ("nothing known here") is itself a positive signal — proceed. Anything marked [evidence changed: <path>] drifted since it was verified; re-verify before relying on it, and correct the note with kb_write if it proved wrong. Pass an optional `symbol` to narrow to one top-level symbol at that path.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Exact repo-relative path of the file (e.g. "src/auth/service.ts").',
+        },
+        symbol: {
+          type: 'string',
+          description: 'Optional top-level symbol name to narrow the lookup to notes anchored at that symbol.',
+        },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'kb_write',
+    description:
+      'Save or correct a NOTEBOOK note after finishing real work here — you have the files in context, so no future agent is better placed to record what you learned. Write a file note (what a file is for), a flow note (how a task spans files), or an absence lesson (a confirmed "there is no X"). Also the tool to FIX or RETRACT a note you used that proved wrong (`op: "put"` replaces, `op: "retract"` removes).\n\n' +
+      'TWO-PHASE reuse gate: a flow/lesson `spec` sent WITHOUT an `id` first searches the notebook for the same concept. If plausible matches exist, kb_write returns `{status:"candidates", candidates:[...]}` INSTEAD of writing — re-call with `into: "<id>"` to merge into an existing note, or `is_new: true` to declare a genuinely new one. This makes note identity reliable (matching, not guessing an exact title). File notes skip the gate (id derives from the path).\n\n' +
+      'The `spec` shape is documented in coldstart.md — briefly: `type` ("file"|"flow"|"lesson", or sugar "file-hub"/"file-single"), `title`, `summary`, `anchors` ([{path, symbols?}] — the addresses the note is about, which drive freshness), plus type-specific fields (file: facets/character; flow: steps; lesson: kind:"absence"/scope/body). This tool WRITES to the repo notebook; it never commits to git — publishing notes is a human-only step (`coldstart kb commit`).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        spec: {
+          type: 'object',
+          description: 'The note spec (JSON object). Fields: type, title, summary, anchors:[{path,symbols?}], and type-specific fields (facets/character for file; steps for flow; kind/scope/body for lesson). See coldstart.md. Omit `id` on a new flow/lesson to trigger the reuse gate.',
+        },
+        into: {
+          type: 'string',
+          description: 'Phase-2 answer: merge this write into the existing note with this id (from a prior `candidates` response).',
+        },
+        is_new: {
+          type: 'boolean',
+          description: 'Phase-2 answer: declare this a genuinely new concept, bypassing the candidate matches from a prior `candidates` response.',
+        },
+      },
+      required: ['spec'],
+    },
+  },
+  {
+    name: 'kb_status',
+    description:
+      'Notebook overview: how many notes exist (by type: file/flow/lesson), how many are flagged stale (their anchored files drifted since verification), and how many are superseded/retracted. Pass `paths` (array of repo-relative paths) to instead list the notes anchored at each of those exact paths with their freshness state — a quick "is anything known here?" check across several files at once.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        paths: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional repo-relative paths. When given, returns per-path anchored notes + freshness instead of the whole-notebook overview.',
+        },
+      },
+    },
+  },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -154,6 +214,78 @@ export function registerToolHandlers(
         }
         const searchResult = await kbSearch(index.rootDir, query, { notesIndex: loadKbNotesIndex(index.rootDir, opts.cacheDir), source: 'tool' });
         result = { __rawText: renderSearchPage(index.rootDir, query, searchResult) };
+        break;
+      }
+
+      case 'kb_lookup': {
+        const { kbLookup, renderLookup } = await import('../kb/lookup.js');
+        const path = String(params['path'] ?? params['file_path'] ?? params['file'] ?? '');
+        if (!path.trim()) {
+          result = { error: 'kb_lookup needs a `path` (exact repo-relative file path)' };
+          break;
+        }
+        const symbol = params['symbol'] ? String(params['symbol']) : undefined;
+        const lookup = kbLookup(index.rootDir, path, symbol);
+        result = { __rawText: renderLookup(lookup) };
+        break;
+      }
+
+      case 'kb_write': {
+        const { kbWrite } = await import('../kb/write.js');
+        const { initSkeleton } = await import('../kb/store.js');
+        const spec = params['spec'];
+        if (!spec || typeof spec !== 'object' || Array.isArray(spec)) {
+          result = { error: 'kb_write needs a `spec` object — see coldstart.md for its shape' };
+          break;
+        }
+        initSkeleton(index.rootDir); // first write creates the notebook
+        const wres = await kbWrite(index.rootDir, spec as import('../kb/write.js').WriteSpec, {
+          into: params['into'] ? String(params['into']) : undefined,
+          isNew: Boolean(params['is_new']),
+        });
+        if (wres.status === 'error') {
+          result = { error: wres.message };
+        } else if (wres.status === 'candidates') {
+          result = {
+            status: 'candidates',
+            candidates: wres.candidates,
+            message: `${wres.message} Re-call kb_write with the same spec plus \`into: "<id>"\` to merge into one of these, or \`is_new: true\` to create a new note.`,
+          };
+        } else {
+          result = { status: 'written', op: wres.op, id: wres.id, warnings: wres.warnings ?? [] };
+        }
+        break;
+      }
+
+      case 'kb_status': {
+        const { loadAll } = await import('../kb/store.js');
+        const { stampAnchors } = await import('../kb/freshness.js');
+        const { notes, warnings } = loadAll(index.rootDir);
+        const paths = Array.isArray(params['paths'])
+          ? (params['paths'] as unknown[]).map((p) => String(p)).filter(Boolean)
+          : undefined;
+        if (paths?.length) {
+          result = {
+            paths: paths.map((p) => ({
+              path: p,
+              notes: notes
+                .filter((n) => n.anchors.some((a) => a.path === p))
+                .map((n) => ({
+                  id: n.id, type: n.type, title: n.title, status: n.status,
+                  state: stampAnchors(index.rootDir, n.anchors.filter((a) => a.path === p))[0]?.state ?? 'unverified',
+                })),
+            })),
+          };
+        } else {
+          const byType = { file: 0, flow: 0, lesson: 0 };
+          let flagged = 0, superseded = 0;
+          for (const n of notes) {
+            byType[n.type]++;
+            if (n.status !== 'active') superseded++;
+            else if (stampAnchors(index.rootDir, n.anchors).some((s) => s.state === 'changed' || s.state === 'missing')) flagged++;
+          }
+          result = { total: notes.length, byType, flagged, superseded, warnings: warnings.length };
+        }
         break;
       }
 

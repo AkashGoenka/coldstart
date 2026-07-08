@@ -29,6 +29,12 @@ export interface LookupFlowHit {
   title: string;
   /** 1-based step positions in the flow that touch the address. */
   steps: { index: number; role: string; symbols?: string[] }[];
+  /** True when the flow matched ONLY because the address is one of its anchors
+   *  (its freshness contract) and it has no step at this exact path. Without
+   *  this, a flow that watches a file but narrates its story elsewhere would be
+   *  invisible to the pre-edit gate — a real false-negative (see arches: ~14%
+   *  of flows anchor a file they have no step at). */
+  viaAnchor?: boolean;
 }
 
 export interface LookupLessonHit {
@@ -77,7 +83,15 @@ export function kbLookup(root: string, rawPath: string, symbol?: string): Lookup
         .map((s, i) => ({ s, index: i + 1 }))
         .filter(({ s }) => normPath(s.path) === path && (!symbol || !s.symbols?.length || s.symbols.includes(symbol)))
         .map(({ s, index }) => ({ index, role: s.role, ...(s.symbols?.length ? { symbols: s.symbols } : {}) }));
-      if (steps.length) result.flows.push({ id: n.id, title: n.title, steps });
+      if (steps.length) {
+        result.flows.push({ id: n.id, title: n.title, steps });
+      } else {
+        // No step at this exact path — but the flow may still ANCHOR it (its
+        // freshness contract). Surface it as an anchor-only hit so the pre-edit
+        // gate never hides a flow that depends on the file being edited.
+        const anchored = n.anchors.some((a) => normPath(a.path) === path && (!symbol || !a.symbols?.length || a.symbols.includes(symbol)));
+        if (anchored) result.flows.push({ id: n.id, title: n.title, steps: [], viaAnchor: true });
+      }
     } else if (n.type === 'lesson') {
       const hit = n.anchors.some((a) => normPath(a.path) === path && (!symbol || !a.symbols?.length || a.symbols.includes(symbol)));
       if (hit) {
@@ -112,7 +126,8 @@ export function renderLookup(r: LookupResult): string {
   if (r.flows.length) {
     out.push(`flows touching ${addr}:`);
     for (const fl of r.flows) {
-      for (const s of fl.steps) out.push(`  [[${fl.id}]] step ${s.index} — ${s.role}`);
+      if (fl.viaAnchor) out.push(`  [[${fl.id}]] — depends on this file (no step here; re-verify the flow if you change it)`);
+      else for (const s of fl.steps) out.push(`  [[${fl.id}]] step ${s.index} — ${s.role}`);
     }
   }
   if (r.lessons.length) {

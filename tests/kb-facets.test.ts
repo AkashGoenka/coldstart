@@ -349,6 +349,27 @@ describe('kb lookup', () => {
     const r = kbLookup(root, 'does/not/exist.py');
     expect(renderLookup(r)).toContain('nothing recorded');
   });
+
+  it('anchor-only match: a flow that ANCHORS a file but has no step there still surfaces (pre-edit gate)', async () => {
+    // Mirrors ~14% of real arches flows: the file is in the freshness contract
+    // (anchors) but the narrative (steps) lives elsewhere.
+    appendRecord(root, {
+      id: 'schema-drift-flow', type: 'flow', op: 'put',
+      title: 'spatial view schema drift',
+      steps: [{ path: 'views/nav.py', role: 'reads the view' }],
+      anchors: [{ path: 'migrations/0001_init.py' }],
+    });
+    const r = kbLookup(root, 'migrations/0001_init.py');
+    expect(r.flows.map((f) => f.id)).toEqual(['schema-drift-flow']);
+    expect(r.flows[0].viaAnchor).toBe(true);
+    expect(r.flows[0].steps).toHaveLength(0);
+    expect(renderLookup(r)).toContain('[[schema-drift-flow]] — depends on this file');
+
+    // And where it DOES have a step, it renders as a step (not the anchor line).
+    const stepHit = kbLookup(root, 'views/nav.py');
+    expect(stepHit.flows[0].viaAnchor).toBeUndefined();
+    expect(renderLookup(stepHit)).toContain('[[schema-drift-flow]] step 1');
+  });
 });
 
 describe('kb write: --force (validation mode) + path warnings', () => {
