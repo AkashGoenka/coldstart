@@ -31,6 +31,9 @@ jobs:
         run: npm run build
 
       - name: Publish package
-        run: npm publish --provenance
+        # --access public is REQUIRED alongside --provenance for a new package:
+        # npm refuses to generate provenance for a package it would otherwise
+        # create as private/restricted.
+        run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
