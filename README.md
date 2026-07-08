@@ -118,9 +118,11 @@ The intended flow: **`find`** a concept → pick the best path → **`gs`** that
 
 ```mermaid
 flowchart LR
-    A["coldstart find<br/>which files?"]:::cold --> B["coldstart gs<br/>what is it? who uses it?"]:::cold --> C["Read<br/>just the method body"]:::warm
-    classDef cold stroke:#16708f,stroke-width:2px;
-    classDef warm stroke:#c26714,stroke-width:2px;
+    A["coldstart find<br/>which files?"] --> B["coldstart gs<br/>what is it? who uses it?"] --> C["Read<br/>just the method body"]
+    class A,B cold
+    class C warm
+    classDef cold stroke:#16708f,stroke-width:2px
+    classDef warm stroke:#c26714,stroke-width:2px
 ```
 
 ### `find` — locate the files for a concept
@@ -181,12 +183,12 @@ coldstart is **one keeper, thin readers**:
 
 ```mermaid
 flowchart TD
-    K["keeper &nbsp;·&nbsp; coldstart --daemon<br/>watches repo → patch / rebuild → save cache<br/>· serves nothing ·"]:::cold
-    K -->|debounced save| C[("on-disk cache")]
+    K["keeper — coldstart --daemon<br/>watches repo, patches/rebuilds, saves cache<br/>serves nothing"] -->|debounced save| C[("on-disk cache")]
     C --> F["coldstart find<br/>reads cache, prints"]
     C --> G["coldstart gs<br/>reads cache, prints"]
     C --> M["MCP server<br/>reads cache, stdio"]
-    classDef cold stroke:#16708f,stroke-width:2px;
+    class K cold
+    classDef cold stroke:#16708f,stroke-width:2px
 ```
 
 - A single **keeper** process per repo watches the filesystem and keeps the on-disk cache current. It does **not** answer queries.
