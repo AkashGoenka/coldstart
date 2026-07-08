@@ -37,7 +37,7 @@ function writeRepoFile(rel: string, content: string): void {
 function seedLesson(over: Record<string, unknown> = {}): void {
   appendRecord(root, {
     id: 'restore-drops-functions', type: 'lesson', op: 'put',
-    kind: 'bug-cause',
+    kind: 'absence',
     title: 'Version restore silently drops function assignments',
     aliases: ['functions disappear after graph restore'],
     body: 'restore_state never re-creates functions_x_graphs rows.',
@@ -103,7 +103,7 @@ describe('kb search', () => {
       id: 'add-address-note',
       type: 'lesson',
       op: 'put',
-      kind: 'trap',
+      kind: 'absence',
       title: 'AddAddress utility for resolving user info',
       body: 'looks up addresses and resolves them',
     });
@@ -155,18 +155,18 @@ describe('kb search', () => {
     writeRepoFile('app/a.py', 'pass\n');
     writeRepoFile('app/b.py', 'pass\n');
     appendRecord(root, {
-      id: 'spatialview-restore-breaks', type: 'lesson', op: 'put', kind: 'trap',
+      id: 'spatialview-restore-breaks', type: 'lesson', op: 'put', kind: 'absence',
       title: 'spatialview restore breaks silently',
       body: 'first note body.', anchors: [{ path: 'app/a.py' }],
     });
     appendRecord(root, {
-      id: 'spatialview-restore-timeout', type: 'lesson', op: 'put', kind: 'trap',
+      id: 'spatialview-restore-timeout', type: 'lesson', op: 'put', kind: 'absence',
       title: 'spatialview restore timeout on large graphs',
       body: 'second note body.', anchors: [{ path: 'app/b.py' }],
     });
     // filler corpus so the shared terms stay minority-df under strongOnly
     for (const t of ['auth cookie parsing', 'webpack bundle size', 'csv importer quoting']) {
-      appendRecord(root, { id: t.replace(/ /g, '-'), type: 'lesson', op: 'put', kind: 'trap', title: t, body: t });
+      appendRecord(root, { id: t.replace(/ /g, '-'), type: 'lesson', op: 'put', kind: 'absence', title: t, body: t });
     }
     const res = await kbSearch(root, 'why does spatialview restore fail', { strongOnly: true, noMissLog: true });
     expect(res.hits.length).toBe(2);
@@ -185,17 +185,17 @@ describe('kb search', () => {
     // The top note names the symbol ITSELF (own-text match); the inventory
     // confirming it's declared in the note's anchor = the second channel.
     appendRecord(root, {
-      id: 'graph-restore-note', type: 'lesson', op: 'put', kind: 'trap',
+      id: 'graph-restore-note', type: 'lesson', op: 'put', kind: 'absence',
       title: 'TileHelperRegistry graph restore drops rows',
       body: 'anchored where the symbol lives.', anchors: [{ path: 'app/models/graph.py' }],
     });
     appendRecord(root, {
-      id: 'graph-restore-perf', type: 'lesson', op: 'put', kind: 'trap',
+      id: 'graph-restore-perf', type: 'lesson', op: 'put', kind: 'absence',
       title: 'graph restore perf cliff',
       body: 'a competing note.', anchors: [{ path: 'app/graph_utils.py' }],
     });
     for (const t of ['auth cookie parsing', 'webpack bundle size', 'csv importer quoting']) {
-      appendRecord(root, { id: t.replace(/ /g, '-'), type: 'lesson', op: 'put', kind: 'trap', title: t, body: t });
+      appendRecord(root, { id: t.replace(/ /g, '-'), type: 'lesson', op: 'put', kind: 'absence', title: t, body: t });
     }
     const notesIndex = await buildKbNotesIndex(fakeIndex({
       'app/models/graph.py': ['TileHelperRegistry'], 'app/graph_utils.py': [],
@@ -237,9 +237,9 @@ describe('kb search', () => {
     const oldHash = hashFile(root, 'src/stale.ts');
     fs.writeFileSync(path.join(root, 'src/stale.ts'), 'v2 drifted\n');
 
-    appendRecord(root, { id: 'stale-note', type: 'lesson', op: 'put', kind: 'trap', title: 'shared topic alpha beta', body: 'alpha beta gamma delta', anchors: [{ path: 'src/stale.ts', hash: oldHash }] });
-    appendRecord(root, { id: 'fresh-note', type: 'lesson', op: 'put', kind: 'trap', title: 'shared topic alpha', body: 'alpha', anchors: [{ path: 'src/fresh.ts', hash: freshHash }] });
-    appendRecord(root, { id: 'dead-note', type: 'lesson', op: 'put', kind: 'trap', title: 'shared topic alpha beta gamma', body: 'alpha beta gamma' });
+    appendRecord(root, { id: 'stale-note', type: 'lesson', op: 'put', kind: 'absence', title: 'shared topic alpha beta', body: 'alpha beta gamma delta', anchors: [{ path: 'src/stale.ts', hash: oldHash }] });
+    appendRecord(root, { id: 'fresh-note', type: 'lesson', op: 'put', kind: 'absence', title: 'shared topic alpha', body: 'alpha', anchors: [{ path: 'src/fresh.ts', hash: freshHash }] });
+    appendRecord(root, { id: 'dead-note', type: 'lesson', op: 'put', kind: 'absence', title: 'shared topic alpha beta gamma', body: 'alpha beta gamma' });
     appendRecord(root, { id: 'dead-note', type: 'lesson', op: 'supersede', by: 'fresh-note' });
 
     const { hits } = await kbSearch(root, 'shared topic alpha', { maxResults: 10 });
@@ -399,7 +399,7 @@ describe('kb lint', () => {
     writeRepoFile('src/b.ts', 'b\n');
     appendRecord(root, { id: 'flow-one', type: 'flow', op: 'put', title: 'Flow one', anchors: [{ path: 'src/a.ts' }, { path: 'src/b.ts' }] });
     appendRecord(root, { id: 'flow-two', type: 'flow', op: 'put', title: 'Flow two', anchors: [{ path: 'src/a.ts' }, { path: 'src/b.ts' }] });
-    appendRecord(root, { id: 'dead-anchor-note', type: 'lesson', op: 'put', kind: 'trap', title: 'points at nothing', body: 'x', anchors: [{ path: 'src/deleted.ts' }] });
+    appendRecord(root, { id: 'dead-anchor-note', type: 'lesson', op: 'put', kind: 'absence', title: 'points at nothing', body: 'x', anchors: [{ path: 'src/deleted.ts' }] });
     // a file note that references flow-one keeps it un-orphaned
     appendRecord(root, { id: 'a-file', type: 'file', op: 'put', summary: 's', anchors: [{ path: 'src/a.ts' }], features: [{ concept_id: 'flow-one', role: 'start' }] });
 

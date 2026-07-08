@@ -63,7 +63,7 @@ describe('separator folding (name/path/symbol channels)', () => {
   it('note lane: a snake_case query term hits the kebab-case compound in a note title', () => {
     writeRepoFile('app/datatypes.py', 'x = 1\n');
     appendRecord(root, {
-      id: 'filelist-note', type: 'lesson', op: 'put', kind: 'trap',
+      id: 'filelist-note', type: 'lesson', op: 'put', kind: 'absence',
       title: 'file-list datatype matching request files to a tile',
       body: 'b.', anchors: [{ path: 'app/datatypes.py' }],
     });

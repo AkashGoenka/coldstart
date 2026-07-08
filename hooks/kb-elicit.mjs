@@ -175,10 +175,10 @@ for when changing it, and which tests or checks matter.
 step points at a file (path + symbols) with its role in the story. A step never restates what a \
 file note already says — the detail lives in the file's facet; the flow links to it.
 
-3. LESSON notes — rare. Only two things qualify:
-   - a confirmed ABSENCE ("there is no X in this repo"), with the search terms that proved it;
-   - a repo-wide rule that applies to any future task, regardless of area.
-   If it is about one file or one symbol, it is a facet, not a lesson.
+3. LESSON notes — rare. Only one thing qualifies:
+   - a confirmed ABSENCE ("there is no X in this repo"), with the search terms that proved it.
+   If it is about one file or one symbol, it is a facet, not a lesson. Repo-wide rules and \
+conventions are the human's to define (CLAUDE.md / coldstart.md / AGENTS.md) — do not mint them here.
 
 Fixed a bug? The actual cause goes into the culpable file's facet, and the SYMPTOM words go \
 into that file note's "aliases" — the symptom is what a future agent will search. If the cause \
@@ -235,9 +235,9 @@ Spec shapes (only include fields you actually have):
                   "summary":"one paragraph",
                   "steps":[{"path":"src/a.py","symbols":["entry"],"role":"receives the request"}],
                   "invariants":["what must hold"],"verified":["src/a.py"]}
-  lesson:        {"type":"lesson","kind":"absence|rule","title":"the rule or absence",
-                  "body":"when it applies + the actual truth",
-                  "scope":{"terms":["search","terms"]}}          (scope: absence only)
+  lesson:        {"type":"lesson","kind":"absence","title":"the absence, e.g. no retry logic",
+                  "body":"what you looked for + that it is not there",
+                  "scope":{"terms":["search","terms"]}}          (the search that proved it)
 
 When your notes are written, stop.`;
 }

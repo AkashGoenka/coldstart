@@ -194,7 +194,7 @@ describe('kb commit — deliberate publish', () => {
   it('commits ONLY the notebook surface, leaving other staged work staged', () => {
     gitInit();
     appendRecord(root, {
-      id: 'a-note', type: 'lesson', op: 'put', kind: 'rule', title: 'a rule', body: 'x',
+      id: 'a-note', type: 'lesson', op: 'put', kind: 'absence', title: 'a rule', body: 'x',
     } as never);
     // unrelated staged work must survive untouched
     fs.writeFileSync(path.join(root, 'feature.ts'), 'export {}\n');
@@ -215,7 +215,7 @@ describe('kb commit — deliberate publish', () => {
     gitInit();
     fs.writeFileSync(path.join(root, '.gitignore'), '.coldstart/\n');
     appendRecord(root, {
-      id: 'b-note', type: 'lesson', op: 'put', kind: 'rule', title: 'r', body: 'x',
+      id: 'b-note', type: 'lesson', op: 'put', kind: 'absence', title: 'r', body: 'x',
     } as never);
     const res = kbCommit(root);
     expect(res.kind).toBe('nothing');

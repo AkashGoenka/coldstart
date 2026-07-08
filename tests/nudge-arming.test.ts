@@ -97,7 +97,7 @@ describe('kb-recall pre-seeds the nudge state on injection', () => {
     fs.mkdirSync(path.join(root, 'app'), { recursive: true });
     fs.writeFileSync(path.join(root, 'app/models.py'), 'class LoadStaging: pass\n');
     appendRecord(root, {
-      id: 'loadstaging-trap', type: 'lesson', op: 'put', kind: 'trap',
+      id: 'loadstaging-trap', type: 'lesson', op: 'put', kind: 'absence',
       title: 'LoadStaging nodegroup cascade behavior on graph restore',
       body: 'nodegroup FK rows are guarded, not deleted.',
       anchors: [{ path: 'app/models.py' }],
