@@ -1,5 +1,7 @@
 # coldstart
 
+**[Website](https://akashgoenka.github.io/coldstart/) · [Docs](https://akashgoenka.github.io/coldstart/docs.html) · [npm](https://www.npmjs.com/package/@cstart/coldstart)**
+
 Codebase navigation **and a codebase notebook** for AI agents.
 
 Two layers, one tool:

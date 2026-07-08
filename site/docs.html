@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>coldstart docs — commands, notebook, architecture</title>
+<meta name="description" content="coldstart command reference: find, gs, the kb notebook family, sharing a notebook with a team, and how the index stays fresh." />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body class="docs-page">
+
+<nav>
+  <div class="nav-in">
+    <a class="brand" href="index.html"><span class="dot"></span>coldstart <span class="tag">docs</span></a>
+    <span class="nav-spacer"></span>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="index.html#notebook">Notebook</a>
+      <a href="https://github.com/AkashGoenka/coldstart">GitHub</a>
+      <a href="https://www.npmjs.com/package/@cstart/coldstart">npm</a>
+    </div>
+    <a class="nav-cta" href="#install">Install</a>
+  </div>
+</nav>
+<hr class="thread" />
+
+<div class="docs">
+  <!-- SIDEBAR -->
+  <aside class="side">
+    <div class="side-group">
+      <div class="gh">Getting started</div>
+      <a href="#overview">Overview</a>
+      <a href="#install">Install &amp; setup</a>
+      <a href="#flow">The intended flow</a>
+    </div>
+    <div class="side-group">
+      <div class="gh">Navigation</div>
+      <a href="#find"><code>find</code></a>
+      <a href="#gs"><code>gs</code></a>
+    </div>
+    <div class="side-group">
+      <div class="gh">Notebook</div>
+      <a href="#notebook">The notebook, in depth</a>
+      <a href="#kb-search"><code>kb search</code></a>
+      <a href="#kb-lookup"><code>kb lookup</code></a>
+      <a href="#kb-write"><code>kb write</code></a>
+      <a href="#kb-commit"><code>kb commit</code></a>
+      <a href="#kb-view"><code>kb view</code></a>
+      <a href="#kb-maint"><code>kb status / lint / render</code></a>
+      <a href="#sharing">Sharing with a team</a>
+    </div>
+    <div class="side-group">
+      <div class="gh">Under the hood</div>
+      <a href="#freshness">How the index stays fresh</a>
+      <a href="#lifecycle">Lifecycle commands</a>
+      <a href="#mcp">MCP tools</a>
+      <a href="#semantics">Bring your own semantics</a>
+      <a href="#languages">Supported languages</a>
+    </div>
+  </aside>
+
+  <!-- CONTENT -->
+  <main class="content">
+    <section id="overview" class="doc-sec">
+      <div class="kicker">Documentation</div>
+      <h1>coldstart, command by command.</h1>
+      <p class="lead-p">coldstart is one binary with two front doors — a <b>CLI</b> (the fast path for any shell-capable agent) and an <b>MCP server</b> (for no-shell clients), with byte-identical output. This page covers the stable core surface; for exhaustive flags, versioned changes, and internals, see the <a href="https://github.com/AkashGoenka/coldstart" style="color:var(--frost)">README and docs on GitHub</a> — the source of truth.</p>
+      <div class="callout"><span class="ct">The shape of it</span>Two operations answer navigation — <code>find</code> (which files?) and <code>gs</code> (what is this file, who uses it?) — and the <code>kb</code> family is the notebook: durable, agent-written notes kept honest by the index. That's the whole surface.</div>
+    </section>
+
+    <!-- GETTING STARTED -->
+    <section id="install" class="doc-sec">
+      <h2>Install &amp; setup</h2>
+      <p>Requires Node.js 18+. Install globally, then run <code>init</code> once per project.</p>
+      <div class="term">
+        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">your-project</span></div>
+        <div class="term-body">
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">npm install -g @cstart/coldstart</span> <span class="c-flag">--legacy-peer-deps</span></span>
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">cd</span> your-project</span>
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart init</span>   <span class="c-dim"># coldstart.md + client wiring + notebook + hooks + warm-up</span></span>
+        </div>
+      </div>
+      <div class="callout"><span class="ct">Why --legacy-peer-deps</span>The tree-sitter grammar packages under-declare their peer-dep ranges. Without the flag, npm's strict resolver enters a long retry loop on a cold cache and can appear to hang. The flag tells npm to use our tested versions as-is; we can't set it from inside the package.</div>
+      <p style="margin-top:22px"><code>init</code> asks two things — the <b>experience</b> (<code>cli</code>, recommended, or <code>mcp</code>) and the <b>client</b> (<code>claude</code> / <code>cursor</code> / <code>codex</code> / <code>other</code>) — then writes a single <code>coldstart.md</code> at your repo root and wires the client. It also creates the notebook and, for Claude Code / Codex / Cursor, registers the navigation and notebook hooks. Pass <code>--experience</code> / <code>--client</code> to skip the prompts; the client is never auto-detected.</p>
+      <div class="flags">
+        <div class="flag-row"><span class="fk">--experience cli|mcp</span><span class="fv">The surface to wire. <b>cli</b> is the fast path; <b>mcp</b> also writes an MCP server entry.</span></div>
+        <div class="flag-row"><span class="fk">--client NAME</span><span class="fv"><b>claude</b>, <b>cursor</b>, <b>codex</b>, or <b>other</b>. Determines which config files get wired.</span></div>
+        <div class="flag-row"><span class="fk">--commit-notebook</span><span class="fv">Opt in to committing the notebook <code>.raw</code> logs so the team can share it. Private by default — see <a href="#sharing" style="color:var(--frost)">Sharing</a>.</span></div>
+      </div>
+      <p style="margin-top:20px"><b>Upgrading:</b> <code>npm install -g @cstart/coldstart@latest --legacy-peer-deps</code>, then re-run <code>coldstart init</code> in each project. A version stamp in the keeper's lockfile shuts the old background process down on the next lookup; a fresh one spawns from the new binary.</p>
+    </section>
+
+    <section id="flow" class="doc-sec">
+      <h2>The intended flow</h2>
+      <p><code>find</code> → <code>gs</code> → <code>Read</code>. Orient with two cheap calls before spending a token reading. Notebook summaries ride along on <code>find</code>, so the orientation step often answers itself.</p>
+      <ul class="tight">
+        <li><b>find a concept</b> → ranked candidate files, each with the evidence for why it ranked.</li>
+        <li><b>gs the best file</b> → its symbols, importers, and per-symbol callers, in one call.</li>
+        <li><b>Read only the method body</b> you actually need — not the whole file.</li>
+      </ul>
+    </section>
+
+    <!-- NAVIGATION -->
+    <div class="grp-head"><div class="kicker">Navigation</div></div>
+
+    <section id="find" class="doc-sec">
+      <div class="cmd">
+        <div class="name"><span class="c">coldstart find</span> <span class="badge">navigation</span></div>
+        <div class="sig">coldstart find &lt;term&gt; [term…] [flags]</div>
+        <div class="desc"><b>Which files are about this?</b> Ranks files by how many of your query terms each covers — filenames, path segments, exported symbols, plus a repo-wide name-reference pass — and shows <em>why</em> each ranked: which terms it defines vs. imports.</div>
+      </div>
+      <div class="term">
+        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">coldstart find</span></div>
+        <div class="term-body">
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart find</span> auth session cookie</span>
+<span class="gap"></span>
+<span class="ln"><span class="c-frost">src/auth/service.ts</span>  <span class="c-hit">3/3</span> <span class="c-dim">defines</span> auth, session, cookie</span>
+<span class="ln">  <span class="c-ember">Summary</span> <span class="c-dim">[fresh]</span> Signs and verifies session cookies.</span>
+<span class="ln"><span class="c-frost">src/middleware/session.ts</span>  <span class="c-hit">2/3</span> <span class="c-dim">imports</span> session, cookie</span>
+        </div>
+      </div>
+      <p style="margin-top:16px">Pass <b>every salient identifier</b> from your task — the symbol, the domain noun, the rare token you half-remember — not one distilled keyword. <code>find</code> ranks by coverage and shows where the terms cluster, so often that's enough to answer without opening anything. Its reference pass runs on ripgrep, so it competes with raw grep on speed.</p>
+      <div class="flags">
+        <div class="flag-row"><span class="fk">--path GLOB</span><span class="fv">Scope to matching paths. Comma-combine; prefix <code>!</code> to exclude.</span></div>
+        <div class="flag-row"><span class="fk">--tests</span><span class="fv">Include test files (excluded by default).</span></div>
+        <div class="flag-row"><span class="fk">--via</span><span class="fv">Show name-reference relations — where the terms are referenced, not just declared.</span></div>
+        <div class="flag-row"><span class="fk">--json</span><span class="fv">Machine-readable output.</span></div>
+      </div>
+      <div class="callout"><span class="ct">When find says "no indexed file contains any of […]"</span>Those identifiers aren't in the repo. Don't grep spelling variants — trust the negative.</div>
+    </section>
+
+    <section id="gs" class="doc-sec">
+      <div class="cmd">
+        <div class="name"><span class="c">coldstart gs</span> <span class="badge">navigation</span></div>
+        <div class="sig">coldstart gs &lt;file&gt; [flags]</div>
+        <div class="desc"><b>What is this file, and who uses it?</b> Returns the file's top-level symbols (with line ranges), its 1-hop internal imports, who imports it, and per-symbol cross-file callers — in one call. This is the answer to "who calls this?", not a grep.</div>
+      </div>
+      <div class="term">
+        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">coldstart gs</span></div>
+        <div class="term-body">
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart gs</span> src/auth/service.ts</span>
+<span class="ln"><span class="c-dim">symbols</span>  signCookie <span class="c-dim">L12</span> · verify <span class="c-dim">L34</span> · rotate <span class="c-dim">L61</span></span>
+<span class="ln"><span class="c-dim">callers</span>  verify ← <span class="c-file">middleware/session.ts</span>, <span class="c-file">routes/login.ts</span></span>
+<span class="ln"><span class="c-dim">imported by</span>  4 files</span>
+        </div>
+      </div>
+      <div class="flags">
+        <div class="flag-row"><span class="fk">--symbol a,b</span><span class="fv">Deliver the named method bodies inline — skip a separate Read.</span></div>
+        <div class="flag-row"><span class="fk">--match TERM</span><span class="fv">Filter a god-file to one area. <code>a|b</code> = OR, <code>/regex/</code> = regex.</span></div>
+        <div class="flag-row"><span class="fk">--view V</span><span class="fv">One of <code>symbols</code> / <code>imports</code> / <code>importers</code> / <code>callers</code>. Default returns all.</span></div>
+        <div class="flag-row"><span class="fk">--json</span><span class="fv">Machine-readable output.</span></div>
+      </div>
+      <div class="callout"><span class="ct">Scope</span>Callers are one-hop and file-scoped. Named function/constant calls resolve cross-file; member-expression calls (<code>this.method()</code>, <code>api.method()</code>) don't. Chase further hops by running <code>gs</code> on the caller file.</div>
+    </section>
+
+    <!-- NOTEBOOK -->
+    <div class="grp-head"><div class="kicker">Notebook</div></div>
+
+    <section id="notebook" class="doc-sec">
+      <h2>The notebook, in depth</h2>
+      <p class="lead-p">A repo-local knowledge base, written and read by agents, living in <code>.coldstart/notebook/</code>. It's the one place semantics belong: authored by the agent that just did the work, kept honest by the index, and recalled when a later task matches. <b>No human writes or grooms it.</b></p>
+
+      <h4 class="subhead">What a note is</h4>
+      <div class="types">
+        <div class="tcard file"><div class="tt">File note</div><p>What a file is for — a single summary, or per-symbol facets for hub files.</p></div>
+        <div class="tcard flow"><div class="tt">Flow note</div><p>A cross-file story: ordered steps and the invariants that hold across them.</p></div>
+        <div class="tcard lesson"><div class="tt">Lesson</div><p>A trap, rule, bug-cause, rationale, or a confirmed <em>absence</em>.</p></div>
+      </div>
+      <p style="margin-top:18px">Every note carries <b>anchors</b> — the concrete file paths and symbols its claims rest on. Anchors are what make a note checkable rather than a floating assertion.</p>
+
+      <h4 class="subhead">Where notes reach the agent</h4>
+      <ul class="tight">
+        <li><b>Summary lines on <code>find</code> results</b> — a past agent's verified overview, right where the file ranks. <span class="pill fresh"><span class="d"></span>fresh</span> means the file is byte-identical to when the summary was verified, so the agent can rely on it without re-reading.</li>
+        <li><b>Recall at prompt time</b> (optional hook) — notes whose titles, aliases, or anchors match the prompt surface as a compact, hard-capped block. Nothing matches → nothing injected.</li>
+        <li><b><code>kb search</code> / <code>kb lookup</code></b> — a search engine over the notebook, and an exact-address lookup before editing a file.</li>
+      </ul>
+
+      <h4 class="subhead">Why it can be trusted</h4>
+      <ul class="tight">
+        <li><b>Freshness is mechanical.</b> Every anchor is stamped with a content hash at write time; the index re-checks it as the code changes. A drifted note renders <span class="pill changed"><span class="d"></span>evidence changed</span> and the guidance says re-verify — stale knowledge degrades into a labeled hypothesis, not a confident lie.</li>
+        <li><b>The log is the truth.</b> Notes live in an append-only <code>.raw</code> event log; the Markdown notes are derived and regenerated mechanically. A note is a pure fold of its log.</li>
+        <li><b>Writes go through a gate.</b> A new note's concept is searched against existing notes first — the agent must merge into a match or declare it new. Duplicates are caught at write time.</li>
+        <li><b>Concurrent sessions are safe.</b> Per-note append-only logs, exclusive creation of new ids, lossless union-merge of shared notes, atomic renders — concurrent writers never silently merge or lose a note.</li>
+        <li><b>Corrections happen in-session.</b> An agent that finds a note wrong while the evidence is in context is told to fix or retract it right then.</li>
+      </ul>
+
+      <div class="callout warm"><span class="ct">On token savings</span>Because the next agent recalls a verified note instead of re-deriving it, repeated tasks re-spend far fewer tokens orienting. We're holding published benchmark figures until they're reproducible enough to stand behind — the mechanism is the point: recall a fact once written, don't pay to re-derive it.</div>
+
+      <p style="margin-top:22px"><b>Language-agnostic.</b> The freshness machinery is content-hash based, so the notebook works on any codebase — including languages the navigation index doesn't parse. Where the index does parse, notes additionally get symbol-level freshness.</p>
+    </section>
+
+    <section id="kb-search" class="doc-sec">
+      <div class="cmd">
+        <div class="name warm"><span class="c">coldstart kb search</span> <span class="badge">notebook</span></div>
+        <div class="sig">coldstart kb search &lt;terms…&gt; [--max N]</div>
+        <div class="desc">Search the notebook with plain task words, symbols, or file names. Returns ranked notes — the mid-task tool when your vocabulary shifts.</div>
+      </div>
+      <div class="term">
+        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">coldstart kb search</span></div>
+        <div class="term-body">
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart kb search</span> tile save lifecycle</span>
+<span class="gap"></span>
+<span class="ln"><span class="c-ember">tile-save-lifecycle</span>  <span class="c-dim">flow · [fresh]</span></span>
+<span class="ln"><span class="c-ember">src/models.py · Tile</span>  <span class="c-dim">file · [fresh]</span></span>
+        </div>
+      </div>
+    </section>
+
+    <section id="kb-lookup" class="doc-sec">
+      <div class="cmd">
+        <div class="name warm"><span class="c">coldstart kb lookup</span> <span class="badge">notebook</span></div>
+        <div class="sig">coldstart kb lookup &lt;path&gt; [symbol]</div>
+        <div class="desc">Everything known at one exact address. Run it before editing a file to pull the note (and per-symbol facets) that apply to exactly that path.</div>
+      </div>
+      <div class="term">
+        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">coldstart kb lookup</span></div>
+        <div class="term-body">
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart kb lookup</span> src/models.py Tile</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="kb-write" class="doc-sec">
+      <div class="cmd">
+        <div class="name warm"><span class="c">coldstart kb write</span> <span class="badge">notebook · the gate</span></div>
+        <div class="sig">coldstart kb write &lt;spec.json | -&gt; [--into &lt;id&gt; | --new]</div>
+        <div class="desc">The write gate. A two-phase, dedup-first path: the note's concept is checked against existing notes before anything is written.</div>
+      </div>
+      <ul class="tight">
+        <li>First call <b>exits 3</b> with candidate matches. Resolve it with <code>--into &lt;id&gt;</code> (merge into an existing note) or <code>--new</code> (declare it genuinely new).</li>
+        <li>Reads a spec file, or <code>-</code> to stream the spec from stdin.</li>
+        <li>Freshly-coined ids are created exclusively — a same-moment duplicate becomes two visible notes, never a silent merge.</li>
+      </ul>
+      <div class="callout warm"><span class="ct">Agent-facing</span>This is the command the capture hook drives at the end of a session. You rarely type it by hand.</div>
+    </section>
+
+    <section id="kb-commit" class="doc-sec">
+      <div class="cmd">
+        <div class="name warm"><span class="c">coldstart kb commit</span> <span class="badge">notebook · human-only</span></div>
+        <div class="sig">coldstart kb commit</div>
+        <div class="desc">The one sanctioned git path for the notebook. Commits only the <code>.raw</code> logs and skeleton — never your feature code, and notes never ride along in a feature commit.</div>
+      </div>
+      <div class="callout warm"><span class="ct">Never an agent action</span><code>kb commit</code> is CLI/human-only and is <b>not</b> exposed as an MCP tool. Publishing notes to git is a human decision.</div>
+    </section>
+
+    <section id="kb-view" class="doc-sec">
+      <div class="cmd">
+        <div class="name warm"><span class="c">coldstart kb view</span> <span class="badge">notebook · human-only</span></div>
+        <div class="sig">coldstart kb view [--no-open]</div>
+        <div class="desc">Generate a single self-contained HTML browser of the whole notebook and open it in your default browser. No server — one file, generated fresh, freshness stamped at generation time.</div>
+      </div>
+      <div class="term">
+        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">coldstart kb view</span></div>
+        <div class="term-body">
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart kb view</span></span>
+<span class="ln"><span class="c-hit">✓</span> <span class="c-dim">kb view: wrote .coldstart/notebook/index.html — opening in browser</span></span>
+        </div>
+      </div>
+      <div class="flags">
+        <div class="flag-row"><span class="fk">--no-open</span><span class="fv">Write <code>index.html</code> but don't launch the browser.</span></div>
+      </div>
+      <div class="callout warm"><span class="ct">For the human</span>Agents use <code>kb search</code> / <code>lookup</code>; this is the view for a person who wants to browse what the agents have been keeping. The generated file self-registers in the notebook's <code>.gitignore</code>.</div>
+    </section>
+
+    <section id="kb-maint" class="doc-sec">
+      <div class="cmd">
+        <div class="name warm"><span class="c">coldstart kb status / lint / render</span> <span class="badge">notebook</span></div>
+      </div>
+      <div class="flags">
+        <div class="flag-row"><span class="fk">kb status</span><span class="fv">Notebook health: note counts and per-note freshness at a glance.</span></div>
+        <div class="flag-row"><span class="fk">kb lint</span><span class="fv">Check the notebook for structural problems (broken anchors, malformed notes).</span></div>
+        <div class="flag-row"><span class="fk">kb render</span><span class="fv">Regenerate the derived Markdown notes from the <code>.raw</code> logs.</span></div>
+        <div class="flag-row"><span class="fk">kb init</span><span class="fv">Notebook-only setup — skeleton + hooks. Redundant if you ran <code>coldstart init</code>, which already does this.</span></div>
+        <div class="flag-row"><span class="fk">kb migrate</span><span class="fv">Upgrade an older notebook's on-disk format.</span></div>
+      </div>
+    </section>
+
+    <section id="sharing" class="doc-sec">
+      <h2>Sharing with a team</h2>
+      <p>The notebook is <b>private by default</b> — <code>.coldstart/</code> is gitignored. Opt in to sharing and the whole team's agents contribute to one growing corpus.</p>
+      <div class="term">
+        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">share the notebook</span></div>
+        <div class="term-body">
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart init</span> <span class="c-flag">--commit-notebook</span>   <span class="c-dim"># make .raw committable</span></span>
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart kb commit</span>              <span class="c-dim"># publish notes to git</span></span>
+        </div>
+      </div>
+      <p style="margin-top:16px">Once committed, the <code>.raw</code> logs travel with the repo and <b>union-merge across branches and machines</b> — parallel branches of notes reconcile without conflicts. Every teammate's agent both reads from and writes to the same notebook, so the corpus grows at the speed of the whole team, not one person.</p>
+      <div class="callout warm"><span class="ct">Bigger notebooks, faster</span>The corpus grows exactly where the codebase gets worked. On a shared repo, that's every engineer's sessions feeding one knowledge base — and because each note stays anchored to the code, growth stays true instead of rotting.</div>
+    </section>
+
+    <!-- UNDER THE HOOD -->
+    <div class="grp-head"><div class="kicker">Under the hood</div></div>
+
+    <section id="freshness" class="doc-sec">
+      <h2>How the index stays fresh</h2>
+      <p>coldstart is <b>one keeper, thin readers</b>. A single background keeper watches the repo and keeps an on-disk cache current; the readers (<code>find</code>, <code>gs</code>, the MCP server) are stateless and never build. There is no cache TTL — the index is never discarded for being old, it's kept <em>correct</em>.</p>
+      <div class="diagram">
+        <svg viewBox="0 0 900 300" role="img" aria-label="Architecture: a single keeper watches the repo and saves an on-disk cache; three stateless readers read that cache">
+          <defs><marker id="ah2" markerWidth="9" markerHeight="9" refX="6" refY="4.5" orient="auto"><path class="d-arrowhead" d="M0,0 L9,4.5 L0,9 z"/></marker></defs>
+          <rect class="d-box d-frost" x="250" y="20" width="400" height="76" rx="10" stroke-width="2"/>
+          <text class="d-label" x="270" y="50">keeper — coldstart --daemon</text>
+          <text class="d-sub" x="270" y="74">watches repo → patch/rebuild → saves cache · serves nothing</text>
+          <rect class="d-box" x="370" y="130" width="160" height="44" rx="8"/>
+          <text class="d-cmd" x="450" y="157" text-anchor="middle">on-disk cache</text>
+          <path class="d-arrow" d="M450,98 L450,128" marker-end="url(#ah2)"/>
+          <path class="d-arrow" d="M450,176 L180,224" marker-end="url(#ah2)"/>
+          <path class="d-arrow" d="M450,176 L450,224" marker-end="url(#ah2)"/>
+          <path class="d-arrow" d="M450,176 L720,224" marker-end="url(#ah2)"/>
+          <rect class="d-box" x="70" y="230" width="210" height="50" rx="8"/><text class="d-cmd" x="175" y="252" text-anchor="middle">coldstart find</text><text class="d-sub" x="175" y="270" text-anchor="middle">reads cache, prints</text>
+          <rect class="d-box" x="345" y="230" width="210" height="50" rx="8"/><text class="d-cmd" x="450" y="252" text-anchor="middle">coldstart gs</text><text class="d-sub" x="450" y="270" text-anchor="middle">reads cache, prints</text>
+          <rect class="d-box" x="620" y="230" width="210" height="50" rx="8"/><text class="d-cmd" x="725" y="252" text-anchor="middle">MCP server</text><text class="d-sub" x="725" y="270" text-anchor="middle">reads cache, stdio</text>
+        </svg>
+      </div>
+      <div class="fgrid">
+        <div class="fcard"><div class="fnum">WHILE RUNNING</div><h4>Patched as you type</h4><p>Edits debounce (400 ms), then patch incrementally (~2–5 ms/file) or trigger a background rebuild. Re-saved in atomic generations — a reader never loads a half-written mix.</p></div>
+        <div class="fcard"><div class="fnum">ON START</div><h4>Reconciled, not rebuilt</h4><p>Stat-checks every file against its fingerprint plus a git diff, and patches exactly what changed. A branch switch that used to force a full rebuild is now typically a few seconds.</p></div>
+        <div class="fcard"><div class="fnum">AS A BACKSTOP</div><h4>Linted &amp; audited</h4><p>Every patch is checked against index invariants (a violation auto-rebuilds), and a rotating fingerprint audit after each save catches watcher-missed drift.</p></div>
+      </div>
+      <div class="callout"><span class="ct">Full internals</span>The exact pipeline (walk → parse → resolve → graph → cache) and per-language resolver notes live in <b>ARCHITECTURE.md</b> on <a href="https://github.com/AkashGoenka/coldstart" style="color:var(--frost)">GitHub</a>.</div>
+    </section>
+
+    <section id="lifecycle" class="doc-sec">
+      <h2>Lifecycle commands</h2>
+      <div class="flags">
+        <div class="flag-row"><span class="fk">coldstart status</span><span class="fv">Keepers on this machine: alive? fresh? last patch/rebuild/save? repairs?</span></div>
+        <div class="flag-row"><span class="fk">coldstart restart</span><span class="fv">Kill the current repo's keeper (respawns on next lookup). <code>--root DIR</code> targets another repo; <code>--all</code> kills every keeper.</span></div>
+        <div class="flag-row"><span class="fk">coldstart index</span><span class="fv">Build + save the cache once, up front (single-writer prep).</span></div>
+      </div>
+      <div class="callout"><span class="ct">When anything feels stale</span><code>coldstart restart</code> — a fresh keeper reconciles on start, so it comes back <em>correct</em>, not just alive. If something looks structurally wrong, <b>TROUBLESHOOTING.md</b> on GitHub has recovery steps.</div>
+    </section>
+
+    <section id="mcp" class="doc-sec">
+      <h2>MCP tools</h2>
+      <p>For no-shell clients (like Claude Desktop), the same engine is exposed as MCP tools with byte-identical output to the CLI.</p>
+      <div class="flags">
+        <div class="flag-row"><span class="fk">find · gs</span><span class="fv">The two navigation operations.</span></div>
+        <div class="flag-row"><span class="fk">kb_search · kb_lookup</span><span class="fv">Read the notebook.</span></div>
+        <div class="flag-row"><span class="fk">kb_write · kb_status</span><span class="fv">Write to and inspect the notebook — the MCP server is a writer for <code>kb_write</code>.</span></div>
+      </div>
+      <div class="callout"><span class="ct">Not exposed</span><code>kb commit</code> and <code>kb view</code> stay CLI/human-only — publishing to git and opening a browser are never agent actions.</div>
+    </section>
+
+    <section id="semantics" class="doc-sec">
+      <h2>Bring your own semantics</h2>
+      <p>coldstart has no embeddings, no generated summaries, no semantic layer computed at index time — <b>on purpose. The semantic layer is the agent.</b> Every consumer is already a frontier model; pre-computing meaning at index time only duplicates that, worse and stale. So the index keeps what's cheap to keep <em>exact</em> — paths, symbols, exports, the import/call graph — and returns <em>why</em> each file ranked. The notebook applies the same rule to memory: it stores and freshness-checks the meaning agents author, and computes none of its own.</p>
+      <div class="callout"><span class="ct">Read the argument</span>The full case is in <b>PHILOSOPHY.md</b> on <a href="https://github.com/AkashGoenka/coldstart" style="color:var(--frost)">GitHub</a>.</div>
+    </section>
+
+    <section id="languages" class="doc-sec">
+      <h2>Supported languages</h2>
+      <p>Tree-sitter for the parsed set; the notebook's content-hash freshness works on all of them — notes on a Swift repo are as trustworthy as notes on a TypeScript one (they just lack symbol-level freshness).</p>
+      <div class="langs">
+        <span class="chip hot">TypeScript</span><span class="chip hot">JavaScript</span><span class="chip hot">JSX / TSX</span>
+        <span class="chip">Vue</span><span class="chip">Svelte</span><span class="chip">Astro</span><span class="chip">AngularJS</span>
+        <span class="chip hot">Python</span><span class="chip hot">Ruby (Rails)</span><span class="chip hot">Go</span><span class="chip hot">Rust</span>
+        <span class="chip">Java</span><span class="chip">Kotlin</span><span class="chip">C#</span><span class="chip">PHP (Laravel)</span><span class="chip">C++</span>
+        <span class="chip">Groovy / Gradle</span><span class="chip">GraphQL</span><span class="chip">YAML</span><span class="chip">TOML</span><span class="chip">XML</span><span class="chip">.env</span>
+      </div>
+      <p style="margin-top:16px;font-size:14px"><b>Not indexed:</b> Swift, Dart — no extension mapping; these files aren't walked or parsed. The notebook still works on them.</p>
+    </section>
+  </main>
+</div>
+
+<hr class="thread" />
+<footer>
+  <div class="foot-in">
+    <span class="foot-brand"><a class="brand" href="index.html" style="font-size:15px"><span class="dot"></span>coldstart</a> — docs · MIT</span>
+    <div class="foot-links">
+      <a href="index.html">Home</a>
+      <a href="https://github.com/AkashGoenka/coldstart">GitHub</a>
+      <a href="https://www.npmjs.com/package/@cstart/coldstart">npm</a>
+      <a href="#notebook">Notebook</a>
+      <a href="#install">Install</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // Sidebar scrollspy — highlight the section in view. Guarded + no-op if unsupported.
+  (function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('.side a[href^="#"]'));
+    if (!links.length || !('IntersectionObserver' in window)) return;
+    var byId = {};
+    links.forEach(function (a) { byId[a.getAttribute('href').slice(1)] = a; });
+    var visible = new Set();
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) visible.add(e.target.id); else visible.delete(e.target.id);
+      });
+      var top = null, topY = Infinity;
+      visible.forEach(function (id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        var y = el.getBoundingClientRect().top;
+        if (y < topY) { topY = y; top = id; }
+      });
+      links.forEach(function (a) { a.classList.remove('active'); });
+      if (top && byId[top]) byId[top].classList.add('active');
+    }, { rootMargin: '-70px 0px -70% 0px', threshold: 0 });
+    document.querySelectorAll('.doc-sec').forEach(function (s) { obs.observe(s); });
+  })();
+</script>
+</body>
+</html>
