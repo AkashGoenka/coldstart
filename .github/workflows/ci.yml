@@ -1,7 +1,7 @@
 name: CI
 
 # Runs on every PR and on pushes to main. Make the "test" check required in
-# branch protection so a PR can only merge when typecheck + tests are green.
+# branch protection so a PR can only merge when build + tests are green.
 on:
   pull_request:
   push:
@@ -23,8 +23,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Typecheck
-        run: npx tsc --noEmit
+      # `npm run build` (tsc --noEmit false) both type-checks AND emits dist/,
+      # which some tests need at runtime (e.g. the kb recall hook spawns
+      # `node dist/index.js kb search`). It exits non-zero on type errors, so
+      # this doubles as the typecheck gate.
+      - name: Build
+        run: npm run build
 
       - name: Test
         run: npm test
