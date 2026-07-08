@@ -27,6 +27,8 @@ import { kbCommit } from './commit.js';
 import { stampAnchors, freshnessLine } from './freshness.js';
 import { loadAll, renderIds, initSkeleton, notebookExists, notebookDir, logMetric } from './store.js';
 import { KB_RAW_VERSION } from './raw-log.js';
+import { kbView } from './view.js';
+import { VIEW_TEMPLATE } from './view-template.js';
 
 function err(...args: unknown[]): void {
   process.stderr.write(args.join(' ') + '\n');
@@ -49,11 +51,12 @@ interface KbFlags {
   paths?: string[];
   session?: string;
   message?: string;
+  noOpen: boolean;
 }
 
 function parseKbArgs(argv: string[]): { positional: string[]; flags: KbFlags } {
   const positional: string[] = [];
-  const flags: KbFlags = { root: '.', json: false, hook: false, noIndex: false, isNew: false, force: false, commit: false };
+  const flags: KbFlags = { root: '.', json: false, hook: false, noIndex: false, isNew: false, force: false, commit: false, noOpen: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     switch (a) {
@@ -66,6 +69,7 @@ function parseKbArgs(argv: string[]): { positional: string[]; flags: KbFlags } {
       case '--new': flags.isNew = true; break;
       case '--force': flags.force = true; break;
       case '--commit-notebook': flags.commit = true; break;
+      case '--no-open': flags.noOpen = true; break;
       case '--id': flags.id = argv[++i]; break;
       case '--paths': flags.paths = String(argv[++i] ?? '').split(',').map((s) => s.trim()).filter(Boolean); break;
       case '--session': flags.session = argv[++i]; break;
@@ -86,6 +90,7 @@ const USAGE = `usage: coldstart kb <verb>
   status [--paths ..] notebook overview, or per-path notes+freshness (--json for hooks)
   lint                mechanical worklist (dead anchors, duplicate flows, orphans)
   render [--id ID]    re-fold .raw → derived md
+  view [--no-open]    generate a single-file HTML browser of the notebook and open it
   commit [-m "msg"]   deliberate publish: commit ONLY the notebook .raw to git
   init                create the notebook skeleton in this repo
   migrate             verify the .raw format version`;
@@ -105,6 +110,13 @@ export async function runKb(argv: string[]): Promise<number> {
       if (!requireNotebook(root)) return 2;
       const ids = renderIds(root, flags.id ? [flags.id] : undefined);
       out(`kb render: ${ids.length} note${ids.length === 1 ? '' : 's'} rendered`);
+      return 0;
+    }
+    case 'view': {
+      if (!requireNotebook(root)) return 2;
+      const generated = new Date().toISOString().slice(0, 10);
+      const p = kbView(root, VIEW_TEMPLATE, { open: !flags.noOpen, generated });
+      out(`kb view: wrote ${p}${flags.noOpen ? '' : ' — opening in browser'}`);
       return 0;
     }
     case 'commit': {
