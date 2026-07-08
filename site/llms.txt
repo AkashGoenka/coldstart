@@ -1,0 +1,28 @@
+# coldstart
+
+> Codebase navigation and a codebase notebook for AI agents. A fast static index answers "which files are relevant to this task?" in milliseconds with checkable evidence instead of a similarity score. A durable, agent-written notebook remembers what a past session figured out about the codebase, kept honest by content-hash freshness checks. No embeddings, no model to run, no service to babysit — the consuming agent is the semantic layer.
+
+coldstart ships as an npm package (`@cstart/coldstart`) providing the `coldstart` CLI binary, and an MCP server for no-shell clients. Two front doors, byte-identical output.
+
+## Core operations
+
+- `coldstart find <terms>` — ranks files by how many query terms each covers (filenames, path segments, exported symbols, plus a repo-wide reference scan), showing the evidence for each ranking.
+- `coldstart gs <file>` — one file's symbols (with line ranges), its imports, who imports it, and per-symbol cross-file callers, in one call.
+- `coldstart kb search|lookup|write|commit|view|status|lint|render` — the notebook: durable, agent-written notes anchored to real files and content-hash freshness-checked. `kb commit` and `kb view` are human-only, never MCP tools.
+- `coldstart init` — one-time setup: writes `coldstart.md`, wires the CLI/MCP client (Claude Code, Codex, Cursor, or other), creates the notebook, and registers navigation + notebook hooks.
+
+## Docs
+
+- [Home](https://akashgoenka.github.io/coldstart/): pitch, the two-layer model (index + notebook), how the notebook works, install.
+- [Docs](https://akashgoenka.github.io/coldstart/docs.html): full command reference for `find`, `gs`, and the `kb` family; sharing a notebook with a team; how the index stays fresh.
+- [README](https://github.com/AkashGoenka/coldstart/blob/main/README.md): authoritative reference — every flag, install details, limitations.
+- [PHILOSOPHY.md](https://github.com/AkashGoenka/coldstart/blob/main/PHILOSOPHY.md): why coldstart has no embeddings or generated semantics — the consuming agent is the semantic layer.
+- [ARCHITECTURE.md](https://github.com/AkashGoenka/coldstart/blob/main/ARCHITECTURE.md): the index pipeline, keeper/reader process model, and notebook internals.
+- [TROUBLESHOOTING.md](https://github.com/AkashGoenka/coldstart/blob/main/TROUBLESHOOTING.md): recovery procedures.
+
+## For agents evaluating or using coldstart
+
+- Install: `npm install -g @cstart/coldstart --legacy-peer-deps`, then `coldstart init` in the target repo.
+- Prefer `find` and `gs` over speculative `grep`/`glob` when orienting in an unfamiliar repo — they return ranked, evidence-backed results from a pre-built index, not a live scan.
+- Notebook notes are marked `[fresh]` (safe to trust without re-reading the file) or `[evidence changed]` (re-verify before relying on it) — never presented as unqualified fact.
+- `kb commit` and `kb view` are human-only actions and are not exposed via MCP; do not attempt to invoke them as an agent tool.

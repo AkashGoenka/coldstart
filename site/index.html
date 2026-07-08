@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>coldstart — codebase memory &amp; navigation for AI agents</title>
+<meta name="description" content="coldstart is a fast static index that tells agents which files matter, plus a notebook the agent writes and maintains itself. No embeddings, no separate API key." />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<nav>
+  <div class="nav-in">
+    <span class="brand"><span class="dot"></span>coldstart</span>
+    <span class="nav-spacer"></span>
+    <div class="nav-links">
+      <a href="#notebook">Notebook</a>
+      <a href="#flow">The&nbsp;flow</a>
+      <a href="#semantics">Philosophy</a>
+      <a href="docs.html">Docs</a>
+    </div>
+    <a class="nav-cta" href="#install">Install</a>
+  </div>
+</nav>
+<hr class="thread" />
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Codebase memory &amp; navigation for AI agents</div>
+    <h1 class="hero-title">Your agent lands <span class="cold">cold</span> in every repo.</h1>
+    <p class="hero-sub">coldstart is the layer that warms it up — a <strong>fast static index</strong> that answers <em>which files matter</em> in milliseconds, and a <strong>notebook the agent writes and maintains itself</strong> — a knowledge base that grows as the repo gets worked, so each agent starts with more context and wastes less effort re-deriving what's already known. No embeddings. No model to run. No service to babysit.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#install">Get started →</a>
+      <a class="btn btn-ghost" href="https://github.com/AkashGoenka/coldstart">View on GitHub →</a>
+      <span class="hero-note">MIT · Node 18+ · no separate API key</span>
+    </div>
+
+    <div class="term" role="img" aria-label="Terminal showing a coldstart find command and its ranked, evidence-backed results">
+      <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">agent — coldstart</span></div>
+      <div class="term-body">
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart find</span> <span class="c-cmd">auth session cookie</span></span>
+<span class="gap"></span>
+<span class="ln"><span class="c-frost">src/auth/service.ts</span>  <span class="c-dim">·······</span> <span class="c-hit">3/3</span> <span class="c-dim">defines</span> auth, session, cookie</span>
+<span class="ln">  <span class="c-ember">Summary</span> <span class="c-dim">[fresh]</span> Signs and verifies session cookies; entry for login/logout.</span>
+<span class="ln"><span class="c-frost">src/middleware/session.ts</span>  <span class="c-dim">·</span> <span class="c-hit">2/3</span> <span class="c-dim">imports</span> session, cookie</span>
+<span class="ln"><span class="c-frost">src/routes/login.ts</span>  <span class="c-dim">·······</span> <span class="c-hit">2/3</span> <span class="c-dim">defines</span> auth · <span class="c-dim">imports</span> session</span>
+<span class="gap"></span>
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart gs</span> <span class="c-cmd">src/auth/service.ts</span></span>
+<span class="ln"><span class="c-dim">symbols</span>  signCookie <span class="c-dim">L12</span> · verify <span class="c-dim">L34</span> · rotate <span class="c-dim">L61</span></span>
+<span class="ln"><span class="c-dim">callers</span>  verify ← <span class="c-file">middleware/session.ts</span>, <span class="c-file">routes/login.ts</span></span>
+<span class="ln"><span class="c-dim">imported by</span>  4 files <span class="c-dim">·</span> <span class="c-frost">→ Read only the method body you need</span></span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section class="band">
+  <div class="wrap">
+    <div class="prob-grid">
+      <div>
+        <div class="sec-eyebrow">The cold-start tax</div>
+        <div class="prob-stat">Find, not read.</div>
+      </div>
+      <div class="prob-list">
+        <div class="prob-item"><span class="x">✕</span><p><strong>Agents already read code well.</strong> That was never the bottleneck.</p></div>
+        <div class="prob-item"><span class="x">✕</span><p>They burn tokens <strong>finding</strong> the right file — speculative greps, three wrong reads before the right one.</p></div>
+        <div class="prob-item"><span class="x">✕</span><p>And they <strong>re-derive</strong> what a past session already figured out, every single time.</p></div>
+        <div class="prob-item"><span class="x">✕</span><p>coldstart does exactly those two things — <strong>cutting the tokens agents spend orienting</strong>, and getting out of the way.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="layers">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-eyebrow">Two layers, one tool</div>
+      <h2>Exact structure, plus honest memory.</h2>
+      <p class="sec-lead">The cold layer keeps facts <em>exact</em>. The warm layer keeps judgment <em>honest</em>. The agent supplies both — you maintain neither.</p>
+    </div>
+    <div class="layers">
+      <div class="layer cold">
+        <div class="tag">❄ Navigation · the index</div>
+        <h3>Find the file. Fast.</h3>
+        <p>A static index over paths, symbols, exports, and the import/call graph. Deterministic, offline, free — no API key, no GPU, no inference.</p>
+        <div class="op"><div class="opname"><span class="cold">find</span> &lt;terms&gt;</div><p>Ranks files by how many of your query terms each covers — and shows <em>why</em> it ranked: which terms it defines vs. imports.</p></div>
+        <div class="op"><div class="opname"><span class="cold">gs</span> &lt;file&gt;</div><p>One file's shape: symbols with line ranges, who imports it, who calls each symbol. Not a grep — the answer to "who uses this?"</p></div>
+      </div>
+      <div class="layer warm">
+        <div class="tag">✦ Notebook · the memory</div>
+        <h3>Remember what was learned.</h3>
+        <p>Durable notes about how <em>this</em> repo actually works — written by the agent after real tasks, recalled when a later task matches. You never touch it.</p>
+        <div class="op"><div class="opname"><span class="warm">Anchored</span> to real files</div><p>Every note cites concrete paths and symbols. The index re-checks each anchor's hash as code changes.</p></div>
+        <div class="op"><div class="opname"><span class="warm">Kept honest</span>, never stale</div><p>A note whose evidence drifted renders <code>[evidence changed]</code> — degraded to a labeled hypothesis, not served as a confident lie.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ NOTEBOOK CENTERPIECE ============ -->
+<section id="notebook" class="nb-band">
+  <div class="wrap">
+    <div class="sec-head nb-head">
+      <div class="sec-eyebrow">The notebook · written and maintained by the agent</div>
+      <h2>A memory your agent keeps — <span class="warm">so you don't have to.</span></h2>
+      <p class="sec-lead">Most "knowledge bases" rot because a human has to feed them. coldstart's notebook is written by the agent that just did the work, kept honest by the index automatically, and recalled the moment it's relevant. There is no human in the maintenance loop — and that's the point.</p>
+    </div>
+
+    <div class="beats">
+
+      <!-- BEAT 1 — the agent writes -->
+      <div class="beat">
+        <div class="beat-text">
+          <div class="beat-step"><span class="n">1</span>The agent writes it</div>
+          <h3>Authored after a real task.</h3>
+          <p>The reasoner that just solved something writes down what it learned — a file's purpose, a cross-file flow, a trap — with concrete citations, while the full context is still in hand. A write gate dedupes by concept, and concurrent agents never silently merge or lose a note.</p>
+          <div class="notyou"><s>You write the docs.</s> &nbsp;<b>The agent does.</b></div>
+        </div>
+        <div class="beat-visual">
+          <div class="notecard">
+            <div class="nc-top">
+              <div class="nc-kicker">
+                <span class="type-pill">File note</span>
+                <span class="pill fresh"><span class="d"></span>fresh</span>
+              </div>
+              <div class="nc-title">src/models.py · Tile</div>
+            </div>
+            <div class="nc-body">
+              <p>Persists a map tile and its geometry. <b>save()</b> is the single write path — it stamps <span class="link">bbox</span> from the geometry before insert, so callers must never set bbox by hand.</p>
+              <p>Part of the <span class="link">[[tile-save-lifecycle]]</span> flow.</p>
+              <div class="nc-anchors">
+                <div class="panel-label">Anchors — the files this note rests on</div>
+                <div class="anchors">
+                  <span class="anchor fresh"><span class="d"></span>src/models.py <span class="sym">· Tile</span></span>
+                  <span class="anchor fresh"><span class="d"></span>src/models.py <span class="sym">· save</span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BEAT 2 — the index keeps it honest (visual on left) -->
+      <div class="beat rev">
+        <div class="beat-text">
+          <div class="beat-step"><span class="n">2</span>The index keeps it honest</div>
+          <h3>Freshness is mechanical, not hoped-for.</h3>
+          <p>Every anchor is stamped with a content hash. The background keeper re-checks it as the code moves — no one has to remember to. When the evidence drifts, the note flips to <code>[evidence changed]</code> automatically: degraded to a labeled hypothesis, never served as a confident lie.</p>
+          <div class="notyou"><s>You prune stale docs.</s> &nbsp;<b>The hash does.</b></div>
+        </div>
+        <div class="beat-visual">
+          <div class="notecard">
+            <div class="nc-top">
+              <div class="nc-kicker">
+                <span class="type-pill">File note</span>
+                <span class="pill changed"><span class="d"></span>evidence changed</span>
+              </div>
+              <div class="nc-title">src/models.py · Tile</div>
+            </div>
+            <div class="nc-body">
+              <p>Persists a map tile and its geometry. <b>save()</b> is the single write path…</p>
+              <div class="nc-changed-note">⚠ evidence changed: src/models.py — re-verify before relying on this note.</div>
+              <div class="nc-anchors">
+                <div class="panel-label">Anchors</div>
+                <div class="anchors">
+                  <span class="anchor changed"><span class="d"></span>src/models.py <span class="sym">· Tile</span></span>
+                  <span class="anchor changed"><span class="d"></span>src/models.py <span class="sym">· save</span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BEAT 3 — the next agent recalls (visual = the kb view browser) -->
+      <div class="beat">
+        <div class="beat-text">
+          <div class="beat-step"><span class="n">3</span>The next agent recalls it</div>
+          <h3>Surfaced when it's relevant — not searched for.</h3>
+          <p>A matching prompt pulls the note in automatically, and a fresh <code>Summary</code> rides along on every <code>find</code>. The second time any question comes up, the answer is one <code>Read</code> away instead of a re-derivation.</p>
+          <p>And when a human wants to see what the agents have been keeping, <code>coldstart kb view</code> opens the whole notebook as one HTML file — no server.</p>
+          <div class="notyou"><s>You go looking.</s> &nbsp;<b>It comes to you.</b></div>
+        </div>
+        <div class="beat-visual">
+          <div class="viewer" role="img" aria-label="Mock of the coldstart kb view notebook browser: a file tree on the left with per-file freshness dots, and a note pane on the right">
+            <div class="vw-chrome">
+              <span class="tl"></span><span class="tl"></span><span class="tl"></span>
+              <span class="vw-url">file:///arches/.coldstart/notebook/index.html</span>
+            </div>
+            <div class="vw-app">
+              <div class="vw-topbar">
+                <div>
+                  <div class="vw-kicker">coldstart notebook</div>
+                  <div class="vw-repo">arches</div>
+                </div>
+                <div class="vw-tabs" style="margin-left:20px">
+                  <span class="vw-tab on">Files</span>
+                  <span class="vw-tab">Flows</span>
+                </div>
+                <span class="vw-count">111 notes · 108 fresh</span>
+              </div>
+              <div class="vw-tree">
+                <div class="vw-row dir"><span class="tw">▾</span>src</div>
+                <div class="vw-row file on vw-ind"><span class="tw">•</span>models.py<span class="dd fresh"></span></div>
+                <div class="vw-row file vw-ind"><span class="tw">•</span>search.py<span class="dd fresh"></span></div>
+                <div class="vw-row dir vw-ind"><span class="tw">▾</span>views</div>
+                <div class="vw-row file vw-ind2"><span class="tw">•</span>tile.py<span class="dd changed"></span></div>
+                <div class="vw-row file vw-ind2"><span class="tw">•</span>map.py<span class="dd fresh"></span></div>
+                <div class="vw-row dir"><span class="tw">▸</span>api</div>
+              </div>
+              <div class="vw-pane">
+                <div class="nc-kicker">
+                  <span class="type-pill">File note</span>
+                  <span class="pill fresh"><span class="d"></span>fresh</span>
+                </div>
+                <div class="nc-title">src/models.py · Tile</div>
+                <p style="margin-top:10px">Persists a map tile and its geometry. <b>save()</b> is the single write path — it stamps bbox from the geometry before insert.</p>
+                <div class="nc-anchors">
+                  <div class="panel-label">Anchors</div>
+                  <div class="anchors">
+                    <span class="anchor fresh"><span class="d"></span>src/models.py <span class="sym">· Tile</span></span>
+                    <span class="anchor fresh"><span class="d"></span>src/models.py <span class="sym">· save</span></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="keynote nb-share">
+      <span class="kk">Shared, it compounds faster</span>
+      <p><b>Commit the notebook to your repo and the whole team feeds one corpus.</b> The append-only logs union-merge across branches and machines — no conflicts — so every teammate's agent both reads from and adds to the same notebook. Private by default; opt in with <code>coldstart init --commit-notebook</code>. More sessions in, bigger notebook out.</p>
+    </div>
+
+    <div class="nb-foot">
+      <p class="lead">A knowledge base that compounds as the repo gets worked — more context for the next agent, less effort spent re-deriving what's already known.</p>
+      <p class="sub">Every note stays anchored to the code, so the <b>codebase remains the single source of truth</b> — the notebook only remembers what was learned about it, and the index keeps the two in sync.</p>
+    </div>
+
+    <div style="text-align:center;margin-top:30px">
+      <a class="btn btn-ghost" href="docs.html#notebook">Read more about the notebook →</a>
+    </div>
+  </div>
+</section>
+
+<section id="flow">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-eyebrow">The intended flow</div>
+      <h2>find → gs → Read.</h2>
+      <p class="sec-lead">Orient with two cheap calls before you spend a single token reading. Notebook summaries ride along on <code style="font-family:var(--mono)">find</code>, so the orientation step often answers itself.</p>
+    </div>
+    <div class="diagram">
+      <svg viewBox="0 0 900 260" role="img" aria-label="Flow diagram: find ranks candidate files, gs reveals one file's structure and callers, then Read opens only the needed method body">
+        <defs>
+          <marker id="ah" markerWidth="9" markerHeight="9" refX="6" refY="4.5" orient="auto"><path class="d-arrowhead" d="M0,0 L9,4.5 L0,9 z"/></marker>
+        </defs>
+        <rect class="d-box d-frost" x="24" y="70" width="230" height="120" rx="10" stroke-width="2"/>
+        <text class="d-cmd" x="44" y="102">coldstart find</text>
+        <text class="d-label" x="44" y="132">Which files?</text>
+        <text class="d-sub" x="44" y="156">Ranked candidates,</text>
+        <text class="d-sub" x="44" y="174">each with its evidence.</text>
+        <text class="d-note" x="44" y="52">＋ notebook Summary [fresh]</text>
+        <path class="d-arrow" d="M262,130 L322,130" marker-end="url(#ah)"/>
+        <rect class="d-box d-frost" x="332" y="70" width="230" height="120" rx="10" stroke-width="2"/>
+        <text class="d-cmd" x="352" y="102">coldstart gs</text>
+        <text class="d-label" x="352" y="132">What is it?</text>
+        <text class="d-sub" x="352" y="156">Symbols, importers,</text>
+        <text class="d-sub" x="352" y="174">per-symbol callers.</text>
+        <path class="d-arrow" d="M570,130 L630,130" marker-end="url(#ah)"/>
+        <rect class="d-box d-ember" x="640" y="70" width="236" height="120" rx="10" stroke-width="2"/>
+        <text class="d-cmd" x="660" y="102" style="fill:var(--ember)">Read</text>
+        <text class="d-label" x="660" y="132">Just the body.</text>
+        <text class="d-sub" x="660" y="156">Open only the one</text>
+        <text class="d-sub" x="660" y="174">method you need.</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section id="semantics" class="band">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-eyebrow">Bring your own semantics</div>
+      <h2>No embeddings. On purpose.</h2>
+      <p class="sec-lead">Every consumer is already a frontier model — the best semantic reasoner in the loop. Pre-computing meaning at index time only duplicates that, worse and stale. So coldstart keeps what's cheap to keep <em>exact</em>, and leaves meaning to the reasoner holding the task.</p>
+    </div>
+    <div class="compare">
+      <div class="cmp them">
+        <h4>Embedding-based code search</h4>
+        <ul>
+          <li><span class="mk">✕</span><span>Freezes <b>one interpretation</b> of a file at index time, blind to the task.</span></li>
+          <li><span class="mk">✕</span><span>A stale vector <b>fails silently</b> — a confident wrong answer you can't spot.</span></li>
+          <li><span class="mk">✕</span><span>Returns a <b>cosine score</b> the agent has to trust blindly or re-verify.</span></li>
+          <li><span class="mk">✕</span><span>Needs an API key, a GPU, inference on every query.</span></li>
+        </ul>
+      </div>
+      <div class="cmp us">
+        <h4>coldstart</h4>
+        <ul>
+          <li><span class="mk">✓</span><span>The agent judges relevance <b>in context</b>, against the actual goal.</span></li>
+          <li><span class="mk">✓</span><span>A background keeper patches facts in <b>milliseconds</b> — the index never lies about the tree.</span></li>
+          <li><span class="mk">✓</span><span>Returns <b>checkable evidence</b> — this term is defined here, imported there.</span></li>
+          <li><span class="mk">✓</span><span>Runs on <b>the agent you already pay for</b> — deterministic, offline, no key, no GPU.</span></li>
+        </ul>
+      </div>
+    </div>
+    <div class="keynote">
+      <span class="kk">No second bill</span>
+      <p><b>coldstart runs on the agent you already pay for.</b> The semantic layer <em>is</em> your Claude Code, Codex, or Cursor subscription — coldstart adds no inference of its own, so there's <b>no separate API key, no metered embeddings, nothing new to provision.</b> Most code-search tools bill you twice: once for the agent, again for their own model. This one doesn't.</p>
+    </div>
+  </div>
+</section>
+
+<section id="languages">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-eyebrow">Supported languages</div>
+      <h2>Parses 20+ languages. The notebook works on all of them.</h2>
+      <p class="sec-lead">Tree-sitter for the parsed set; content-hash freshness for the notebook means notes on a Swift repo are as trustworthy as notes on a TypeScript one.</p>
+    </div>
+    <div class="langs">
+      <span class="chip hot">TypeScript</span><span class="chip hot">JavaScript</span><span class="chip hot">JSX / TSX</span>
+      <span class="chip">Vue</span><span class="chip">Svelte</span><span class="chip">Astro</span><span class="chip">AngularJS</span>
+      <span class="chip hot">Python</span><span class="chip hot">Ruby (Rails)</span><span class="chip hot">Go</span><span class="chip hot">Rust</span>
+      <span class="chip">Java</span><span class="chip">Kotlin</span><span class="chip">C#</span><span class="chip">PHP (Laravel)</span><span class="chip">C++</span>
+      <span class="chip">Groovy / Gradle</span><span class="chip">GraphQL</span><span class="chip">YAML</span><span class="chip">TOML</span><span class="chip">XML</span><span class="chip">.env</span>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-eyebrow">Get started</div>
+      <h2>Two commands to warm the repo.</h2>
+      <p class="sec-lead">Works best with <strong>Claude Code</strong>, <strong>Codex</strong>, and <strong>Cursor</strong> — all get the fast CLI path <em>and</em> the notebook capture/recall hooks auto-wired by <code style="font-family:var(--mono)">init</code>.</p>
+    </div>
+    <div class="term install-term">
+      <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">your-project</span></div>
+      <div class="term-body">
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">npm install -g @cstart/coldstart</span> <span class="c-flag">--legacy-peer-deps</span></span>
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">cd</span> your-project</span>
+<span class="gap"></span>
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart init</span>   <span class="c-dim"># coldstart.md + client wiring + notebook + capture/recall hooks</span></span>
+<span class="gap"></span>
+<span class="ln"><span class="c-hit">✓</span> <span class="c-dim">index warming in the background — your first lookup is instant.</span></span>
+      </div>
+    </div>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="docs.html">Read the docs →</a>
+      <a class="btn btn-ghost" href="https://github.com/AkashGoenka/coldstart">GitHub</a>
+      <a class="btn btn-ghost" href="https://www.npmjs.com/package/@cstart/coldstart">npm</a>
+    </div>
+  </div>
+</section>
+
+<hr class="thread" />
+<footer>
+  <div class="foot-in">
+    <span class="foot-brand"><span class="brand" style="font-size:15px"><span class="dot"></span>coldstart</span> — codebase memory &amp; navigation for AI agents · MIT</span>
+    <div class="foot-links">
+      <a href="docs.html">Docs</a>
+      <a href="https://github.com/AkashGoenka/coldstart">GitHub</a>
+      <a href="https://www.npmjs.com/package/@cstart/coldstart">npm</a>
+      <a href="#notebook">Notebook</a>
+      <a href="#semantics">Philosophy</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

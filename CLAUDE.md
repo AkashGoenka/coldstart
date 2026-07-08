@@ -39,3 +39,4 @@ Key files:
 - `src/keeper-state.ts` — keeper-state.json + repair.jsonl (observability beside the cache)
 - `src/kb/` — notebook: store / raw-log / fold / render / search / write / freshness / notes-index / lint / cli
 - `src/types.ts`, `src/constants.ts`
+- `site/` — the GitHub Pages marketing site (`index.html` + `docs.html`, shared `styles.css`, `llms.txt`), deployed by `.github/workflows/pages.yml` on push to `main`. **When a change is meaningful to an outside user** (a command's behavior/flags change, a new `kb` subcommand ships, the notebook's guarantees change, the npm package name changes) — update `site/docs.html` (and `site/index.html` if it affects the pitch). Routine internal refactors don't need a site update.
