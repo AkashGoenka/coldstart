@@ -11,11 +11,11 @@ Major release. The package is renamed, the CLI is now the primary surface, and t
 process model is rebuilt around a single background keeper with stateless readers.
 
 ### Changed (BREAKING)
-- **Package renamed `coldstart-mcp` → `coldstart`.** The CLI is the primary surface
-  now; MCP is the no-shell fallback. `coldstart-mcp` on npm is deprecated and
-  redirects here. The `coldstart-mcp` binary name is retained as an alias, so
-  existing MCP configs keep working. Migrate with
-  `npm uninstall -g coldstart-mcp && npm install -g coldstart --legacy-peer-deps && coldstart init`.
+- **Package renamed `coldstart-mcp` → `@cstart/coldstart`.** The CLI is the primary
+  surface now; MCP is the no-shell fallback. `coldstart-mcp` on npm is deprecated and
+  points here. The `coldstart` and `coldstart-mcp` binary names are both retained, so
+  the CLI command is still `coldstart` and existing MCP configs keep working. Migrate with
+  `npm uninstall -g coldstart-mcp && npm install -g @cstart/coldstart --legacy-peer-deps && coldstart init`.
 - **Tools/commands renamed to `find` + `gs`** (matching the CLI verbs):
   `get-overview` → `find`, `get-structure` → `gs`. Exposed identically as CLI
   commands (`coldstart find` / `coldstart gs`, the primary path) and as MCP tools

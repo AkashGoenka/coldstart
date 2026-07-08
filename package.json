@@ -1,6 +1,9 @@
 {
-  "name": "coldstart",
+  "name": "@cstart/coldstart",
   "version": "2.0.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "description": "Fast static codebase navigation for AI agents — `find` ranks relevant files, `gs` shows a file's structure and callers. CLI-first; also a no-shell MCP server.",
   "type": "module",
   "bin": {
