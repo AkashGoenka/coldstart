@@ -147,9 +147,18 @@ function filesBlock(root, files) {
 // configuration: gates off via --force, capture-only) ---------------------------
 function buildCapturePrompt(root, block, sid) {
   return `You have completed a task now and have gathered knowledge as a part of that task or \
-process. We need to preserve the knowledge so that another agent in future can make use of your \
-findings. We are storing this in a notebook format and this notebook has to be backed by the \
-codebase you are working on.
+process — knowledge another agent in future could make use of.
+
+But before writing any notes, we need to decide whether the task you completed deserves a note. \
+If you were investigating on an older branch or doing a PR review, we may not need to save notes \
+because that code is not in the present — it's in the past or it's in the future. The notes that \
+we write are backed by the code in the present. This was an example to explain to you. As an \
+agent who worked on the current task, you know its exact intent and are best suited to decide \
+whether this task deserves a note. And if nothing about the current code is worth recording, \
+then no note is the right answer.
+
+Once you decide the task does deserve a note, we store it in a notebook format, and this \
+notebook has to be backed by the codebase you are working on.
 
 We need to save only the working knowledge of the codebase in a specific format so that it can \
 be searched and served to future cold agents. We don't need to store any general interaction you \
@@ -160,8 +169,9 @@ below format —
 
 THE NOTEBOOK HAS THREE CONTAINERS. Put each piece of knowledge in its one home:
 
-1. FILE notes — write one for EVERY file you actually read and understood this session. No \
-judgment call about whether it seems obvious. First decide the file's CHARACTER:
+1. FILE notes (if you decided to write a note for the entire task) — write one for EVERY file \
+you actually read and understood this session. No judgment call about whether it seems obvious. \
+First decide the file's CHARACTER:
    - hub    = the file has no single purpose (models.py, helpers, utils). Knowledge lives per \
 SYMBOL, as facets: one facet for each symbol you worked with this session. Only symbols you \
 have firsthand knowledge of — never enumerate the rest.
