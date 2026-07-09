@@ -40,6 +40,22 @@ export function stampAnchors(root: string, anchors: Anchor[]): StampedAnchor[] {
   });
 }
 
+/**
+ * "Inactive" — a read-time, branch-reactive projection (never stored): true
+ * when a note anchors at least one file and EVERY anchored file is absent right
+ * now. That is a note whose subject doesn't exist on the current branch — a
+ * feature/review-branch note seen from a branch without those files, or a note
+ * left behind by a deletion/rename. Computed from live existence on each read,
+ * so it flips automatically across a branch switch with no write.
+ *
+ * A note with no anchors can't be judged this way (never inactive). Lessons are
+ * exempt by the caller: an absence lesson is ABOUT non-existence, and its
+ * freshness is the keeper's re-run stamp, not anchor presence.
+ */
+export function anchorsAllMissing(stamped: StampedAnchor[]): boolean {
+  return stamped.length > 0 && stamped.every((s) => s.state === 'missing');
+}
+
 /** One human line per anchor, used verbatim by search/status output. */
 export function freshnessLine(s: StampedAnchor): string {
   switch (s.state) {
