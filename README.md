@@ -5,8 +5,8 @@
 <h1>coldstart</h1>
 
 <p>
-  <b>Codebase navigation and a codebase notebook for AI agents.</b><br/>
-  Find the right file in milliseconds — and remember what the last session figured out.
+  <b>Self-maintaining codebase knowledge for AI coding agents.</b><br/>
+  Agent-written notes that stay anchored to your code — plus fast, deterministic navigation — so Claude Code, Codex, and Cursor stop rediscovering the repo every session.
 </p>
 
 <p>
@@ -27,10 +27,10 @@
 
 Two layers, one tool:
 
-- **The notebook** (`coldstart kb`) — durable, agent-written notes about how *this* codebase actually works: what a file is for, how a flow spans files, which invariants hold. Captured after real tasks, recalled when a later task matches, and kept honest by the index — every note is anchored to real files, and a note whose evidence drifted is flagged, not served as truth.
+- **The notebook** (`coldstart kb`) — durable, agent-written notes about how _this_ codebase actually works: what a file is for, how a flow spans files, which invariants hold. Captured after real tasks, recalled when a later task matches, and kept honest by the index — every note is anchored to real files, and a note whose evidence drifted is flagged, not served as truth.
 - **Navigation** (`coldstart find` / `coldstart gs`) — a fast static index over file paths, symbol names, exports, and the import/call graph. It answers "which files are relevant to this task?" in milliseconds, with checkable evidence instead of a similarity score.
 
-No embeddings, no model to run, no service to babysit. Agents are already good at reading and reasoning about code; what they waste tokens on is *finding* the right file and *re-deriving* what the last session already figured out. coldstart does those two parts and gets out of the way.
+No embeddings, no model to run, no service to babysit. Agents are already good at reading and reasoning about code; what they waste tokens on is _finding_ the right file and _re-deriving_ what the last session already figured out. coldstart does those two parts and gets out of the way.
 
 ---
 
@@ -111,10 +111,10 @@ coldstart kb status / lint / render / init / migrate
 
 ## Navigation: the two operations
 
-| | What it answers | Replaces |
-|---|---|---|
-| **`find <terms>`** | "Which files are about this?" — ranks files by how many of your query terms they cover (filenames, path segments, exported symbols, plus a repo-wide name-reference pass). | a flurry of `grep`/`glob` while orienting |
-| **`gs <file>`** | "What is this file?" — top-level symbols with line ranges, who imports it, who calls each symbol, and name-related neighbors. | reading a whole file just to learn its shape and usage |
+|                    | What it answers                                                                                                                                                            | Replaces                                               |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| **`find <terms>`** | "Which files are about this?" — ranks files by how many of your query terms they cover (filenames, path segments, exported symbols, plus a repo-wide name-reference pass). | a flurry of `grep`/`glob` while orienting              |
+| **`gs <file>`**    | "What is this file?" — top-level symbols with line ranges, who imports it, who calls each symbol, and name-related neighbors.                                              | reading a whole file just to learn its shape and usage |
 
 The intended flow: **`find`** a concept → pick the best path → **`gs`** that file for its shape and who uses it → `Read` only for the implementation inside a method body. Notebook summaries ride along on `find` results, so often the orientation step answers itself.
 
@@ -173,7 +173,7 @@ It works best with **Claude Code**, **Codex**, and **Cursor**: all three get pla
 
 ## Bring your own semantics
 
-coldstart has no embeddings, no generated summaries, no semantic layer computed at index time — **on purpose. The semantic layer is the agent.** Every consumer is already a frontier model; pre-computing meaning at index time only duplicates that, worse and stale. So the index keeps what's cheap to keep *exact* — paths, symbols, exports, the import/call graph — and returns *why* each file ranked.
+coldstart has no embeddings, no generated summaries, no semantic layer computed at index time — **on purpose. The semantic layer is the agent.** Every consumer is already a frontier model; pre-computing meaning at index time only duplicates that, worse and stale. So the index keeps what's cheap to keep _exact_ — paths, symbols, exports, the import/call graph — and returns _why_ each file ranked.
 
 The notebook is the same philosophy applied to memory: coldstart still computes no meaning of its own. It stores, anchors, and freshness-checks the meaning **agents** author — written at task time, by the reasoner that had the full context, about the question that actually mattered. The full argument is in **[PHILOSOPHY.md](./PHILOSOPHY.md)**.
 
@@ -198,7 +198,7 @@ flowchart TD
 - **Readers never build the index.** On a cache miss they wait for the keeper's build (progress to stderr) instead of silently kicking off a multi-minute build inline — or three of them concurrently.
 - No HTTP, no ports, no bridge. The keeper logs to `~/.coldstart/daemon/<root>.log` and exits when its lockfile is removed.
 
-**There is no cache TTL.** The index is never discarded for being old — it's kept *correct* instead:
+**There is no cache TTL.** The index is never discarded for being old — it's kept _correct_ instead:
 
 - **While the keeper runs:** edits are debounced (400 ms), then **patched incrementally** (~2–5 ms/file, up to 30 files or 20% of the repo, whichever is larger) or trigger a **background full rebuild** above that (served from the last good index until the swap). The cache re-saves ~5 s after edits settle, in **atomic generations** — a reader can never load a half-written mix of old and new.
 - **When the keeper starts:** it **reconciles** — stat-checks every indexed file against its stored fingerprint (~150 ms even at 16k files) plus a git diff against the indexed HEAD — and patches exactly what changed while nothing was watching. A branch switch that used to force a 96-second rebuild on a 16k-file repo is now a ~3-second patch.
@@ -216,7 +216,7 @@ coldstart restart --all       # kill every keeper
 coldstart index               # build + save the cache once, up front (single-writer prep)
 ```
 
-`restart` is the right move whenever anything feels stale — a fresh keeper reconciles on start, so it comes back *correct*, not just alive. `status` answers "is my index fresh, and why?": liveness, cache age, the keeper's last reconcile/patch/rebuild/save stamps, and the tail of the repair log — no network probe.
+`restart` is the right move whenever anything feels stale — a fresh keeper reconciles on start, so it comes back _correct_, not just alive. `status` answers "is my index fresh, and why?": liveness, cache age, the keeper's last reconcile/patch/rebuild/save stamps, and the tail of the repair log — no network probe.
 
 ---
 
@@ -230,11 +230,11 @@ The **notebook works regardless** — its freshness stamps are content-hash base
 
 ---
 
-## When *not* to reach for it
+## When _not_ to reach for it
 
 - A literal string / phrase / regex inside file bodies → **Grep**.
 - Reading an implementation → **Read**, after `gs` gives you the shape.
-- `find` says *"no indexed file contains any of […]"* → those identifiers aren't in the repo. Don't grep spelling variants.
+- `find` says _"no indexed file contains any of […]"_ → those identifiers aren't in the repo. Don't grep spelling variants.
 
 ---
 
@@ -262,7 +262,7 @@ See [PHILOSOPHY.md](./PHILOSOPHY.md) for why coldstart computes no semantics of 
 2. `gs` callers are one-hop and file-scoped. Member-expression calls (`this.method()`, `api.method()`) aren't cross-file resolved; named function/constant calls are. Chase further hops by calling `gs` on the caller files.
 3. Dynamic/computed imports (`import(variable)`) and runtime-DSL references (polymorphic associations, gem/reflection-backed models) stay unresolved.
 4. Hidden directories and files over 1 MB are skipped by the index.
-5. The keeper is per-repo and per-machine — no sharing across projects or hosts. The notebook *does* travel: its `.raw` logs are committed and union-merge across branches and machines.
+5. The keeper is per-repo and per-machine — no sharing across projects or hosts. The notebook _does_ travel: its `.raw` logs are committed and union-merge across branches and machines.
 6. Notebook quality is bounded by what writing agents actually read — notes are accurate about what they state, but a note is not a proof of completeness.
 
 ## License
