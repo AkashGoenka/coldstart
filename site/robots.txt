@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://akashgoenka.github.io/coldstart/sitemap.xml
