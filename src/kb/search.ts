@@ -351,7 +351,10 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
   // Freshness NOW for everything scored, then hard-tier: fresh+active first.
   const rareById = new Map(scored.map((s) => [s.note.id, s.rare]));
   const withTier: KbSearchHit[] = scored.map(({ note, score, convergence, strongTerms }) => {
-    const stamped = stampAnchors(root, note.anchors);
+    // The keeper's rename overlay lets a note whose file was renamed resolve to
+    // its new path ('moved', not 'missing'), so a byte-exact refactor doesn't
+    // send the note inactive. Live-re-verified inside stampAnchors.
+    const stamped = stampAnchors(root, note.anchors, opts.notesIndex?.renames);
     // Lessons are exempt (an absence lesson is ABOUT non-existence); any other
     // note whose anchored files are all gone is inactive on this branch.
     const inactive = note.type !== 'lesson' && anchorsAllMissing(stamped);
@@ -426,9 +429,11 @@ const gistLines = (hit: KbSearchHit): string[] => {
   const kind = n.type === 'lesson' && n.kind ? `/${n.kind}` : '';
   const status = n.status !== 'active' ? ` · ${n.status.toUpperCase()}` : '';
   const changed = hit.stamped.filter((s) => s.state === 'changed' || s.state === 'missing');
+  const moved = hit.stamped.filter((s) => s.state === 'moved');
   const fresh =
     !hit.stamped.length ? '' :
     changed.length ? ` · [evidence changed: ${changed.slice(0, 2).map((s) => s.path).join(', ')}${changed.length > 2 ? ` +${changed.length - 2}` : ''}]` :
+    moved.length ? ` · [moved → ${moved.slice(0, 2).map((s) => s.movedTo).join(', ')}${moved.length > 2 ? ` +${moved.length - 2}` : ''}]` :
     hit.stamped.every((s) => s.state === 'fresh') ? ' · anchors [fresh]' : ' · [not fully verified]';
   // Hub file notes carry knowledge in facets, not a body — their gist is the
   // symbol inventory (what the note knows about), not prose.
@@ -482,11 +487,13 @@ export function renderResultsPage(query: string, result: KbSearchResult): string
     const n = hit.note;
     const kind = n.type === 'lesson' && n.kind ? `/${n.kind}` : '';
     const changed = hit.stamped.filter((s) => s.state === 'changed' || s.state === 'missing');
+    const moved = hit.stamped.filter((s) => s.state === 'moved');
     const fresh =
       hit.inactive ? 'INACTIVE — every anchored file absent on this branch' :
       n.status !== 'active' ? n.status.toUpperCase() :
       !hit.stamped.length ? 'unverified' :
       changed.length ? `evidence changed: ${changed.slice(0, 2).map((s) => s.path).join(', ')}${changed.length > 2 ? ` +${changed.length - 2}` : ''}` :
+      moved.length ? `moved → ${moved.slice(0, 2).map((s) => s.movedTo).join(', ')}${moved.length > 2 ? ` +${moved.length - 2}` : ''}` :
       hit.stamped.every((s) => s.state === 'fresh') ? 'fresh' : 'not fully verified';
     parts.push(`${i + 1}. ${n.title}  [${n.type}${kind} · ${fresh} · ${n.updated.slice(0, 10)}]`);
     parts.push(`   → open: ${NOTES_REL}/${n.id}.md`);

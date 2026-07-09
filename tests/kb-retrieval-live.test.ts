@@ -172,6 +172,79 @@ describe('inactive projection — notes whose anchored files are absent on this 
   });
 });
 
+describe('rename overlay — a note follows a byte-exact move instead of going inactive', () => {
+  function write(rel: string, content: string): void {
+    const abs = path.join(root, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, content);
+  }
+  // Minimal keeper-derived notes index carrying only a rename overlay.
+  const idx = (renames: Record<string, { to: string }>) =>
+    ({ v: 2, builtAt: 0, anchors: {}, absence: {}, renames }) as never;
+
+  it('resolves a moved anchor to its new path (active, tier 0), re-verified live', async () => {
+    write('src/orig.py', 'def zebra_unloader():\n    return 1\n');
+    // verified → the append stamps the anchor hash from the live file bytes.
+    appendRecord(root, {
+      id: 'moved-note', type: 'file', op: 'put', character: 'single',
+      title: 'ZebraUnloader handles staging', summary: 'unloader.',
+      anchors: [{ path: 'src/orig.py', symbols: ['ZebraUnloader'] }],
+      verified: ['src/orig.py'],
+    } as never);
+    // Refactor: identical bytes appear at a new path, the old one vanishes.
+    write('src/moved.py', 'def zebra_unloader():\n    return 1\n');
+    fs.rmSync(path.join(root, 'src/orig.py'));
+
+    const res = await kbSearch(root, 'ZebraUnloader staging', {
+      noMissLog: true, notesIndex: idx({ 'src/orig.py': { to: 'src/moved.py' } }),
+    });
+    const hit = res.hits.find((h) => h.note.id === 'moved-note');
+    expect(hit).toBeTruthy();
+    expect(hit?.inactive).toBe(false);
+    expect(hit?.tier).toBe(0);
+    expect(hit?.stamped[0].state).toBe('moved');
+    expect(hit?.stamped[0].movedTo).toBe('src/moved.py');
+  });
+
+  it('guard: destination content differs from the recorded hash → stays inactive', async () => {
+    write('src/orig.py', 'def zebra_unloader():\n    return 1\n');
+    appendRecord(root, {
+      id: 'moved-note', type: 'file', op: 'put', character: 'single',
+      title: 'ZebraUnloader handles staging', summary: 'unloader.',
+      anchors: [{ path: 'src/orig.py', symbols: ['ZebraUnloader'] }],
+      verified: ['src/orig.py'],
+    } as never);
+    // The overlay points at a file whose content does NOT match (rename+edit).
+    write('src/moved.py', 'def zebra_unloader():\n    return 2  # edited\n');
+    fs.rmSync(path.join(root, 'src/orig.py'));
+
+    const res = await kbSearch(root, 'ZebraUnloader staging', {
+      noMissLog: true, notesIndex: idx({ 'src/orig.py': { to: 'src/moved.py' } }),
+    });
+    const hit = res.hits.find((h) => h.note.id === 'moved-note');
+    expect(hit?.stamped[0].state).toBe('missing');
+    expect(hit?.inactive).toBe(true);
+  });
+
+  it('recall (hook mode) keeps a moved note — its subject exists at the new path', async () => {
+    write('src/orig.py', 'def zebra_unloader():\n    return 1\n');
+    appendRecord(root, {
+      id: 'moved-note', type: 'file', op: 'put', character: 'single',
+      title: 'ZebraUnloader handles staging', summary: 'unloader.',
+      anchors: [{ path: 'src/orig.py', symbols: ['ZebraUnloader'] }],
+      verified: ['src/orig.py'],
+    } as never);
+    write('src/moved.py', 'def zebra_unloader():\n    return 1\n');
+    fs.rmSync(path.join(root, 'src/orig.py'));
+
+    const hook = await kbSearch(root, 'ZebraUnloader is dropping rows', {
+      strongOnly: true, noMissLog: true, source: 'hook',
+      notesIndex: idx({ 'src/orig.py': { to: 'src/moved.py' } }),
+    });
+    expect(hook.hits.some((h) => h.note.id === 'moved-note')).toBe(true);
+  });
+});
+
 describe('find Note: line summaries', () => {
   const base: FoldedNote = {
     id: 'x', type: 'file', title: 'src/models.py', aliases: [], anchors: [], status: 'active',

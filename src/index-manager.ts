@@ -139,7 +139,7 @@ export class IndexManager {
     try {
       const kb = await buildKbNotesIndex(this.activeIndex, this.activeIndex.rootDir);
       await saveKbNotesIndex(this.activeIndex.rootDir, kb, this.cacheDir);
-      this.log(`[coldstart] KB notes index refreshed (${Object.keys(kb.anchors).length} anchors, ${Object.keys(kb.absence).length} absence stamps)`);
+      this.log(`[coldstart] KB notes index refreshed (${Object.keys(kb.anchors).length} anchors, ${Object.keys(kb.absence).length} absence stamps, ${Object.keys(kb.renames).length} renames)`);
     } catch (err) {
       this.log(`[coldstart] KB notes index refresh failed: ${err}`);
     } finally {

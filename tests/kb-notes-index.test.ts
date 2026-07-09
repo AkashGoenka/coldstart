@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { buildKbNotesIndex, saveKbNotesIndex, loadKbNotesIndex, kbNotesIndexPath, stampCoversTerms } from '../src/kb/notes-index.js';
 import { appendRecord } from '../src/kb/raw-log.js';
 import { kbLint } from '../src/kb/lint.js';
@@ -46,7 +47,7 @@ describe('kb notes index', () => {
     const index = fakeIndex({ 'src/main.ts': ['main'] });
     const built = await buildKbNotesIndex(index, root);
 
-    expect(built.v).toBe(1);
+    expect(built.v).toBe(2);
     expect(built.anchors).toEqual({ 'src/main.ts': ['main'] });
     expect(built.absence).toEqual({});
     expect(typeof built.builtAt).toBe('number');
@@ -307,5 +308,90 @@ describe('kb notes index', () => {
     expect(stampCoversTerms(stamp, ['foo'])).toBe(false);
     expect(stampCoversTerms(stamp, ['foo', 'baz'])).toBe(false);
     expect(stampCoversTerms(undefined, ['foo'])).toBe(false);
+  });
+});
+
+describe('deriveRenames — a vanished anchor follows a byte-exact move', () => {
+  const git = (...args: string[]): void => { execFileSync('git', args, { cwd: root, stdio: 'pipe' }); };
+  function initRepo(): void {
+    git('init', '-q');
+    git('config', 'user.email', 't@t');
+    git('config', 'user.name', 't');
+  }
+  function writeRepoFile(rel: string, content: string): void {
+    const abs = path.join(root, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, content);
+  }
+  // A note whose only anchor is `rel`, with its hash+head stamped from the live
+  // file (via `verified`). deriveRenames keys off exactly that hash/head.
+  function noteFor(rel: string): void {
+    appendRecord(root, {
+      id: 'store-note', type: 'file', op: 'put', character: 'single',
+      summary: 'folds notes.', anchors: [{ path: rel }], verified: [rel],
+    } as never);
+  }
+  const BODY = 'export const fold = () => 1;\n';
+
+  it('committed R100 rename resolves old→new from the anchor write-time head', async () => {
+    initRepo();
+    writeRepoFile('src/store.ts', BODY);
+    git('add', '.'); git('commit', '-qm', 'add store');
+    noteFor('src/store.ts'); // head stamped = this commit
+    fs.mkdirSync(path.join(root, 'src/kb'), { recursive: true });
+    git('mv', 'src/store.ts', 'src/kb/store.ts'); git('commit', '-qm', 'move store');
+
+    const built = await buildKbNotesIndex(fakeIndex({}), root);
+    expect(built.renames['src/store.ts']?.to).toBe('src/kb/store.ts');
+  });
+
+  it('unstaged working-tree move resolves via exact content hash', async () => {
+    initRepo();
+    writeRepoFile('src/store.ts', BODY);
+    git('add', '.'); git('commit', '-qm', 'add store');
+    noteFor('src/store.ts');
+    // Move with NO git op: identical bytes appear elsewhere, original vanishes.
+    writeRepoFile('src/kb/store.ts', BODY);
+    fs.rmSync(path.join(root, 'src/store.ts'));
+
+    const built = await buildKbNotesIndex(fakeIndex({}), root);
+    expect(built.renames['src/store.ts']?.to).toBe('src/kb/store.ts');
+  });
+
+  it('guard: two identical-content candidates → ambiguous → not resolved', async () => {
+    initRepo();
+    writeRepoFile('src/store.ts', BODY);
+    git('add', '.'); git('commit', '-qm', 'add store');
+    noteFor('src/store.ts');
+    fs.rmSync(path.join(root, 'src/store.ts'));
+    writeRepoFile('a.ts', BODY); writeRepoFile('b.ts', BODY); // two byte-identical
+
+    const built = await buildKbNotesIndex(fakeIndex({}), root);
+    expect(built.renames['src/store.ts']).toBeUndefined();
+  });
+
+  it('guard: a copy (original still present) is not a move → not resolved', async () => {
+    initRepo();
+    writeRepoFile('src/store.ts', BODY);
+    git('add', '.'); git('commit', '-qm', 'add store');
+    noteFor('src/store.ts');
+    writeRepoFile('src/copy.ts', BODY); // copy — original stays put
+
+    const built = await buildKbNotesIndex(fakeIndex({}), root);
+    expect(built.renames['src/store.ts']).toBeUndefined();
+  });
+
+  it('guard: rename+edit (below R100, content changed) → not resolved', async () => {
+    initRepo();
+    writeRepoFile('src/store.ts', BODY + '// line 2\n// line 3\n// line 4\n');
+    git('add', '.'); git('commit', '-qm', 'add store');
+    noteFor('src/store.ts');
+    fs.mkdirSync(path.join(root, 'src/kb'), { recursive: true });
+    git('mv', 'src/store.ts', 'src/kb/store.ts');
+    fs.appendFileSync(path.join(root, 'src/kb/store.ts'), '// EDIT changes the bytes\n');
+    git('add', '.'); git('commit', '-qm', 'move+edit store');
+
+    const built = await buildKbNotesIndex(fakeIndex({}), root);
+    expect(built.renames['src/store.ts']).toBeUndefined();
   });
 });

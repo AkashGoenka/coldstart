@@ -196,7 +196,7 @@ async function cmdSearch(words: string[], flags: KbFlags): Promise<number> {
       maxUsed: result.maxUsed,
       hits: result.hits.map((h) => ({
         id: h.note.id, type: h.note.type, kind: h.note.kind, title: h.note.title,
-        status: h.note.status, tier: h.inactive ? 'inactive' : h.note.status !== 'active' ? 'superseded' : h.tier === 1 ? 'stale' : 'fresh',
+        status: h.note.status, tier: h.inactive ? 'inactive' : h.note.status !== 'active' ? 'superseded' : h.tier === 1 ? 'stale' : h.stamped.some((s) => s.state === 'moved') ? 'moved' : 'fresh',
         updated: h.note.updated, score: Math.round(h.score * 100) / 100,
         anchors: h.stamped, absence: h.absence,
         page: renderSearchPage(flags.root, query, { ...result, hits: [h] }),
