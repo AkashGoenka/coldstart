@@ -154,7 +154,7 @@ export interface FoldedNote {
   extra: Record<string, unknown>;
 }
 
-export type AnchorState = 'fresh' | 'changed' | 'missing' | 'unverified';
+export type AnchorState = 'fresh' | 'changed' | 'missing' | 'unverified' | 'moved';
 
 export interface StampedAnchor {
   path: string;
@@ -162,4 +162,8 @@ export interface StampedAnchor {
   state: AnchorState;
   /** Stored (last-verified) hash, when one exists. */
   hash?: string;
+  /** When state is 'moved': the current path the anchor's file was resolved to
+   *  (a byte-exact rename the keeper detected). The `.raw` anchor still records
+   *  the old path — this is the read-time overlay. */
+  movedTo?: string;
 }

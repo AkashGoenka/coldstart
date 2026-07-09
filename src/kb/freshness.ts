@@ -16,6 +16,12 @@ import { readFileSync } from 'node:fs';
 import { join, isAbsolute } from 'node:path';
 import type { Anchor, StampedAnchor } from './types.js';
 
+/** Keeper-derived overlay (kb-notes.json): a byte-exact move the keeper
+ *  resolved, old path → new path. A read-time HINT — stampAnchors re-verifies
+ *  the destination's live content against the anchor's recorded hash before
+ *  trusting it, so a stale entry can never resurrect a note wrongly. */
+export type RenameMap = Record<string, { to: string; hash?: string }>;
+
 /** Hash a repo-relative file's current bytes. Missing/unreadable → "missing"
  *  (a note outliving its file is itself a signal). */
 export function hashFile(root: string, relPath: string): string {
@@ -28,16 +34,45 @@ export function hashFile(root: string, relPath: string): string {
   }
 }
 
-/** Compare each anchor's stored (last-verified) hash against the live file, NOW. */
-export function stampAnchors(root: string, anchors: Anchor[]): StampedAnchor[] {
+/** Compare each anchor's stored (last-verified) hash against the live file, NOW.
+ *  When an anchor's file is gone but `renames` resolves it to a destination
+ *  whose live content still equals the anchor's recorded hash, the anchor is
+ *  'moved' (follows the file) rather than 'missing' — a byte-exact refactor
+ *  keeps the note alive at its new path. The rename map is a hint; the live
+ *  re-verify here is what makes it safe and branch-reactive. */
+export function stampAnchors(root: string, anchors: Anchor[], renames?: RenameMap): StampedAnchor[] {
   return anchors.map((a) => {
     const live = hashFile(root, a.path);
     let state: StampedAnchor['state'];
-    if (live === 'missing') state = 'missing';
-    else if (!a.hash || a.hash === 'missing') state = a.hash === 'missing' ? 'changed' : 'unverified';
+    let movedTo: string | undefined;
+    if (live === 'missing') {
+      const to = renames?.[a.path]?.to;
+      if (to && a.hash && a.hash !== 'missing' && hashFile(root, to) === a.hash) {
+        state = 'moved';
+        movedTo = to;
+      } else {
+        state = 'missing';
+      }
+    } else if (!a.hash || a.hash === 'missing') state = a.hash === 'missing' ? 'changed' : 'unverified';
     else state = live === a.hash ? 'fresh' : 'changed';
-    return { path: a.path, symbols: a.symbols, state, hash: a.hash };
+    return { path: a.path, symbols: a.symbols, state, hash: a.hash, movedTo };
   });
+}
+
+/**
+ * "Inactive" — a read-time, branch-reactive projection (never stored): true
+ * when a note anchors at least one file and EVERY anchored file is absent right
+ * now. That is a note whose subject doesn't exist on the current branch — a
+ * feature/review-branch note seen from a branch without those files, or a note
+ * left behind by a deletion/rename. Computed from live existence on each read,
+ * so it flips automatically across a branch switch with no write.
+ *
+ * A note with no anchors can't be judged this way (never inactive). Lessons are
+ * exempt by the caller: an absence lesson is ABOUT non-existence, and its
+ * freshness is the keeper's re-run stamp, not anchor presence.
+ */
+export function anchorsAllMissing(stamped: StampedAnchor[]): boolean {
+  return stamped.length > 0 && stamped.every((s) => s.state === 'missing');
 }
 
 /** One human line per anchor, used verbatim by search/status output. */
@@ -47,5 +82,6 @@ export function freshnessLine(s: StampedAnchor): string {
     case 'changed': return `[evidence changed: ${s.path}]`;
     case 'missing': return `[anchor missing: ${s.path}]`;
     case 'unverified': return `[never verified: ${s.path}]`;
+    case 'moved': return `[moved → ${s.movedTo}] ${s.path}`;
   }
 }

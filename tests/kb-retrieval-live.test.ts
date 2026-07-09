@@ -23,9 +23,19 @@ beforeEach(() => {
 });
 afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
 
+/** Create a placeholder file for an anchor path so the note's anchors resolve
+ *  as present — without it every note is "inactive" (all anchors absent) and
+ *  recall correctly drops it. Ranking tests need live anchors. */
+function touch(rel: string): void {
+  const abs = path.join(root, rel);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, `# fixture ${rel}\n`);
+}
+
 function seedCorpus(n: number): void {
   // n distinct notes so idf operates in the calibrated regime (≥30).
   for (let i = 0; i < n; i++) {
+    touch(`src/sub${i}/loader.py`);
     appendRecord(root, {
       id: `area-${i}-note`, type: 'flow', op: 'put',
       title: `how subsystem ${i} handles Widget${i}Loader requests`,
@@ -57,6 +67,7 @@ describe('hook injection floor', () => {
     // words. No single term is rare (df > N/10 for all), but 4 independent
     // minority words converge on the right note's name channel.
     seedCorpus(15);
+    touch('src/jobs/export_queue.py');
     appendRecord(root, {
       id: 'export-queue-flow', type: 'flow', op: 'put',
       title: 'how the export queue retry batch works',
@@ -68,6 +79,7 @@ describe('hook injection floor', () => {
     const words = ['export', 'queue', 'retry', 'batch'];
     for (const w of words) {
       for (let i = 0; i < 4; i++) {
+        touch(`src/decoys/${w}_${i}.py`);
         appendRecord(root, {
           id: `${w}-decoy-${i}`, type: 'flow', op: 'put',
           title: `unrelated ${w} corner ${i} pipeline`,
@@ -108,6 +120,128 @@ describe('hook injection floor', () => {
     const page = renderCompactPage('Widget2Loader breaks on persist', res);
     expect(page).not.toContain('## ');
     expect(page).toContain('- **');
+  });
+});
+
+describe('inactive projection — notes whose anchored files are absent on this branch', () => {
+  it('tool search keeps an absent-anchor note but flags it inactive (tier 3); a live one is active', async () => {
+    touch('src/live.py');
+    appendRecord(root, {
+      id: 'live-note', type: 'file', op: 'put', character: 'single',
+      title: 'ZebraLoader handles staging', summary: 'present file.',
+      anchors: [{ path: 'src/live.py', symbols: ['ZebraLoader'] }],
+    } as never);
+    // src/gone.py intentionally NOT created → absent on this branch.
+    appendRecord(root, {
+      id: 'gone-note', type: 'file', op: 'put', character: 'single',
+      title: 'ZebraUnloader handles staging', summary: 'absent file.',
+      anchors: [{ path: 'src/gone.py', symbols: ['ZebraUnloader'] }],
+    } as never);
+
+    const tool = await kbSearch(root, 'ZebraUnloader ZebraLoader staging', { noMissLog: true });
+    const gone = tool.hits.find((h) => h.note.id === 'gone-note');
+    const live = tool.hits.find((h) => h.note.id === 'live-note');
+    expect(live?.inactive).toBe(false);
+    expect(gone?.inactive).toBe(true);
+    expect(gone?.tier).toBe(3);
+  });
+
+  it('recall (hook mode) never injects a note whose anchored files are all absent', async () => {
+    // gone-note matches its own distinctive term, but its file does not exist.
+    appendRecord(root, {
+      id: 'gone-note', type: 'file', op: 'put', character: 'single',
+      title: 'ZebraUnloader handles staging', summary: 'absent file.',
+      anchors: [{ path: 'src/gone.py', symbols: ['ZebraUnloader'] }],
+    } as never);
+    const hook = await kbSearch(root, 'ZebraUnloader is dropping rows', { strongOnly: true, noMissLog: true, source: 'hook' });
+    expect(hook.hits.some((h) => h.note.id === 'gone-note')).toBe(false);
+  });
+
+  it('lessons are exempt — an absence lesson stays active even with no live anchor', async () => {
+    appendRecord(root, {
+      id: 'absence-note', type: 'lesson', op: 'put', kind: 'absence',
+      title: 'no retry logic in the ingest path',
+      body: 'searched, found nothing.',
+      anchors: [{ path: 'src/never_existed.py' }],
+      scope: { terms: ['retry', 'ingest'] },
+    } as never);
+    const res = await kbSearch(root, 'retry ingest', { noMissLog: true });
+    const hit = res.hits.find((h) => h.note.id === 'absence-note');
+    expect(hit).toBeTruthy();
+    expect(hit?.inactive).toBe(false);
+  });
+});
+
+describe('rename overlay — a note follows a byte-exact move instead of going inactive', () => {
+  function write(rel: string, content: string): void {
+    const abs = path.join(root, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, content);
+  }
+  // Minimal keeper-derived notes index carrying only a rename overlay.
+  const idx = (renames: Record<string, { to: string }>) =>
+    ({ v: 2, builtAt: 0, anchors: {}, absence: {}, renames }) as never;
+
+  it('resolves a moved anchor to its new path (active, tier 0), re-verified live', async () => {
+    write('src/orig.py', 'def zebra_unloader():\n    return 1\n');
+    // verified → the append stamps the anchor hash from the live file bytes.
+    appendRecord(root, {
+      id: 'moved-note', type: 'file', op: 'put', character: 'single',
+      title: 'ZebraUnloader handles staging', summary: 'unloader.',
+      anchors: [{ path: 'src/orig.py', symbols: ['ZebraUnloader'] }],
+      verified: ['src/orig.py'],
+    } as never);
+    // Refactor: identical bytes appear at a new path, the old one vanishes.
+    write('src/moved.py', 'def zebra_unloader():\n    return 1\n');
+    fs.rmSync(path.join(root, 'src/orig.py'));
+
+    const res = await kbSearch(root, 'ZebraUnloader staging', {
+      noMissLog: true, notesIndex: idx({ 'src/orig.py': { to: 'src/moved.py' } }),
+    });
+    const hit = res.hits.find((h) => h.note.id === 'moved-note');
+    expect(hit).toBeTruthy();
+    expect(hit?.inactive).toBe(false);
+    expect(hit?.tier).toBe(0);
+    expect(hit?.stamped[0].state).toBe('moved');
+    expect(hit?.stamped[0].movedTo).toBe('src/moved.py');
+  });
+
+  it('guard: destination content differs from the recorded hash → stays inactive', async () => {
+    write('src/orig.py', 'def zebra_unloader():\n    return 1\n');
+    appendRecord(root, {
+      id: 'moved-note', type: 'file', op: 'put', character: 'single',
+      title: 'ZebraUnloader handles staging', summary: 'unloader.',
+      anchors: [{ path: 'src/orig.py', symbols: ['ZebraUnloader'] }],
+      verified: ['src/orig.py'],
+    } as never);
+    // The overlay points at a file whose content does NOT match (rename+edit).
+    write('src/moved.py', 'def zebra_unloader():\n    return 2  # edited\n');
+    fs.rmSync(path.join(root, 'src/orig.py'));
+
+    const res = await kbSearch(root, 'ZebraUnloader staging', {
+      noMissLog: true, notesIndex: idx({ 'src/orig.py': { to: 'src/moved.py' } }),
+    });
+    const hit = res.hits.find((h) => h.note.id === 'moved-note');
+    expect(hit?.stamped[0].state).toBe('missing');
+    expect(hit?.inactive).toBe(true);
+  });
+
+  it('recall (hook mode) keeps a moved note — its subject exists at the new path', async () => {
+    write('src/orig.py', 'def zebra_unloader():\n    return 1\n');
+    appendRecord(root, {
+      id: 'moved-note', type: 'file', op: 'put', character: 'single',
+      title: 'ZebraUnloader handles staging', summary: 'unloader.',
+      anchors: [{ path: 'src/orig.py', symbols: ['ZebraUnloader'] }],
+      verified: ['src/orig.py'],
+    } as never);
+    write('src/moved.py', 'def zebra_unloader():\n    return 1\n');
+    fs.rmSync(path.join(root, 'src/orig.py'));
+
+    const hook = await kbSearch(root, 'ZebraUnloader is dropping rows', {
+      strongOnly: true, noMissLog: true, source: 'hook',
+      notesIndex: idx({ 'src/orig.py': { to: 'src/moved.py' } }),
+    });
+    expect(hook.hits.some((h) => h.note.id === 'moved-note')).toBe(true);
   });
 });
 

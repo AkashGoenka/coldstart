@@ -22,7 +22,7 @@
 import type { FoldedNote, StampedAnchor } from './types.js';
 import { stampCoversTerms, type KbNotesIndex } from './notes-index.js';
 import { parseTerms } from '../server/find.js';
-import { stampAnchors, freshnessLine } from './freshness.js';
+import { stampAnchors, freshnessLine, anchorsAllMissing } from './freshness.js';
 import { loadAll, logMetric } from './store.js';
 import { NOTES_REL } from './raw-log.js';
 import { renderNote } from './render.js';
@@ -66,8 +66,13 @@ const STOPWORDS = new Set([
 export interface KbSearchHit {
   note: FoldedNote;
   score: number;
-  /** 0 = active+all-anchors-fresh · 1 = active but stale · 2 = superseded/retracted */
+  /** 0 = active+all-anchors-fresh · 1 = active but stale · 2 = superseded/retracted
+   *  · 3 = inactive (every anchored file absent on this branch). */
   tier: number;
+  /** Read-time projection: every anchored file is absent right now (branch
+   *  switch / deletion / unresolved rename). Recall drops these; tool search
+   *  keeps them at the bottom, labelled. Never true for lessons. */
+  inactive: boolean;
   stamped: StampedAnchor[];
   /** Absence-note re-run verdict line, when applicable. */
   absence?: string;
@@ -346,12 +351,22 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
   // Freshness NOW for everything scored, then hard-tier: fresh+active first.
   const rareById = new Map(scored.map((s) => [s.note.id, s.rare]));
   const withTier: KbSearchHit[] = scored.map(({ note, score, convergence, strongTerms }) => {
-    const stamped = stampAnchors(root, note.anchors);
+    // The keeper's rename overlay lets a note whose file was renamed resolve to
+    // its new path ('moved', not 'missing'), so a byte-exact refactor doesn't
+    // send the note inactive. Live-re-verified inside stampAnchors.
+    const stamped = stampAnchors(root, note.anchors, opts.notesIndex?.renames);
+    // Lessons are exempt (an absence lesson is ABOUT non-existence); any other
+    // note whose anchored files are all gone is inactive on this branch.
+    const inactive = note.type !== 'lesson' && anchorsAllMissing(stamped);
     const stale = stamped.some((s) => s.state === 'changed' || s.state === 'missing');
-    const tier = note.status !== 'active' ? 2 : stale ? 1 : 0;
-    return { note, score, tier, stamped, absence: absenceVerdict(note, opts.notesIndex), convergence, strongTerms };
+    const tier = inactive ? 3 : note.status !== 'active' ? 2 : stale ? 1 : 0;
+    return { note, score, tier, inactive, stamped, absence: absenceVerdict(note, opts.notesIndex), convergence, strongTerms };
   });
-  withTier.sort((a, b) => a.tier - b.tier || b.score - a.score || (a.note.id < b.note.id ? -1 : 1));
+  // Recall (hook mode) must never inject a note whose subject doesn't exist on
+  // the current branch — a review/feature-branch note viewed from elsewhere.
+  // Tool search keeps them (findable, bottom tier, labelled below).
+  const surfaced = opts.strongOnly ? withTier.filter((h) => !h.inactive) : withTier;
+  surfaced.sort((a, b) => a.tier - b.tier || b.score - a.score || (a.note.id < b.note.id ? -1 : 1));
 
   // Hook-mode rarity gate (calibrated 2026-07-06, 117-note arches corpus:
   // 27/27 real prompts inject, 8/8 boilerplate probes silent): a top hit
@@ -363,18 +378,18 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
   // The convergence override (HOOK_CONVERGE_MIN) rescues the one measured
   // false-suppression mode: a real task named entirely in common words.
   if (
-    opts.strongOnly && notes.length >= HOOK_FLOOR_MIN_NOTES && withTier.length &&
-    !rareById.get(withTier[0].note.id) && withTier[0].strongTerms < HOOK_CONVERGE_MIN
+    opts.strongOnly && notes.length >= HOOK_FLOOR_MIN_NOTES && surfaced.length &&
+    !rareById.get(surfaced[0].note.id) && surfaced[0].strongTerms < HOOK_CONVERGE_MIN
   ) {
-    if (!opts.noMissLog) logMetric(root, 'inject-log', { query: query.slice(0, 200), suppressed: true, top: withTier[0].note.id, score: Math.round(withTier[0].score * 10) / 10, strongTerms: withTier[0].strongTerms });
+    if (!opts.noMissLog) logMetric(root, 'inject-log', { query: query.slice(0, 200), suppressed: true, top: surfaced[0].note.id, score: Math.round(surfaced[0].score * 10) / 10, strongTerms: surfaced[0].strongTerms });
     return { hits: [], terms, warnings };
   }
 
   // Hook mode: hits far below the best are padding (a generic path segment
   // grazing an anchor), not a second answer — don't inject them.
-  const trimmed = opts.strongOnly && withTier.length > 1
-    ? withTier.filter((h) => h.score >= 0.4 * withTier[0].score)
-    : withTier;
+  const trimmed = opts.strongOnly && surfaced.length > 1
+    ? surfaced.filter((h) => h.score >= 0.4 * surfaced[0].score)
+    : surfaced;
 
   // Hits the cap dropped that still clear the results floor — a genuine second
   // page. The footer offers --max only when this is non-zero; a tail trimmed
@@ -414,9 +429,11 @@ const gistLines = (hit: KbSearchHit): string[] => {
   const kind = n.type === 'lesson' && n.kind ? `/${n.kind}` : '';
   const status = n.status !== 'active' ? ` · ${n.status.toUpperCase()}` : '';
   const changed = hit.stamped.filter((s) => s.state === 'changed' || s.state === 'missing');
+  const moved = hit.stamped.filter((s) => s.state === 'moved');
   const fresh =
     !hit.stamped.length ? '' :
     changed.length ? ` · [evidence changed: ${changed.slice(0, 2).map((s) => s.path).join(', ')}${changed.length > 2 ? ` +${changed.length - 2}` : ''}]` :
+    moved.length ? ` · [moved → ${moved.slice(0, 2).map((s) => s.movedTo).join(', ')}${moved.length > 2 ? ` +${moved.length - 2}` : ''}]` :
     hit.stamped.every((s) => s.state === 'fresh') ? ' · anchors [fresh]' : ' · [not fully verified]';
   // Hub file notes carry knowledge in facets, not a body — their gist is the
   // symbol inventory (what the note knows about), not prose.
@@ -470,10 +487,13 @@ export function renderResultsPage(query: string, result: KbSearchResult): string
     const n = hit.note;
     const kind = n.type === 'lesson' && n.kind ? `/${n.kind}` : '';
     const changed = hit.stamped.filter((s) => s.state === 'changed' || s.state === 'missing');
+    const moved = hit.stamped.filter((s) => s.state === 'moved');
     const fresh =
+      hit.inactive ? 'INACTIVE — every anchored file absent on this branch' :
       n.status !== 'active' ? n.status.toUpperCase() :
       !hit.stamped.length ? 'unverified' :
       changed.length ? `evidence changed: ${changed.slice(0, 2).map((s) => s.path).join(', ')}${changed.length > 2 ? ` +${changed.length - 2}` : ''}` :
+      moved.length ? `moved → ${moved.slice(0, 2).map((s) => s.movedTo).join(', ')}${moved.length > 2 ? ` +${moved.length - 2}` : ''}` :
       hit.stamped.every((s) => s.state === 'fresh') ? 'fresh' : 'not fully verified';
     parts.push(`${i + 1}. ${n.title}  [${n.type}${kind} · ${fresh} · ${n.updated.slice(0, 10)}]`);
     parts.push(`   → open: ${NOTES_REL}/${n.id}.md`);
@@ -527,6 +547,7 @@ export function renderSearchPage(root: string, query: string, result: KbSearchRe
     if (n.status === 'superseded' && n.supersededBy) parts.push(`superseded by: ${n.supersededBy}`);
     if (n.aliases.length) parts.push(`aka: ${n.aliases.join(' · ')}`);
     for (const s of hit.stamped) parts.push(freshnessLine(s));
+    if (hit.inactive) parts.push('[inactive — every anchored file is absent on this branch]');
     if (hit.absence) parts.push(hit.absence);
     parts.push('', noteBody(n), '');
   }
