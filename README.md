@@ -1,6 +1,8 @@
 <div align="center">
 
-<h1>❄️&nbsp; coldstart</h1>
+<img src="https://raw.githubusercontent.com/AkashGoenka/coldstart/main/site/logo.svg" alt="coldstart" width="76" height="76" />
+
+<h1>coldstart</h1>
 
 <p>
   <b>Codebase navigation and a codebase notebook for AI agents.</b><br/>
