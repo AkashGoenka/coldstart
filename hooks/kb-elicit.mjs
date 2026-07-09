@@ -147,7 +147,7 @@ function filesBlock(root, files) {
 
 // --- The capture prompt (v4, 2026-07-07 — user-authored opening; validation-run
 // configuration: gates off via --force, capture-only) ---------------------------
-function buildCapturePrompt(root, block, sid) {
+function buildCapturePrompt(root, block, sid, isSubagent) {
   return `You have completed a task now and have gathered knowledge as a part of that task or \
 process — knowledge another agent in future could make use of.
 
@@ -249,7 +249,9 @@ Spec shapes (only include fields you actually have):
                   "body":"what you looked for + that it is not there",
                   "scope":{"terms":["search","terms"]}}          (the search that proved it)
 
-When your notes are written, stop.`;
+${isSubagent
+  ? `Once you have handled the notebook — whether you wrote notes or decided none were needed — remember you were spawned as a subagent. The coordinator that spawned you receives ONLY your final message, so your last message must repeat, in full, the result you produced for it — your findings, not the notebook decision.`
+  : `When your notes are written, stop.`}`;
 }
 
 // --- stdin + guards -------------------------------------------------------------
@@ -333,7 +335,7 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
       process.exit(0);
     }
 
-    const prompt = buildCapturePrompt(root, filesBlock(root, files), sid);
+    const prompt = buildCapturePrompt(root, filesBlock(root, files), sid, input.hook_event_name === "SubagentStop");
     logCaptureEvent(root, { event: "elicit", session: sid, agent: aid, touched: files.length, hook: input.hook_event_name });
     log(`ELICIT session=${sid} agent=${aid} touched=${files.length} promptBytes=${prompt.length} event=${input.hook_event_name || "?"}`);
     process.stdout.write(JSON.stringify({ decision: "block", reason: prompt }));
