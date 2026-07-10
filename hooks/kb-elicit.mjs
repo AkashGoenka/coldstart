@@ -300,12 +300,16 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     const sid = String(input.session_id || "").replace(/[^A-Za-z0-9_-]/g, "");
     if (!sid) { log("SKIP no-session-id"); process.exit(0); }
 
-    // Guard 2: one elicitation per (session, agent) — subagents share the
-    // parent session_id, so the marker is scoped by agent too.
+    // Guard 2: capture across a long session, but only files not yet offered.
+    // A boolean once-per-(session,agent) marker silently dropped ALL knowledge
+    // after the first Stop; instead we remember which files were already offered
+    // for capture and elicit only the new ones (the delta is computed below,
+    // once the SubagentStop transcript is resolved). Subagents share the parent
+    // session_id, so the record is scoped by agent too.
     const aid = String(input.agent_id || "main").replace(/[^A-Za-z0-9_-]/g, "") || "main";
-    const marker = join(tmpdir(), `coldstart-kb-${sid}-${aid}.done`);
-    if (existsSync(marker)) { log(`SKIP already-elicited session=${sid} agent=${aid}`); process.exit(0); }
-    try { writeFileSync(marker, String(Date.now())); } catch { /* best effort */ }
+    const marker = join(tmpdir(), `coldstart-kb-${sid}-${aid}.json`);
+    let offered = new Set();
+    try { offered = new Set(JSON.parse(readFileSync(marker, "utf8")).files || []); } catch { /* first Stop of this session */ }
 
     // On SubagentStop, transcript_path is the PARENT's transcript (confirmed:
     // claude-code#11396) — scanning it would elicit the sub off the parent's
@@ -326,18 +330,27 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
       transcriptPath = own;
     }
     const files = transcriptPath ? touchedFiles(transcriptPath, root) : [];
+    // Delta: only files not already offered on an earlier Stop this session.
+    const newFiles = files.filter((f) => !offered.has(f));
 
-    // FAST-EXIT only when the agent touched NO repo file at all (pure
-    // orchestration / Q&A). Anything touched → the agent judges what's worth
-    // capturing; the hook never guesses from read modality.
-    if (!files.length) {
-      log(`FAST-EXIT zero touched files session=${sid} agent=${aid} event=${input.hook_event_name || "?"}`);
+    // FAST-EXIT when there is nothing NEW to capture — either no repo file was
+    // touched at all (pure orchestration / Q&A) or every touched file was already
+    // offered on a previous Stop. No record is written on this path, so an early
+    // no-op Stop can never burn the session's capture.
+    if (!newFiles.length) {
+      log(`FAST-EXIT no-new-files session=${sid} agent=${aid} touched=${files.length} event=${input.hook_event_name || "?"}`);
       process.exit(0);
     }
 
-    const prompt = buildCapturePrompt(root, filesBlock(root, files), sid, input.hook_event_name === "SubagentStop");
-    logCaptureEvent(root, { event: "elicit", session: sid, agent: aid, touched: files.length, hook: input.hook_event_name });
-    log(`ELICIT session=${sid} agent=${aid} touched=${files.length} promptBytes=${prompt.length} event=${input.hook_event_name || "?"}`);
+    // Record everything now offered BEFORE returning the block, so the post-write
+    // re-Stop and every later Stop skip these files. stop_hook_active (Guard 1)
+    // still short-circuits the immediate re-Stop; this record survives across the
+    // natural turns of a long session.
+    try { writeFileSync(marker, JSON.stringify({ files: [...offered, ...newFiles], ts: Date.now() })); } catch { /* best effort */ }
+
+    const prompt = buildCapturePrompt(root, filesBlock(root, newFiles), sid, input.hook_event_name === "SubagentStop");
+    logCaptureEvent(root, { event: "elicit", session: sid, agent: aid, touched: files.length, new: newFiles.length, hook: input.hook_event_name });
+    log(`ELICIT session=${sid} agent=${aid} new=${newFiles.length} touched=${files.length} promptBytes=${prompt.length} event=${input.hook_event_name || "?"}`);
     process.stdout.write(JSON.stringify({ decision: "block", reason: prompt }));
   } catch (e) {
     log(`handler ${e?.stack || e}`); // fail-open: no stdout → stop allowed

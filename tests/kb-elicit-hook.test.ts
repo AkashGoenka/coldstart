@@ -96,3 +96,53 @@ describe('kb-elicit always-fire', () => {
     expect(out.trim()).toBe('');
   });
 });
+
+describe('kb-elicit long-session capture (delta, not once-per-session)', () => {
+  // Distinctive names — the capture prompt hard-codes example paths (src/a.py,
+  // src/x.py, models.py), so the touched files must not collide with those.
+  it('re-elicits NEW files on a later Stop, never re-offering one already captured', () => {
+    fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'src/zebra_loader.py'), 'x = 1\n');
+    fs.writeFileSync(path.join(root, 'src/quokka_handler.py'), 'y = 2\n');
+
+    // Stop 1: only zebra_loader touched → elicits for it.
+    const out1 = JSON.parse(runHook([
+      assistantLine([{ name: 'Read', input: { file_path: path.join(root, 'src/zebra_loader.py') } }]),
+    ]));
+    expect(out1.decision).toBe('block');
+    expect(out1.reason).toContain('src/zebra_loader.py');
+
+    // Stop 2 (same session): both touched → elicits for the NEW file only.
+    const out2 = JSON.parse(runHook([
+      assistantLine([{ name: 'Read', input: { file_path: path.join(root, 'src/zebra_loader.py') } }]),
+      assistantLine([{ name: 'Read', input: { file_path: path.join(root, 'src/quokka_handler.py') } }]),
+    ]));
+    expect(out2.decision).toBe('block');
+    expect(out2.reason).toContain('src/quokka_handler.py');
+    expect(out2.reason).not.toContain('src/zebra_loader.py'); // already offered on Stop 1
+
+    // Stop 3 (same session): nothing new → stop is allowed (no re-nag).
+    const out3 = runHook([
+      assistantLine([{ name: 'Read', input: { file_path: path.join(root, 'src/zebra_loader.py') } }]),
+      assistantLine([{ name: 'Read', input: { file_path: path.join(root, 'src/quokka_handler.py') } }]),
+    ]);
+    expect(out3.trim()).toBe('');
+  });
+
+  it('a no-touch Stop does not burn the session — later real work still elicits', () => {
+    fs.writeFileSync(path.join(root, 'zephyr_widget.js'), 'const x = 1\n');
+
+    // Stop 1: nothing under-root touched → FAST-EXIT, and crucially no record written.
+    const out1 = runHook([
+      assistantLine([{ name: 'Bash', input: { command: 'git status && npm test' } }]),
+    ]);
+    expect(out1.trim()).toBe('');
+
+    // Stop 2: a real file is touched → still elicits (the slot was not consumed).
+    const out2 = JSON.parse(runHook([
+      assistantLine([{ name: 'Read', input: { file_path: path.join(root, 'zephyr_widget.js') } }]),
+    ]));
+    expect(out2.decision).toBe('block');
+    expect(out2.reason).toContain('zephyr_widget.js');
+  });
+});

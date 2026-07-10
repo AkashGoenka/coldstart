@@ -37,6 +37,7 @@
 
 import { readFileSync, writeFileSync, renameSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { canonicalFindKey } from "./canonical-find-key.mjs";
@@ -66,6 +67,48 @@ const GS_FALLBACK_RE = /NOT a declared symbol here|no declared symbol matches/;
 const SEARCH_RE =
   /(^|[;&|]|\s)(grep|egrep|fgrep|rg)\b|git\s+grep|git\s+log|(^|[;&|]|\s)find\s|(^|[;&|]|\s)ls\b|(^|[;&|]|\s)cat\b/;
 const GS_FILE_RE = /(?:coldstart|index\.js)\s+gs\s+(\S+)/;
+
+// The checkpoint (detector 4) only makes sense when the agent may be SPINNING IN
+// SEARCH — never mid-implementation. A write is the signal that it is producing,
+// not spinning. Fast per-call detection: structured write tools + write-shaped
+// shell (sed -i, redirections, cp/mv/rm, git apply/checkout…). This is the
+// fallback; git ground-truth (below) is authoritative when the repo is a git repo.
+const WRITE_TOOLS = new Set([
+  "Edit", "Write", "MultiEdit", "NotebookEdit", // Claude
+  "apply_patch", "edit_file", "write_file", "create_file", // Codex / Cursor / MCP writers
+]);
+const WRITE_CMD_RE =
+  /(^|[\s;&|(])(sed\s+-i|tee|dd|truncate|patch|apply_patch|cp|mv|rm|mkdir|touch|install)\b|>>?(?!\s*\/dev\/null)|git\s+(apply|checkout|restore|stash|reset|revert|commit|mv|rm)\b/;
+
+// Genuine, tool-agnostic write detection: hash the working-tree state so ANY
+// modification (Edit, sed -i, >>, an MCP writer, a new or deleted file) changes
+// it, while pure reads leave it untouched. Empty string when git is unavailable
+// (no repo / no commits / no git) — callers fall back to the fast signal above.
+// porcelain catches added/removed/untracked files; shortstat catches further
+// edits to an already-dirty file. Verified across write modalities 2026-07-10.
+function gitFingerprint(root) {
+  try {
+    const opts = { cwd: root, encoding: "utf8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"] };
+    const status = execFileSync("git", ["status", "--porcelain=v1"], opts);
+    const stat = execFileSync("git", ["diff", "HEAD", "--shortstat"], opts);
+    return createHash("sha1").update(status + " " + stat).digest("hex").slice(0, 16);
+  } catch {
+    return "";
+  }
+}
+
+// Current HEAD (short sha), or "" when unavailable. The fingerprint above reads
+// the working-tree DIFF against HEAD, so a HEAD move (branch switch / commit /
+// rebase) can shift it without the agent writing anything — we compare HEAD
+// across checkpoints and distrust the fingerprint whenever it moved.
+function gitHead(root) {
+  try {
+    const opts = { cwd: root, encoding: "utf8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"] };
+    return execFileSync("git", ["rev-parse", "HEAD"], opts).trim().slice(0, 12);
+  } catch {
+    return "";
+  }
+}
 
 // Evidence store regexes — paths printed in ANY output, and files named as ARGS.
 const PATH_RE = /[\w./-]+\.(?:py|js|jsx|ts|tsx|htm|html|vue|json|scss|css|rb|java)/g;
@@ -161,6 +204,9 @@ export default function handle(input) {
     held_files: [],
     redundant_fired: 0,
     seen_find_queries: [],
+    wrote_since_ckpt: false, // (4) any write since the last checkpoint window
+    git_fp: "", // (4) working-tree fingerprint at the last checkpoint
+    git_head: "", // (4) HEAD at the last checkpoint — a move invalidates the fp diff
   };
   try {
     Object.assign(st, JSON.parse(readFileSync(stateFile, "utf8")));
@@ -185,6 +231,8 @@ export default function handle(input) {
     tool === "Glob" ||
     (tool === "Bash" && !isFind && !isGs && !isKb && SEARCH_RE.test(cmd));
   const isNonfindShell = isSearch;
+  // Producing, not spinning — used only to gate the checkpoint (detector 4).
+  const isWrite = WRITE_TOOLS.has(tool) || (tool === "Bash" && WRITE_CMD_RE.test(cmd));
 
   const _ob = out !== null && out !== undefined ? out.trim().toLowerCase() : null;
   const outEmpty =
@@ -195,6 +243,7 @@ export default function handle(input) {
       _ob === "no files found");
 
   st.total += 1;
+  if (isWrite) st.wrote_since_ckpt = true;
   // seen_find gates the spiral detectors (3/3b): they stay silent for sessions that
   // never touch coldstart at all (deliberate — this hook must not nag non-users).
   // Any coldstart surface proves awareness: find (set below on the find branch),
@@ -329,19 +378,38 @@ export default function handle(input) {
     st.last_gs_fallback = out && GS_FALLBACK_RE.test(out) ? gsFile : "";
   }
 
-  // (4) checkpoint — periodic, lowest urgency
+  // (4) checkpoint — periodic, lowest urgency. Fires ONLY when the agent may be
+  // spinning in search: suppressed whenever a write happened in the window, so it
+  // never nags mid-implementation (where "stop searching and answer" is nonsense).
+  // git is authoritative when present (ground-truth over the whole window); the
+  // fast per-call signal covers the first window and non-git repos.
   if (st.total - st.last_checkpoint >= CHECKPOINT_EVERY) {
     st.last_checkpoint = st.total;
-    msgs.push([
-      5,
-      `Checkpoint (${st.total} tool calls). Stop and think before the next call — answer these in order:\n` +
-        "1. Restate the task in one sentence — what is the ONE thing it asks for?\n" +
-        "2. List the files you have already surfaced or read that bear on it.\n" +
-        "3. Can you answer (1) from (2)? If YES — write the answer now and stop searching; you almost " +
-        "certainly have enough.\n" +
-        "4. Only if NO — name the single specific fact still missing, and make the next call target ONLY " +
-        "that. Do not re-run a search whose results are already in your context.",
-    ]);
+    const headNow = gitHead(input.cwd);
+    const fpNow = gitFingerprint(input.cwd);
+    // Trust the git working-tree diff only with a prior baseline AND an unmoved
+    // HEAD — a branch switch / commit / rebase shifts the whole tree and would
+    // read as a spurious write. Otherwise (first window, no git, or HEAD moved)
+    // the fast per-call signal governs: it tracks the agent's own writes and is
+    // immune to branch movement.
+    const gitUsable = !!fpNow && !!st.git_fp && !!headNow && headNow === st.git_head;
+    const wrote = gitUsable ? fpNow !== st.git_fp : st.wrote_since_ckpt;
+    if (fpNow) st.git_fp = fpNow;
+    if (headNow) st.git_head = headNow;
+    st.wrote_since_ckpt = false;
+    if (!wrote) {
+      msgs.push([
+        5,
+        `Checkpoint (${st.total} tool calls). If you are searching or investigating, stop and think ` +
+          "before the next call (if you are mid-implementation, disregard this):\n" +
+          "1. Restate the task in one sentence — what is the ONE thing it asks for?\n" +
+          "2. List the files you have already surfaced or read that bear on it.\n" +
+          "3. Can you answer (1) from (2)? If YES — write the answer now and stop searching; you almost " +
+          "certainly have enough.\n" +
+          "4. Only if NO — name the single specific fact still missing, and make the next call target ONLY " +
+          "that. Do not re-run a search whose results are already in your context.",
+      ]);
+    }
   }
 
   // merge THIS call's evidence into the store (after novelty was computed above)

@@ -115,3 +115,81 @@ describe('kb-recall pre-seeds the nudge state on injection', () => {
     expect(st.seen_find).toBe(true);
   });
 });
+
+describe('checkpoint (detector 4) gates on genuine writes', () => {
+  let dir: string;
+  beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coldstart-ckpt-')); });
+  afterEach(() => { fs.rmSync(dir, { recursive: true, force: true }); });
+
+  const call = (tool_name: string, tool_input: Record<string, unknown>) =>
+    handle({ session_id: sid, cwd: dir, tool_name, tool_input, tool_response: 'x' });
+
+  it('fires after 12 read/search calls with no write in the window', () => {
+    let res: ReturnType<typeof handle> = null;
+    for (let i = 0; i < 12; i++) res = call('Read', { file_path: `${dir}/f${i}.py` });
+    expect(res?.hookSpecificOutput?.additionalContext).toContain('Checkpoint');
+  });
+
+  it('is suppressed when a structured write (Edit) lands in the window', () => {
+    for (let i = 0; i < 11; i++) call('Read', { file_path: `${dir}/f${i}.py` });
+    const res = call('Edit', { file_path: `${dir}/f.py` });
+    expect(res).toBeNull();
+  });
+
+  it('is suppressed when a Bash write (sed -i) the structured signal misses lands in the window', () => {
+    for (let i = 0; i < 11; i++) call('Read', { file_path: `${dir}/f${i}.py` });
+    const res = handle({
+      session_id: sid, cwd: dir, tool_name: 'Bash',
+      tool_input: { command: `sed -i 's/a/b/' ${dir}/f.py` }, tool_response: '',
+    });
+    expect(res).toBeNull();
+  });
+
+  it('git ground-truth suppresses it for a write NO tool call revealed', () => {
+    execFileSync('git', ['init', '-q'], { cwd: dir });
+    execFileSync('git', ['config', 'user.email', 't@t.co'], { cwd: dir });
+    execFileSync('git', ['config', 'user.name', 't'], { cwd: dir });
+    fs.writeFileSync(path.join(dir, 'tracked.py'), 'a\n');
+    execFileSync('git', ['add', '-A'], { cwd: dir });
+    execFileSync('git', ['commit', '-qm', 'init'], { cwd: dir });
+
+    // Window 1: 12 pure reads → checkpoint fires, clean baseline captured.
+    let res: ReturnType<typeof handle> = null;
+    for (let i = 0; i < 12; i++) res = call('Read', { file_path: `${dir}/r${i}.py` });
+    expect(res?.hookSpecificOutput?.additionalContext).toContain('Checkpoint');
+
+    // A write that arrives through NO tool call the hook can see (e.g. an editor
+    // save, an MCP writer) — only git knows the tree changed.
+    fs.appendFileSync(path.join(dir, 'tracked.py'), 'b\n');
+
+    // Window 2: 12 more pure reads → git sees the change → checkpoint suppressed.
+    for (let i = 0; i < 12; i++) res = call('Read', { file_path: `${dir}/s${i}.py` });
+    expect(res).toBeNull();
+  });
+
+  it('a HEAD move (commit / branch switch) does NOT spuriously suppress it', () => {
+    execFileSync('git', ['init', '-q'], { cwd: dir });
+    execFileSync('git', ['config', 'user.email', 't@t.co'], { cwd: dir });
+    execFileSync('git', ['config', 'user.name', 't'], { cwd: dir });
+    fs.writeFileSync(path.join(dir, 'f.py'), 'a\n');
+    execFileSync('git', ['add', '-A'], { cwd: dir });
+    execFileSync('git', ['commit', '-qm', 'init'], { cwd: dir });
+
+    // Window 1: 12 pure reads on a clean tree → checkpoint fires, baseline captured.
+    let res: ReturnType<typeof handle> = null;
+    for (let i = 0; i < 12; i++) res = call('Read', { file_path: `${dir}/r${i}.py` });
+    expect(res?.hookSpecificOutput?.additionalContext).toContain('Checkpoint');
+
+    // HEAD moves + the tree changes through NO agent tool call (a commit made
+    // out of band, then a fresh dirty edit) — exactly the branch-switch/manual
+    // case that would otherwise read as a spurious write.
+    fs.appendFileSync(path.join(dir, 'f.py'), 'b\n');
+    execFileSync('git', ['commit', '-qm', 'oob', '-a'], { cwd: dir });
+    fs.appendFileSync(path.join(dir, 'f.py'), 'c\n');
+
+    // Window 2: 12 pure reads, agent wrote nothing. HEAD moved since the baseline
+    // → the git diff is distrusted → the (empty) fast write signal governs → fires.
+    for (let i = 0; i < 12; i++) res = call('Read', { file_path: `${dir}/s${i}.py` });
+    expect(res?.hookSpecificOutput?.additionalContext).toContain('Checkpoint');
+  });
+});
