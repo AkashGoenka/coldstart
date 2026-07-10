@@ -1,11 +1,9 @@
-import { createRequire } from 'node:module';
+import csharpModule from 'tree-sitter-c-sharp';
 import type { SymbolNode, CallSite } from '../../types.js';
 import { childrenOfType, firstChildOfType } from './node-helpers.js';
 import { makeParser } from './parser-factory.js';
 
-const require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const csharpGrammar = require('tree-sitter-c-sharp') as unknown;
+const csharpGrammar = csharpModule as unknown;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
