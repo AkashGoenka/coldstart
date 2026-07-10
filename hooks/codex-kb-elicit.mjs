@@ -295,17 +295,20 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     if (input.stop_hook_active === true) { log("SKIP stop_hook_active"); process.exit(0); }
 
     // Codex session_id identifies a thread; turn_id identifies one user turn.
-    // Capture once per turn so a resumed thread can contribute new knowledge.
+    // Capture across the whole thread, incrementally — a resumed thread keeps
+    // contributing new knowledge.
     const sid = String(input.session_id || "").replace(/[^A-Za-z0-9_-]/g, "");
     if (!sid) { log("SKIP no-session-id"); process.exit(0); }
-    const tid = String(input.turn_id || sid).replace(/[^A-Za-z0-9_-]/g, "") || sid;
 
-    // Guard 2: one elicitation per (session, agent) — subagents share the
-    // parent session_id, so the marker is scoped by agent too.
+    // Guard 2: capture across the session, but only files not yet offered. The
+    // old per-turn marker re-offered EVERY touched file on every turn; instead we
+    // remember which files were already offered and elicit only the new ones (the
+    // delta is computed below). Subagents share the parent session_id, so the
+    // record is scoped by agent too.
     const aid = String(input.agent_id || "main").replace(/[^A-Za-z0-9_-]/g, "") || "main";
-    const marker = join(tmpdir(), `coldstart-codex-kb-${tid}-${aid}.done`);
-    if (existsSync(marker)) { log(`SKIP already-elicited session=${sid} agent=${aid}`); process.exit(0); }
-    try { writeFileSync(marker, String(Date.now())); } catch { /* best effort */ }
+    const marker = join(tmpdir(), `coldstart-codex-kb-${sid}-${aid}.json`);
+    let offered = new Set();
+    try { offered = new Set(JSON.parse(readFileSync(marker, "utf8")).files || []); } catch { /* first Stop of this session */ }
 
     // Codex supplies the child's own rollout as agent_transcript_path on
     // SubagentStop. Its transcript_path is the parent's rollout at that event.
@@ -321,18 +324,25 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     // Ephemeral Codex runs deliberately expose no transcript path. Fail open:
     // navigation/recall still work, but capture has no trustworthy evidence.
     const files = transcriptPath ? touchedFiles(transcriptPath, root) : [];
+    // Delta: only files not already offered on an earlier Stop this session.
+    const newFiles = files.filter((f) => !offered.has(f));
 
-    // FAST-EXIT only when the agent touched NO repo file at all (pure
-    // orchestration / Q&A). Anything touched → the agent judges what's worth
-    // capturing; the hook never guesses from read modality.
-    if (!files.length) {
-      log(`FAST-EXIT zero touched files session=${sid} agent=${aid} event=${input.hook_event_name || "?"}`);
+    // FAST-EXIT when there is nothing NEW to capture — either no repo file was
+    // touched at all (pure orchestration / Q&A) or every touched file was already
+    // offered on a previous Stop. No record is written on this path, so an early
+    // no-op Stop can never burn the session's capture.
+    if (!newFiles.length) {
+      log(`FAST-EXIT no-new-files session=${sid} agent=${aid} touched=${files.length} event=${input.hook_event_name || "?"}`);
       process.exit(0);
     }
 
-    const prompt = buildCapturePrompt(root, filesBlock(root, files), sid, input.hook_event_name === "SubagentStop");
-    logCaptureEvent(root, { event: "elicit", session: sid, agent: aid, touched: files.length, hook: input.hook_event_name });
-    log(`ELICIT session=${sid} agent=${aid} touched=${files.length} promptBytes=${prompt.length} event=${input.hook_event_name || "?"}`);
+    // Record everything now offered BEFORE returning the block, so the post-write
+    // re-Stop and every later Stop skip these files.
+    try { writeFileSync(marker, JSON.stringify({ files: [...offered, ...newFiles], ts: Date.now() })); } catch { /* best effort */ }
+
+    const prompt = buildCapturePrompt(root, filesBlock(root, newFiles), sid, input.hook_event_name === "SubagentStop");
+    logCaptureEvent(root, { event: "elicit", session: sid, agent: aid, touched: files.length, new: newFiles.length, hook: input.hook_event_name });
+    log(`ELICIT session=${sid} agent=${aid} new=${newFiles.length} touched=${files.length} promptBytes=${prompt.length} event=${input.hook_event_name || "?"}`);
     process.stdout.write(JSON.stringify({ decision: "block", reason: prompt }));
   } catch (e) {
     log(`handler ${e?.stack || e}`); // fail-open: no stdout → stop allowed
