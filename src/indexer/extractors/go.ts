@@ -1,11 +1,9 @@
-import { createRequire } from 'node:module';
+import goModule from 'tree-sitter-go';
 import type { SymbolNode, CallSite } from '../../types.js';
 import { firstChildOfType } from './node-helpers.js';
 import { makeParser } from './parser-factory.js';
 
-const require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const goGrammar = require('tree-sitter-go') as unknown;
+const goGrammar = goModule as unknown;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;

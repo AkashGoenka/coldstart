@@ -11,11 +11,10 @@
  * `makeParser(grammar)` once at module scope and gets back a `getParser()` that
  * builds the parser on first use and caches it for the process lifetime.
  */
-import { createRequire } from 'node:module';
+import ParserModule from 'tree-sitter';
 
-const require = createRequire(import.meta.url);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ParserCtor = require('tree-sitter') as { new(): any };
+const ParserCtor = ParserModule as { new(): any };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyParser = any;

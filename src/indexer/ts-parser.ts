@@ -5,15 +5,16 @@
  *
  * This supplements the regex parser in parser.ts for TS/JS files only.
  */
-import { createRequire } from 'node:module';
+import ParserModule from 'tree-sitter';
+import tsTypescriptModule from 'tree-sitter-typescript';
 import type { SymbolNode, SymbolKind, CallSite } from '../types.js';
 
-// Native addons need createRequire in an ESM context
-const require = createRequire(import.meta.url);
+// Static default imports (not createRequire) so `bun build --compile` can trace
+// into each grammar wrapper and embed its prebuilt .node. Under Node these are
+// object-identical to the previous require() calls (verified).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ParserCtor = require('tree-sitter') as { new(): any };
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { typescript: tsGrammar, tsx: tsxGrammar } = require('tree-sitter-typescript') as {
+const ParserCtor = ParserModule as { new(): any };
+const { typescript: tsGrammar, tsx: tsxGrammar } = tsTypescriptModule as {
   typescript: unknown;
   tsx: unknown;
 };

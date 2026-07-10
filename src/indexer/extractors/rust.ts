@@ -1,11 +1,9 @@
-import { createRequire } from 'node:module';
+import rustModule from 'tree-sitter-rust';
 import type { SymbolNode, CallSite } from '../../types.js';
 import { firstChildOfType } from './node-helpers.js';
 import { makeParser } from './parser-factory.js';
 
-const require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const rustGrammar = require('tree-sitter-rust') as unknown;
+const rustGrammar = rustModule as unknown;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;

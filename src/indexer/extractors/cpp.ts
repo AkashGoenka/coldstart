@@ -1,11 +1,9 @@
-import { createRequire } from 'node:module';
+import cppModule from 'tree-sitter-cpp';
 import type { SymbolNode, CallSite } from '../../types.js';
 import { firstChildOfType } from './node-helpers.js';
 import { makeParser } from './parser-factory.js';
 
-const require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const cppGrammar = require('tree-sitter-cpp') as unknown;
+const cppGrammar = cppModule as unknown;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;

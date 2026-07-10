@@ -1,11 +1,9 @@
-import { createRequire } from 'node:module';
+import xmlDefault from '@tree-sitter-grammars/tree-sitter-xml';
 import type { SymbolNode } from '../../types.js';
 import { childrenOfType, firstChildOfType } from './node-helpers.js';
 import { makeParser } from './parser-factory.js';
 
-const require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const xmlModule = require('@tree-sitter-grammars/tree-sitter-xml') as unknown;
+const xmlModule = xmlDefault as unknown;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;

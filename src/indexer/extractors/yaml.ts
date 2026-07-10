@@ -1,10 +1,8 @@
-import { createRequire } from 'node:module';
+import yamlDefault from '@tree-sitter-grammars/tree-sitter-yaml';
 import type { SymbolNode } from '../../types.js';
 import { makeParser } from './parser-factory.js';
 
-const require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const yamlModule = require('@tree-sitter-grammars/tree-sitter-yaml') as unknown;
+const yamlModule = yamlDefault as unknown;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;

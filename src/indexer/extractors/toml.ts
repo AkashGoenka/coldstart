@@ -1,10 +1,8 @@
-import { createRequire } from 'node:module';
+import tomlDefault from '@tree-sitter-grammars/tree-sitter-toml';
 import type { SymbolNode } from '../../types.js';
 import { makeParser } from './parser-factory.js';
 
-const require = createRequire(import.meta.url);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const tomlModule = require('@tree-sitter-grammars/tree-sitter-toml') as unknown;
+const tomlModule = tomlDefault as unknown;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;

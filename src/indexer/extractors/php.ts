@@ -1,12 +1,10 @@
-import { createRequire } from 'node:module';
+import phpDefault from 'tree-sitter-php';
 import type { SymbolNode, CallSite } from '../../types.js';
 import { childrenOfType, firstChildOfType } from './node-helpers.js';
 import { makeParser } from './parser-factory.js';
 
-const require = createRequire(import.meta.url);
 // tree-sitter-php exports a { php, php_only } object
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const phpModule = require('tree-sitter-php') as { php: unknown; php_only: unknown };
+const phpModule = phpDefault as { php: unknown; php_only: unknown };
 const phpGrammar = phpModule.php ?? phpModule.php_only;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
