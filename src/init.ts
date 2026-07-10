@@ -13,10 +13,12 @@
  *   2. CLIENT — which tool to wire (never auto-detected; the user always picks):
  *        - Claude Code → CLAUDE.md imports `@coldstart.md`; find/gs hooks in
  *          `.claude/settings.json`. (MCP experience also writes `.mcp.json`.)
- *        - Cursor      → `.cursor/rules/coldstart.mdc` references coldstart.md;
- *          Cursor-specific navigation + notebook hooks in `.cursor/hooks.json`.
- *          (MCP) also writes `.cursor/mcp.json`.
- *        - Codex       → AGENTS.md points at coldstart.md; Codex-specific
+ *        - Cursor      → `.cursor/rules/coldstart.mdc` carries the FULL guidance
+ *          inline (Cursor doesn't resolve `@file` refs in rules), rewritten every
+ *          init; Cursor-specific navigation + notebook hooks in
+ *          `.cursor/hooks.json`. (MCP) also writes `.cursor/mcp.json`.
+ *        - Codex       → AGENTS.md carries the full guidance inline in a marked
+ *          block (Codex has no `@file` include); Codex-specific
  *          navigation + notebook hooks in `.codex/hooks.json`. (MCP) writes
  *          `[mcp_servers.coldstart]` into `.codex/config.toml`.
  *        - Other       → write coldstart.md only; print wiring directions.
@@ -524,10 +526,13 @@ export function wireCursorHooks(cwd: string): 'created' | 'updated' | { error: s
 // Rules-file writers — each references coldstart.md, never duplicates it
 // ---------------------------------------------------------------------------
 
-/** Write `.cursor/rules/coldstart.mdc` — an always-applied rule that pulls in
- *  coldstart.md via Cursor's `@file` reference. Overwritten on re-run (it owns
- *  this file), so guidance edits flow through coldstart.md. */
-export function wireCursorRule(cwd: string): 'created' | 'updated' {
+/** Write `.cursor/rules/coldstart.mdc` — an always-applied rule that carries the
+ *  FULL coldstart guidance inline. Cursor does NOT reliably resolve `@file`
+ *  references inside a rule body (the old `@coldstart.md` line was silently
+ *  ignored, so the CLI workflow never reached the agent), so we embed the whole
+ *  coldstart.md body here. Overwritten on every re-run (it owns this file), so
+ *  guidance edits flow through on the next `coldstart init`. */
+export function wireCursorRule(cwd: string, mode: 'cli' | 'mcp'): 'created' | 'updated' {
   const dir = path.join(cwd, '.cursor', 'rules');
   const filePath = path.join(dir, 'coldstart.mdc');
   const existed = fs.existsSync(filePath);
@@ -536,11 +541,7 @@ description: coldstart — fast codebase navigation (find/gs) before grep/read
 alwaysApply: true
 ---
 
-Before grepping or reading files to orient in this codebase, use coldstart
-(\`find\` to locate files, \`gs\` to inspect one). Full guidance:
-
-@coldstart.md
-`;
+${coldstartMd(mode)}`;
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(filePath, body);
   return existed ? 'updated' : 'created';
@@ -549,16 +550,19 @@ Before grepping or reading files to orient in this codebase, use coldstart
 const AGENTS_START = '<!-- coldstart:start -->';
 const AGENTS_END = '<!-- coldstart:end -->';
 
-/** Ensure AGENTS.md carries a coldstart section pointing at coldstart.md.
- *  AGENTS.md has no import directive, so we inject a marked block and refresh it
- *  in place on re-run (idempotent), preserving everything else in the file. */
-export function wireCodexAgents(cwd: string): 'created' | 'updated' {
+/** Ensure AGENTS.md carries the FULL coldstart guidance inline.
+ *  Codex and the AGENTS.md standard support NO file-inclusion directive (no
+ *  `@file`), and hierarchical discovery only pulls in *nested* AGENTS.md files —
+ *  never an arbitrary sibling like coldstart.md. Pointing at coldstart.md would
+ *  rely on the agent voluntarily opening a second file, so we embed the whole
+ *  body in a marked block, refreshed in place on re-run (idempotent) so the rest
+ *  of the user's AGENTS.md is preserved. */
+export function wireCodexAgents(cwd: string, mode: 'cli' | 'mcp'): 'created' | 'updated' {
   const filePath = path.join(cwd, 'AGENTS.md');
   const block = `${AGENTS_START}
 ## Codebase navigation (coldstart)
 
-Before grepping or reading files to orient in this repo, use coldstart. Read
-\`coldstart.md\` at the repo root for the find/gs workflow and follow it.
+${coldstartMd(mode)}
 ${AGENTS_END}`;
 
   if (!fs.existsSync(filePath)) {
@@ -705,8 +709,7 @@ function setupClaude(cwd: string, exp: Experience): void {
 }
 
 function setupCodex(cwd: string, exp: Experience): void {
-  out(`  coldstart.md  — ${writeColdstartMd(cwd, exp)} (${FLAVOR(exp)})`);
-  out(`  AGENTS.md     — ${wireCodexAgents(cwd)} coldstart navigation section`);
+  out(`  AGENTS.md     — ${wireCodexAgents(cwd, exp)} coldstart navigation section (full ${FLAVOR(exp)} guidance inlined)`);
   if (exp === 'mcp') {
     const entry = mcpEntryOrNull(cwd);
     if (entry) out(`  config.toml   — ${wireCodexMcp(cwd, entry)} [mcp_servers.coldstart]`);
@@ -718,8 +721,7 @@ function setupCodex(cwd: string, exp: Experience): void {
 }
 
 function setupCursor(cwd: string, exp: Experience): void {
-  out(`  coldstart.md  — ${writeColdstartMd(cwd, exp)} (${FLAVOR(exp)})`);
-  out(`  coldstart.mdc — ${wireCursorRule(cwd)} .cursor/rules rule (references @coldstart.md)`);
+  out(`  coldstart.mdc — ${wireCursorRule(cwd, exp)} .cursor/rules rule (full ${FLAVOR(exp)} guidance inlined)`);
   if (exp === 'mcp') {
     const entry = mcpEntryOrNull(cwd);
     if (entry) {
