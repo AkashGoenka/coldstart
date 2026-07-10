@@ -41,21 +41,20 @@ Requires Node.js 18+.
 ```bash
 npm install -g @cstart/coldstart --legacy-peer-deps
 cd your-project
-coldstart init      # navigation: coldstart.md + client wiring + background index warm-up
-coldstart kb init   # notebook: skeleton + capture/recall hooks (optional but recommended)
+coldstart init   # coldstart.md + client wiring + notebook + background index warm-up
 ```
 
-`init` asks two things — the **experience** (`cli`, recommended, or `mcp`) and the **client** — then writes a single `coldstart.md` at your repo root (the agent-facing guidance) and wires it in. Pass `--experience` / `--client` to skip the prompts. The client is never auto-detected; you always pick it.
+> [!IMPORTANT]
+> **Always install with `--legacy-peer-deps`.** npm's own copy-paste box on the [package page](https://www.npmjs.com/package/@cstart/coldstart) omits it — use the command **above** instead. The tree-sitter grammar packages under-declare their peer-dep ranges (some say `^0.21.x`, others `^0.22.x`), so without the flag npm's strict resolver enters a long retry loop on a cold cache and can appear to hang. The flag tells npm to use our tested versions as-is. We can't set it from inside the package — npm reads install config only from your environment.
 
-- **Claude Code** → ensures `CLAUDE.md` imports it via `@coldstart.md`, and registers the find/gs search hooks in `.claude/settings.json` (a PostToolUse nudge + a PreToolUse find-dedup guard — merged into any existing settings, never overwriting them). The `mcp` experience also writes `.mcp.json`.
-- **Codex** → adds a coldstart section to `AGENTS.md` and registers Codex-specific navigation plus notebook hooks in `.codex/hooks.json`. The capture hook understands Codex rollout and subagent transcripts. The `mcp` experience also writes `[mcp_servers.coldstart]` into `.codex/config.toml`.
-- **Cursor** → writes `.cursor/rules/coldstart.mdc` (an always-applied rule referencing `@coldstart.md`) and registers Cursor-specific navigation plus notebook hooks in `.cursor/hooks.json` (a `preToolUse` find-dedup guard, a `postToolUse` nudge, `beforeSubmitPrompt` recall, and `stop`/`subagentStop` capture — merged into any existing hooks). The capture hook parses Cursor's own conversation transcript. The `mcp` experience also writes `.cursor/mcp.json`.
+A single `coldstart init` does everything — navigation **and** the notebook. It asks two things — the **experience** (`cli`, recommended, or `mcp`) and the **client** — then writes the agent-facing guidance into the client's own rules file (as an imported `coldstart.md` for Claude Code; inlined directly for Cursor and Codex, which don't resolve `@file` references), wires the client, and sets up the notebook (skeleton, git wiring, and — for Claude Code, Codex, and Cursor — the capture/recall hooks). Pass `--experience` / `--client` to skip the prompts. The client is never auto-detected; you always pick it.
+
+- **Claude Code** → writes `coldstart.md` and ensures `CLAUDE.md` imports it via `@coldstart.md`, and registers both the find/gs search hooks (a PostToolUse nudge + a PreToolUse find-dedup guard) and the notebook recall/capture hooks (UserPromptSubmit + Stop/SubagentStop) in `.claude/settings.json` — merged into any existing settings, never overwriting them. The `mcp` experience also writes `.mcp.json`.
+- **Codex** → embeds the full coldstart guidance inline in a marked block in `AGENTS.md` (Codex has no `@file` include, so there's no separate `coldstart.md`), refreshed in place on re-run, and registers Codex-specific navigation plus notebook hooks in `.codex/hooks.json`. The capture hook understands Codex rollout and subagent transcripts. The `mcp` experience also writes `[mcp_servers.coldstart]` into `.codex/config.toml`.
+- **Cursor** → writes `.cursor/rules/coldstart.mdc` — an always-applied rule that carries the full coldstart guidance inline (Cursor doesn't reliably resolve `@file` references in rules), rewritten on every init — and registers Cursor-specific navigation plus notebook hooks in `.cursor/hooks.json` (a `preToolUse` find-dedup guard, a `postToolUse` nudge, `beforeSubmitPrompt` recall, and `stop`/`subagentStop` capture — merged into any existing hooks). The capture hook parses Cursor's own conversation transcript. The `mcp` experience also writes `.cursor/mcp.json`.
 - **Other** → writes `coldstart.md` only, and prints the wiring directions (plus the MCP server entry for the `mcp` experience).
 
-`init` then warms the index in the background, so your first lookup is instant. Re-running either init is safe — they never duplicate entries.
-
-> [!IMPORTANT]
-> **Why `--legacy-peer-deps`?** The tree-sitter grammar packages under-declare their peer-dep ranges (some say `^0.21.x`, others `^0.22.x`). Without the flag npm's strict resolver enters a long retry loop on a cold cache and can appear to hang. The flag tells npm to use our tested versions as-is. We can't set it from inside the package — npm reads install config only from your environment.
+`init` then warms the index in the background, so your first lookup is instant. Re-running `init` is safe — it never duplicates entries.
 
 ### Upgrading
 
@@ -100,7 +99,7 @@ coldstart kb status / lint / render / init / migrate
 - **Concurrent sessions are safe.** Multiple agents can write at once: per-note append-only logs, exclusive creation for new note ids (a same-moment duplicate becomes two visible notes, never a silent merge), lossless merging for shared file notes, and atomic renders (a reader never sees a half-written note).
 - **Corrections happen in-session.** If an agent finds a note wrong while the evidence is in its context, the guidance tells it to fix or retract the note right then — no better-placed future agent exists.
 
-**Setup:** `coldstart kb init` creates the notebook skeleton, sets union-merge for the logs, and (on Claude Code) wires the two optional hooks — capture at session end, recall at prompt time. Other hosts can drive the notebook without the hooks: via the full `kb` CLI, or — for no-shell clients — the `kb_search` / `kb_lookup` / `kb_write` / `kb_status` MCP tools.
+**Setup:** the notebook comes with `coldstart init` — no separate step. It creates the notebook skeleton, sets union-merge for the logs, and (on Claude Code and Codex) wires the two hooks — capture at session end, recall at prompt time. (`coldstart kb init` still exists as an alias if you want to (re-)wire just the notebook.) Other hosts can drive the notebook without the hooks: via the full `kb` CLI, or — for no-shell clients — the `kb_search` / `kb_lookup` / `kb_write` / `kb_status` MCP tools.
 
 **Language-agnostic.** The notebook's freshness machinery is content-hash based, so it works on any codebase — including languages the navigation index doesn't parse. Where the index does parse, notes additionally get symbol-level freshness.
 

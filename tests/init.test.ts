@@ -199,29 +199,32 @@ describe('rules-file writers (reference coldstart.md, never duplicate it)', () =
     if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true });
   });
 
-  it('wireCursorRule writes an always-applied .mdc that references @coldstart.md', () => {
-    expect(wireCursorRule(tempDir)).toBe('created');
+  it('wireCursorRule writes an always-applied .mdc with the full guidance inlined', () => {
+    expect(wireCursorRule(tempDir, 'cli')).toBe('created');
     const body = fs.readFileSync(path.join(tempDir, '.cursor', 'rules', 'coldstart.mdc'), 'utf8');
     expect(body).toContain('alwaysApply: true');
-    expect(body).toContain('@coldstart.md');
-    // re-run is an update, single reference (no duplication)
-    expect(wireCursorRule(tempDir)).toBe('updated');
+    // full doc body is embedded, not an unresolved @file reference
+    expect(body).not.toContain('@coldstart.md');
+    expect(body).toContain(coldstartMd('cli'));
+    // re-run overwrites in place (no duplication)
+    expect(wireCursorRule(tempDir, 'cli')).toBe('updated');
     const again = fs.readFileSync(path.join(tempDir, '.cursor', 'rules', 'coldstart.mdc'), 'utf8');
-    expect(again.match(/@coldstart\.md/g)!.length).toBe(1);
+    expect(again.split('alwaysApply: true').length - 1).toBe(1);
   });
 
-  it('wireCodexAgents creates AGENTS.md with a marked coldstart section', () => {
-    expect(wireCodexAgents(tempDir)).toBe('created');
+  it('wireCodexAgents creates AGENTS.md with the full guidance inlined in a marked section', () => {
+    expect(wireCodexAgents(tempDir, 'cli')).toBe('created');
     const body = fs.readFileSync(path.join(tempDir, 'AGENTS.md'), 'utf8');
     expect(body).toContain('<!-- coldstart:start -->');
     expect(body).toContain('<!-- coldstart:end -->');
-    expect(body).toContain('coldstart.md');
+    // full doc body is embedded, not a pointer to a sibling coldstart.md file
+    expect(body).toContain(coldstartMd('cli'));
   });
 
   it('wireCodexAgents refreshes its block in place and preserves other content', () => {
     fs.writeFileSync(path.join(tempDir, 'AGENTS.md'), '# AGENTS.md\n\nMy own house rules.\n');
-    expect(wireCodexAgents(tempDir)).toBe('updated');
-    expect(wireCodexAgents(tempDir)).toBe('updated'); // idempotent re-run
+    expect(wireCodexAgents(tempDir, 'cli')).toBe('updated');
+    expect(wireCodexAgents(tempDir, 'cli')).toBe('updated'); // idempotent re-run
     const body = fs.readFileSync(path.join(tempDir, 'AGENTS.md'), 'utf8');
     expect(body).toContain('My own house rules.'); // foreign content preserved
     expect(body.match(/<!-- coldstart:start -->/g)!.length).toBe(1); // exactly one block
