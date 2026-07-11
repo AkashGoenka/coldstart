@@ -15,7 +15,7 @@ const rubyGrammar = rubyModule as unknown;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-const getParser = makeParser(rubyGrammar);
+const getParser = makeParser(rubyGrammar, { pkg: 'tree-sitter-ruby', wasm: 'tree-sitter-ruby.wasm' });
 
 // ---------------------------------------------------------------------------
 // Node helpers

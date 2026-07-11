@@ -8,7 +8,7 @@ const groovyModule = groovyRawModule as unknown;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-const getParser = makeParser(groovyModule);
+const getParser = makeParser(groovyModule, { pkg: 'tree-sitter-groovy', wasm: 'tree-sitter-groovy.wasm' });
 
 // ---------------------------------------------------------------------------
 // Result type

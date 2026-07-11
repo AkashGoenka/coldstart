@@ -8,7 +8,7 @@ const pythonGrammar = pythonModule as unknown;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-const getParser = makeParser(pythonGrammar);
+const getParser = makeParser(pythonGrammar, { pkg: 'tree-sitter-python', wasm: 'tree-sitter-python.wasm' });
 
 // ---------------------------------------------------------------------------
 // Node helpers

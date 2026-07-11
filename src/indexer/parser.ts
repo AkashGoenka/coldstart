@@ -21,6 +21,7 @@ import { parseEnvContent } from './extractors/env.js';
 import { parseXmlContent } from './extractors/xml.js';
 import { parseGroovyContent } from './extractors/groovy.js';
 import { extractContentTokens } from './content-tokens.js';
+import { ensureParsersReady } from './extractors/parser-factory.js';
 
 const MAX_FILE_SIZE = 1_000_000; // 1 MB
 
@@ -56,6 +57,7 @@ export async function parseFile(
   language: Language,
   fileId = '',
 ): Promise<ParsedFile | null> {
+  await ensureParsersReady(); // no-op in native mode; one-time wasm grammar load under COLDSTART_WASM
   let content: string;
   try {
     const buf = await readFile(filePath);

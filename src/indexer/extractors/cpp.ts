@@ -8,7 +8,7 @@ const cppGrammar = cppModule as unknown;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-const getParser = makeParser(cppGrammar);
+const getParser = makeParser(cppGrammar, { pkg: 'tree-sitter-cpp', wasm: 'tree-sitter-cpp.wasm' });
 
 /** Recursively collect call_expression callee names + first-seen line in a subtree. */
 function collectCalls(node: TSNode, results: Map<string, number>): void {

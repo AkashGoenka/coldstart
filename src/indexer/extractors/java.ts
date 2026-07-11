@@ -15,7 +15,7 @@ const javaGrammar = javaModule as unknown;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-const getParser = makeParser(javaGrammar);
+const getParser = makeParser(javaGrammar, { pkg: 'tree-sitter-java', wasm: 'tree-sitter-java.wasm' });
 
 // ---------------------------------------------------------------------------
 // Node helpers
@@ -541,7 +541,16 @@ export function parseJavaContent(
     throw new Error(`Tree-sitter failed to parse Java (${content.length} chars): ${err}`);
   }
   const root: TSNode = tree.rootNode;
+  return extractJavaFromRoot(root, fileId);
+}
 
+/**
+ * Symbol/import extraction from an already-parsed root node. Split out from
+ * parseJavaContent so the traversal can run against any tree-sitter-compatible
+ * tree — native node-tree-sitter OR web-tree-sitter. Used by the wasm spike to
+ * verify the extractor yields byte-identical output on both engines.
+ */
+export function extractJavaFromRoot(root: TSNode, fileId: string): JavaParseResult {
   const imports: string[] = [];
   const exports: string[] = [];
   const rawSymbols: SymbolNode[] = [];

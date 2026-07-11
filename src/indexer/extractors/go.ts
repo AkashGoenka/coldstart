@@ -8,7 +8,7 @@ const goGrammar = goModule as unknown;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-const getParser = makeParser(goGrammar);
+const getParser = makeParser(goGrammar, { pkg: 'tree-sitter-go', wasm: 'tree-sitter-go.wasm' });
 
 // ---------------------------------------------------------------------------
 // Node helpers

@@ -7,7 +7,7 @@ const yamlModule = yamlDefault as unknown;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-const getParser = makeParser(yamlModule);
+const getParser = makeParser(yamlModule, { pkg: '@tree-sitter-grammars/tree-sitter-yaml', wasm: 'tree-sitter-yaml.wasm' });
 
 export interface YamlParseResult {
   imports: string[];

@@ -7,7 +7,7 @@ const tomlModule = tomlDefault as unknown;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-const getParser = makeParser(tomlModule);
+const getParser = makeParser(tomlModule, { pkg: '@tree-sitter-grammars/tree-sitter-toml', wasm: 'tree-sitter-toml.wasm' });
 
 export interface TomlParseResult {
   imports: string[];

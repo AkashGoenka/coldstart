@@ -10,7 +10,7 @@ const phpGrammar = phpModule.php ?? phpModule.php_only;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-const getParser = makeParser(phpGrammar);
+const getParser = makeParser(phpGrammar, { pkg: 'tree-sitter-php', wasm: 'tree-sitter-php.wasm' });
 
 // ---------------------------------------------------------------------------
 // Node helpers

@@ -8,7 +8,7 @@ const rustGrammar = rustModule as unknown;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-const getParser = makeParser(rustGrammar);
+const getParser = makeParser(rustGrammar, { pkg: 'tree-sitter-rust', wasm: 'tree-sitter-rust.wasm' });
 
 // ---------------------------------------------------------------------------
 // Node helpers
