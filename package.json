@@ -14,7 +14,8 @@
   "files": [
     "dist",
     "hooks",
-    "templates"
+    "templates",
+    "vendor/wasm"
   ],
   "keywords": [
     "cli",

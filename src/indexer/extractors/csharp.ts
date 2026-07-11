@@ -8,7 +8,7 @@ const csharpGrammar = csharpModule as unknown;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-const getParser = makeParser(csharpGrammar);
+const getParser = makeParser(csharpGrammar, { vendored: 'tree-sitter-c-sharp.wasm' });
 
 // ---------------------------------------------------------------------------
 // Node helpers

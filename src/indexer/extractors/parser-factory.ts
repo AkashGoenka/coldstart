@@ -21,6 +21,8 @@
 import ParserModule from 'tree-sitter';
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
 const require = createRequire(import.meta.url);
 
@@ -32,11 +34,26 @@ type AnyParser = any;
 
 const WASM_MODE = process.env['COLDSTART_WASM'] === '1';
 
-/** Where to find a grammar's prebuilt .wasm — resolved via the package name. */
+/**
+ * Where to find a grammar's prebuilt .wasm. Most grammars ship one inside their
+ * own npm package (resolved via `pkg`/`wasm` with require.resolve). A few
+ * grammars (c#, kotlin, xml) don't ship a .wasm, so coldstart vendors a built
+ * one under `vendor/wasm/`; those pass `vendored` (a basename resolved against
+ * the repo's vendor dir) instead of `pkg`.
+ */
 export interface WasmSpec {
-  pkg: string;   // e.g. 'tree-sitter-java' or '@tree-sitter-grammars/tree-sitter-yaml'
-  wasm: string;  // e.g. 'tree-sitter-java.wasm'
+  pkg?: string;   // npm package that ships the .wasm, e.g. 'tree-sitter-java'
+  wasm?: string;  // the .wasm file inside that package, e.g. 'tree-sitter-java.wasm'
+  vendored?: string; // basename under vendor/wasm/, e.g. 'tree-sitter-c-sharp.wasm'
 }
+
+/**
+ * Absolute path to the repo's vendored-wasm dir. This module compiles to
+ * dist/indexer/extractors/ and runs from src/indexer/extractors/ under vitest —
+ * both are exactly three levels below the repo root, so the same relative walk
+ * up to vendor/wasm/ resolves in both layouts.
+ */
+const VENDOR_WASM_DIR = fileURLToPath(new URL('../../../vendor/wasm/', import.meta.url));
 
 interface Pending {
   spec: WasmSpec;
@@ -46,6 +63,11 @@ const pendingWasm: Pending[] = [];
 
 /** Resolve the absolute path of a spec's .wasm, or null if it doesn't ship one. */
 function resolveWasm(spec: WasmSpec): string | null {
+  // Vendored grammars (c#/kotlin/xml) live in the repo, not an npm package.
+  if (spec.vendored) {
+    const p = join(VENDOR_WASM_DIR, spec.vendored);
+    return existsSync(p) ? p : null;
+  }
   try {
     const p = require.resolve(`${spec.pkg}/${spec.wasm}`);
     return existsSync(p) ? p : null;
@@ -126,7 +148,7 @@ export function makeParser(grammar: unknown, wasm?: WasmSpec): () => AnyParser {
     return () => {
       if (!ready) {
         throw new Error(
-          `[coldstart] wasm parser for ${wasm.pkg} not initialised — ` +
+          `[coldstart] wasm parser for ${wasm.pkg ?? wasm.vendored} not initialised — ` +
           `ensureParsersReady() must be awaited before parsing`,
         );
       }

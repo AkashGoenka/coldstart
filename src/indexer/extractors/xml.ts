@@ -9,7 +9,7 @@ const xmlModule = xmlDefault as unknown;
 type TSNode = any;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const getParser = makeParser((xmlModule as any).xml);
+const getParser = makeParser((xmlModule as any).xml, { vendored: 'tree-sitter-xml.wasm' });
 
 // ---------------------------------------------------------------------------
 // Result type

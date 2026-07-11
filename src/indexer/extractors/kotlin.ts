@@ -8,7 +8,7 @@ const kotlinGrammar = kotlinModule as unknown;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-const getParser = makeParser(kotlinGrammar);
+const getParser = makeParser(kotlinGrammar, { vendored: 'tree-sitter-kotlin.wasm' });
 
 // ---------------------------------------------------------------------------
 // Node helpers
