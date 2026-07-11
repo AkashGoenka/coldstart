@@ -1,6 +1,6 @@
 import pythonModule from 'tree-sitter-python';
 import type { SymbolNode, CallSite } from '../../types.js';
-import { childrenOfType, firstChildOfType } from './node-helpers.js';
+import { childrenOfType, firstChildOfType, sameNode } from './node-helpers.js';
 import { makeParser } from './parser-factory.js';
 
 const pythonGrammar = pythonModule as unknown;
@@ -315,7 +315,7 @@ export function parsePythonContent(
       // relative dots ('.', '..') join without an extra dot.
       const sep = /^\.+$/.test(moduleText) ? '' : '.';
       for (const child of node.namedChildren) {
-        if (child === moduleNode) continue;
+        if (sameNode(child, moduleNode)) continue;
         if (child.type === 'dotted_name' || child.type === 'aliased_import') {
           const nm = child.type === 'aliased_import'
             ? firstChildOfType(child, 'dotted_name')?.text

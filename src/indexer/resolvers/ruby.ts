@@ -169,7 +169,13 @@ export async function buildRailsFqcnIndex(
 
   // Index each root
   for (const root of autoloadRoots) {
-    const rbFiles = await walkRbFiles(root);
+    // Sort by path so the winner for an ambiguous/duplicate FQCN key is chosen
+    // deterministically (lexicographically-first file wins via the !idx.has
+    // guard below), independent of walkRbFiles' filesystem-readdir order. Two
+    // Rails files that map to the same autoload constant would otherwise resolve
+    // to whichever the OS/parse-engine happened to enumerate first, producing a
+    // small edge-count delta between native and WASM runs (see WASM brief).
+    const rbFiles = (await walkRbFiles(root)).sort();
     for (const f of rbFiles) {
       let rel = f.slice(root.length + 1).slice(0, -3); // relative path without .rb
       // Strip concerns/ segment if present (Visibility in app/models/concerns → "visibility", not "concerns/visibility")

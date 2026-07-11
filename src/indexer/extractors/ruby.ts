@@ -7,7 +7,7 @@
  */
 import rubyModule from 'tree-sitter-ruby';
 import type { SymbolNode, CallSite } from '../../types.js';
-import { childrenOfType, firstChildOfType, firstChildOfTypes } from './node-helpers.js';
+import { childrenOfType, firstChildOfType, firstChildOfTypes, sameNode } from './node-helpers.js';
 import { makeParser } from './parser-factory.js';
 
 const rubyGrammar = rubyModule as unknown;
@@ -827,9 +827,9 @@ function isConstantDefinitionContext(node: TSNode): boolean {
   const p = node.parent;
   if (!p) return false;
   // class Foo / module Foo — constant is first named child, don't resolve
-  if ((p.type === 'class' || p.type === 'module') && p.namedChildren[0] === node) return true;
+  if ((p.type === 'class' || p.type === 'module') && sameNode(p.namedChildren[0], node)) return true;
   // Assignment LHS (FOO = 1) — don't resolve
-  if (p.type === 'assignment' && p.namedChildren[0] === node) return true;
+  if (p.type === 'assignment' && sameNode(p.namedChildren[0], node)) return true;
   return false;
 }
 
@@ -864,7 +864,7 @@ function shouldSkipConstantContext(node: TSNode): boolean {
  * `nesting` is the enclosing class/module FQCNs, innermost-first (= Module.nesting).
  * Compact definitions (`class A::B`) don't add intermediate namespaces, matching Ruby.
  */
-function collectConstantReferences(root: TSNode): string[][] {
+export function collectConstantReferences(root: TSNode): string[][] {
   const out: string[][] = [];
   const seen = new Set<string>();
 
@@ -887,7 +887,7 @@ function collectConstantReferences(root: TSNode): string[][] {
       // OUTER nesting (Ruby resolves `class Foo < Bar` and `Foo::X` before Foo is open).
       const body = firstChildOfType(node, 'body_statement');
       for (const c of node.namedChildren) {
-        visit(c, c === body ? newNesting : nesting);
+        visit(c, sameNode(c, body) ? newNesting : nesting);
       }
       return;
     }
