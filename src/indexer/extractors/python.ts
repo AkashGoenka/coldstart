@@ -1,14 +1,11 @@
-import pythonModule from 'tree-sitter-python';
 import type { SymbolNode, CallSite } from '../../types.js';
 import { childrenOfType, firstChildOfType, sameNode } from './node-helpers.js';
 import { makeParser } from './parser-factory.js';
 
-const pythonGrammar = pythonModule as unknown;
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-const getParser = makeParser(pythonGrammar, { pkg: 'tree-sitter-python', wasm: 'tree-sitter-python.wasm' });
+const getParser = makeParser({ vendored: 'tree-sitter-python.wasm' });
 
 // ---------------------------------------------------------------------------
 // Node helpers

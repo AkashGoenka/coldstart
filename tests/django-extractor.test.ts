@@ -1,5 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { parsePythonContent } from '../src/indexer/extractors/python.js';
+import { ensureParsersReady } from '../src/indexer/extractors/parser-factory.js';
+
+// Direct extractor calls (not via parseFile) must load the wasm grammars first.
+beforeAll(async () => { await ensureParsersReady(); });
 
 describe('Django extractor — settings.py references', () => {
   it('extracts MIDDLEWARE list string references', () => {

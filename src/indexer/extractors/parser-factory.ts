@@ -1,24 +1,22 @@
 /**
- * Lazily-constructed, memoised tree-sitter parser, shared by the language
- * extractors. Every extractor calls `makeParser(grammar)` once at module scope
- * and gets back a `getParser()` that builds the parser on first use and caches
- * it for the process lifetime.
+ * web-tree-sitter (WASM) parser factory, shared by the language extractors.
+ * Every extractor calls `makeParser(spec)` once at module scope and gets back a
+ * `getParser()` that returns the wasm-backed parser (built once, cached for the
+ * process lifetime).
  *
- * Dual-mode (spike/experimental): when `COLDSTART_WASM=1`, extractors that pass
- * a `wasm` spec run on web-tree-sitter (WASM) instead of the native
- * node-tree-sitter binding. The wasm parser is wrapped so the extractors need
- * ZERO body changes:
+ * coldstart runs EVERY grammar on web-tree-sitter — there is no native
+ * node-tree-sitter path. `.wasm` grammars are inert data (no node-gyp, no
+ * install scripts, no per-grammar peer-dep), so a plain `npm i` always works.
+ * All grammars are vendored under `vendor/wasm/`.
+ *
+ * The wasm parser is wrapped so the extractors need ZERO body changes:
  *   - it accepts the same `.parse(string)` AND `.parse(chunkCallback)` shapes
  *     (the >32 KB chunked path is reconstructed into a full string, since
  *     web-tree-sitter has no 32 KB cap);
  *   - it deletes the previous Tree on each new parse() call, bounding live wasm
  *     memory to one tree per language (safe: extraction is fully synchronous per
  *     file, so a tree is always fully traversed before the next parse()).
- * web-tree-sitter is imported lazily inside initWasm() — native/production never
- * loads it. Grammars without a shipped .wasm (c#, kotlin, xml) simply pass no
- * spec and stay native even under COLDSTART_WASM (hybrid).
  */
-import ParserModule from 'tree-sitter';
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -27,24 +25,17 @@ import { join } from 'node:path';
 const require = createRequire(import.meta.url);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ParserCtor = ParserModule as { new(): any };
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyParser = any;
 
-const WASM_MODE = process.env['COLDSTART_WASM'] === '1';
-
 /**
- * Where to find a grammar's prebuilt .wasm. Most grammars ship one inside their
- * own npm package (resolved via `pkg`/`wasm` with require.resolve). A few
- * grammars (c#, kotlin, xml) don't ship a .wasm, so coldstart vendors a built
- * one under `vendor/wasm/`; those pass `vendored` (a basename resolved against
- * the repo's vendor dir) instead of `pkg`.
+ * Where to find a grammar's prebuilt .wasm. Every grammar is vendored under
+ * `vendor/wasm/` as `<basename>.wasm` (grammars that ship a .wasm in their npm
+ * package are copied verbatim; c#/kotlin/xml are built from source — see
+ * `scripts/wasm-build/`). Vendoring keeps coldstart free of the `tree-sitter`
+ * core peerDependency that each grammar package carries.
  */
 export interface WasmSpec {
-  pkg?: string;   // npm package that ships the .wasm, e.g. 'tree-sitter-java'
-  wasm?: string;  // the .wasm file inside that package, e.g. 'tree-sitter-java.wasm'
-  vendored?: string; // basename under vendor/wasm/, e.g. 'tree-sitter-c-sharp.wasm'
+  vendored: string; // basename under vendor/wasm/, e.g. 'tree-sitter-java.wasm'
 }
 
 /**
@@ -58,54 +49,67 @@ const VENDOR_WASM_DIR = fileURLToPath(new URL('../../../vendor/wasm/', import.me
 interface Pending {
   spec: WasmSpec;
   setReady: (p: AnyParser) => void;
+  loaded: boolean;
 }
 const pendingWasm: Pending[] = [];
 
-/** Resolve the absolute path of a spec's .wasm, or null if it doesn't ship one. */
+/** Resolve the absolute path of a spec's vendored .wasm, or null if absent. */
 function resolveWasm(spec: WasmSpec): string | null {
-  // Vendored grammars (c#/kotlin/xml) live in the repo, not an npm package.
-  if (spec.vendored) {
-    const p = join(VENDOR_WASM_DIR, spec.vendored);
-    return existsSync(p) ? p : null;
-  }
-  try {
-    const p = require.resolve(`${spec.pkg}/${spec.wasm}`);
-    return existsSync(p) ? p : null;
-  } catch {
-    return null;
-  }
+  const p = join(VENDOR_WASM_DIR, spec.vendored);
+  return existsSync(p) ? p : null;
 }
 
-let initPromise: Promise<void> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let runtime: Promise<any> | null = null;
+function getRuntime(): Promise<{ Parser: unknown; Language: unknown }> {
+  if (!runtime) {
+    runtime = (async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { Parser, Language } = require('web-tree-sitter') as any;
+      await Parser.init();
+      return { Parser, Language };
+    })();
+  }
+  return runtime;
+}
+
+// Serialise draining so concurrent callers never double-load a grammar.
+let draining: Promise<void> = Promise.resolve();
 
 /**
- * Must be awaited before any parsing when COLDSTART_WASM=1 — loads the
- * web-tree-sitter runtime and every registered grammar's .wasm. Idempotent and
- * concurrency-safe (single memoised promise). No-op in native mode.
+ * Must be awaited before any parsing — loads the web-tree-sitter runtime and
+ * every grammar registered so far whose .wasm isn't loaded yet. Idempotent and
+ * concurrency-safe: calls are serialised, each `Pending` is loaded exactly once
+ * (guarded by `loaded`), and a call made after new grammars register picks them
+ * up. Awaited inside `parseFile`, so every parse path is covered. There is no
+ * native fallback — a missing vendored .wasm throws.
  */
 export function ensureParsersReady(): Promise<void> {
-  if (!WASM_MODE) return Promise.resolve();
-  if (!initPromise) initPromise = initWasm();
-  return initPromise;
-}
-
-async function initWasm(): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { Parser, Language } = require('web-tree-sitter') as any;
-  await Parser.init();
-  for (const entry of pendingWasm) {
-    const path = resolveWasm(entry.spec);
-    if (!path) continue; // no wasm shipped → its getParser stays native (set at makeParser time)
-    const lang = await Language.load(path);
-    const real = new Parser();
-    real.setLanguage(lang);
-    entry.setReady(wrapWasmParser(real));
-  }
+  draining = draining.then(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { Parser, Language } = (await getRuntime()) as any;
+    for (const entry of pendingWasm) {
+      if (entry.loaded) continue;
+      const path = resolveWasm(entry.spec);
+      if (!path) {
+        throw new Error(
+          `[coldstart] vendored wasm '${entry.spec.vendored}' not found under vendor/wasm/ — ` +
+          `the package is corrupt or the grammar was not vendored`,
+        );
+      }
+      const lang = await Language.load(path);
+      const real = new Parser();
+      real.setLanguage(lang);
+      entry.setReady(wrapWasmParser(real));
+      entry.loaded = true;
+    }
+  });
+  return draining;
 }
 
 /**
- * Wrap a web-tree-sitter Parser so extractors can use it exactly like the native
- * one: same parse() shapes, and automatic previous-tree cleanup.
+ * Wrap a web-tree-sitter Parser so extractors can use it like a node one: same
+ * parse() shapes, and automatic previous-tree cleanup.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function wrapWasmParser(real: any): AnyParser {
@@ -137,31 +141,20 @@ function wrapWasmParser(real: any): AnyParser {
 }
 
 /**
- * Build a memoised getParser(). In native mode (or when no wasm ships), returns
- * the native node-tree-sitter parser. In wasm mode with a resolvable .wasm,
- * returns the wasm-backed wrapper (populated by ensureParsersReady()).
+ * Build a memoised getParser() backed by the spec's vendored .wasm. The parser
+ * is populated by ensureParsersReady(); calling getParser() before that promise
+ * resolves throws (parseFile awaits it, so this only fires on misuse).
  */
-export function makeParser(grammar: unknown, wasm?: WasmSpec): () => AnyParser {
-  if (WASM_MODE && wasm && resolveWasm(wasm)) {
-    let ready: AnyParser = null;
-    pendingWasm.push({ spec: wasm, setReady: (p) => { ready = p; } });
-    return () => {
-      if (!ready) {
-        throw new Error(
-          `[coldstart] wasm parser for ${wasm.pkg ?? wasm.vendored} not initialised — ` +
-          `ensureParsersReady() must be awaited before parsing`,
-        );
-      }
-      return ready;
-    };
-  }
-  // Native (unchanged behaviour).
-  let parser: AnyParser = null;
+export function makeParser(spec: WasmSpec): () => AnyParser {
+  let ready: AnyParser = null;
+  pendingWasm.push({ spec, loaded: false, setReady: (p) => { ready = p; } });
   return () => {
-    if (!parser) {
-      parser = new ParserCtor();
-      parser.setLanguage(grammar);
+    if (!ready) {
+      throw new Error(
+        `[coldstart] wasm parser for ${spec.vendored} not initialised — ` +
+        `ensureParsersReady() must be awaited before parsing`,
+      );
     }
-    return parser;
+    return ready;
   };
 }

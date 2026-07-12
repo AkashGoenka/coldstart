@@ -1,14 +1,11 @@
-import rustModule from 'tree-sitter-rust';
 import type { SymbolNode, CallSite } from '../../types.js';
 import { firstChildOfType } from './node-helpers.js';
 import { makeParser } from './parser-factory.js';
 
-const rustGrammar = rustModule as unknown;
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-const getParser = makeParser(rustGrammar, { pkg: 'tree-sitter-rust', wasm: 'tree-sitter-rust.wasm' });
+const getParser = makeParser({ vendored: 'tree-sitter-rust.wasm' });
 
 // ---------------------------------------------------------------------------
 // Node helpers

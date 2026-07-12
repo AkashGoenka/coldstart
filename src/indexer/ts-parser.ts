@@ -5,22 +5,13 @@
  *
  * This supplements the regex parser in parser.ts for TS/JS files only.
  */
-import tsTypescriptModule from 'tree-sitter-typescript';
 import type { SymbolNode, SymbolKind, CallSite } from '../types.js';
 import { makeParser } from './extractors/parser-factory.js';
 
-// Static default imports (not createRequire) so `bun build --compile` can trace
-// into each grammar wrapper and embed its prebuilt .node. Under Node these are
-// object-identical to the previous require() calls (verified).
-const { typescript: tsGrammar, tsx: tsxGrammar } = tsTypescriptModule as {
-  typescript: unknown;
-  tsx: unknown;
-};
-
-// Native node-tree-sitter by default; web-tree-sitter under COLDSTART_WASM
-// (typescript + tsx each ship their own .wasm in tree-sitter-typescript).
-const getTsParser = makeParser(tsGrammar, { pkg: 'tree-sitter-typescript', wasm: 'tree-sitter-typescript.wasm' });
-const getTsxParser = makeParser(tsxGrammar, { pkg: 'tree-sitter-typescript', wasm: 'tree-sitter-tsx.wasm' });
+// typescript + tsx are separate vendored grammars (tree-sitter-typescript ships
+// both .wasm; coldstart vendors them under vendor/wasm/).
+const getTsParser = makeParser({ vendored: 'tree-sitter-typescript.wasm' });
+const getTsxParser = makeParser({ vendored: 'tree-sitter-tsx.wasm' });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getParser(isTsx: boolean): any {

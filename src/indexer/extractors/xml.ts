@@ -1,15 +1,12 @@
-import xmlDefault from '@tree-sitter-grammars/tree-sitter-xml';
 import type { SymbolNode } from '../../types.js';
 import { childrenOfType, firstChildOfType } from './node-helpers.js';
 import { makeParser } from './parser-factory.js';
 
-const xmlModule = xmlDefault as unknown;
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const getParser = makeParser((xmlModule as any).xml, { vendored: 'tree-sitter-xml.wasm' });
+// The vendored tree-sitter-xml.wasm is the `xml` sub-grammar (not dtd).
+const getParser = makeParser({ vendored: 'tree-sitter-xml.wasm' });
 
 // ---------------------------------------------------------------------------
 // Result type

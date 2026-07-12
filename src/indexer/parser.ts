@@ -57,7 +57,7 @@ export async function parseFile(
   language: Language,
   fileId = '',
 ): Promise<ParsedFile | null> {
-  await ensureParsersReady(); // no-op in native mode; one-time wasm grammar load under COLDSTART_WASM
+  await ensureParsersReady(); // one-time (idempotent) load of the web-tree-sitter grammars
   let content: string;
   try {
     const buf = await readFile(filePath);

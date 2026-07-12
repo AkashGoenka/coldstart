@@ -1,9 +1,13 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseJavaContent } from '../src/indexer/extractors/java.js';
 import { parseKotlinContent } from '../src/indexer/extractors/kotlin.js';
+import { ensureParsersReady } from '../src/indexer/extractors/parser-factory.js';
+
+// Direct extractor calls (not via parseFile) must load the wasm grammars first.
+beforeAll(async () => { await ensureParsersReady(); });
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const JAVA_DIR = join(__dirname, 'fixtures', 'java', 'same-package');

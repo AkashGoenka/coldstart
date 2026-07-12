@@ -1,14 +1,11 @@
-import kotlinModule from 'tree-sitter-kotlin';
 import type { SymbolNode, CallSite } from '../../types.js';
 import { firstChildOfType } from './node-helpers.js';
 import { makeParser } from './parser-factory.js';
 
-const kotlinGrammar = kotlinModule as unknown;
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-const getParser = makeParser(kotlinGrammar, { vendored: 'tree-sitter-kotlin.wasm' });
+const getParser = makeParser({ vendored: 'tree-sitter-kotlin.wasm' });
 
 // ---------------------------------------------------------------------------
 // Node helpers

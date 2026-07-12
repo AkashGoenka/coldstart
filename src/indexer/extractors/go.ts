@@ -1,14 +1,11 @@
-import goModule from 'tree-sitter-go';
 import type { SymbolNode, CallSite } from '../../types.js';
 import { firstChildOfType } from './node-helpers.js';
 import { makeParser } from './parser-factory.js';
 
-const goGrammar = goModule as unknown;
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-const getParser = makeParser(goGrammar, { pkg: 'tree-sitter-go', wasm: 'tree-sitter-go.wasm' });
+const getParser = makeParser({ vendored: 'tree-sitter-go.wasm' });
 
 // ---------------------------------------------------------------------------
 // Node helpers

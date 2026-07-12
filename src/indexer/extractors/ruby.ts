@@ -5,17 +5,14 @@
  *
  * Follows the same interface and patterns as ts-parser.ts.
  */
-import rubyModule from 'tree-sitter-ruby';
 import type { SymbolNode, CallSite } from '../../types.js';
 import { childrenOfType, firstChildOfType, firstChildOfTypes, sameNode } from './node-helpers.js';
 import { makeParser } from './parser-factory.js';
 
-const rubyGrammar = rubyModule as unknown;
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-const getParser = makeParser(rubyGrammar, { pkg: 'tree-sitter-ruby', wasm: 'tree-sitter-ruby.wasm' });
+const getParser = makeParser({ vendored: 'tree-sitter-ruby.wasm' });
 
 // ---------------------------------------------------------------------------
 // Node helpers

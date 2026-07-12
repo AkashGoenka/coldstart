@@ -1,14 +1,11 @@
-import groovyRawModule from 'tree-sitter-groovy';
 import type { SymbolNode } from '../../types.js';
 import { childrenOfType, firstChildOfType } from './node-helpers.js';
 import { makeParser } from './parser-factory.js';
 
-const groovyModule = groovyRawModule as unknown;
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-const getParser = makeParser(groovyModule, { pkg: 'tree-sitter-groovy', wasm: 'tree-sitter-groovy.wasm' });
+const getParser = makeParser({ vendored: 'tree-sitter-groovy.wasm' });
 
 // ---------------------------------------------------------------------------
 // Result type
