@@ -19,14 +19,16 @@
 <meta property="og:title" content="coldstart — codebase memory & navigation for AI coding agents" />
 <meta property="og:description" content="A notebook the agent writes itself, plus a fast index to find the right file without wasted reads. No embeddings, no API key — it runs on the model you already pay for." />
 <meta property="og:url" content="https://akashgoenka.github.io/coldstart/" />
-<meta property="og:image" content="https://akashgoenka.github.io/coldstart/logo.svg" />
-<meta property="og:image:alt" content="coldstart logo — a snowflake with a warm ember core" />
+<meta property="og:image" content="https://akashgoenka.github.io/coldstart/og.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="coldstart — codebase memory and navigation for AI coding agents" />
 
 <!-- Twitter -->
-<meta name="twitter:card" content="summary" />
+<meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="coldstart — codebase memory & navigation for AI coding agents" />
 <meta name="twitter:description" content="A notebook the agent writes itself, plus a fast index to find the right file without wasted reads. No embeddings, no API key." />
-<meta name="twitter:image" content="https://akashgoenka.github.io/coldstart/logo.svg" />
+<meta name="twitter:image" content="https://akashgoenka.github.io/coldstart/og.png" />
 
 <link rel="stylesheet" href="styles.css" />
 
@@ -44,6 +46,55 @@
   "license": "https://opensource.org/licenses/MIT",
   "author": { "@type": "Person", "name": "Akash Goenka" },
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Does coldstart use embeddings?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. coldstart is a fast static index over file paths, symbol names, exports, and the import/call graph, plus a ripgrep-backed reference scan. There is no vector database and no semantic embedding step — results are ranked from concrete lexical and structural evidence, so the index is small, instant to query, and never goes stale against your code."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Do I need an API key or a paid model?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No API key. coldstart calls no external service and runs fully offline. It adds a navigation and memory layer for whatever coding agent you already use, so it runs on the model you already pay for rather than billing any tokens of its own."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Does coldstart work with Claude Code, Cursor, and Codex?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. Running `coldstart init` wires Claude Code, Cursor, and Codex with the right guidance plus navigation and notebook hooks. Shell-capable agents use the CLI (`coldstart find` / `coldstart gs`); no-shell clients like Claude Desktop use the identical operations exposed as MCP tools."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What languages does coldstart parse?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "coldstart parses TypeScript, JavaScript, JSX, TSX, Java, Ruby, Python, Go, Rust, C#, PHP, Kotlin, and C++ via vendored Tree-sitter (WebAssembly) grammars, plus Vue, Svelte, and Astro script blocks and YAML, TOML, XML, and GraphQL. Because the grammars are WASM, a plain `npm install` works with no native build step."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "What is the coldstart notebook?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "The notebook is a durable set of notes the agent writes itself while it works, so what one session figures out about your codebase the next session already knows. Notes are anchored to real files and symbols and kept honest by the index, so they are flagged when the code they describe changes."
+      }
+    }
+  ]
 }
 </script>
 
