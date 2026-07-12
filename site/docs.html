@@ -108,19 +108,20 @@
       <div class="term">
         <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">your-project</span></div>
         <div class="term-body">
-<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">npm install -g @cstart/coldstart</span> <span class="c-flag">--legacy-peer-deps</span></span>
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">npm install -g @cstart/coldstart</span></span>
 <span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">cd</span> your-project</span>
 <span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart init</span>   <span class="c-dim"># coldstart.md + client wiring + notebook + hooks + warm-up</span></span>
         </div>
       </div>
-      <div class="callout"><span class="ct">Why --legacy-peer-deps</span>The tree-sitter grammar packages under-declare their peer-dep ranges. Without the flag, npm's strict resolver enters a long retry loop on a cold cache and can appear to hang. The flag tells npm to use our tested versions as-is; we can't set it from inside the package.</div>
+      <div class="callout"><span class="ct">A plain install</span>coldstart ships its Tree-sitter grammars as pre-built WASM — no native compilation, no build tools, no peer-dependency flags. Node.js 18+ is all you need.</div>
       <p style="margin-top:22px"><code>init</code> asks two things — the <b>experience</b> (<code>cli</code>, recommended, or <code>mcp</code>) and the <b>client</b> (<code>claude</code> / <code>cursor</code> / <code>codex</code> / <code>other</code>) — then writes the coldstart guidance into the client's own rules file — imported via <code>coldstart.md</code> for Claude Code, inlined directly into <code>.cursor/rules/coldstart.mdc</code> (Cursor) and <code>AGENTS.md</code> (Codex) — and wires the client. It also creates the notebook and, for Claude Code / Codex / Cursor, registers the navigation and notebook hooks. Pass <code>--experience</code> / <code>--client</code> to skip the prompts; the client is never auto-detected.</p>
       <div class="flags">
         <div class="flag-row"><span class="fk">--experience cli|mcp</span><span class="fv">The surface to wire. <b>cli</b> is the fast path; <b>mcp</b> also writes an MCP server entry.</span></div>
         <div class="flag-row"><span class="fk">--client NAME</span><span class="fv"><b>claude</b>, <b>cursor</b>, <b>codex</b>, or <b>other</b>. Determines which config files get wired.</span></div>
         <div class="flag-row"><span class="fk">--commit-notebook</span><span class="fv">Opt in to committing the notebook <code>.raw</code> logs so the team can share it. Private by default — see <a href="#sharing" style="color:var(--frost)">Sharing</a>.</span></div>
       </div>
-      <p style="margin-top:20px"><b>Upgrading:</b> <code>npm install -g @cstart/coldstart@latest --legacy-peer-deps</code>, then re-run <code>coldstart init</code> in each project. A version stamp in the keeper's lockfile shuts the old background process down on the next lookup; a fresh one spawns from the new binary.</p>
+      <p style="margin-top:20px"><b>Upgrading:</b> <code>npm install -g @cstart/coldstart@latest</code>, then re-run <code>coldstart init</code> in each project. A version stamp in the keeper's lockfile shuts the old background process down on the next lookup; a fresh one spawns from the new binary.</p>
+      <p style="margin-top:14px"><b>Removing:</b> <code>coldstart unwire</code> reverses <code>init</code> — it strips coldstart's per-repo wiring (hook entries, the <code>coldstart.md</code> import, the <code>AGENTS.md</code> block, the MCP entry, owned files) without touching your own content in shared files. The notebook is kept by default; <code>--purge</code> also deletes it. Run it per project, then <code>npm uninstall -g @cstart/coldstart</code>.</p>
     </section>
 
     <section id="flow" class="doc-sec">

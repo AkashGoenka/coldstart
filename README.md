@@ -39,13 +39,13 @@ No embeddings, no model to run, no service to babysit. Agents are already good a
 Requires Node.js 18+.
 
 ```bash
-npm install -g @cstart/coldstart --legacy-peer-deps
+npm install -g @cstart/coldstart
 cd your-project
 coldstart init   # coldstart.md + client wiring + notebook + background index warm-up
 ```
 
-> [!IMPORTANT]
-> **Always install with `--legacy-peer-deps`.** npm's own copy-paste box on the [package page](https://www.npmjs.com/package/@cstart/coldstart) omits it — use the command **above** instead. The tree-sitter grammar packages under-declare their peer-dep ranges (some say `^0.21.x`, others `^0.22.x`), so without the flag npm's strict resolver enters a long retry loop on a cold cache and can appear to hang. The flag tells npm to use our tested versions as-is. We can't set it from inside the package — npm reads install config only from your environment.
+> [!NOTE]
+> **A plain `npm install` just works.** coldstart ships its Tree-sitter grammars as pre-built WASM, so there's no native compilation, no build tools, and no peer-dependency flags to remember. Node.js 18+ is the only requirement.
 
 A single `coldstart init` does everything — navigation **and** the notebook. It asks two things — the **experience** (`cli`, recommended, or `mcp`) and the **client** — then writes the agent-facing guidance into the client's own rules file (as an imported `coldstart.md` for Claude Code; inlined directly for Cursor and Codex, which don't resolve `@file` references), wires the client, and sets up the notebook (skeleton, git wiring, and — for Claude Code, Codex, and Cursor — the capture/recall hooks). Pass `--experience` / `--client` to skip the prompts. The client is never auto-detected; you always pick it.
 
@@ -59,14 +59,25 @@ A single `coldstart init` does everything — navigation **and** the notebook. I
 ### Upgrading
 
 ```bash
-npm install -g @cstart/coldstart@latest --legacy-peer-deps
+npm install -g @cstart/coldstart@latest
 coldstart init   # re-run in each project to refresh coldstart.md
 ```
 
 A version stamp in the keeper's lockfile makes the old background keeper shut down on the next lookup; a fresh one spawns from the new binary. No manual restart needed.
 
 > [!NOTE]
-> **Migrating from `coldstart-mcp`:** the package was renamed `coldstart-mcp` → **`coldstart`** at 2.0.0 (the CLI is now the primary surface). `coldstart-mcp` is deprecated but still installs; switch with `npm uninstall -g coldstart-mcp && npm install -g coldstart --legacy-peer-deps && coldstart init`. The `coldstart-mcp` binary name is kept as an alias, so existing MCP configs keep working.
+> **Migrating from `coldstart-mcp`:** the package was renamed `coldstart-mcp` → **`coldstart`** at 2.0.0 (the CLI is now the primary surface). `coldstart-mcp` is deprecated but still installs; switch with `npm uninstall -g coldstart-mcp && npm install -g @cstart/coldstart && coldstart init`. The `coldstart-mcp` binary name is kept as an alias, so existing MCP configs keep working.
+
+### Removing coldstart
+
+`init` writes per-repo wiring that a global `npm uninstall` can't reach (npm fires no reliable uninstall hook, and it has no record of which repos you `init`'d). So — like husky — coldstart ships an explicit reverse:
+
+```bash
+coldstart unwire          # strip coldstart's wiring from this repo (notebook kept)
+coldstart unwire --purge  # also delete .coldstart/notebook/ and its git plumbing
+```
+
+`unwire` removes **only** coldstart-owned markers from the files `init` touched — hook entries, the `@coldstart.md` import, the `AGENTS.md` block, the MCP server entry, and files coldstart fully owns (`coldstart.md`, `.cursor/rules/coldstart.mdc`) — never your own content in shared files. It sweeps all four clients, is idempotent (a second run reports everything already gone), and **keeps the notebook by default** since it's committed, shared data. Run it in each project first, then `npm uninstall -g @cstart/coldstart` to remove the package.
 
 ---
 

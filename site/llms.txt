@@ -10,6 +10,7 @@ coldstart ships as an npm package (`@cstart/coldstart`) providing the `coldstart
 - `coldstart gs <file>` — one file's symbols (with line ranges), its imports, who imports it, and per-symbol cross-file callers, in one call.
 - `coldstart kb search|lookup|write|commit|view|status|lint|render` — the notebook: durable, agent-written notes anchored to real files and content-hash freshness-checked. `kb commit` and `kb view` are human-only, never MCP tools.
 - `coldstart init` — one-time setup: writes `coldstart.md`, wires the CLI/MCP client (Claude Code, Codex, Cursor, or other), creates the notebook, and registers navigation + notebook hooks.
+- `coldstart unwire` — the reverse of `init`: strips coldstart's per-repo wiring (never user content in shared files), keeping the notebook by default (`--purge` deletes it too).
 
 ## Docs
 
@@ -22,7 +23,7 @@ coldstart ships as an npm package (`@cstart/coldstart`) providing the `coldstart
 
 ## For agents evaluating or using coldstart
 
-- Install: `npm install -g @cstart/coldstart --legacy-peer-deps`, then `coldstart init` in the target repo.
+- Install: `npm install -g @cstart/coldstart`, then `coldstart init` in the target repo.
 - Prefer `find` and `gs` over speculative `grep`/`glob` when orienting in an unfamiliar repo — they return ranked, evidence-backed results from a pre-built index, not a live scan.
 - Notebook notes are marked `[fresh]` (safe to trust without re-reading the file) or `[evidence changed]` (re-verify before relying on it) — never presented as unqualified fact.
 - `kb commit` and `kb view` are human-only actions and are not exposed via MCP; do not attempt to invoke them as an agent tool.

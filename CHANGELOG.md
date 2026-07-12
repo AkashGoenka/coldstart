@@ -5,6 +5,91 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed (BREAKING internals — no API change)
+- **WASM-only parse engine — `node-tree-sitter` dropped entirely.** Every grammar
+  now parses on **web-tree-sitter (WASM)**; the native `tree-sitter` core and all
+  14 native grammar packages are removed from `package.json`. `.wasm` grammars are
+  inert data — no node-gyp, no install scripts, no per-grammar peer-dep — so the
+  whole native-build problem class is retired at once: the peer-dependency install
+  hang, npm 12's install-script/node-gyp block, and the kotlin prebuild gap. All 15
+  grammars are vendored in `vendor/wasm/` (12 copied from the grammar packages' own
+  shipped wasm; c#/kotlin/xml built from source). Behaviour is byte-identical to the
+  native engine (proven on ~12 repos with the natives pruned from `node_modules` —
+  edge counts match exactly) and 1.3–3.6× faster through the walk-heavy parse+extract
+  phase. **This makes coldstart a plain `npm i` package — the `--legacy-peer-deps`
+  flag is no longer needed once this ships to npm.** (#68, supersedes the opt-in
+  `COLDSTART_WASM=1` prototype in the closed #67.)
+
+### Added
+- **`coldstart unwire` — the reverse of `init`.** `npm uninstall` can't clean the
+  per-repo artifacts `init` writes (npm fires no reliable pre/postuninstall, and a
+  global uninstall has no registry of inited repos), so — like husky — coldstart
+  ships an explicit reverse command. It strips only coldstart-owned markers from the
+  files `init` touched (reusing `init`'s own idempotency detectors, so removal is
+  symmetric with how it writes), never clobbering user content in shared files:
+  hook entries, the `@coldstart.md` import, the `AGENTS.md` block, the
+  `[mcp_servers.coldstart]` table, and fully-owned files (`coldstart.md`,
+  `.cursor/rules/coldstart.mdc`). All four clients are swept unconditionally. The
+  **notebook is kept by default** (committed/shared user data); `--purge` also
+  deletes `.coldstart/notebook/` and its git plumbing. Idempotent — a second run
+  reports all-absent and exits 0. (#69)
+
+### Changed
+- **Tighter notebook capture prompt (flow notes + partial-read guard).** A 22-flow
+  audit on a real human-use notebook found ~32% of flow notes were feature
+  inventories, single-file mechanisms, or bare call-chains, and ~3% of file notes
+  overclaimed from partial reads. The elicit prompt now fires a **flow** note on what
+  the repo *is* (the relationship between files is itself the knowledge), not what the
+  session did — gated on naming the one fact a reader of all the file notes would still
+  miss, and leading the flow's summary with it — with an explicit never-a-flow list
+  (feature parts-list, one-file mechanism, gotcha-free chain). New rules forbid
+  asserting a method/branch/config key not verified this session or describing a file
+  not actually read. All clients inherit via the shared detector core. (#70)
+- **Long-session capture no longer drops notes; search checkpoint gated on writes.**
+  The capture hook's once-per-session marker became a per-file session delta, so a long
+  chat that reads many files still elicits a note at the end; the search-quality nudge
+  now fires only when a git-fingerprint write actually happened. (#64)
+
+### Internal
+- Grammars are loaded via **static imports** so a bundler (bun) can embed them,
+  ahead of the WASM cutover. (#65)
+- Added a Google Analytics (GA4) tag to the marketing site's home and docs pages. (#66)
+
+## [2.0.3] - 2026-07-10
+
+### Changed
+- **Unified install + setup docs; inline guidance for Cursor & Codex.** `init` now
+  embeds the full coldstart guidance **inline** in the client's own rules file for
+  Cursor (`.cursor/rules/coldstart.mdc`) and Codex (`AGENTS.md`) — neither resolves
+  `@file` references — instead of a separate `coldstart.md` they'd never read. Claude
+  Code and Other still get `coldstart.md` + an `@coldstart.md` import. Install and
+  setup instructions unified across README, site, and the generated guidance. (#63)
+
+## [2.0.2] - 2026-07-10
+
+### Added
+- **Branch-reactive notebook notes.** Notes now react to the checked-out branch:
+  anchors absent on this branch are demoted (the note isn't served as truth for code
+  that isn't here), and byte-exact file renames are followed so a moved anchor keeps
+  its freshness instead of going stale. (#58)
+
+### Changed
+- **Capture gated on task durability across all host hooks.** A note is elicited only
+  after a session did real, durable work — not on trivial or aborted turns — uniformly
+  across the Claude/Codex/Cursor capture hooks. (#59)
+- **Site redesign** — dark, terminal-native home page, new snowflake logo, docs reskin,
+  and SEO metadata. (#60)
+- **README leads with self-maintaining knowledge** — the pitch opens on the notebook
+  (durable, agent-written, freshness-checked) rather than navigation alone. (#62)
+
+### Fixed
+- **Subagent capture restates its deliverable last.** On `SubagentStop`, the capture
+  hook's block-decision message was becoming the subagent's last message — so a finder
+  subagent returned "no note" instead of its findings and the parent re-asked. The hook
+  now restates the deliverable last on `SubagentStop` only. (#61)
+
 ## [2.0.1] - 2026-07-09
 
 ### Changed
