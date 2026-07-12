@@ -39,7 +39,7 @@ import { initSkeleton, logMetric } from './kb/store.js';
 const __filename = fileURLToPath(import.meta.url);
 
 const DIVIDER = '─'.repeat(60);
-const IMPORT_LINE = '@coldstart.md';
+export const IMPORT_LINE = '@coldstart.md';
 
 function out(msg: string): void {
   process.stderr.write(msg + '\n');
@@ -81,8 +81,10 @@ export function coldstartMd(mode: 'cli' | 'mcp'): string {
  * init`), so the running path is always stable — which makes the old
  * version-pinned copy into `~/.coldstart/versions/<v>/` pure liability:
  *   - `npm update -g @cstart/coldstart` is now picked up automatically (no stale snapshot).
- *   - `npm uninstall -g @cstart/coldstart` actually disables the wired hooks, instead of
- *     a hidden copy that keeps executing on every tool call after removal.
+ *   - `npm uninstall -g @cstart/coldstart` makes the wired hooks no-op (their
+ *     `node <install>/hooks/…` path is gone, so they fail open) — but it does NOT
+ *     remove the per-repo entries/files init wrote. `coldstart unwire` (see
+ *     unwire.ts) is the explicit reverse that strips those; run it before uninstall.
  */
 function installRoot(): string {
   const root = path.dirname(path.dirname(__filename)); // <install>/dist/init.js → <install>
@@ -119,7 +121,7 @@ const KB_HOOK_ELICIT = 'kb-elicit.mjs';
 
 /** True if a hook-array entry is one of OUR kb hooks (by filename) — so re-init
  *  strips + refreshes instead of duplicating. */
-function isKbHookEntry(entry: unknown): boolean {
+export function isKbHookEntry(entry: unknown): boolean {
   const hooks = (entry as { hooks?: unknown })?.hooks;
   if (!Array.isArray(hooks)) return false;
   return hooks.some((h) => {
@@ -309,7 +311,7 @@ interface HookSet {
 
 /** True if a hook-array entry is one WE wrote (by entry filename), so re-running
  *  init can strip + refresh it instead of duplicating it. */
-function isColdstartHookEntry(entry: unknown): boolean {
+export function isColdstartHookEntry(entry: unknown): boolean {
   const hooks = (entry as { hooks?: unknown })?.hooks;
   if (!Array.isArray(hooks)) return false;
   return hooks.some((h) => {
@@ -318,7 +320,7 @@ function isColdstartHookEntry(entry: unknown): boolean {
   });
 }
 
-function isCodexHookEntry(entry: unknown): boolean {
+export function isCodexHookEntry(entry: unknown): boolean {
   const hooks = (entry as { hooks?: unknown })?.hooks;
   if (!Array.isArray(hooks)) return false;
   const owned = [HOOK_PRE, HOOK_POST, KB_HOOK_RECALL, KB_HOOK_ELICIT,
@@ -459,7 +461,7 @@ export function wireCodexHooks(cwd: string): 'created' | 'updated' | { error: st
 /** True if a `.cursor/hooks.json` entry (`{command}`) is one WE wrote. Cursor's
  *  entry shape is flatter than Codex's ({command} vs {matcher,hooks:[…]}), so it
  *  gets its own detector. */
-function isCursorHookEntry(entry: unknown): boolean {
+export function isCursorHookEntry(entry: unknown): boolean {
   const cmd = (entry as { command?: unknown })?.command;
   const owned = [CURSOR_HOOK_PRE, CURSOR_HOOK_POST, CURSOR_KB_HOOK_RECALL, CURSOR_KB_HOOK_ELICIT];
   return typeof cmd === 'string' && owned.some((file) => cmd.includes(file));
@@ -547,8 +549,8 @@ ${coldstartMd(mode)}`;
   return existed ? 'updated' : 'created';
 }
 
-const AGENTS_START = '<!-- coldstart:start -->';
-const AGENTS_END = '<!-- coldstart:end -->';
+export const AGENTS_START = '<!-- coldstart:start -->';
+export const AGENTS_END = '<!-- coldstart:end -->';
 
 /** Ensure AGENTS.md carries the FULL coldstart guidance inline.
  *  Codex and the AGENTS.md standard support NO file-inclusion directive (no
@@ -622,7 +624,7 @@ export function wireJsonMcp(
 /** Remove an existing `[mcp_servers.coldstart]` table (and any sub-tables) from
  *  TOML text, so we can append a fresh one without duplicating. Conservative:
  *  drops the header line and everything until the next top-level `[` or EOF. */
-function stripCodexColdstartTable(toml: string): string {
+export function stripCodexColdstartTable(toml: string): string {
   const lines = toml.split('\n');
   const out: string[] = [];
   let skipping = false;
@@ -856,5 +858,6 @@ export async function runInit(): Promise<void> {
   out('');
   out(DIVIDER);
   out('Done. Full docs: https://github.com/AkashGoenka/coldstart');
+  out('To remove coldstart from this repo later: coldstart unwire');
   out('');
 }
