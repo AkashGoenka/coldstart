@@ -187,8 +187,8 @@ itself the knowledge — such as an enforcement gap, an asymmetry or inconsisten
 a dead/unreachable path, or an evolution that explains a surprising present shape. The gate: \
 name, in one sentence, the fact a reader of ALL the file notes would still be missing; if you \
 cannot, there is no flow — put the facts in file notes. That sentence is the FIRST sentence of \
-the flow's summary. Never a flow: a feature's parts-list ("model, migration, view, url, admin" \
-— an index, not knowledge); a mechanism living in one file (that file's note); a call-chain or \
+the flow's summary. Never a flow: a feature's parts-list ("the model, the view, the route, the \
+config, the tests" — an index, not knowledge); a mechanism living in one file (that file's note); a call-chain or \
 version history with no gotcha at the end. Steps are the minimal chain carrying the missing \
 fact — not a tour of every file the task visited. A step never restates what a file note \
 already says — the detail lives in the file's facet; the flow links to it.
