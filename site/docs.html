@@ -113,7 +113,6 @@
 <span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart init</span>   <span class="c-dim"># coldstart.md + client wiring + notebook + hooks + warm-up</span></span>
         </div>
       </div>
-      <div class="callout"><span class="ct">A plain install</span>coldstart ships its Tree-sitter grammars as pre-built WASM — no native compilation, no build tools, no peer-dependency flags. Node.js 18+ is all you need.</div>
       <p style="margin-top:22px"><code>init</code> asks two things — the <b>experience</b> (<code>cli</code>, recommended, or <code>mcp</code>) and the <b>client</b> (<code>claude</code> / <code>cursor</code> / <code>codex</code> / <code>other</code>) — then writes the coldstart guidance into the client's own rules file — imported via <code>coldstart.md</code> for Claude Code, inlined directly into <code>.cursor/rules/coldstart.mdc</code> (Cursor) and <code>AGENTS.md</code> (Codex) — and wires the client. It also creates the notebook and, for Claude Code / Codex / Cursor, registers the navigation and notebook hooks. Pass <code>--experience</code> / <code>--client</code> to skip the prompts; the client is never auto-detected.</p>
       <div class="flags">
         <div class="flag-row"><span class="fk">--experience cli|mcp</span><span class="fv">The surface to wire. <b>cli</b> is the fast path; <b>mcp</b> also writes an MCP server entry.</span></div>

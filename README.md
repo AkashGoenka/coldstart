@@ -44,9 +44,6 @@ cd your-project
 coldstart init   # coldstart.md + client wiring + notebook + background index warm-up
 ```
 
-> [!NOTE]
-> **A plain `npm install` just works.** coldstart ships its Tree-sitter grammars as pre-built WASM, so there's no native compilation, no build tools, and no peer-dependency flags to remember. Node.js 18+ is the only requirement.
-
 A single `coldstart init` does everything — navigation **and** the notebook. It asks two things — the **experience** (`cli`, recommended, or `mcp`) and the **client** — then writes the agent-facing guidance into the client's own rules file (as an imported `coldstart.md` for Claude Code; inlined directly for Cursor and Codex, which don't resolve `@file` references), wires the client, and sets up the notebook (skeleton, git wiring, and — for Claude Code, Codex, and Cursor — the capture/recall hooks). Pass `--experience` / `--client` to skip the prompts. The client is never auto-detected; you always pick it.
 
 - **Claude Code** → writes `coldstart.md` and ensures `CLAUDE.md` imports it via `@coldstart.md`, and registers both the find/gs search hooks (a PostToolUse nudge + a PreToolUse find-dedup guard) and the notebook recall/capture hooks (UserPromptSubmit + Stop/SubagentStop) in `.claude/settings.json` — merged into any existing settings, never overwriting them. The `mcp` experience also writes `.mcp.json`.
