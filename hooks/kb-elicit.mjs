@@ -181,9 +181,17 @@ have firsthand knowledge of — never enumerate the rest.
    The best facet/summary says: what it does that the name doesn't tell you, what to watch out \
 for when changing it, and which tests or checks matter.
 
-2. FLOW notes — when your task traced how something works ACROSS files: the ordered story. Each \
-step points at a file (path + symbols) with its role in the story. A step never restates what a \
-file note already says — the detail lives in the file's facet; the flow links to it.
+2. FLOW notes — RARE. Not "my task touched several files": that is most tasks, and its \
+knowledge belongs in the file notes. A flow exists only when the RELATIONSHIP between files is \
+itself the knowledge — such as an enforcement gap, an asymmetry or inconsistency between files, \
+a dead/unreachable path, or an evolution that explains a surprising present shape. The gate: \
+name, in one sentence, the fact a reader of ALL the file notes would still be missing; if you \
+cannot, there is no flow — put the facts in file notes. That sentence is the FIRST sentence of \
+the flow's summary. Never a flow: a feature's parts-list ("model, migration, view, url, admin" \
+— an index, not knowledge); a mechanism living in one file (that file's note); a call-chain or \
+version history with no gotcha at the end. Steps are the minimal chain carrying the missing \
+fact — not a tour of every file the task visited. A step never restates what a file note \
+already says — the detail lives in the file's facet; the flow links to it.
 
 3. LESSON notes — rare. Only one thing qualifies:
    - a confirmed ABSENCE ("there is no X in this repo"), with the search terms that proved it.
@@ -202,6 +210,10 @@ RULES:
 - Codebase knowledge only — never the interaction, the user, or your own process.
 - Firsthand only: if it arrived secondhand (e.g. a subagent's report) and you did not verify it \
 yourself, do not store it.
+- Say only what you verified in THIS file, this session: never assert a method, branch, or \
+config key you did not confirm is present, and never describe what a DIFFERENT file does (that \
+is a flow, or that file's own note). A confident whole-file claim from a partial read is the \
+single most common bad note.
 - If a future agent would not act differently for knowing it, do not store it.
 - SEARCH BEFORE YOU WRITE a flow or lesson: run \`node ${CLI} kb search "<your task words>" \
 --root ${root}\` once. If an existing flow already tells this mechanism's story, UPDATE it \
