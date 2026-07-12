@@ -121,6 +121,7 @@
         <div class="flag-row"><span class="fk">--commit-notebook</span><span class="fv">Opt in to committing the notebook <code>.raw</code> logs so the team can share it. Private by default — see <a href="#sharing" style="color:var(--frost)">Sharing</a>.</span></div>
       </div>
       <p style="margin-top:20px"><b>Upgrading:</b> <code>npm install -g @cstart/coldstart@latest --legacy-peer-deps</code>, then re-run <code>coldstart init</code> in each project. A version stamp in the keeper's lockfile shuts the old background process down on the next lookup; a fresh one spawns from the new binary.</p>
+      <p style="margin-top:14px"><b>Removing:</b> <code>coldstart unwire</code> reverses <code>init</code> — it strips coldstart's per-repo wiring (hook entries, the <code>coldstart.md</code> import, the <code>AGENTS.md</code> block, the MCP entry, owned files) without touching your own content in shared files. The notebook is kept by default; <code>--purge</code> also deletes it. Run it per project, then <code>npm uninstall -g @cstart/coldstart</code>.</p>
     </section>
 
     <section id="flow" class="doc-sec">

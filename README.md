@@ -68,6 +68,17 @@ A version stamp in the keeper's lockfile makes the old background keeper shut do
 > [!NOTE]
 > **Migrating from `coldstart-mcp`:** the package was renamed `coldstart-mcp` → **`coldstart`** at 2.0.0 (the CLI is now the primary surface). `coldstart-mcp` is deprecated but still installs; switch with `npm uninstall -g coldstart-mcp && npm install -g coldstart --legacy-peer-deps && coldstart init`. The `coldstart-mcp` binary name is kept as an alias, so existing MCP configs keep working.
 
+### Removing coldstart
+
+`init` writes per-repo wiring that a global `npm uninstall` can't reach (npm fires no reliable uninstall hook, and it has no record of which repos you `init`'d). So — like husky — coldstart ships an explicit reverse:
+
+```bash
+coldstart unwire          # strip coldstart's wiring from this repo (notebook kept)
+coldstart unwire --purge  # also delete .coldstart/notebook/ and its git plumbing
+```
+
+`unwire` removes **only** coldstart-owned markers from the files `init` touched — hook entries, the `@coldstart.md` import, the `AGENTS.md` block, the MCP server entry, and files coldstart fully owns (`coldstart.md`, `.cursor/rules/coldstart.mdc`) — never your own content in shared files. It sweeps all four clients, is idempotent (a second run reports everything already gone), and **keeps the notebook by default** since it's committed, shared data. Run it in each project first, then `npm uninstall -g @cstart/coldstart` to remove the package.
+
 ---
 
 ## The notebook

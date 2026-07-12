@@ -10,6 +10,7 @@ coldstart ships as an npm package (`@cstart/coldstart`) providing the `coldstart
 - `coldstart gs <file>` — one file's symbols (with line ranges), its imports, who imports it, and per-symbol cross-file callers, in one call.
 - `coldstart kb search|lookup|write|commit|view|status|lint|render` — the notebook: durable, agent-written notes anchored to real files and content-hash freshness-checked. `kb commit` and `kb view` are human-only, never MCP tools.
 - `coldstart init` — one-time setup: writes `coldstart.md`, wires the CLI/MCP client (Claude Code, Codex, Cursor, or other), creates the notebook, and registers navigation + notebook hooks.
+- `coldstart unwire` — the reverse of `init`: strips coldstart's per-repo wiring (never user content in shared files), keeping the notebook by default (`--purge` deletes it too).
 
 ## Docs
 
