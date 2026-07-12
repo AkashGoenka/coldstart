@@ -5,41 +5,18 @@
  *
  * This supplements the regex parser in parser.ts for TS/JS files only.
  */
-import ParserModule from 'tree-sitter';
-import tsTypescriptModule from 'tree-sitter-typescript';
 import type { SymbolNode, SymbolKind, CallSite } from '../types.js';
+import { makeParser } from './extractors/parser-factory.js';
 
-// Static default imports (not createRequire) so `bun build --compile` can trace
-// into each grammar wrapper and embed its prebuilt .node. Under Node these are
-// object-identical to the previous require() calls (verified).
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ParserCtor = ParserModule as { new(): any };
-const { typescript: tsGrammar, tsx: tsxGrammar } = tsTypescriptModule as {
-  typescript: unknown;
-  tsx: unknown;
-};
-
-// Re-use a single parser instance (not thread-safe but Node.js is single-threaded)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let tsParser: any = null;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let tsxParser: any = null;
+// typescript + tsx are separate vendored grammars (tree-sitter-typescript ships
+// both .wasm; coldstart vendors them under vendor/wasm/).
+const getTsParser = makeParser({ vendored: 'tree-sitter-typescript.wasm' });
+const getTsxParser = makeParser({ vendored: 'tree-sitter-tsx.wasm' });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getParser(isTsx: boolean): any {
   try {
-    if (isTsx) {
-      if (!tsxParser) {
-        tsxParser = new ParserCtor();
-        tsxParser.setLanguage(tsxGrammar);
-      }
-      return tsxParser;
-    }
-    if (!tsParser) {
-      tsParser = new ParserCtor();
-      tsParser.setLanguage(tsGrammar);
-    }
-    return tsParser;
+    return isTsx ? getTsxParser() : getTsParser();
   } catch (err) {
     throw new Error(`Failed to initialize Tree-sitter parser: ${err}`);
   }

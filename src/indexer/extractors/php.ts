@@ -1,16 +1,12 @@
-import phpDefault from 'tree-sitter-php';
 import type { SymbolNode, CallSite } from '../../types.js';
 import { childrenOfType, firstChildOfType } from './node-helpers.js';
 import { makeParser } from './parser-factory.js';
 
-// tree-sitter-php exports a { php, php_only } object
-const phpModule = phpDefault as { php: unknown; php_only: unknown };
-const phpGrammar = phpModule.php ?? phpModule.php_only;
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-const getParser = makeParser(phpGrammar);
+// The vendored tree-sitter-php.wasm is the `php` grammar (not php_only).
+const getParser = makeParser({ vendored: 'tree-sitter-php.wasm' });
 
 // ---------------------------------------------------------------------------
 // Node helpers

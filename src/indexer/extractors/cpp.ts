@@ -1,14 +1,11 @@
-import cppModule from 'tree-sitter-cpp';
 import type { SymbolNode, CallSite } from '../../types.js';
 import { firstChildOfType } from './node-helpers.js';
 import { makeParser } from './parser-factory.js';
 
-const cppGrammar = cppModule as unknown;
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-const getParser = makeParser(cppGrammar);
+const getParser = makeParser({ vendored: 'tree-sitter-cpp.wasm' });
 
 /** Recursively collect call_expression callee names + first-seen line in a subtree. */
 function collectCalls(node: TSNode, results: Map<string, number>): void {

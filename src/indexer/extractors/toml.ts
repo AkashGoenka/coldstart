@@ -1,13 +1,10 @@
-import tomlDefault from '@tree-sitter-grammars/tree-sitter-toml';
 import type { SymbolNode } from '../../types.js';
 import { makeParser } from './parser-factory.js';
-
-const tomlModule = tomlDefault as unknown;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-const getParser = makeParser(tomlModule);
+const getParser = makeParser({ vendored: 'tree-sitter-toml.wasm' });
 
 export interface TomlParseResult {
   imports: string[];

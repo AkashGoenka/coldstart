@@ -1,14 +1,11 @@
-import pythonModule from 'tree-sitter-python';
 import type { SymbolNode, CallSite } from '../../types.js';
-import { childrenOfType, firstChildOfType } from './node-helpers.js';
+import { childrenOfType, firstChildOfType, sameNode } from './node-helpers.js';
 import { makeParser } from './parser-factory.js';
-
-const pythonGrammar = pythonModule as unknown;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TSNode = any;
 
-const getParser = makeParser(pythonGrammar);
+const getParser = makeParser({ vendored: 'tree-sitter-python.wasm' });
 
 // ---------------------------------------------------------------------------
 // Node helpers
@@ -315,7 +312,7 @@ export function parsePythonContent(
       // relative dots ('.', '..') join without an extra dot.
       const sep = /^\.+$/.test(moduleText) ? '' : '.';
       for (const child of node.namedChildren) {
-        if (child === moduleNode) continue;
+        if (sameNode(child, moduleNode)) continue;
         if (child.type === 'dotted_name' || child.type === 'aliased_import') {
           const nm = child.type === 'aliased_import'
             ? firstChildOfType(child, 'dotted_name')?.text
