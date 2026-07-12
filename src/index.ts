@@ -10,6 +10,7 @@
  *
  * Subcommands:
  *   coldstart init            # wire coldstart.md into the project
+ *   coldstart unwire          # reverse of init — remove coldstart's wiring (--purge = also notebook)
  *   coldstart find / gs       # CLI readers (load the cache, print, exit)
  *   coldstart status          # list every keeper + its index freshness
  *   coldstart restart [--all] # stop the keeper(s); respawn on next read
@@ -659,6 +660,15 @@ async function main(): Promise<void> {
   if (process.argv[2] === 'init') {
     const { runInit } = await import('./init.js');
     await runInit();
+    return;
+  }
+
+  // `unwire` — reverse of init. Strips coldstart-owned wiring from this repo's
+  // client config/files; `--purge` also deletes the notebook. Run before
+  // `npm uninstall` (npm can't clean per-repo artifacts).
+  if (process.argv[2] === 'unwire') {
+    const { runUnwire } = await import('./unwire.js');
+    await runUnwire();
     return;
   }
 
