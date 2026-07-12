@@ -63,7 +63,7 @@ coldstart init   # re-run in each project to refresh coldstart.md
 A version stamp in the keeper's lockfile makes the old background keeper shut down on the next lookup; a fresh one spawns from the new binary. No manual restart needed.
 
 > [!NOTE]
-> **Migrating from `coldstart-mcp`:** the package was renamed `coldstart-mcp` → **`coldstart`** at 2.0.0 (the CLI is now the primary surface). `coldstart-mcp` is deprecated but still installs; switch with `npm uninstall -g coldstart-mcp && npm install -g @cstart/coldstart && coldstart init`. The `coldstart-mcp` binary name is kept as an alias, so existing MCP configs keep working.
+> **Migrating from `coldstart-mcp`:** the package was renamed `coldstart-mcp` → **`@cstart/coldstart`** at 2.0.0 (the CLI is now the primary surface). `coldstart-mcp` is deprecated but still installs; switch with `npm uninstall -g coldstart-mcp && npm install -g @cstart/coldstart && coldstart init`. The `coldstart-mcp` binary name is kept as an alias, so existing MCP configs keep working.
 
 ### Removing coldstart
 
@@ -107,7 +107,7 @@ coldstart kb status / lint / render / init / migrate
 - **Concurrent sessions are safe.** Multiple agents can write at once: per-note append-only logs, exclusive creation for new note ids (a same-moment duplicate becomes two visible notes, never a silent merge), lossless merging for shared file notes, and atomic renders (a reader never sees a half-written note).
 - **Corrections happen in-session.** If an agent finds a note wrong while the evidence is in its context, the guidance tells it to fix or retract the note right then — no better-placed future agent exists.
 
-**Setup:** the notebook comes with `coldstart init` — no separate step. It creates the notebook skeleton, sets union-merge for the logs, and (on Claude Code and Codex) wires the two hooks — capture at session end, recall at prompt time. (`coldstart kb init` still exists as an alias if you want to (re-)wire just the notebook.) Other hosts can drive the notebook without the hooks: via the full `kb` CLI, or — for no-shell clients — the `kb_search` / `kb_lookup` / `kb_write` / `kb_status` MCP tools.
+**Setup:** the notebook comes with `coldstart init` — no separate step. It creates the notebook skeleton, sets union-merge for the logs, and (on Claude Code, Codex and Cursor) wires the two hooks — capture at session end, recall at prompt time. (`coldstart kb init` still exists as an alias if you want to (re-)wire just the notebook.) Other hosts can drive the notebook without the hooks: via the full `kb` CLI, or — for no-shell clients — the `kb_search` / `kb_lookup` / `kb_write` / `kb_status` MCP tools.
 
 **Language-agnostic.** The notebook's freshness machinery is content-hash based, so it works on any codebase — including languages the navigation index doesn't parse. Where the index does parse, notes additionally get symbol-level freshness.
 
