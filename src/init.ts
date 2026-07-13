@@ -720,6 +720,16 @@ function setupCodex(cwd: string, exp: Experience): void {
   out(typeof hooks === 'object'
     ? `  hooks.json    — Codex hooks NOT wired: ${hooks.error}`
     : `  hooks.json    — ${hooks} Codex navigation + notebook hooks`);
+  if (typeof hooks !== 'object') {
+    out('');
+    out('  ⚠ Codex won\'t run these hooks until you trust them — untrusted hooks');
+    out('    are skipped silently (no error):');
+    out('    • When Codex shows "Hooks need review", choose "Trust all and');
+    out('      continue". If your app never prompts, launch `codex` from a');
+    out('      terminal in this repo — the prompt appears at startup there.');
+    out('      Re-approve after a coldstart update changes a hook.');
+    out('    • For `codex exec` automation: pass `--dangerously-bypass-hook-trust`.');
+  }
 }
 
 function setupCursor(cwd: string, exp: Experience): void {
