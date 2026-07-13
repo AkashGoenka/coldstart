@@ -121,6 +121,39 @@ describe('hook injection floor', () => {
     expect(page).not.toContain('## ');
     expect(page).toContain('- **');
   });
+
+  it('path-name override: naming a note\'s anchor path injects it even when tokenization drops the path', async () => {
+    // Calibrated regime, so the rarity gate is fully active — the override must
+    // work independently of it.
+    seedCorpus(35);
+    touch('src/routing/urls.py');
+    appendRecord(root, {
+      id: 'urls-file', type: 'file', op: 'put', character: 'single',
+      title: 'src/routing/urls.py', summary: 'The main URL router.',
+      anchors: [{ path: 'src/routing/urls.py' }],
+    } as never);
+
+    // parseTerms drops the `/`-glued path and the 2-char extension, so the
+    // path contributes no usable terms; the override surfaces it anyway.
+    const named = await kbSearch(root, 'what does src/routing/urls.py actually do', {
+      strongOnly: true, noMissLog: true, source: 'hook',
+    });
+    expect(named.hits.length).toBeGreaterThan(0);
+    expect(named.hits[0].note.id).toBe('urls-file');
+
+    // A bare path yields ZERO parseTerms terms — still resolves via the override.
+    const bare = await kbSearch(root, 'src/routing/urls.py', {
+      strongOnly: true, noMissLog: true, source: 'hook',
+    });
+    expect(bare.hits.length).toBeGreaterThan(0);
+    expect(bare.hits[0].note.id).toBe('urls-file');
+
+    // A prompt naming no path stays silent — no accidental squash graze.
+    const nopath = await kbSearch(root, 'please clean up and refactor everything here', {
+      strongOnly: true, noMissLog: true, source: 'hook',
+    });
+    expect(nopath.hits).toHaveLength(0);
+  });
 });
 
 describe('inactive projection — notes whose anchored files are absent on this branch', () => {

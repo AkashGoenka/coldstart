@@ -173,6 +173,17 @@ const rarityMax = (n: number): number => Math.ceil(n / HOOK_RARITY_DIVISOR);
  *  strongTerms is logged on every injection decision for re-calibration. */
 const HOOK_CONVERGE_MIN = 4;
 
+/** Path-name override: when the raw prompt literally contains a note's anchor
+ *  path (case/separator-insensitive), the user named that file — surface its
+ *  note regardless of term rarity. parseTerms drops `/`-glued paths (the `/`
+ *  fails its alnum token filter) and sub-3-char extensions, so a bare path like
+ *  "arches/urls.py" yields ZERO terms; without this, naming a file is a no-op.
+ *  The anchor-path squash must be ≥ this many chars to fire, so trivially short
+ *  paths can't graze arbitrary prose. Boost dominates term scores so the named
+ *  file leads its freshness tier. */
+const PATH_MATCH_MIN_SQUASH = 6;
+const PATH_MATCH_BOOST = 100;
+
 const tokenCount = (s: string): number => (s ? s.split(/\s+/).filter(Boolean).length : 0);
 
 /** Substring occurrence count in normalized text; a squash-only match counts 1. */
@@ -253,7 +264,20 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
   const max = opts.maxResults ?? 3;
   const { notes, warnings } = loadAll(root);
   const terms = parseTerms(query).filter((t) => !STOPWORDS.has(t.toLowerCase()));
-  if (!notes.length || !terms.length) {
+  // Path-name override (recall only): the raw prompt literally naming a note's
+  // anchor path surfaces that note even when parseTerms yields nothing — a
+  // `/`-glued path fails the alnum token filter and a 2-char extension drops,
+  // so "what does arches/urls.py do" would otherwise leave no terms to match.
+  const querySquash = squash(query);
+  const pathNamedIds = new Set<string>();
+  if (opts.strongOnly) {
+    for (const note of notes) {
+      if (note.anchors.some((a) => { const ps = squash(a.path); return ps.length >= PATH_MATCH_MIN_SQUASH && querySquash.includes(ps); })) {
+        pathNamedIds.add(note.id);
+      }
+    }
+  }
+  if (!notes.length || (!terms.length && !pathNamedIds.size)) {
     if (notes.length && !opts.noMissLog) logMetric(root, 'miss-log', { query, source: opts.source ?? 'tool', reason: 'no-terms' });
     return { hits: [], terms, warnings };
   }
@@ -337,6 +361,16 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
         const idfB = Math.log(1 + (notes.length - df[k] + 0.5) / (df[k] + 0.5));
         boost += (idfB * (wtf * (BM25_K1 + 1))) / (wtf + BM25_K1 * (1 - BM25_B + (BM25_B * lens[i]) / avgLen));
       }
+    }
+    // Path-name override: the prompt named this note's file → treat as a strong,
+    // discriminating hit and boost it to the top of its tier, bypassing the
+    // term-rarity eligibility gate (and the suppression gate, via rare=true).
+    if (opts.strongOnly && pathNamedIds.has(note.id)) {
+      if (!covered) covered = 1;
+      strong = true;
+      rare = true;
+      strongTerms = Math.max(strongTerms, 1);
+      boost += PATH_MATCH_BOOST;
     }
     if (!covered) continue;
     if (opts.strongOnly && !strong) continue; // body-word coverage ≠ a hit on an arbitrary sentence
