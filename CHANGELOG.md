@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1] - 2026-07-13
+
+### Fixed
+- **Recall now surfaces a note when the prompt names its file path.** The recall
+  hook (`kb search --hook`, the `UserPromptSubmit` injector) previously stayed
+  silent when a user asked about a file directly — e.g. *"what does
+  `arches/urls.py` do"* — even when a fresh, on-point note existed. Two causes:
+  `parseTerms` splits on `.` and whitespace but **not `/`**, so a `/`-glued path
+  fails its alnum token filter and is discarded (and a sub-3-char extension like
+  `py` is dropped) — a bare path yields zero terms; and even space-separated, a
+  path's words are common in a themed notebook and fail the hook-mode rarity gate.
+  A **path-name override** now admits any note whose anchor path appears in the
+  (squash-normalized) prompt as a strong, discriminating hit that bypasses the
+  rarity and suppression gates and leads its freshness tier. Scoped to recall
+  only — `find` and tool-mode `kb search` are unchanged. A minimum path length
+  keeps trivially short paths from grazing arbitrary prose. (#75)
+
 ## [2.1.0] - 2026-07-12
 
 ### Changed
