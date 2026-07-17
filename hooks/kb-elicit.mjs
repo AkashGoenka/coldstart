@@ -31,100 +31,24 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
-import { existsSync, writeFileSync, appendFileSync, readFileSync, mkdirSync } from "node:fs";
+import { existsSync, writeFileSync, appendFileSync, readFileSync } from "node:fs";
 
 import { extractEvidence, segmentStats } from "./evidence.mjs";
 import { initialState, step } from "./trigger.mjs";
 import { loadIgnore } from "./ignore.mjs";
 import { buildCapturePayload } from "./capture-payload.mjs";
+import {
+  worklistEntries, freshNotedSet, gitHead, logCaptureEvent, writePendingCapture,
+} from "./elicit-core.mjs";
 
 // hooks/ sits beside dist/ in both the repo and the published package.
 const CLI = fileURLToPath(new URL("../dist/index.js", import.meta.url));
-
-const MAX_WORKLIST = 30;
 
 // --- Logging -----------------------------------------------------------------
 let LOG_FILE = join(tmpdir(), "coldstart-kb-hook.log");
 function setLogRoot(root) { if (root) LOG_FILE = join(root, ".coldstart", "kb-hook.log"); }
 function log(msg) {
   try { appendFileSync(LOG_FILE, `[${new Date().toISOString()}] elicit: ${msg}\n`); } catch { /* never fail logging */ }
-}
-
-function logCaptureEvent(root, event) {
-  try {
-    const dir = join(root, ".coldstart", "notebook", ".metrics");
-    mkdirSync(dir, { recursive: true });
-    appendFileSync(join(dir, "capture.jsonl"), JSON.stringify({ ts: new Date().toISOString(), ...event }) + "\n");
-  } catch { /* metrics never wedge a stop */ }
-}
-
-// --- Annotation sources (fail-open: absence of data = absence of annotation) ---
-function noteAnnotations(root, files) {
-  try {
-    const raw = execFileSync(
-      "node", [CLI, "kb", "status", "--json", "--paths", files.join(","), "--root", root],
-      { encoding: "utf8", timeout: 10000, stdio: ["ignore", "pipe", "ignore"] },
-    );
-    const byPath = new Map();
-    for (const entry of JSON.parse(raw).paths || []) byPath.set(entry.path, entry.notes || []);
-    return byPath;
-  } catch (e) {
-    log(`kb status unavailable (${String(e).split("\n")[0]}) — annotating as no-notes`);
-    return new Map();
-  }
-}
-
-function consumerCounts(root, files) {
-  try {
-    const raw = execFileSync(
-      "node", [CLI, "consumers", "--json", "--paths", files.join(","), "--root", root],
-      { encoding: "utf8", timeout: 10000, stdio: ["ignore", "pipe", "ignore"] },
-    );
-    const byPath = new Map();
-    for (const entry of JSON.parse(raw).paths || []) byPath.set(entry.path, entry.consumers);
-    return byPath;
-  } catch (e) {
-    log(`consumers unavailable (${String(e).split("\n")[0]}) — no graph annotation`);
-    return new Map();
-  }
-}
-
-function worklistEntries(root, files, stateFiles) {
-  const listed = files.slice(0, MAX_WORKLIST);
-  const notes = noteAnnotations(root, listed);
-  const consumers = consumerCounts(root, listed);
-  return listed.map((rel) => {
-    const f = stateFiles[rel] || {};
-    const tier = f.edits > 0 ? `edited ×${f.edits}` : f.reads > 0 ? "read" : "skimmed";
-    return {
-      path: rel,
-      tier,
-      notes: (notes.get(rel) || []).map((n) => ({ id: n.id, type: n.type, state: n.state })),
-      noConsumers: consumers.get(rel) === 0,
-    };
-  });
-}
-
-/** Fresh-noted set for score discounting: files whose EVERY anchored note is fresh. */
-function freshNotedSet(root, files) {
-  if (!files.length) return new Set();
-  const notes = noteAnnotations(root, files);
-  const fresh = new Set();
-  for (const rel of files) {
-    const anchored = notes.get(rel) || [];
-    if (anchored.length && anchored.every((n) => n.state === "fresh")) fresh.add(rel);
-  }
-  return fresh;
-}
-
-// --- Repo observation: HEAD fingerprint (catches MANUAL commits too) -----------
-function gitHead(root) {
-  try {
-    return execFileSync("git", ["rev-parse", "HEAD"], {
-      cwd: root, encoding: "utf8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-  } catch { return ""; }
 }
 
 // --- stdin ---------------------------------------------------------------------
@@ -216,7 +140,7 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
       for (const rel of fresh) state.files[rel] = { ...delta.get(rel), captured: true };
       writeFileSync(marker, JSON.stringify(state));
       if (!fresh.length) { log(`FAST-EXIT subagent no-new-files session=${sid} agent=${aid}`); process.exit(0); }
-      const entries = worklistEntries(root, fresh, Object.fromEntries(fresh.map((rel) => [rel, delta.get(rel)])));
+      const entries = worklistEntries(CLI, root, fresh, Object.fromEntries(fresh.map((rel) => [rel, delta.get(rel)])), log);
       const payload = buildCapturePayload({ root, cli: CLI, sid, entries, envelope: "subagent" });
       logCaptureEvent(root, { event: "fire", reason: "subagent", session: sid, agent: aid, files: fresh.length });
       log(`FIRE subagent session=${sid} agent=${aid} files=${fresh.length}`);
@@ -230,7 +154,7 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     state.head = head || state.head;
 
     const stats = segmentStats(segment);
-    const freshNoted = freshNotedSet(root, [...delta.keys()].filter((rel) => !state.files[rel]));
+    const freshNoted = freshNotedSet(CLI, root, [...delta.keys()].filter((rel) => !state.files[rel]), log);
 
     const { state: next, decision } = step(state, {
       delta,
@@ -245,7 +169,7 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
       process.exit(0);
     }
 
-    const entries = worklistEntries(root, decision.files, next.files);
+    const entries = worklistEntries(CLI, root, decision.files, next.files, log);
     logCaptureEvent(root, {
       event: "fire", reason: decision.fire, mode: decision.mode, session: sid,
       score: decision.score, files: decision.files.length, stop: next.stop, fires: next.fires,
@@ -258,9 +182,7 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     } else {
       // Non-blocking: kb-recall delivers this with the user's next prompt.
       const payload = buildCapturePayload({ root, cli: CLI, sid, entries, envelope: "inject" });
-      writeFileSync(join(tmpdir(), `coldstart-kb-pending-${sid}.json`), JSON.stringify({
-        ts: Date.now(), reason: decision.fire, payload,
-      }));
+      writePendingCapture(sid, decision.fire, payload);
     }
   } catch (e) {
     log(`handler ${e?.stack || e}`); // fail-open: no stdout → stop allowed

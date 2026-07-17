@@ -23,7 +23,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, appendFileSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
+import { existsSync, appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -32,18 +32,8 @@ import { fileURLToPath } from "node:url";
 // Stop wrote its worklist payload to a pending file instead of blocking the
 // stop. It rides the SAME next-prompt channel as recall — capture first, then
 // the user's request. Consumed (deleted) on delivery; stale pendings (>24h,
-// e.g. a session resumed days later) are dropped, their loss logged.
-function takePendingCapture(sid) {
-  if (!sid) return "";
-  const pf = join(tmpdir(), `coldstart-kb-pending-${sid}.json`);
-  try {
-    if (!existsSync(pf)) return "";
-    const pending = JSON.parse(readFileSync(pf, "utf8"));
-    unlinkSync(pf);
-    if (Date.now() - (pending.ts || 0) > 24 * 3600 * 1000) return "";
-    return String(pending.payload || "");
-  } catch { return ""; }
-}
+// e.g. a session resumed days later) are dropped.
+import { takePendingCapture } from "./elicit-core.mjs";
 
 // hooks/ sits beside dist/ in both the repo and the published package.
 const CLI = fileURLToPath(new URL("../dist/index.js", import.meta.url));

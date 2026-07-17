@@ -81,17 +81,10 @@ function classifyBash(cmd) {
   return out;
 }
 
-/**
- * extractEvidence(transcriptText, root) → Map<relPath, record>
- * record = { reads, edits, gs, mentions, events, firstEvent, lastEvent }
- *   events/firstEvent/lastEvent are tool-call ordinals (for retouch ranking).
- * Worklist eligibility = reads + edits + gs > 0 (contentRead); mentions never qualify.
- */
-export function extractEvidence(transcriptText, root) {
+// Shared per-file record collector — the same record shape for every host walker.
+function makeCollector(root) {
   const evidence = new Map();
-  const pending = new Map(); // tool_use_id → [{rel, tier, mustExist}]
-  let ordinal = 0;
-
+  const state = { ordinal: 0 };
   const commit = (rel, tier, mustExist) => {
     if (!rel || rel.startsWith(".coldstart/") || rel.includes("..")) return;
     if (mustExist) {
@@ -99,7 +92,7 @@ export function extractEvidence(transcriptText, root) {
     }
     let rec = evidence.get(rel);
     if (!rec) {
-      rec = { reads: 0, edits: 0, gs: 0, mentions: 0, events: 0, firstEvent: ordinal, lastEvent: ordinal };
+      rec = { reads: 0, edits: 0, gs: 0, mentions: 0, events: 0, firstEvent: state.ordinal, lastEvent: state.ordinal };
       evidence.set(rel, rec);
     }
     if (tier === TIER.edit) rec.edits++;
@@ -107,8 +100,20 @@ export function extractEvidence(transcriptText, root) {
     else if (tier === TIER.gs) rec.gs++;
     else rec.mentions++;
     rec.events++;
-    rec.lastEvent = ordinal;
+    rec.lastEvent = state.ordinal;
   };
+  return { evidence, state, commit };
+}
+
+/**
+ * extractEvidence(transcriptText, root) → Map<relPath, record>
+ * record = { reads, edits, gs, mentions, events, firstEvent, lastEvent }
+ *   events/firstEvent/lastEvent are tool-call ordinals (for retouch ranking).
+ * Worklist eligibility = reads + edits + gs > 0 (contentRead); mentions never qualify.
+ */
+export function extractEvidence(transcriptText, root) {
+  const { evidence, state, commit } = makeCollector(root);
+  const pending = new Map(); // tool_use_id → [{rel, tier, mustExist}]
 
   for (const line of transcriptText.split("\n")) {
     if (!line.trim() || line[0] !== "{") continue;
@@ -146,9 +151,117 @@ export function extractEvidence(transcriptText, root) {
         const claims = pending.get(b.tool_use_id);
         pending.delete(b.tool_use_id);
         if (b.is_error === true) continue; // errored call: the content never arrived
-        ordinal++;
+        state.ordinal++;
         for (const c of claims) commit(c.rel, c.tier, c.mustExist);
       }
+    }
+  }
+  return evidence;
+}
+
+/**
+ * extractCursorEvidence(transcriptText, root) — Cursor conversation JSONL.
+ *
+ * Records: {role:"assistant", message:{content:[{type:"tool_use", name, input}]}}
+ * with Claude-shaped tool names (Read/Shell/Grep/Glob/Write/Edit — verified on
+ * real transcripts 2026-07-17). Cursor's transcript carries NO tool_result
+ * records, so result confirmation is impossible on this host; the compensating
+ * control is a mustExist stat-check on EVERY claim (not just bash tokens) —
+ * a Read of a path that isn't a file on disk contributes nothing.
+ */
+export function extractCursorEvidence(transcriptText, root) {
+  const { evidence, state, commit } = makeCollector(root);
+  for (const line of transcriptText.split("\n")) {
+    if (!line.trim() || line[0] !== "{") continue;
+    let rec;
+    try { rec = JSON.parse(line); } catch { continue; }
+    const content = rec.message?.content;
+    if (!Array.isArray(content)) continue;
+    for (const b of content) {
+      if (!b || b.type !== "tool_use") continue;
+      const inp = b.input || {};
+      state.ordinal++;
+      if (b.name === "Read") {
+        commit(normRel(root, inp.path || inp.file_path), TIER.read, true);
+      } else if (b.name === "Edit" || b.name === "Write" || b.name === "MultiEdit" || b.name === "SearchReplace") {
+        // On edits mustExist stays true: Cursor supplies no results, and a
+        // Write that never landed should not anchor a note. A genuinely new
+        // file exists on disk by the time the Stop hook runs.
+        commit(normRel(root, inp.path || inp.file_path), TIER.edit, true);
+      } else if (b.name === "Shell" || b.name === "Bash") {
+        for (const c of classifyBash(String(inp.command || ""))) {
+          commit(normRel(root, c.token), c.tier, true);
+        }
+      } else if (b.name === "Grep" || b.name === "Glob") {
+        const p = inp.path ? normRel(root, inp.path) : "";
+        if (p) commit(p, TIER.mention, true); // search hits are not reads
+      }
+    }
+  }
+  return evidence;
+}
+
+// Codex embeds shell invocations inside a JS tool script:
+//   tools.exec_command({"cmd":"<shell>", ...})
+// The script is agent-authored JS, so the key appears both quoted ("cmd":) and
+// unquoted (cmd:) across rollouts — accept either. Values are JSON-escaped.
+function codexCmdStrings(input) {
+  const out = [];
+  for (const m of String(input).matchAll(/(?:"cmd"|\bcmd)\s*:\s*"((?:[^"\\]|\\.)*)"/g)) {
+    try { out.push(JSON.parse(`"${m[1]}"`)); } catch { /* bad escape: skip */ }
+  }
+  return out;
+}
+
+/**
+ * extractCodexEvidence(transcriptText, root) — Codex rollout JSONL.
+ *
+ * Records: {type:"response_item", payload:{type:"custom_tool_call"|"function_call",
+ * name, call_id, input|arguments}} paired with *_output payloads by call_id —
+ * so Codex evidence IS result-confirmed, like Claude's. Tool surface (verified
+ * on real rollouts 2026-07-17): name "exec" wraps shell commands in a JS
+ * script (classifyBash over each extracted "cmd"); "apply_patch" carries
+ * `*** Update/Add File:` headers (edit tier). Anything else: default-deny —
+ * its path tokens are at most mentions.
+ */
+export function extractCodexEvidence(transcriptText, root) {
+  const { evidence, state, commit } = makeCollector(root);
+  const pending = new Map(); // call_id → [{rel, tier, mustExist}]
+  for (const line of transcriptText.split("\n")) {
+    if (!line.trim() || line[0] !== "{") continue;
+    let rec;
+    try { rec = JSON.parse(line); } catch { continue; }
+    if (rec.type !== "response_item") continue;
+    const p = rec.payload || {};
+    if (p.type === "custom_tool_call" || p.type === "function_call") {
+      const input = typeof p.input === "string" ? p.input
+        : typeof p.arguments === "string" ? p.arguments
+        : JSON.stringify(p.input ?? p.arguments ?? "");
+      const claims = [];
+      if (p.name === "apply_patch" || /^\s*\*\*\* (?:Begin Patch|Update File|Add File)/m.test(input)) {
+        for (const m of input.matchAll(/\*\*\* (?:Update|Add) File:\s*([^\n\\"]+)/g)) {
+          claims.push({ rel: normRel(root, m[1].trim()), tier: TIER.edit, mustExist: true });
+        }
+      } else {
+        const cmds = codexCmdStrings(input);
+        if (cmds.length) {
+          for (const cmd of cmds) {
+            for (const c of classifyBash(cmd)) claims.push({ rel: normRel(root, c.token), tier: c.tier, mustExist: true });
+          }
+        } else {
+          // Unknown tool: default-deny — a `coldstart gs` stays gs (explicit
+          // signature), every other path token is a mention at most.
+          for (const c of classifyBash(input)) claims.push({ rel: normRel(root, c.token), tier: c.tier === TIER.gs ? TIER.gs : TIER.mention, mustExist: true });
+        }
+      }
+      const kept = claims.filter((c) => c.rel);
+      if (kept.length && p.call_id) pending.set(p.call_id, kept);
+    } else if (p.type === "custom_tool_call_output" || p.type === "function_call_output") {
+      const claims = pending.get(p.call_id);
+      if (!claims) continue;
+      pending.delete(p.call_id);
+      state.ordinal++;
+      for (const c of claims) commit(c.rel, c.tier, c.mustExist);
     }
   }
   return evidence;
@@ -184,3 +297,22 @@ export function segmentStats(text) {
   }
   return { toolCalls, textBytes, synthesis: textBytes >= 1500 && toolCalls <= 2 };
 }
+
+/** segmentStats for a Cursor transcript slice (assistant text vs tool_use items). */
+export function segmentStatsCursor(text) {
+  let toolCalls = 0;
+  let textBytes = 0;
+  for (const line of text.split("\n")) {
+    if (!line.trim() || line[0] !== "{") continue;
+    let rec;
+    try { rec = JSON.parse(line); } catch { continue; }
+    if (rec.role !== "assistant") continue;
+    for (const b of rec.message?.content || []) {
+      if (!b) continue;
+      if (b.type === "tool_use") toolCalls++;
+      else if (b.type === "text") textBytes += String(b.text || "").length;
+    }
+  }
+  return { toolCalls, textBytes, synthesis: textBytes >= 1500 && toolCalls <= 2 };
+}
+

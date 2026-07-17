@@ -115,7 +115,7 @@ export const TOOL_DEFINITIONS = [
     description:
       'Save or correct a NOTEBOOK note after finishing real work here — you have the files in context, so no future agent is better placed to record what you learned. Write a file note (what a file is for), a flow note (how a task spans files), or an absence lesson (a confirmed "there is no X"). Also the tool to FIX or RETRACT a note you used that proved wrong (`op: "put"` replaces, `op: "retract"` removes).\n\n' +
       'TWO-PHASE reuse gate: a flow/lesson `spec` sent WITHOUT an `id` first searches the notebook for the same concept. If plausible matches exist, kb_write returns `{status:"candidates", candidates:[...]}` INSTEAD of writing — re-call with `into: "<id>"` to merge into an existing note, or `is_new: true` to declare a genuinely new one. This makes note identity reliable (matching, not guessing an exact title). File notes skip the gate (id derives from the path).\n\n' +
-      'The `spec` shape is documented in coldstart.md — briefly: `type` ("file"|"flow"|"lesson", or sugar "file-hub"/"file-single"), `title`, `summary`, `anchors` ([{path, symbols?}] — the addresses the note is about, which drive freshness), plus type-specific fields (file: facets/character; flow: steps; lesson: kind:"absence"/scope/body). This tool WRITES to the repo notebook; it never commits to git — publishing notes is a human-only step (`coldstart kb commit`).',
+      'The `spec` shape is documented in coldstart.md — briefly: `type` ("file"|"flow"|"lesson", or sugar "file-hub"/"file-single"), `title`, `summary`, `anchors` ([{path, symbols?}] — the addresses the note is about, which drive freshness), plus type-specific fields (file: facets/character; flow: steps; lesson: kind:"absence"/scope/body). Call with NO arguments to get the full spec guide. This tool WRITES to the repo notebook; it never commits to git — publishing notes is a human-only step (`coldstart kb commit`).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -131,8 +131,12 @@ export const TOOL_DEFINITIONS = [
           type: 'boolean',
           description: 'Phase-2 answer: declare this a genuinely new concept, bypassing the candidate matches from a prior `candidates` response.',
         },
+        session: {
+          type: 'string',
+          description: 'Optional session id (given in a capture prompt). Enables the flow-evidence check: a flow whose step files this session never actually read gets a warning.',
+        },
       },
-      required: ['spec'],
+      required: [],
     },
   },
   {
@@ -233,9 +237,11 @@ export function registerToolHandlers(
       case 'kb_write': {
         const { kbWrite } = await import('../kb/write.js');
         const { initSkeleton } = await import('../kb/store.js');
+        const { writeGuideMcp, flowEvidenceWarning } = await import('../kb/write-guide.js');
         const spec = params['spec'];
         if (!spec || typeof spec !== 'object' || Array.isArray(spec)) {
-          result = { error: 'kb_write needs a `spec` object — see coldstart.md for its shape' };
+          // Parity with `kb write` (no spec): return the full guide, not an error.
+          result = { __rawText: writeGuideMcp() };
           break;
         }
         initSkeleton(index.rootDir); // first write creates the notebook
@@ -252,7 +258,14 @@ export function registerToolHandlers(
             message: `${wres.message} Re-call kb_write with the same spec plus \`into: "<id>"\` to merge into one of these, or \`is_new: true\` to create a new note.`,
           };
         } else {
-          result = { status: 'written', op: wres.op, id: wres.id, warnings: wres.warnings ?? [] };
+          const warnings = [...(wres.warnings ?? [])];
+          // Flow-evidence WARN (never a rejection) — parity with `kb write --session`.
+          const flowWarn = flowEvidenceWarning(
+            spec as import('../kb/write.js').WriteSpec,
+            params['session'] ? String(params['session']) : undefined,
+          );
+          if (flowWarn) warnings.push(flowWarn);
+          result = { status: 'written', op: wres.op, id: wres.id, warnings };
         }
         break;
       }

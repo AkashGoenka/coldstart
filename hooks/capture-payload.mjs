@@ -16,6 +16,25 @@
  *              (the coordinator only sees the final message — #61).
  */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+/**
+ * SPIKE (experimental, undocumented): a repo can replace the shipped checklist
+ * with its own `.coldstart/checklist.md`. Placeholders {{WORKLIST}}, {{CLI}},
+ * {{ROOT}}, {{SID}} are substituted. The worklist is LOAD-BEARING (it is the
+ * scope rule) — an override that omits {{WORKLIST}} gets it appended anyway.
+ * Trigger mechanics stay in code; only the prompt text is overridable. Merge
+ * semantics when the shipped default evolves = none (the override wins
+ * wholesale) — revisit before promoting past spike.
+ */
+function loadChecklistOverride(root) {
+  try {
+    const text = readFileSync(join(root, ".coldstart", "checklist.md"), "utf8");
+    return text.trim() ? text : null;
+  } catch { return null; }
+}
+
 /**
  * worklist entry: { path, tier, retouches, notes: [{id, type, state}], noConsumers }
  *   tier: "edited ×N" | "read" | "skimmed"
@@ -55,6 +74,20 @@ needed — remember you were spawned as a subagent. The coordinator that spawned
 ONLY your final message, so your last message must repeat, in full, the result you produced \
 for it — your findings, not the notebook decision.`
     : "";
+
+  const override = loadChecklistOverride(root);
+  if (override) {
+    const worklist = worklistLines(entries);
+    let body = override
+      .replaceAll("{{CLI}}", String(cli))
+      .replaceAll("{{ROOT}}", String(root))
+      .replaceAll("{{SID}}", String(sid));
+    body = body.includes("{{WORKLIST}}")
+      ? body.replaceAll("{{WORKLIST}}", worklist)
+      : `${body.trimEnd()}\n\nWORKLIST — files you actually read this session, most-worked first \
+(the complete scope; never write a note for an unlisted file):\n\n${worklist}`;
+    return `**Notebook capture point.** ${opening}\n\n${body.trimEnd()}${tail}`;
+  }
 
   return `**Notebook capture point.** You have completed work and gathered knowledge as part \
 of it — knowledge a future agent could use. This repo keeps that knowledge in a notebook: \
@@ -114,7 +147,11 @@ kb search first — update the existing flow, never a near-duplicate.
 
 WRITE — one Bash block total: specs as heredocs, writes chained with &&.
   {"type":"file-single","path":"src/x.py","summary":"1-3 sentences","aliases":["symptom words"]}
-  {"type":"file-hub","path":"src/y.py","facets":[{"symbol":"Fn","detail":"the non-obvious thing"}]}   (hub = only for files with no single purpose)
+  {"type":"file-hub","path":"src/y.py","facets":[{"symbol":"Fn","detail":"the non-obvious thing"}]}
+  file-single is the DEFAULT. A file with one purpose gets one summary even if you worked \
+with several of its symbols. file-hub is ONLY for grab-bag files that have no single purpose \
+(models.py, utils, helpers) — there, knowledge lives per symbol. Touching many symbols does \
+not make a file a hub; having no one purpose does.
   Update = the same spec plus "id":"<id from the worklist>".
   node ${cli} kb write /tmp/spec1.json --root ${root} --session ${sid} --force
   Flow/lesson shapes: run \`node ${cli} kb write --root ${root}\` with no spec — it prints the full guide.${tail}`;
