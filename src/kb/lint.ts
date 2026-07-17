@@ -10,15 +10,34 @@
  *   orphan             flow/lesson never referenced by any other note
  *   absence-stale      an absence note's stored search now returns hits
  *   malformed          unparseable/invalid raw records (tolerant-reader warnings)
+ *   ignored-anchor     a note anchors a .coldstartignore'd file. Capture
+ *                      filters ignored files AT THE ROOT (the hook's evidence
+ *                      layer), so this only catches leaks from un-elicited
+ *                      writes (MCP kb_write, manual specs). REPORT-only by
+ *                      design — no write-time validation layer.
  */
 import { stampCoversTerms, type KbNotesIndex } from './notes-index.js';
 import { stampAnchors } from './freshness.js';
 import { loadAll } from './store.js';
 
 export interface LintFinding {
-  check: 'dead-anchor' | 'duplicate-flows' | 'orphan' | 'absence-stale' | 'malformed';
+  check: 'dead-anchor' | 'duplicate-flows' | 'orphan' | 'absence-stale' | 'malformed' | 'ignored-anchor';
   note: string;
   detail: string;
+}
+
+/** The hook-side matcher, reused so lint and capture agree byte-for-byte on
+ *  what "ignored" means (hooks/ sits beside dist/ in repo and package alike).
+ *  Fail-open: matcher unavailable → no ignored-anchor findings. */
+async function loadIgnoreMatcher(root: string): Promise<((rel: string) => boolean) | null> {
+  try {
+    const mod = (await import(new URL('../../hooks/ignore.mjs', import.meta.url).href)) as {
+      loadIgnore: (root: string) => (rel: string) => boolean;
+    };
+    return mod.loadIgnore(root);
+  } catch {
+    return null;
+  }
 }
 
 const DUP_JACCARD = 0.6;
@@ -68,6 +87,18 @@ export async function kbLint(root: string, notesIndex?: KbNotesIndex | null): Pr
   for (const n of active) {
     if (n.type !== 'file' && !referenced.has(n.id)) {
       findings.push({ check: 'orphan', note: n.id, detail: `no other note references ${n.id} — fine if new; a signal if old and unused` });
+    }
+  }
+
+  // ignored anchors — notes about files the notebook is told not to note
+  const isIgnored = await loadIgnoreMatcher(root);
+  if (isIgnored) {
+    for (const n of active) {
+      for (const a of n.anchors) {
+        if (isIgnored(a.path)) {
+          findings.push({ check: 'ignored-anchor', note: n.id, detail: `anchors ${a.path} — .coldstartignore'd (capture skips these; this note arrived via an un-elicited write). Retract it or un-ignore the path.` });
+        }
+      }
     }
   }
 

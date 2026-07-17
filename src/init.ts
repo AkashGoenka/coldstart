@@ -235,9 +235,32 @@ function ensureGitattributes(cwd: string): void {
  * (gitignore `.coldstart/`), or committable when `commit` is set. Does NOT wire
  * hooks — those are Claude-specific (see wireClaudeKbHooks).
  */
+// Scaffolded once by init when absent — the discoverable face of the ignore
+// layer. The DEFAULTS live in hooks/ignore.mjs (single source of truth); this
+// file only ADDS or negates. User edits are never touched again.
+const COLDSTARTIGNORE_TEMPLATE = `# .coldstartignore — files the notebook never writes notes for (gitignore syntax).
+# Built-in defaults already cover: *.json, lockfiles, dist/ build/ coverage/,
+# *.min.*, *.map, *.snap, .env*, images/fonts/binaries.
+# Lines here ADD to the defaults; re-include a default with "!".
+# Examples:
+#   *.generated.ts
+#   docs/
+#   !tsconfig.json
+`;
+
+export function ensureColdstartignore(cwd: string): 'created' | 'kept' {
+  const p = path.join(cwd, '.coldstartignore');
+  if (fs.existsSync(p)) return 'kept';
+  fs.writeFileSync(p, COLDSTARTIGNORE_TEMPLATE);
+  return 'created';
+}
+
 export function setupNotebook(cwd: string, commit: boolean): void {
   initSkeleton(cwd);
   ensureGitattributes(cwd);
+  if (ensureColdstartignore(cwd) === 'created') {
+    out('  .coldstartignore — created (files the notebook skips; gitignore syntax, defaults built in)');
+  }
   if (commit) {
     const r = removeNotebookGitignore(cwd);
     out(`  notebook      — shared: .raw + okf.yaml committable, publish with \`coldstart kb commit\`${r === 'removed' ? ' (removed prior ignore rule)' : ''}`);

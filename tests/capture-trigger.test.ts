@@ -3,7 +3,7 @@
  * ignore matcher, evidence extractor tiers, trigger state machine.
  */
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -11,6 +11,10 @@ import { tmpdir } from 'node:os';
 import { compileIgnore, loadIgnore, DEFAULT_IGNORES } from '../hooks/ignore.mjs';
 import { extractEvidence, contentReadFiles, segmentStats } from '../hooks/evidence.mjs';
 import { initialState, step, T_ARM, T_CAP } from '../hooks/trigger.mjs';
+import { ensureColdstartignore } from '../src/init.js';
+import { appendRecord } from '../src/kb/raw-log.js';
+import { initSkeleton } from '../src/kb/store.js';
+import { kbLint } from '../src/kb/lint.js';
 
 // --- helpers -------------------------------------------------------------------
 
@@ -254,5 +258,40 @@ describe('trigger', () => {
   it('T_ARM sanity: exported constants match the frozen spec', () => {
     expect(T_ARM).toBe(10);
     expect(T_CAP).toBe(20);
+  });
+});
+
+// --- .coldstartignore scaffold + lint report ---------------------------------------
+
+describe('coldstartignore wiring', () => {
+  it('init scaffolds the template once and never touches user edits', () => {
+    const root = makeRepo([]);
+    expect(ensureColdstartignore(root)).toBe('created');
+    const scaffolded = readFileSync(join(root, '.coldstartignore'), 'utf8');
+    expect(scaffolded).toContain('gitignore syntax');
+    expect(loadIgnore(root)('package.json')).toBe(true); // comments-only template = defaults intact
+    writeFileSync(join(root, '.coldstartignore'), '*.custom\n');
+    expect(ensureColdstartignore(root)).toBe('kept');
+    expect(readFileSync(join(root, '.coldstartignore'), 'utf8')).toBe('*.custom\n');
+  });
+
+  it('kb lint REPORTS a note anchored to an ignored file (never blocks the write)', async () => {
+    const root = makeRepo(['package.json', 'src/real.ts']);
+    initSkeleton(root);
+    appendRecord(root, {
+      id: 'json-leak', type: 'file', op: 'put',
+      anchors: [{ path: 'package.json', symbols: [] }],
+      summary: 'a note that should never have been written',
+    } as Parameters<typeof appendRecord>[1]);
+    appendRecord(root, {
+      id: 'fine-note', type: 'file', op: 'put',
+      anchors: [{ path: 'src/real.ts', symbols: [] }],
+      summary: 'a legitimate note',
+    } as Parameters<typeof appendRecord>[1]);
+    const findings = await kbLint(root, null);
+    const ignored = findings.filter((f) => f.check === 'ignored-anchor');
+    expect(ignored).toHaveLength(1);
+    expect(ignored[0].note).toBe('json-leak');
+    expect(ignored[0].detail).toContain('package.json');
   });
 });

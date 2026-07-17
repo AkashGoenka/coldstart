@@ -224,6 +224,24 @@
       <div class="callout warm"><span class="ct">On token savings</span>Because the next agent recalls a verified note instead of re-deriving it, repeated tasks re-spend far fewer tokens orienting. We're holding published benchmark figures until they're reproducible enough to stand behind — the mechanism is the point: recall a fact once written, don't pay to re-derive it.</div>
 
       <p style="margin-top:22px"><b>Language-agnostic.</b> The freshness machinery is content-hash based, so the notebook works on any codebase — including languages the navigation index doesn't parse. Where the index does parse, notes additionally get symbol-level freshness.</p>
+
+      <h4 class="subhead">When capture happens</h4>
+      <p>Capture is <b>trigger-timed</b>, not every-turn. The hook keeps per-file evidence of what the session actually read or edited (search hits and passing path mentions never count), scores the uncaptured backlog, and asks for notes at natural boundaries — when a burst of work settles, or the moment a commit lands (manual commits included). Most turns end silently. The ask itself is <b>non-blocking</b>: it arrives with your next prompt as a short worklist of the files the session genuinely worked with, each annotated with its existing note's state — never a wall of instructions after every answer.</p>
+      <p style="margin-top:12px">Files whose notes are already fresh don't re-trigger capture, so a warmed-up repo asks less over time. The flip side: a brand-new notebook starts empty and <b>warms with use</b> — the first few real tasks seed the file notes, and "how X works" flow notes appear as sessions actually need those answers. Don't judge recall on day one.</p>
+
+      <h4 class="subhead"><code>.coldstartignore</code> — files that never get notes</h4>
+      <p><code>coldstart init</code> scaffolds a <code>.coldstartignore</code> at the repo root (gitignore syntax). Built-in defaults already exclude data-shaped files — <code>*.json</code>, lockfiles, <code>dist/</code>/<code>build/</code>/<code>coverage/</code>, minified/map/snapshot files, binaries and images, and <code>.env*</code> (notes are committed; secrets must never enter them). Lines you add extend the defaults; re-include a default with <code>!</code>:</p>
+      <div class="term">
+        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">.coldstartignore</span></div>
+        <div class="term-body">
+<span class="ln"><span class="c-dim"># add your own</span></span>
+<span class="ln">*.generated.ts</span>
+<span class="ln">docs/</span>
+<span class="ln"><span class="c-dim"># re-include a built-in default</span></span>
+<span class="ln">!tsconfig.json</span>
+        </div>
+      </div>
+      <p style="margin-top:12px">Ignored files are filtered at the root — they never appear in a capture worklist and never trigger it. Logic-bearing configs (<code>vite.config.ts</code>, CI workflow YAML, <code>routes.rb</code>) are deliberately <em>not</em> ignored by default: they carry exactly the gotchas notes exist for. <code>kb lint</code> reports any note that anchors an ignored file (possible only via direct <code>kb write</code>).</p>
     </section>
 
     <section id="kb-search" class="doc-sec">
