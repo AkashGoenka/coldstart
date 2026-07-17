@@ -41,6 +41,7 @@ interface ParsedArgs {
     view?: string;
     max?: string;
     page?: string;
+    paths?: string[];
     root?: string;
     cacheDir?: string;
     tests?: boolean;
@@ -61,6 +62,7 @@ function parseQueryArgs(argv: string[]): ParsedArgs {
       case '--view': flags.view = argv[++i]; break;
       case '--max': flags.max = argv[++i]; break;
       case '--page': flags.page = argv[++i]; break;
+      case '--paths': flags.paths = String(argv[++i] ?? '').split(',').map((s) => s.trim()).filter(Boolean); break;
       case '--root': flags.root = argv[++i]; break;
       case '--cache-dir': flags.cacheDir = argv[++i]; break;
       case '--tests': flags.tests = true; break;
@@ -196,6 +198,33 @@ export async function runFind(argv: string[], buildIndex: BuildFn): Promise<numb
 
   const { buildRichPage } = await import('./server/find.js');
   process.stdout.write((await buildRichPage(index, root, query, flags.json, flags.via === true)) + '\n');
+  return 0;
+}
+
+/**
+ * Consumer counts for the capture hook's "no consumers in import graph"
+ * worklist annotation: per path, how many files the graph knows import it.
+ * `consumers: null` for unindexed paths — the hook flags ONLY an explicit 0
+ * (a file the index knows but sees nobody importing), never absence of data.
+ */
+export async function runConsumers(argv: string[], _buildIndex: BuildFn): Promise<number> {
+  const { positional, flags } = parseQueryArgs(argv);
+  const paths = [...(flags.paths ?? []), ...positional].filter(Boolean);
+  if (!paths.length) {
+    err('usage: coldstart consumers --paths a,b [--json]  (or positional paths)');
+    return 1;
+  }
+  const root = resolve(flags.root ?? '.');
+  // Pure cache read — no keeper spawn, no build-wait. This is called from the
+  // capture hook at fire time; a cold cache must answer "don't know" (nulls)
+  // instantly, not stall the stop.
+  const index = await loadCachedIndex(root, flags.cacheDir, 'gs');
+  const results = paths.map((p) => {
+    const f = index?.files.get(p);
+    return { path: p, consumers: f ? f.importedByCount : null };
+  });
+  if (flags.json) process.stdout.write(JSON.stringify({ paths: results }, null, 2) + '\n');
+  else for (const r of results) process.stdout.write(`${r.path}: ${r.consumers ?? 'not indexed'}\n`);
   return 0;
 }
 

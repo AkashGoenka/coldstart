@@ -14,8 +14,9 @@
  * Exit codes: 0 ok · 1 bad input/error · 2 not found · 3 write returned
  * candidates (two-phase gate: re-run with --into <id> or --new).
  */
-import { resolve } from 'node:path';
-import { readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { readFileSync, readdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { ensureKeeper } from '../keeper.js';
 import { setupNotebook, wireClaudeKbHooks } from '../init.js';
 import { kbSearch, renderSearchPage, renderResultsPage, renderCompactPage, shouldImplantTop } from './search.js';
@@ -233,9 +234,77 @@ async function readStdin(): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+// The full spec guide: `kb write` with no spec prints this. The capture
+// checklist inlines only the two common file-note shapes (zero-bounce path);
+// everything else lives here so the prompt stays small and this stays current.
+const WRITE_GUIDE = `kb write — spec shapes (JSON, one note per spec; include only fields you have):
+
+  file (single purpose):
+    {"type":"file-single","path":"src/x.py",
+     "summary":"its one purpose + how (1-3 sentences)",
+     "aliases":["symptom or search words"]}
+
+  file (hub — no single purpose; one facet PER SYMBOL you worked with):
+    {"type":"file-hub","path":"src/y.py","aliases":["search words"],
+     "facets":[{"symbol":"ClassOrFn","detail":"the non-obvious thing about THIS symbol",
+                "flows":["<flow id or the flow's exact title>"]}]}
+
+  flow (product-level mechanism — see the capture checklist's gate):
+    {"type":"flow","title":"how X happens","aliases":["other words for X"],
+     "summary":"first sentence = the product-level fact the file notes miss",
+     "steps":[{"path":"src/a.py","symbols":["entry"],"role":"receives the request"}],
+     "invariants":["what must hold"],"verified":["src/a.py"]}
+
+  lesson (confirmed ABSENCE only — one file/symbol facts are facets, not lessons):
+    {"type":"lesson","kind":"absence","title":"no retry logic in this repo",
+     "body":"what you looked for + that it is not there",
+     "scope":{"terms":["search","terms"]}}
+
+  update an existing note: same spec + its "id" (fields merge; yours win).
+  retract a wrong claim:   {"op":"retract","id":"<id>","reason":"..."}
+
+Rules the writer enforces (fix any WARNING it prints, in this session):
+  - paths are join keys: repo-relative, exactly as in the repo
+  - "verified" re-stamps freshness: list ONLY files you opened this session
+  - never compose ids yourself — reference flows by exact title or an id
+    copied from kb search output
+
+How to run (one Bash block total — author specs as heredocs, chain with &&):
+  cat > /tmp/spec1.json <<'SPEC'
+  { ... }
+SPEC
+  node <cli> kb write /tmp/spec1.json --root <root> --session <sid> --force
+Flows before the file notes that reference them.`;
+
+/** Flow-evidence check: how many of the spec's step files did THIS session
+ *  actually content-read? Reads the capture markers (v2 evidence records)
+ *  the elicit hook maintains. No marker → no opinion (returns null). */
+function flowEvidenceCount(spec: WriteSpec, session: string): { read: number; steps: number } | null {
+  const steps = (spec as { steps?: { path?: string }[] }).steps ?? [];
+  const paths = steps.map((s) => s?.path).filter(Boolean) as string[];
+  if (!paths.length) return null;
+  try {
+    const safe = session.replace(/[^A-Za-z0-9_-]/g, '');
+    const markers = readdirSync(tmpdir()).filter((f) => f.startsWith(`coldstart-kb-${safe}-`) && f.endsWith('.json'));
+    if (!markers.length) return null;
+    const read = new Set<string>();
+    for (const m of markers) {
+      try {
+        const state = JSON.parse(readFileSync(join(tmpdir(), m), 'utf8'));
+        if (state?.v !== 2 || !state.files) continue;
+        for (const [rel, f] of Object.entries(state.files as Record<string, { reads?: number; edits?: number; gs?: number }>)) {
+          if ((f.reads ?? 0) + (f.edits ?? 0) + (f.gs ?? 0) > 0) read.add(rel);
+        }
+      } catch { /* one bad marker never blocks a write */ }
+    }
+    if (!read.size) return null;
+    return { read: paths.filter((p) => read.has(p)).length, steps: paths.length };
+  } catch { return null; }
+}
+
 async function cmdWrite(positional: string[], flags: KbFlags): Promise<number> {
   const src = positional[0];
-  if (!src) { err('usage: coldstart kb write <spec.json | -> [--into ID] [--new]'); return 1; }
+  if (!src) { out(WRITE_GUIDE); return 0; }
   let raw = '';
   try {
     raw = src === '-' ? await readStdin() : readFileSync(src, 'utf8');
@@ -267,8 +336,23 @@ async function cmdWrite(positional: string[], flags: KbFlags): Promise<number> {
   }
   // Path warnings ride on STDOUT — the writing agent must see and fix them
   // now (a typo'd path is a silently dangling link forever after).
-  const warned = result.warnings?.length
-    ? '\n' + result.warnings.map((w) => `warning: ${w}`).join('\n')
+  const warnings = [...(result.warnings ?? [])];
+
+  // Flow-evidence WARN (never a rejection): a flow whose steps the session
+  // never actually read is the classic bad flow — assembled from grep hits.
+  if (spec && (spec as { type?: string }).type === 'flow' && flags.session) {
+    const ev = flowEvidenceCount(spec, flags.session);
+    if (ev && ev.read < 2) {
+      warnings.push(
+        `flow evidence: only ${ev.read} of ${ev.steps} step files were actually read this session — ` +
+        `a flow assembled from search hits is the classic bad flow. Keep it only if you truly ` +
+        `verified the chain; otherwise retract it now (op "retract").`,
+      );
+    }
+  }
+
+  const warned = warnings.length
+    ? '\n' + warnings.map((w) => `warning: ${w}`).join('\n')
     : '';
   out(`kb write: ${result.op} → ${result.id}${warned}`);
   return 0;
