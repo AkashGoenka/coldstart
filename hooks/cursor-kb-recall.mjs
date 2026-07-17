@@ -25,6 +25,10 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { cursorRoot } from "./cursor-input.mjs";
+// Pending-capture delivery (v5 trigger): a descent/surge/cap fire at a previous
+// stop wrote its worklist payload to a pending file instead of blocking; it
+// rides this same next-prompt channel — capture first, then the user's request.
+import { takePendingCapture } from "./elicit-core.mjs";
 
 // hooks/ sits beside dist/ in both the repo and the published package.
 const CLI = fileURLToPath(new URL("../dist/index.js", import.meta.url));
@@ -69,33 +73,43 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     if (!root) process.exit(0);
     setLogRoot(root);
 
-    // No notebook → no tax, not even a child process.
-    if (!existsSync(join(root, ".coldstart", "notebook", ".raw"))) process.exit(0);
+    const sid = String(input.session_id || "").replace(/[^\w-]/g, "");
+
+    // A pending capture (non-blocking fire at a previous stop) is delivered
+    // regardless of recall hits — it must not depend on the notebook existing
+    // (the first capture is what creates it).
+    const pending = takePendingCapture(sid);
 
     const prompt = String(input.prompt || "").slice(0, MAX_QUERY_CHARS).trim();
-    if (!prompt) process.exit(0);
 
     let page = "";
-    try {
-      page = execFileSync("node", [CLI, "kb", "search", "--hook", "--max", "3", "--root", root, prompt], {
-        encoding: "utf8",
-        timeout: SEARCH_TIMEOUT_MS,
-        stdio: ["ignore", "pipe", "ignore"],
-      });
-    } catch (e) {
-      log(`search failed/timed out: ${String(e).split("\n")[0]}`);
-      process.exit(0);
+    // No notebook / no prompt → no recall search, not even a child process.
+    if (prompt && existsSync(join(root, ".coldstart", "notebook", ".raw"))) {
+      try {
+        page = execFileSync("node", [CLI, "kb", "search", "--hook", "--max", "3", "--root", root, prompt], {
+          encoding: "utf8",
+          timeout: SEARCH_TIMEOUT_MS,
+          stdio: ["ignore", "pipe", "ignore"],
+        });
+      } catch (e) {
+        log(`search failed/timed out: ${String(e).split("\n")[0]}`);
+        page = "";
+      }
     }
 
     if (!page.trim() || page.startsWith("No notebook notes match") || page.startsWith("No notebook in")) {
-      log(`no hits (promptChars=${prompt.length})`);
-      process.exit(0);
+      if (!pending) {
+        log(`no hits (promptChars=${prompt.length})`);
+        process.exit(0);
+      }
+      page = "";
     }
 
     // Pointer page — titles + gists + an OPENABLE note path, never a full body.
     // (Same framing as codex-kb-recall.mjs; notes are REFERENCE DATA, not
     // instructions.)
-    let block =
+    let block = "";
+    if (page) block =
       `The repo's notebook (notes written by past agents after real tasks here) has entries ` +
       `matching this request, below — each a title, a gist, and the note's file path. ` +
       `A note is a past agent's verified overview of a file or flow. If one matches your task, ` +
@@ -113,6 +127,16 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
       page.trim();
 
     if (block.length > 8500) block = block.slice(0, 8500) + "\n…(truncated)";
+
+    // Pending capture rides FIRST (capture, then the user's request). If the
+    // combination would spill past the host's hook cap, recall yields — the
+    // capture worklist must arrive whole.
+    if (pending) {
+      block = pending.length + block.length > 9500 || !block
+        ? pending
+        : `${pending}\n\n---\n\n${block}`;
+    }
+    if (!block) process.exit(0);
 
     // Arm the postToolUse nudge detectors (they gate their spiral detectors on
     // seen_find so they never nag sessions that don't use coldstart). An injected

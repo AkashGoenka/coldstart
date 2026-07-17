@@ -6,143 +6,167 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 /**
- * kb-elicit.mjs always-fire contract (2026-07-05): the deep-read gate is GONE.
- * ANY touched repo file — windowed Read, Bash cat/sed, Edit — elicits; only a
- * session that touched nothing fast-exits. Tested by spawning the real hook
- * with a fixture transcript, exactly as Claude Code would.
+ * kb-elicit.mjs v5 contract (2026-07-17): the always-fire gate is GONE.
+ * Stops feed per-file evidence records into the trigger state machine; most
+ * stops exit silently. Fires are descent/surge/cap (non-blocking: pending
+ * file for kb-recall to deliver) or head-drift (blocking). SubagentStop
+ * stays a one-shot block. Tested by spawning the real hook with fixture
+ * transcripts, exactly as Claude Code would.
  */
 const HOOK = fileURLToPath(new URL('../hooks/kb-elicit.mjs', import.meta.url));
 
 let root: string;
 let transcript: string;
-let sid = 0;
+let sid = '';
+let n = 0;
 
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'coldstart-elicit-'));
   transcript = path.join(root, 'transcript.jsonl');
-  sid++;
+  sid = `elicit-test-${process.pid}-${++n}`;
 });
 afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
+  for (const f of fs.readdirSync(os.tmpdir())) {
+    if (f.includes(sid)) fs.rmSync(path.join(os.tmpdir(), f), { force: true });
+  }
 });
 
-function assistantLine(tools: Array<{ name: string; input: Record<string, unknown> }>): string {
-  return JSON.stringify({
-    type: 'assistant',
-    message: { content: tools.map((t) => ({ type: 'tool_use', name: t.name, input: t.input })) },
-  });
+let toolId = 0;
+/** assistant tool_use line + its confirming tool_result (v5 drops unconfirmed calls). */
+function turn(tools: Array<{ name: string; input: Record<string, unknown> }>): string[] {
+  const uses = tools.map((t) => ({ type: 'tool_use', id: `t${++toolId}`, name: t.name, input: t.input }));
+  return [
+    JSON.stringify({ type: 'assistant', message: { content: uses } }),
+    ...uses.map((u) => JSON.stringify({
+      type: 'user',
+      message: { content: [{ type: 'tool_result', tool_use_id: u.id, is_error: false }] },
+    })),
+  ];
 }
 
-function runHook(lines: string[]): string {
-  fs.writeFileSync(transcript, lines.join('\n') + '\n');
+/** Append lines to the session transcript and invoke one Stop. */
+function stop(lines: string[], opts: { event?: string; aid?: string; transcriptPath?: string } = {}): string {
+  const tp = opts.transcriptPath ?? transcript;
+  fs.appendFileSync(tp, lines.length ? lines.join('\n') + '\n' : '');
   const payload = JSON.stringify({
-    session_id: `elicit-test-${process.pid}-${sid}`,
+    session_id: sid,
+    agent_id: opts.aid,
     cwd: root,
     transcript_path: transcript,
-    hook_event_name: 'Stop',
+    ...(opts.aid ? { agent_transcript_path: tp } : {}),
+    hook_event_name: opts.event ?? 'Stop',
   });
   return execFileSync('node', [HOOK], { input: payload, encoding: 'utf8', timeout: 30000 });
 }
 
-describe('kb-elicit always-fire', () => {
-  it('a WINDOWED Read alone elicits (the q8 regression: offset/limit reads used to fast-exit)', () => {
-    fs.mkdirSync(path.join(root, 'src'), { recursive: true });
-    fs.writeFileSync(path.join(root, 'src/app.py'), 'x = 1\n');
-    const out = runHook([
-      assistantLine([{ name: 'Read', input: { file_path: path.join(root, 'src/app.py'), offset: 10, limit: 40 } }]),
-    ]);
-    const res = JSON.parse(out);
-    expect(res.decision).toBe('block');
-    expect(res.reason).toContain('src/app.py');
-    expect(res.reason).toContain('THE NOTEBOOK HAS THREE CONTAINERS');
-    expect(res.reason).toContain('SEARCH BEFORE YOU WRITE'); // v5: pre-write dedup discipline
-    expect(res.reason).toContain('EXACT title'); // v6: flow refs by exact title or copied id — the tool resolves, never the agent
+function pendingFile(): string {
+  return path.join(os.tmpdir(), `coldstart-kb-pending-${sid}.json`);
+}
+
+function seed(files: string[]): void {
+  for (const f of files) {
+    fs.mkdirSync(path.dirname(path.join(root, f)), { recursive: true });
+    fs.writeFileSync(path.join(root, f), 'x = 1\n');
+  }
+}
+
+describe('kb-elicit v5 trigger', () => {
+  it('a first-stop read NEVER fires — evidence is recorded, the stop is allowed', () => {
+    seed(['src/app.py']);
+    const out = stop(turn([{ name: 'Read', input: { file_path: path.join(root, 'src/app.py'), offset: 10, limit: 40 } }]));
+    expect(out.trim()).toBe(''); // silent tick
+    const marker = JSON.parse(fs.readFileSync(path.join(os.tmpdir(), `coldstart-kb-${sid}-main.json`), 'utf8'));
+    expect(marker.files['src/app.py'].reads).toBe(1);
+    expect(fs.existsSync(pendingFile())).toBe(false);
   });
 
-  it('a Bash cat/sed path elicits when the file exists; nonexistent shell tokens are ignored', () => {
-    fs.mkdirSync(path.join(root, 'lib'), { recursive: true });
-    fs.writeFileSync(path.join(root, 'lib/util.ts'), 'export {}\n');
-    const out = runHook([
-      assistantLine([{ name: 'Bash', input: { command: `cat lib/util.ts && sed -n '1,5p' lib/missing.ts` } }]),
-    ]);
-    const res = JSON.parse(out);
-    expect(res.decision).toBe('block');
-    expect(res.reason).toContain('lib/util.ts');
-    expect(res.reason).not.toContain('lib/missing.ts');
+  it('arm on volume, fire on descent → pending file for next-prompt delivery, stop never blocked', () => {
+    const files = ['src/a1.py', 'src/a2.py', 'src/a3.py', 'src/a4.py', 'src/a5.py', 'src/b1.py', 'src/b2.py', 'src/b3.py', 'src/b4.py'];
+    seed(files);
+    // stop 1: 5 reads → active, under threshold
+    expect(stop(files.slice(0, 5).map((f) => turn([{ name: 'Read', input: { file_path: path.join(root, f) } }])).flat()).trim()).toBe('');
+    // stop 2: 4 more → armed
+    expect(stop(files.slice(5).map((f) => turn([{ name: 'Read', input: { file_path: path.join(root, f) } }])).flat()).trim()).toBe('');
+    // stops 3-4: quiet → descent
+    expect(stop([]).trim()).toBe('');
+    const out4 = stop([]);
+    expect(out4.trim()).toBe(''); // NON-blocking: no stdout even on fire
+    expect(fs.existsSync(pendingFile())).toBe(true);
+    const pending = JSON.parse(fs.readFileSync(pendingFile(), 'utf8'));
+    expect(pending.reason).toBe('descent');
+    expect(pending.payload).toContain('Notebook capture point');
+    expect(pending.payload).toContain('src/a1.py');
+    expect(pending.payload).toContain('DECIDE FIRST');
+    expect(pending.payload).toContain('WORKLIST');
+    expect(pending.payload).toContain('FLOWS');
+    expect(pending.payload).toContain('continue with the user\'s request');
   });
 
-  it('an Edit counts as touched', () => {
-    fs.writeFileSync(path.join(root, 'main.go'), 'package main\n');
-    const out = runHook([
-      assistantLine([{ name: 'Edit', input: { file_path: path.join(root, 'main.go'), old_string: 'a', new_string: 'b' } }]),
-    ]);
-    expect(JSON.parse(out).decision).toBe('block');
+  it('mention-only contact (grep/scripts) records nothing and can never arm', () => {
+    seed(['lib/util.ts']);
+    const out = stop(turn([{ name: 'Bash', input: { command: `grep -rn "foo" lib/util.ts && node lib/util.ts` } }]));
+    expect(out.trim()).toBe('');
+    const marker = JSON.parse(fs.readFileSync(path.join(os.tmpdir(), `coldstart-kb-${sid}-main.json`), 'utf8'));
+    expect(marker.files['lib/util.ts']).toBeUndefined(); // mentions are filtered before the trigger
   });
 
-  it('FAST-EXIT only when zero repo files were touched', () => {
-    const out = runHook([
-      assistantLine([{ name: 'Bash', input: { command: 'git status && npm test' } }]),
-      assistantLine([{ name: 'Read', input: { file_path: '/somewhere/else/entirely.md' } }]),
-    ]);
-    expect(out.trim()).toBe(''); // no stdout → stop allowed
+  it('bash reads count; nonexistent shell tokens are ignored; .coldstartignore\'d files are out', () => {
+    seed(['lib/util.ts', 'package.json']);
+    const out = stop(turn([{ name: 'Bash', input: { command: `cat lib/util.ts package.json && sed -n '1,5p' lib/missing.ts` } }]));
+    expect(out.trim()).toBe('');
+    const marker = JSON.parse(fs.readFileSync(path.join(os.tmpdir(), `coldstart-kb-${sid}-main.json`), 'utf8'));
+    expect(marker.files['lib/util.ts'].reads).toBe(1);
+    expect(marker.files['lib/missing.ts']).toBeUndefined();
+    expect(marker.files['package.json']).toBeUndefined(); // default-ignored
   });
 
-  it('.coldstart/ internals never count as touched', () => {
+  it('.coldstart/ internals never count', () => {
     fs.mkdirSync(path.join(root, '.coldstart'), { recursive: true });
     fs.writeFileSync(path.join(root, '.coldstart/kb-hook.log'), 'log\n');
-    const out = runHook([
-      assistantLine([{ name: 'Read', input: { file_path: path.join(root, '.coldstart/kb-hook.log') } }]),
-    ]);
+    const out = stop(turn([{ name: 'Read', input: { file_path: path.join(root, '.coldstart/kb-hook.log') } }]));
     expect(out.trim()).toBe('');
+    const marker = JSON.parse(fs.readFileSync(path.join(os.tmpdir(), `coldstart-kb-${sid}-main.json`), 'utf8'));
+    expect(Object.keys(marker.files)).toEqual([]);
+  });
+
+  it('manual git commit (HEAD drift) fires a BLOCKING capture with the ≥2-file floor', () => {
+    seed(['src/one.py', 'src/two.py']);
+    const git = (args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8' });
+    git(['init', '-q']);
+    git(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'base']);
+    // stop 1: two files read; HEAD fingerprint recorded
+    expect(stop([
+      ...turn([{ name: 'Read', input: { file_path: path.join(root, 'src/one.py') } }]),
+      ...turn([{ name: 'Read', input: { file_path: path.join(root, 'src/two.py') } }]),
+    ]).trim()).toBe('');
+    // manual commit outside the transcript
+    git(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'manual']);
+    // stop 2: drift observed → instant blocking fire
+    const out = stop([]);
+    const res = JSON.parse(out);
+    expect(res.decision).toBe('block');
+    expect(res.reason).toContain('src/one.py');
+    expect(res.reason).toContain('then stop');
   });
 });
 
-describe('kb-elicit long-session capture (delta, not once-per-session)', () => {
-  // Distinctive names — the capture prompt hard-codes example paths (src/a.py,
-  // src/x.py, models.py), so the touched files must not collide with those.
-  it('re-elicits NEW files on a later Stop, never re-offering one already captured', () => {
-    fs.mkdirSync(path.join(root, 'src'), { recursive: true });
-    fs.writeFileSync(path.join(root, 'src/zebra_loader.py'), 'x = 1\n');
-    fs.writeFileSync(path.join(root, 'src/quokka_handler.py'), 'y = 2\n');
-
-    // Stop 1: only zebra_loader touched → elicits for it.
-    const out1 = JSON.parse(runHook([
-      assistantLine([{ name: 'Read', input: { file_path: path.join(root, 'src/zebra_loader.py') } }]),
-    ]));
-    expect(out1.decision).toBe('block');
-    expect(out1.reason).toContain('src/zebra_loader.py');
-
-    // Stop 2 (same session): both touched → elicits for the NEW file only.
-    const out2 = JSON.parse(runHook([
-      assistantLine([{ name: 'Read', input: { file_path: path.join(root, 'src/zebra_loader.py') } }]),
-      assistantLine([{ name: 'Read', input: { file_path: path.join(root, 'src/quokka_handler.py') } }]),
-    ]));
-    expect(out2.decision).toBe('block');
-    expect(out2.reason).toContain('src/quokka_handler.py');
-    expect(out2.reason).not.toContain('src/zebra_loader.py'); // already offered on Stop 1
-
-    // Stop 3 (same session): nothing new → stop is allowed (no re-nag).
-    const out3 = runHook([
-      assistantLine([{ name: 'Read', input: { file_path: path.join(root, 'src/zebra_loader.py') } }]),
-      assistantLine([{ name: 'Read', input: { file_path: path.join(root, 'src/quokka_handler.py') } }]),
-    ]);
-    expect(out3.trim()).toBe('');
-  });
-
-  it('a no-touch Stop does not burn the session — later real work still elicits', () => {
-    fs.writeFileSync(path.join(root, 'zephyr_widget.js'), 'const x = 1\n');
-
-    // Stop 1: nothing under-root touched → FAST-EXIT, and crucially no record written.
-    const out1 = runHook([
-      assistantLine([{ name: 'Bash', input: { command: 'git status && npm test' } }]),
-    ]);
-    expect(out1.trim()).toBe('');
-
-    // Stop 2: a real file is touched → still elicits (the slot was not consumed).
-    const out2 = JSON.parse(runHook([
-      assistantLine([{ name: 'Read', input: { file_path: path.join(root, 'zephyr_widget.js') } }]),
-    ]));
-    expect(out2.decision).toBe('block');
-    expect(out2.reason).toContain('zephyr_widget.js');
+describe('kb-elicit SubagentStop (one-shot, still blocking)', () => {
+  it('block-fires on the sub\'s own reads with the restate-deliverable tail', () => {
+    seed(['src/zebra_loader.py']);
+    const aid = 'agent42';
+    const subDir = path.join(transcript.replace(/\.jsonl$/, ''), 'subagents');
+    fs.mkdirSync(subDir, { recursive: true });
+    const subTranscript = path.join(subDir, `agent-${aid}.jsonl`);
+    fs.writeFileSync(transcript, ''); // parent transcript exists but is empty
+    const out = stop(turn([{ name: 'Read', input: { file_path: path.join(root, 'src/zebra_loader.py') } }]),
+      { event: 'SubagentStop', aid, transcriptPath: subTranscript });
+    const res = JSON.parse(out);
+    expect(res.decision).toBe('block');
+    expect(res.reason).toContain('src/zebra_loader.py');
+    expect(res.reason).toContain('spawned as a subagent');
+    // second SubagentStop with nothing new → silent
+    const out2 = stop([], { event: 'SubagentStop', aid, transcriptPath: subTranscript });
+    expect(out2.trim()).toBe('');
   });
 });

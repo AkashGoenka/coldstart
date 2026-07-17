@@ -14,13 +14,14 @@
  * Exit codes: 0 ok · 1 bad input/error · 2 not found · 3 write returned
  * candidates (two-phase gate: re-run with --into <id> or --new).
  */
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { ensureKeeper } from '../keeper.js';
 import { setupNotebook, wireClaudeKbHooks } from '../init.js';
 import { kbSearch, renderSearchPage, renderResultsPage, renderCompactPage, shouldImplantTop } from './search.js';
 import { loadKbNotesIndex } from './notes-index.js';
 import { kbWrite, type WriteSpec } from './write.js';
+import { writeGuideCli, flowEvidenceWarning } from './write-guide.js';
 import { kbLookup, renderLookup } from './lookup.js';
 import { kbLint, lintSummary } from './lint.js';
 import { kbCommit } from './commit.js';
@@ -235,7 +236,7 @@ async function readStdin(): Promise<string> {
 
 async function cmdWrite(positional: string[], flags: KbFlags): Promise<number> {
   const src = positional[0];
-  if (!src) { err('usage: coldstart kb write <spec.json | -> [--into ID] [--new]'); return 1; }
+  if (!src) { out(writeGuideCli()); return 0; }
   let raw = '';
   try {
     raw = src === '-' ? await readStdin() : readFileSync(src, 'utf8');
@@ -267,8 +268,15 @@ async function cmdWrite(positional: string[], flags: KbFlags): Promise<number> {
   }
   // Path warnings ride on STDOUT — the writing agent must see and fix them
   // now (a typo'd path is a silently dangling link forever after).
-  const warned = result.warnings?.length
-    ? '\n' + result.warnings.map((w) => `warning: ${w}`).join('\n')
+  const warnings = [...(result.warnings ?? [])];
+
+  // Flow-evidence WARN (never a rejection): a flow whose steps the session
+  // never actually read is the classic bad flow — assembled from grep hits.
+  const flowWarn = flowEvidenceWarning(spec, flags.session);
+  if (flowWarn) warnings.push(flowWarn);
+
+  const warned = warnings.length
+    ? '\n' + warnings.map((w) => `warning: ${w}`).join('\n')
     : '';
   out(`kb write: ${result.op} → ${result.id}${warned}`);
   return 0;

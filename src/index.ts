@@ -701,6 +701,11 @@ async function main(): Promise<void> {
     const { runIndexPrep } = await import('./cli.js');
     process.exit(await runIndexPrep(process.argv.slice(3), buildIndex));
   }
+  // Consumer counts for the capture hook's graph annotation (fail-open there).
+  if (process.argv[2] === 'consumers') {
+    const { runConsumers } = await import('./cli.js');
+    process.exit(await runConsumers(process.argv.slice(3), buildIndex));
+  }
   // Notebook KB — `kb search|write|status|lint|render|init|migrate`.
   if (process.argv[2] === 'kb') {
     const { runKb } = await import('./kb/cli.js');

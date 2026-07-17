@@ -235,9 +235,48 @@ function ensureGitattributes(cwd: string): void {
  * (gitignore `.coldstart/`), or committable when `commit` is set. Does NOT wire
  * hooks — those are Claude-specific (see wireClaudeKbHooks).
  */
+// Scaffolded once by init when absent — the discoverable face of the ignore
+// layer. The DEFAULTS live in hooks/ignore.mjs (single source of truth); this
+// file only ADDS or negates. User edits are never touched again. Lives in
+// .coldstart/ and is PERSONAL: a sibling .coldstart/.gitignore keeps it out of
+// git even when the notebook itself is shared (defaults ship in code, so every
+// collaborator has the same baseline without the file).
+const COLDSTARTIGNORE_TEMPLATE = `# .coldstartignore — files the notebook never writes notes for (gitignore syntax).
+# Personal file (gitignored): the built-in defaults apply for everyone; lines
+# here ADD to them on this machine only. Defaults already cover: *.json,
+# lockfiles, dist/ build/ coverage/, *.min.*, *.map, *.snap, .env*,
+# images/fonts/binaries. Re-include a default with "!".
+# Examples:
+#   *.generated.ts
+#   docs/
+#   !tsconfig.json
+`;
+
+const IGNOREFILE_GI_LINE = '.coldstartignore';
+
+export function ensureColdstartignore(cwd: string): 'created' | 'kept' {
+  const dir = path.join(cwd, '.coldstart');
+  fs.mkdirSync(dir, { recursive: true });
+  // Keep the ignore file itself out of git (shared-notebook repos commit
+  // .coldstart/ contents; this file stays per-developer).
+  const gi = path.join(dir, '.gitignore');
+  let giText = '';
+  try { giText = fs.existsSync(gi) ? fs.readFileSync(gi, 'utf8') : ''; } catch { /* create below */ }
+  if (!giText.split('\n').some((l) => l.trim() === IGNOREFILE_GI_LINE)) {
+    fs.appendFileSync(gi, (giText && !giText.endsWith('\n') ? '\n' : '') + IGNOREFILE_GI_LINE + '\n');
+  }
+  const p = path.join(dir, '.coldstartignore');
+  if (fs.existsSync(p)) return 'kept';
+  fs.writeFileSync(p, COLDSTARTIGNORE_TEMPLATE);
+  return 'created';
+}
+
 export function setupNotebook(cwd: string, commit: boolean): void {
   initSkeleton(cwd);
   ensureGitattributes(cwd);
+  if (ensureColdstartignore(cwd) === 'created') {
+    out('  .coldstart/.coldstartignore — created (personal; files the notebook skips; gitignore syntax, defaults built in)');
+  }
   if (commit) {
     const r = removeNotebookGitignore(cwd);
     out(`  notebook      — shared: .raw + okf.yaml committable, publish with \`coldstart kb commit\`${r === 'removed' ? ' (removed prior ignore rule)' : ''}`);

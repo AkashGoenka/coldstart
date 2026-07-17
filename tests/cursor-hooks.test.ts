@@ -88,7 +88,7 @@ describe('Cursor navigation hook contracts', () => {
 });
 
 describe('Cursor transcript capture', () => {
-  it('stop captures only the CURRENT turn (turn-scoped via turn_ended)', () => {
+  it('stop is a silent v5 tick: Reads become evidence, grep paths never do', () => {
     fs.mkdirSync(path.join(root, 'src'), { recursive: true });
     fs.writeFileSync(path.join(root, 'src/app.py'), 'def restoreGraph(): pass\n');
     fs.writeFileSync(path.join(root, 'src/old.py'), 'x = 1\n');
@@ -97,10 +97,12 @@ describe('Cursor transcript capture', () => {
       session_id: sid, generation_id: gen(), loop_count: 0, workspace_roots: [root],
       transcript_path: transcript('main-transcript.jsonl'), hook_event_name: 'stop',
     });
-    const result = JSON.parse(output);
-    expect(result.followup_message).toContain('src/app.py');   // turn 2 Read
-    expect(result.followup_message).toContain('src/helper.py'); // turn 2 Shell grep path
-    expect(result.followup_message).not.toContain('src/old.py'); // turn 1 — excluded
+    expect(output.trim()).toBe(''); // v5: no first-stop fire — evidence recorded, stop allowed
+    const marker = JSON.parse(
+      fs.readFileSync(path.join(os.tmpdir(), `coldstart-cursor-kb-${sid}-main.json`), 'utf8'));
+    expect(marker.files['src/app.py'].reads).toBe(1);  // turn 2 Read
+    expect(marker.files['src/old.py'].reads).toBe(1);  // turn 1 Read — unprocessed evidence counts
+    expect(marker.files['src/helper.py']).toBeUndefined(); // Shell grep = mention, filtered
   });
 
   it('subagentStop uses agent_transcript_path rather than the main transcript', () => {
