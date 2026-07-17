@@ -230,9 +230,9 @@
       <p style="margin-top:12px">Files whose notes are already fresh don't re-trigger capture, so a warmed-up repo asks less over time. The flip side: a brand-new notebook starts empty and <b>warms with use</b> — the first few real tasks seed the file notes, and "how X works" flow notes appear as sessions actually need those answers. Don't judge recall on day one.</p>
 
       <h4 class="subhead"><code>.coldstartignore</code> — files that never get notes</h4>
-      <p><code>coldstart init</code> scaffolds a <code>.coldstartignore</code> at the repo root (gitignore syntax). Built-in defaults already exclude data-shaped files — <code>*.json</code>, lockfiles, <code>dist/</code>/<code>build/</code>/<code>coverage/</code>, minified/map/snapshot files, binaries and images, and <code>.env*</code> (notes are committed; secrets must never enter them). Lines you add extend the defaults; re-include a default with <code>!</code>:</p>
+      <p><code>coldstart init</code> scaffolds <code>.coldstart/.coldstartignore</code> (gitignore syntax). It's a <b>personal</b> file — kept out of git even when the notebook is shared, because the built-in defaults ship in the tool itself: <code>*.json</code>, lockfiles, <code>dist/</code>/<code>build/</code>/<code>coverage/</code>, minified/map/snapshot files, binaries and images, and <code>.env*</code> (notes are committed; secrets must never enter them). Every collaborator gets that baseline with or without the file; lines you add extend it on your machine. Re-include a default with <code>!</code>:</p>
       <div class="term">
-        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">.coldstartignore</span></div>
+        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">.coldstart/.coldstartignore</span></div>
         <div class="term-body">
 <span class="ln"><span class="c-dim"># add your own</span></span>
 <span class="ln">*.generated.ts</span>

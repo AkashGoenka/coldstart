@@ -74,9 +74,11 @@ export function compileIgnore(lines) {
   };
 }
 
-/** Load root/.coldstartignore layered over the shipped defaults. */
+/** Load .coldstart/.coldstartignore layered over the shipped defaults.
+ *  The file is personal (gitignored by init's scaffold) — defaults ship in
+ *  code, so every collaborator gets the same baseline without the file. */
 export function loadIgnore(root) {
   let userLines = [];
-  try { userLines = readFileSync(join(root, ".coldstartignore"), "utf8").split("\n"); } catch { /* none: defaults only */ }
+  try { userLines = readFileSync(join(root, ".coldstart", ".coldstartignore"), "utf8").split("\n"); } catch { /* none: defaults only */ }
   return compileIgnore([...DEFAULT_IGNORES, ...userLines]);
 }

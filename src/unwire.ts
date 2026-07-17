@@ -290,7 +290,8 @@ export async function runUnwire(): Promise<void> {
     let nbRes: Result = 'absent';
     if (fs.existsSync(nb)) { fs.rmSync(nb, { recursive: true, force: true }); nbRes = 'removed'; }
     out(`    .coldstart/notebook — ${label(nbRes)} (--purge: notes deleted)`);
-    out(`    .coldstartignore — ${label(removeFile(path.join(cwd, '.coldstartignore')))}`);
+    out(`    .coldstartignore — ${label(removeFile(path.join(cwd, '.coldstart', '.coldstartignore')))}`);
+    out(`    .coldstart/.gitignore — ${label(removeFile(path.join(cwd, '.coldstart', '.gitignore')))}`);
     out(`    .gitignore    — ${label(removeNotebookGitignore(cwd))} .coldstart/ line`);
     out(`    .gitattributes — ${label(removeNotebookGitattributes(cwd))} merge=union line`);
     rmEmptyDirs(path.join(cwd, '.coldstart'));

@@ -76,7 +76,8 @@ describe('ignore matcher', () => {
 
   it('loadIgnore layers user file over defaults', () => {
     const root = makeRepo([]);
-    writeFileSync(join(root, '.coldstartignore'), '# mine\n*.generated.ts\n!package.json\n');
+    mkdirSync(join(root, '.coldstart'), { recursive: true });
+    writeFileSync(join(root, '.coldstart', '.coldstartignore'), '# mine\n*.generated.ts\n!package.json\n');
     const m = loadIgnore(root);
     expect(m('api.generated.ts')).toBe(true);
     expect(m('package.json')).toBe(false); // user negated a default
@@ -264,15 +265,26 @@ describe('trigger', () => {
 // --- .coldstartignore scaffold + lint report ---------------------------------------
 
 describe('coldstartignore wiring', () => {
-  it('init scaffolds the template once and never touches user edits', () => {
+  it('init scaffolds the template once in .coldstart/ and never touches user edits', () => {
     const root = makeRepo([]);
     expect(ensureColdstartignore(root)).toBe('created');
-    const scaffolded = readFileSync(join(root, '.coldstartignore'), 'utf8');
+    const p = join(root, '.coldstart', '.coldstartignore');
+    const scaffolded = readFileSync(p, 'utf8');
     expect(scaffolded).toContain('gitignore syntax');
     expect(loadIgnore(root)('package.json')).toBe(true); // comments-only template = defaults intact
-    writeFileSync(join(root, '.coldstartignore'), '*.custom\n');
+    writeFileSync(p, '*.custom\n');
     expect(ensureColdstartignore(root)).toBe('kept');
-    expect(readFileSync(join(root, '.coldstartignore'), 'utf8')).toBe('*.custom\n');
+    expect(readFileSync(p, 'utf8')).toBe('*.custom\n');
+  });
+
+  it('scaffold gitignores the ignore file itself (personal, even in shared notebooks)', () => {
+    const root = makeRepo([]);
+    ensureColdstartignore(root);
+    const gi = readFileSync(join(root, '.coldstart', '.gitignore'), 'utf8');
+    expect(gi.split('\n')).toContain('.coldstartignore');
+    ensureColdstartignore(root); // idempotent — no duplicate line
+    const again = readFileSync(join(root, '.coldstart', '.gitignore'), 'utf8');
+    expect(again.split('\n').filter((l) => l === '.coldstartignore')).toHaveLength(1);
   });
 
   it('kb lint REPORTS a note anchored to an ignored file (never blocks the write)', async () => {
