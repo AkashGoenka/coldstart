@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] - 2026-07-18
+
+### Fixed
+- **Notebook capture now survives Claude Code `/compact`.** The Stop-hook capture
+  pipeline slices the session transcript by a stored line offset. `/compact`
+  rewrites the transcript to a far shorter compacted version, so the stored offset
+  pointed *past* the new end — `slice()` returned empty and every subsequent turn's
+  evidence was silently dropped (files stayed `captured`, the trigger never
+  re-armed) for the rest of the session. A shrink guard now resets the offset when
+  the transcript is shorter than expected, reprocessing the compacted transcript
+  from its start. (#81)
+- **`init` no longer skips Claude wiring when `CLAUDE.md` only *mentions*
+  `@coldstart.md` in prose.** The `wireClaudeImport` idempotency check matched the
+  import substring anywhere in the file, so a prose reference counted as "already
+  wired" and the real import was never added. The check is now per line. (#80)
+
+## [2.2.0] - 2026-07-18
+
+### Changed
+- **Trigger-timed notebook capture (v5).** The always-fire Stop gate is gone. Every
+  Stop updates per-file evidence records (edit/read/gs tiers; mentions and
+  `.coldstartignore`'d files never count) and advances a trigger state machine
+  (score = uncaptured reads + 2×settled edits + active stops; arm at 10, fire on
+  descent / surge / cap). Most stops exit silently. Descent and surge fire
+  **non-blocking** — the capture payload is delivered with the user's next prompt
+  via the recall hook, so the stop itself is never interrupted; only a git-HEAD
+  drift (a manual commit boundary) blocks. `.coldstartignore` moved under
+  `.coldstart/`. Cursor, Codex, and the MCP `kb_write` surface were brought to v5
+  parity. (#77, #79)
+
 ## [2.1.1] - 2026-07-13
 
 ### Fixed
