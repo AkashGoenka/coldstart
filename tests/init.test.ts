@@ -130,6 +130,17 @@ describe('init wiring (coldstart.md import model)', () => {
     const body = fs.readFileSync(path.join(tempDir, 'CLAUDE.md'), 'utf8');
     expect(body.match(/@coldstart\.md/g)!.length).toBe(1);
   });
+
+  it('wireClaudeImport is NOT fooled by a prose mention of @coldstart.md (2.2.0 dogfood bug)', () => {
+    // Claude Code does not resolve imports inside code spans — a backticked
+    // mention is documentation, not wiring. Found live: coldstart's own
+    // CLAUDE.md describes the import and init skipped adding the real line.
+    fs.writeFileSync(path.join(tempDir, 'CLAUDE.md'),
+      '# Rules\n\nSetup writes `@coldstart.md` into CLAUDE.md automatically.\n');
+    expect(wireClaudeImport(tempDir)).toBe('added');
+    const lines = fs.readFileSync(path.join(tempDir, 'CLAUDE.md'), 'utf8').split('\n');
+    expect(lines.some((l) => l.trim() === '@coldstart.md')).toBe(true);
+  });
 });
 
 describe('wireClaudeHooks (settings.json hook wiring)', () => {
