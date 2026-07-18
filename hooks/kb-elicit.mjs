@@ -121,6 +121,12 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     // This stop's transcript slice (everything since the last processed line).
     const text = readFileSync(transcriptPath, "utf8");
     const lines = text.split("\n");
+    // A transcript SHORTER than our stored offset was replaced out from under us
+    // — Claude Code's /compact rewrites it far shorter (also log rotation). The
+    // offset now points past the end, so slice() would return an empty segment
+    // and silently drop this turn's (and every later turn's) evidence until the
+    // line count grows back. Reset to reprocess the new transcript from its start.
+    if (state.lineCount > lines.length) state.lineCount = 0;
     const segment = lines.slice(state.lineCount).join("\n");
     state.lineCount = lines.length;
 
