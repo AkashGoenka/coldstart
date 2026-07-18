@@ -310,7 +310,11 @@ export function wireClaudeImport(cwd: string): 'created' | 'added' | 'present' {
     return 'created';
   }
   const existing = fs.readFileSync(filePath, 'utf8');
-  if (existing.includes(IMPORT_LINE)) return 'present';
+  // LINE check, not substring: a CLAUDE.md can mention `@coldstart.md` in
+  // backticked prose (this repo's own does), and Claude Code does not resolve
+  // imports inside code spans — only a standalone line wires the guidance.
+  // Symmetric with unwire's line-based strip.
+  if (existing.split('\n').some((l) => l.trim() === IMPORT_LINE)) return 'present';
   const sep = existing.endsWith('\n') ? '' : '\n';
   fs.appendFileSync(filePath, `${sep}\n${IMPORT_LINE}\n`);
   return 'added';
