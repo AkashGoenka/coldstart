@@ -149,6 +149,24 @@ describe('kb-elicit v5 trigger', () => {
     expect(res.reason).toContain('src/one.py');
     expect(res.reason).toContain('then stop');
   });
+
+  it('a /compact-shrunk transcript is reprocessed, not silently skipped', () => {
+    const before = Array.from({ length: 10 }, (_, i) => `src/before${i}.py`);
+    seed([...before, 'src/after.py']);
+    const markerPath = path.join(os.tmpdir(), `coldstart-kb-${sid}-main.json`);
+    // stop 1: a long turn grows the transcript well past a handful of lines.
+    expect(stop(before.map((f) => turn([{ name: 'Read', input: { file_path: path.join(root, f) } }])).flat()).trim()).toBe('');
+    const bigLineCount = JSON.parse(fs.readFileSync(markerPath, 'utf8')).lineCount;
+    expect(bigLineCount).toBeGreaterThan(15);
+    // /compact replaces the transcript with a much SHORTER compacted version —
+    // its length is now well below the stored offset.
+    fs.writeFileSync(transcript, JSON.stringify({ type: 'summary', summary: 'compacted' }) + '\n');
+    // stop 2: a real edit lands in the post-compact transcript.
+    expect(stop(turn([{ name: 'Edit', input: { file_path: path.join(root, 'src/after.py') } }])).trim()).toBe('');
+    const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+    // Without the shrink guard, slice(bigLineCount) is empty and this edit is lost.
+    expect(marker.files['src/after.py']?.edits).toBe(1);
+  });
 });
 
 describe('kb-elicit SubagentStop (one-shot, still blocking)', () => {
