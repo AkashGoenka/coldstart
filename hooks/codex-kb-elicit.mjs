@@ -5,7 +5,7 @@
  *
  * HOST CONSTRAINT: Codex's Stop does NOT fire per turn — in the TUI it fires
  * once at session EXIT, and `codex exec` is one Stop by construction
- * (confirmed live 2026-07-13). A multi-stop trigger (arm/descent/surge) has
+ * (confirmed live 2026-07-13). A multi-stop trigger (arm/descent) has
  * nothing to time against here, and a pending-file handoff has no next prompt
  * to ride. So Codex capture is ONE-SHOT: at the session's single Stop, build
  * the v5 worklist and deliver it BLOCKING ({decision:"block"} re-prompts the

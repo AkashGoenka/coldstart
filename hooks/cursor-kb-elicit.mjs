@@ -10,7 +10,7 @@
  * .coldstartignore'd files never count) and advances trigger.mjs. Most stops
  * exit silently. Fires:
  *
- *   descent/surge → NON-BLOCKING: payload → pending file; cursor-kb-recall
+ *   descent → NON-BLOCKING: payload → pending file; cursor-kb-recall
  *     (beforeSubmitPrompt) delivers it with the user's next prompt via
  *     additional_context.
  *   cap → also non-blocking (same rationale as the Claude hook: replay showed

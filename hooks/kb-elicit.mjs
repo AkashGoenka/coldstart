@@ -5,10 +5,10 @@
  * v5 (2026-07-17): the always-fire gate is gone. Every Stop updates per-file
  * EVIDENCE RECORDS (hooks/evidence.mjs — edit/read/gs tiers; mentions and
  * .coldstartignore'd files never count) and advances the TRIGGER state machine
- * (hooks/trigger.mjs — score/arm, fire on descent/surge, cap, .git HEAD
+ * (hooks/trigger.mjs — score/arm, fire on descent, cap, .git HEAD
  * drift). Most stops exit silently. When the trigger fires:
  *
- *   descent/surge → NON-BLOCKING: the capture payload is written to a pending
+ *   descent → NON-BLOCKING: the capture payload is written to a pending
  *     file; kb-recall.mjs (UserPromptSubmit) delivers it with the user's next
  *     prompt. The stop itself is never blocked — no more answer-then-homework
  *     agitation (upstream #76721 sidestepped).
@@ -31,7 +31,7 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { existsSync, writeFileSync, appendFileSync, readFileSync } from "node:fs";
+import { existsSync, writeFileSync, appendFileSync, readFileSync, readdirSync } from "node:fs";
 
 import { extractEvidence, segmentStats } from "./evidence.mjs";
 import { initialState, step } from "./trigger.mjs";
@@ -49,6 +49,37 @@ let LOG_FILE = join(tmpdir(), "coldstart-kb-hook.log");
 function setLogRoot(root) { if (root) LOG_FILE = join(root, ".coldstart", "kb-hook.log"); }
 function log(msg) {
   try { appendFileSync(LOG_FILE, `[${new Date().toISOString()}] elicit: ${msg}\n`); } catch { /* never fail logging */ }
+}
+
+// --- Subagent transcript resolution ------------------------------------------
+/**
+ * Resolve a subagent's transcript, supporting both flat and nested layouts.
+ * - Flat: stem/subagents/agent-id.jsonl
+ * - Nested (parallel/batched): stem/subagents/workflows/wf_id/agent-id.jsonl
+ * Returns "" if the subagents dir is absent or no match is found.
+ */
+function resolveSubagentTranscript(parentTranscriptPath, agentId) {
+  const stem = parentTranscriptPath.replace(/\.jsonl$/, "");
+  const flatPath = join(stem, "subagents", `agent-${agentId}.jsonl`);
+
+  // First try flat path.
+  if (existsSync(flatPath)) return flatPath;
+
+  // Recursive search for nested layout.
+  const filename = `agent-${agentId}.jsonl`;
+  const subagentsDir = join(stem, "subagents");
+  try {
+    if (!existsSync(subagentsDir)) return "";
+    // Use recursive option to walk all depths.
+    const entries = readdirSync(subagentsDir, { recursive: true, withFileTypes: false });
+    for (const entry of entries) {
+      if (typeof entry === "string" && entry.endsWith(filename)) {
+        const fullPath = join(subagentsDir, entry);
+        if (existsSync(fullPath)) return fullPath;
+      }
+    }
+  } catch { /* permission/read error: return empty */ }
+  return "";
 }
 
 // --- stdin ---------------------------------------------------------------------
@@ -92,14 +123,20 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     const aid = String(input.agent_id || "main").replace(/[^A-Za-z0-9_-]/g, "") || "main";
     const isSubagent = input.hook_event_name === "SubagentStop";
 
+    // Guard: compaction subagents read transcripts, not code—skip silently.
+    if (isSubagent && aid.startsWith("acompact")) {
+      log(`SKIP compaction-agent session=${sid} agent=${aid}`);
+      process.exit(0);
+    }
+
     // On SubagentStop, transcript_path is the PARENT's transcript (confirmed:
-    // claude-code#11396); the sub's own lives at
-    // <parent-transcript-stem>/subagents/agent-<agent_id>.jsonl.
+    // claude-code#11396); the sub's own lives at stem/subagents/agent-id.jsonl
+    // (flat) or stem/subagents/workflows/wf_id/agent-id.jsonl (nested).
     let transcriptPath = String(input.transcript_path || "");
     if (isSubagent) {
       const own = String(input.agent_transcript_path || "") ||
         (aid !== "main" && transcriptPath
-          ? join(transcriptPath.replace(/\.jsonl$/, ""), "subagents", `agent-${aid}.jsonl`)
+          ? resolveSubagentTranscript(transcriptPath, aid)
           : "");
       if (!own || !existsSync(own)) {
         log(`SKIP subagent-transcript-missing session=${sid} agent=${aid} tried=${own || "n/a"}`);
@@ -116,17 +153,44 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
       const parsed = JSON.parse(readFileSync(marker, "utf8"));
       if (parsed && parsed.v === 2) state = parsed;
     } catch { /* first Stop of this session (or a pre-v5 marker: start fresh) */ }
+    const freshMarker = !state; // no valid prior marker: we're attaching, not resuming our own place
     if (!state) state = initialState();
 
     // This stop's transcript slice (everything since the last processed line).
     const text = readFileSync(transcriptPath, "utf8");
     const lines = text.split("\n");
+    // A newline-terminated transcript splits to a phantom trailing "" — counting
+    // it as a consumed line would push the offset one past the last real line and
+    // silently skip the FIRST line appended next stop (dropping a tool_use → its
+    // file's evidence). Trim it so the offset tracks real lines only.
+    if (lines.length && lines[lines.length - 1] === "") lines.pop();
     // A transcript SHORTER than our stored offset was replaced out from under us
     // — Claude Code's /compact rewrites it far shorter (also log rotation). The
     // offset now points past the end, so slice() would return an empty segment
     // and silently drop this turn's (and every later turn's) evidence until the
     // line count grows back. Reset to reprocess the new transcript from its start.
     if (state.lineCount > lines.length) state.lineCount = 0;
+
+    // Fresh attach to an ALREADY-LARGE transcript → baseline, fire NOTHING.
+    // When the OS clears the tmp marker between days, the next Stop starts fresh
+    // but the on-disk transcript still holds the WHOLE session. Reprocessing it
+    // from line 0 treats all of history as this turn's work and dumps the entire
+    // file set into one cap "blob" (the stop=1 cap fires we saw on resumed
+    // sessions). A genuine first Stop, by contrast, has a tiny transcript (this
+    // turn only) and must still be processed so its evidence can build toward
+    // arming. So baseline ONLY when a fresh marker meets a large transcript:
+    // snapshot the offset + HEAD and start watching from here. Subagents keep
+    // their own one-shot path below (a fresh aid-marker is normal — never baseline).
+    const RESUMED_ATTACH_LINES = 400; // a first turn is tens of lines; a resume is thousands
+    if (freshMarker && !isSubagent && lines.length > RESUMED_ATTACH_LINES) {
+      state.lineCount = lines.length;
+      state.head = gitHead(root) || state.head;
+      writeFileSync(marker, JSON.stringify(state));
+      logCaptureEvent(root, { event: "baseline", session: sid, lines: lines.length });
+      log(`BASELINE fresh-marker-large-transcript session=${sid} lines=${lines.length}`);
+      process.exit(0);
+    }
+
     const segment = lines.slice(state.lineCount).join("\n");
     state.lineCount = lines.length;
 

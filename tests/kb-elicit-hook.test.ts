@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 /**
  * kb-elicit.mjs v5 contract (2026-07-17): the always-fire gate is GONE.
  * Stops feed per-file evidence records into the trigger state machine; most
- * stops exit silently. Fires are descent/surge/cap (non-blocking: pending
+ * stops exit silently. Fires are descent/cap (non-blocking: pending
  * file for kb-recall to deliver) or head-drift (blocking). SubagentStop
  * stays a one-shot block. Tested by spawning the real hook with fixture
  * transcripts, exactly as Claude Code would.
@@ -167,6 +167,42 @@ describe('kb-elicit v5 trigger', () => {
     // Without the shrink guard, slice(bigLineCount) is empty and this edit is lost.
     expect(marker.files['src/after.py']?.edits).toBe(1);
   });
+
+  it('a fresh marker meeting a LARGE pre-existing transcript baselines instead of cap-firing a blob', () => {
+    // Resume scenario: the OS cleared the tmp marker between days, but the on-disk
+    // transcript still holds the whole prior session. A fresh marker reprocessing
+    // it from line 0 would treat all history as this-turn work and cap-fire a blob.
+    seed(['src/hist0.py']); // only the file edited after attach needs to exist
+    const histTurns = Array.from({ length: 210 }, (_, i) =>
+      turn([{ name: 'Read', input: { file_path: path.join(root, `src/hist${i}.py`) } }])).flat();
+    fs.writeFileSync(transcript, histTurns.join('\n') + '\n');
+    expect(histTurns.length).toBeGreaterThan(400);
+    const markerPath = path.join(os.tmpdir(), `coldstart-kb-${sid}-main.json`);
+    expect(fs.existsSync(markerPath)).toBe(false); // fresh: no marker on disk
+
+    const out = stop([]); // process the already-large transcript
+    expect(out.trim()).toBe('');                    // baseline → silent, NO blob fire
+    expect(fs.existsSync(pendingFile())).toBe(false);
+    const baselined = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+    expect(baselined.lineCount).toBeGreaterThan(400); // offset snapped to the end
+    expect(Object.keys(baselined.files)).toEqual([]); // nothing recorded — watch from here
+
+    // Real work AFTER the attach is captured normally (baseline didn't wedge it).
+    fs.appendFileSync(transcript,
+      turn([{ name: 'Edit', input: { file_path: path.join(root, 'src/hist0.py') } }]).join('\n') + '\n');
+    stop([]);
+    const after = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+    expect(after.files['src/hist0.py']?.edits).toBe(1);
+  });
+
+  it('a genuine first Stop with a small transcript still records evidence (not baselined)', () => {
+    // Guard the guard: a real new session's first turn is tiny and must process.
+    seed(['src/small.py']);
+    const out = stop(turn([{ name: 'Read', input: { file_path: path.join(root, 'src/small.py') } }]));
+    expect(out.trim()).toBe('');
+    const marker = JSON.parse(fs.readFileSync(path.join(os.tmpdir(), `coldstart-kb-${sid}-main.json`), 'utf8'));
+    expect(marker.files['src/small.py']?.reads).toBe(1); // recorded, NOT baselined away
+  });
 });
 
 describe('kb-elicit SubagentStop (one-shot, still blocking)', () => {
@@ -186,5 +222,61 @@ describe('kb-elicit SubagentStop (one-shot, still blocking)', () => {
     // second SubagentStop with nothing new → silent
     const out2 = stop([], { event: 'SubagentStop', aid, transcriptPath: subTranscript });
     expect(out2.trim()).toBe('');
+  });
+
+  it('block-fires on the sub\'s reads even when transcript is at nested path (workflows/...)', () => {
+    seed(['src/nested_agent_work.py']);
+    const aid = 'agent_nested_123';
+    const nestedSubDir = path.join(transcript.replace(/\.jsonl$/, ''), 'subagents', 'workflows', 'wf_test');
+    fs.mkdirSync(nestedSubDir, { recursive: true });
+    const nestedSubTranscript = path.join(nestedSubDir, `agent-${aid}.jsonl`);
+    fs.writeFileSync(transcript, ''); // parent transcript exists but is empty
+
+    // Invoke the hook with a payload that does NOT include agent_transcript_path.
+    // This forces the recursive derivation logic to run.
+    fs.appendFileSync(nestedSubTranscript,
+      turn([{ name: 'Read', input: { file_path: path.join(root, 'src/nested_agent_work.py') } }]).join('\n') + '\n');
+    const payload = JSON.stringify({
+      session_id: sid,
+      agent_id: aid,
+      cwd: root,
+      transcript_path: transcript,
+      // Intentionally NOT setting agent_transcript_path here — forces derivation
+      hook_event_name: 'SubagentStop',
+    });
+    const out = execFileSync('node', [HOOK], { input: payload, encoding: 'utf8', timeout: 30000 });
+
+    const res = JSON.parse(out);
+    expect(res.decision).toBe('block');
+    expect(res.reason).toContain('src/nested_agent_work.py');
+    expect(res.reason).toContain('spawned as a subagent');
+  });
+
+  it('silently skip a SubagentStop from a compaction agent (acompact-*)', () => {
+    seed(['src/some_file.py']);
+    const aid = 'acompact_abc123def456';
+    const subDir = path.join(transcript.replace(/\.jsonl$/, ''), 'subagents');
+    fs.mkdirSync(subDir, { recursive: true });
+    const subTranscript = path.join(subDir, `agent-${aid}.jsonl`);
+    fs.writeFileSync(transcript, '');
+    // Create the transcript file even though it shouldn't be processed
+    fs.writeFileSync(subTranscript,
+      turn([{ name: 'Read', input: { file_path: path.join(root, 'src/some_file.py') } }]).join('\n') + '\n');
+
+    const payload = JSON.stringify({
+      session_id: sid,
+      agent_id: aid,
+      cwd: root,
+      transcript_path: transcript,
+      agent_transcript_path: subTranscript,
+      hook_event_name: 'SubagentStop',
+    });
+    const out = execFileSync('node', [HOOK], { input: payload, encoding: 'utf8', timeout: 30000 });
+
+    // Should exit silently with no stdout
+    expect(out.trim()).toBe('');
+
+    // Verify no capture file was created
+    expect(fs.existsSync(pendingFile())).toBe(false);
   });
 });
