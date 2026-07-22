@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.2] - 2026-07-22
+
+### Fixed
+- **Notebook capture fires reliably again.** The Stop-hook trigger had over-tightened:
+  descent required *two* consecutive quiet stops and a prose-heavy "synthesis" turn
+  counted as *active*, so on real sessions capture never descended and collapsed onto
+  the git-HEAD-drift path alone. Descent now needs a single quiet stop
+  (`DESCENT_QUIET = 1`), synthesis turns count as quiet, and the redundant surge path
+  was removed. (#83)
+- **Subagent capture no longer silently skips workflow-nested transcripts.** Claude
+  Code writes parallel/batched subagent transcripts under
+  `subagents/workflows/wf_*/agent-<id>.jsonl`; the resolver only looked at the flat
+  `subagents/agent-<id>.jsonl` path and logged `subagent-transcript-missing`. It now
+  resolves both layouts recursively and skips compaction (`acompact*`) agents. (#83)
+- **Resume no longer dumps a diluted capture blob.** When the OS cleared the tmp
+  session marker (e.g. a session resumed days later) and the transcript was already
+  large, the hook reprocessed the entire history as this-turn work and cap-fired an
+  over-broad worklist. A fresh marker meeting a >400-line transcript now baselines the
+  offset instead. Also fixes an off-by-one where a trailing empty split element
+  inflated the stored line count and dropped the first line of the next slice. (#83)
+
+### Added
+- **`coldstart status` reports install health.** It prints the installed version and
+  warns when a keeper is running an older version than the installed binary
+  (remedy: `coldstart restart`) or when a repo's wired hook paths no longer exist
+  because a node/nvm or npm-prefix change moved the global install
+  (remedy: `coldstart init`). Turns "the update didn't take" into a one-command
+  diagnosis.
+- **The notebook `kb view` stays live.** Once `index.html` has been generated, the
+  background keeper re-renders it whenever notes change, so a plain browser reload
+  shows the latest — no need to re-run the command. The file is never created
+  automatically; that stays the explicit `kb view`.
+
 ## [2.2.1] - 2026-07-18
 
 ### Fixed

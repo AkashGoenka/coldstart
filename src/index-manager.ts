@@ -4,8 +4,10 @@ import { stat } from 'node:fs/promises';
 import { join, dirname, basename } from 'node:path';
 import type { CodebaseIndex } from './types.js';
 import { startWatcher } from './watcher.js';
-import { renderIds, notebookExists } from './kb/store.js';
+import { renderIds, notebookExists, notebookDir } from './kb/store.js';
 import { buildKbNotesIndex, saveKbNotesIndex } from './kb/notes-index.js';
+import { kbView } from './kb/view.js';
+import { VIEW_TEMPLATE } from './kb/view-template.js';
 import { patchIndex } from './indexer/patch.js';
 import { getGitHead } from './indexer/git.js';
 import { lintIndexInvariants } from './indexer/invariants.js';
@@ -140,6 +142,7 @@ export class IndexManager {
       const kb = await buildKbNotesIndex(this.activeIndex, this.activeIndex.rootDir);
       await saveKbNotesIndex(this.activeIndex.rootDir, kb, this.cacheDir);
       this.log(`[coldstart] KB notes index refreshed (${Object.keys(kb.anchors).length} anchors, ${Object.keys(kb.absence).length} absence stamps, ${Object.keys(kb.renames).length} renames)`);
+      this.regenerateKbViewIfPresent();
     } catch (err) {
       this.log(`[coldstart] KB notes index refresh failed: ${err}`);
     } finally {
@@ -148,6 +151,25 @@ export class IndexManager {
         this.kbRefreshQueued = false;
         void this.refreshKbNotesIndex();
       }
+    }
+  }
+
+  /**
+   * Keep an already-generated notebook `index.html` current. `kb view` is
+   * opt-in (generate-and-open); once the user has opened it, the browser tab
+   * otherwise shows a frozen snapshot until they re-run the command. When the
+   * file exists we re-render it on every notes refresh so a plain tab reload
+   * shows the latest notes — no command re-run. We never CREATE the file (that
+   * stays the user's explicit `kb view`), and this is best-effort: a render
+   * failure must never wedge the keeper.
+   */
+  private regenerateKbViewIfPresent(): void {
+    const root = this.activeIndex.rootDir;
+    try {
+      if (!existsSync(join(notebookDir(root), 'index.html'))) return;
+      kbView(root, VIEW_TEMPLATE, { open: false, generated: new Date().toISOString().slice(0, 10) });
+    } catch (err) {
+      this.log(`[coldstart] KB view regen skipped: ${err}`);
     }
   }
 

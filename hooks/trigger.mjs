@@ -3,20 +3,22 @@
  * clock, no client specifics. The hook feeds it one stop's observations and
  * it returns the updated state + a fire decision.
  *
- * FROZEN SPEC (2026-07-15, replay + wave-lab validated):
+ * FROZEN SPEC (2026-07-15, replay + wave-lab validated; 2026-07-21 descent/synthesis update):
  *   score  = uncaptured contentRead files ×1
  *          + settled edited files       ×2   (settled = 3 active stops w/o re-edit)
- *          + active stops since last fire     (synthesis turns count as active)
+ *          + active stops since last fire     (new files or edits only; synthesis no longer counts as active)
  *     fresh-noted files contribute NOTHING — genuinely new knowledge drives firing.
  *   arm    at score ≥ T(10), requiring ≥2 active stops AND ≥2 uncaptured files.
- *   fire   armed + descent (2 quiet stops)             → non-blocking (inject)
- *          armed + surge  (≥2 new files after a quiet) → non-blocking (inject)
- *          score ≥ CAP(20)                             → non-blocking (backlog
+ *   fire   armed + descent (1 quiet stop)               → non-blocking (inject)
+ *          score ≥ CAP(20)                              → non-blocking (backlog
  *            rescue — replay showed dense sessions starve descent and hit cap
  *            repeatedly; blocking each cap re-created the v4 agitation)
- *          .git/HEAD drift, ≥2 uncaptured files        → BLOCKING (instant —
+ *          .git/HEAD drift, ≥2 uncaptured files         → BLOCKING (instant —
  *            the one boundary where waiting for a next prompt loses the moment)
  *   NEVER: first-stop fire, wall-clock, gap/resume, conversation classification.
+ *   (surge removed 2026-07-21: with descent=1 a quiet stop fires descent before
+ *    surge could ever apply — the two were redundant. cap + head-drift remain the
+ *    safety nets, so no armed state escapes a fire.)
  *
  * State lives in the session marker (JSON-serializable, owned by the caller).
  * Files enter state ONLY if they passed the ignore filter and have contentRead
@@ -26,8 +28,7 @@
 export const T_ARM = 10;
 export const T_CAP = 20;
 export const SETTLE_ACTIVE_STOPS = 3;
-export const DESCENT_QUIET = 2;
-export const SURGE_NEW_FILES = 2;
+export const DESCENT_QUIET = 1;
 export const MIN_FILES = 2;
 
 export function initialState() {
@@ -36,11 +37,12 @@ export function initialState() {
     stop: 0,            // stops processed
     activeStops: 0,     // ACTIVE stops since last fire
     quietRun: 0,        // consecutive quiet stops
-    wasQuiet: false,    // previous stop was quiet (surge detection)
     armed: false,
     fires: 0,
     lineCount: 0,       // transcript lines already consumed (caller-owned)
     head: "",           // .git/HEAD fingerprint at last stop (caller-owned)
+    // (surge removed 2026-07-21 — descent=1 subsumes it; old markers may still
+    //  carry a wasQuiet field, which is simply ignored.)
     files: {},          // rel → { reads, edits, gs, firstStop, lastStop,
                         //         lastEditActive, retouches, captured, fresh }
   };
@@ -55,7 +57,7 @@ export function initialState() {
  *     freshNoted:  Set<rel> (files whose note is currently fresh),
  *     headDrift:   bool  (.git/HEAD changed since last stop — manual commits too),
  *   }
- *   decision = null | { fire: "descent"|"surge"|"cap"|"head-drift",
+ *   decision = null | { fire: "descent"|"cap"|"head-drift",
  *                       mode: "inject"|"block", files: [rel…] }
  */
 export function step(state, obs) {
@@ -92,7 +94,10 @@ export function step(state, obs) {
   }
 
   // ---- active vs quiet --------------------------------------------------------
-  const active = newFiles > 0 || editsThisStop > 0 || obs.synthesis === true;
+  // Active = new files or edits only. Synthesis (prose-heavy, tool-light turns)
+  // is the agent settling/explaining — exactly the wind-down signal descent should fire on —
+  // so it counts as quiet, not active.
+  const active = newFiles > 0 || editsThisStop > 0;
   if (active) { s.activeStops++; s.quietRun = 0; } else { s.quietRun++; }
   for (const f of Object.values(s.files)) {
     if (f.lastEditActive === -2) f.lastEditActive = s.activeStops; // edit stamped at current active count
@@ -118,10 +123,7 @@ export function step(state, obs) {
     fire = { fire: "cap", mode: "inject" };
   } else if (s.armed && s.quietRun >= DESCENT_QUIET) {
     fire = { fire: "descent", mode: "inject" };
-  } else if (s.armed && s.wasQuiet && newFiles >= SURGE_NEW_FILES) {
-    fire = { fire: "surge", mode: "inject" };
   }
-  s.wasQuiet = !active;
 
   let decision = null;
   if (fire) {

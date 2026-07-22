@@ -170,10 +170,7 @@ describe('trigger', () => {
     r = step(r.state, { ...QUIET, delta: reads('f', 'g', 'h', 'i') });
     expect(r.decision).toBeNull();
     expect(r.state.armed).toBe(true);
-    // stop 3: quiet
-    r = step(r.state, QUIET);
-    expect(r.decision).toBeNull();
-    // stop 4: second quiet → DESCENT fire, non-blocking
+    // stop 3: single quiet → DESCENT fire (DESCENT_QUIET=1), non-blocking
     r = step(r.state, QUIET);
     expect(r.decision?.fire).toBe('descent');
     expect(r.decision?.mode).toBe('inject');
@@ -184,21 +181,12 @@ describe('trigger', () => {
     expect(r.decision).toBeNull();
   });
 
-  it('surge fires when new files arrive after quiet while armed', () => {
-    let s = initialState();
-    let r = step(s, { ...QUIET, delta: reads('a', 'b', 'c', 'd', 'e') });
-    r = step(r.state, { ...QUIET, delta: reads('f', 'g', 'h', 'i') }); // armed
-    r = step(r.state, QUIET); // one quiet (descent needs two)
-    r = step(r.state, { ...QUIET, delta: reads('x', 'y') }); // ≥2 new after quiet
-    expect(r.decision?.fire).toBe('surge');
-    expect(r.decision?.mode).toBe('inject');
-  });
-
   it('fresh-noted files score nothing; editing one clears the discount', () => {
     let s = initialState();
     const freshNoted = new Set(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i']);
     let r = step(s, { ...QUIET, delta: reads(...freshNoted), freshNoted });
-    r = step(r.state, { ...QUIET, delta: reads(), synthesis: true });
+    // step 2: add non-fresh reads to keep the state machine active (previously used synthesis:true)
+    r = step(r.state, { ...QUIET, delta: reads('x', 'y') });
     r = step(r.state, QUIET);
     r = step(r.state, QUIET);
     expect(r.decision).toBeNull(); // all fresh → never armed, never fires
@@ -222,13 +210,40 @@ describe('trigger', () => {
   it('cap rescues a long grind, non-blocking (dense sessions starve descent)', () => {
     let s = initialState();
     let r = step(s, { ...QUIET, delta: reads('a', 'b') });
-    // grind: active synthesis stops pile up score without new files or quiet
+    // grind: pile up score via continuous new files; synthesis no longer counts as active
     for (let i = 0; i < 40 && !r.decision; i++) {
-      r = step(r.state, { ...QUIET, delta: reads(`f${i}`), synthesis: true });
+      r = step(r.state, { ...QUIET, delta: reads(`f${i}`) });
     }
     expect(r.decision?.fire).toBe('cap');
     expect(r.decision?.mode).toBe('inject');
     expect(r.decision!.score).toBeGreaterThanOrEqual(T_CAP);
+  });
+
+  it('descent fires after ONE quiet stop (DESCENT_QUIET=1)', () => {
+    let s = initialState();
+    // arm via file volume
+    let r = step(s, { ...QUIET, delta: reads('a', 'b', 'c', 'd', 'e') });
+    r = step(r.state, { ...QUIET, delta: reads('f', 'g', 'h', 'i') });
+    expect(r.state.armed).toBe(true);
+    // single quiet stop should trigger descent
+    r = step(r.state, QUIET);
+    expect(r.decision?.fire).toBe('descent');
+    expect(r.decision?.mode).toBe('inject');
+  });
+
+  it('synthesis-only stop counts as QUIET and can trigger descent', () => {
+    let s = initialState();
+    // arm via file volume
+    let r = step(s, { ...QUIET, delta: reads('a', 'b', 'c', 'd', 'e') });
+    r = step(r.state, { ...QUIET, delta: reads('f', 'g', 'h', 'i') });
+    expect(r.state.armed).toBe(true);
+    expect(r.state.quietRun).toBe(0);
+    // A synthesis-only stop (empty delta, synthesis:true) now counts as QUIET,
+    // so under DESCENT_QUIET=1 it fires descent on its own — proving synthesis
+    // no longer resets the quiet run / blocks the wind-down fire.
+    r = step(r.state, { ...QUIET, delta: new Map(), synthesis: true });
+    expect(r.decision?.fire).toBe('descent');
+    expect(r.decision?.mode).toBe('inject');
   });
 
   it('worklist ranks edited files first', () => {
@@ -239,8 +254,7 @@ describe('trigger', () => {
     ]);
     let r = step(s, { ...QUIET, delta: d });
     r = step(r.state, { ...QUIET, delta: reads('c', 'd', 'e', 'f', 'g', 'h', 'i') });
-    r = step(r.state, QUIET);
-    r = step(r.state, QUIET);
+    r = step(r.state, QUIET); // single quiet → descent fire
     expect(r.decision?.files[0]).toBe('edited.ts');
   });
 
@@ -248,8 +262,7 @@ describe('trigger', () => {
     let s = initialState();
     let r = step(s, { ...QUIET, delta: reads('a', 'b', 'c', 'd', 'e') });
     r = step(r.state, { ...QUIET, delta: reads('f', 'g', 'h', 'i') });
-    r = step(r.state, QUIET);
-    r = step(r.state, QUIET); // descent fire → all captured
+    r = step(r.state, QUIET); // single quiet → descent fire → all captured
     expect(r.decision?.fire).toBe('descent');
     const edit = new Map([['a', { reads: 0, edits: 1, gs: 0 }]]);
     r = step(r.state, { ...QUIET, delta: edit });

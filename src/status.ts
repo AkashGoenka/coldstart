@@ -10,12 +10,14 @@
  */
 
 import { existsSync, statSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   daemonDir,
   daemonLogPath,
   isDaemonAlive,
   listDaemonLocks,
+  getCurrentVersion,
   type DaemonLockListing,
 } from './daemon-lock.js';
 import { getCacheDir } from './cache/disk-cache.js';
@@ -41,6 +43,24 @@ function relativeAge(ms: number): string {
   const h = Math.round(m / 60);
   if (h < 24) return `${h}h ago`;
   return `${Math.round(h / 24)}d ago`;
+}
+
+/**
+ * Absolute coldstart hook script paths wired into a repo's Claude settings.
+ * Scanned as raw text (structure-agnostic across settings shapes): every
+ * `/…/hooks/<name>.mjs` referenced in a hook command. Used only to flag a path
+ * a global-install move (node/nvm/prefix change) left dangling.
+ */
+function wiredHookPaths(rootDir: string): string[] {
+  const settings = join(rootDir, '.claude', 'settings.json');
+  if (!existsSync(settings)) return [];
+  try {
+    const raw = readFileSync(settings, 'utf-8');
+    const re = /(\/[^\s"']+\/hooks\/(?:kb-elicit|kb-recall|find-nudge|find-preguard)\.mjs)/g;
+    return [...new Set(Array.from(raw.matchAll(re), (m) => m[1]))];
+  } catch {
+    return [];
+  }
 }
 
 /** Freshness of a root's on-disk index, derived from the cache meta.json. */
@@ -164,6 +184,35 @@ export async function runStatus(): Promise<void> {
   if (detailLines.length > 0) {
     process.stdout.write('\n' + detailLines.join('\n') + '\n');
   }
+
+  // Install health: the #1 cause of "the update didn't take" is a keeper still
+  // running old code, or hooks wired to a global path a node/prefix change left
+  // behind. Surface both so it's diagnosed, not guessed.
+  const installed = getCurrentVersion();
+  // status.js runs from <installRoot>/dist/, so the package root is two up.
+  const thisInstallRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+  const healthLines: string[] = [`\nInstalled: ${installed}  (${thisInstallRoot})`];
+  for (const r of rows) {
+    if (r.version !== '-' && r.version !== installed) {
+      healthLines.push(
+        `  ⚠ keeper on ${r.root} runs ${r.version} but ${installed} is installed — ` +
+        `run \`coldstart restart\` to pick up the update`,
+      );
+    }
+  }
+  for (const l of listings) {
+    if (!l.lock.rootDir) continue;
+    for (const w of wiredHookPaths(l.lock.rootDir)) {
+      if (!existsSync(w)) {
+        healthLines.push(
+          `  ⚠ wired hook path missing: ${w}\n` +
+          `    (global install moved — likely a node/nvm or npm-prefix change) — ` +
+          `run \`coldstart init\` in that repo to re-point the hooks`,
+        );
+      }
+    }
+  }
+  process.stdout.write(healthLines.join('\n') + '\n');
 
   if (rows.some(r => r.status !== 'alive')) {
     process.stdout.write(

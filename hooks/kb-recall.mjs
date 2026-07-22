@@ -28,7 +28,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
-// Pending-capture delivery (v5 trigger): a descent/surge fire at the previous
+// Pending-capture delivery (v5 trigger): a descent fire at the previous
 // Stop wrote its worklist payload to a pending file instead of blocking the
 // stop. It rides the SAME next-prompt channel as recall — capture first, then
 // the user's request. Consumed (deleted) on delivery; stale pendings (>24h,

@@ -98,7 +98,7 @@ export function logCaptureEvent(root, event) {
 }
 
 // --- Pending-capture handoff ---------------------------------------------------
-// A descent/surge fire writes its worklist payload here instead of blocking the
+// A descent fire writes its worklist payload here instead of blocking the
 // stop; the host's next-prompt recall hook consumes it (capture first, then the
 // user's request). One file per session id — a second fire before delivery
 // overwrites (the later worklist supersedes). Same path scheme across hosts;

@@ -302,7 +302,7 @@
       <div class="cmd">
         <div class="name warm"><span class="c">coldstart kb view</span> <span class="badge">notebook · human-only</span></div>
         <div class="sig">coldstart kb view [--no-open]</div>
-        <div class="desc">Generate a single self-contained HTML browser of the whole notebook and open it in your default browser. No server — one file, generated fresh, freshness stamped at generation time.</div>
+        <div class="desc">Generate a single self-contained HTML browser of the whole notebook and open it in your default browser. No server — one file, generated fresh, freshness stamped at generation time. Once generated, the background keeper re-renders it whenever notes change, so a plain browser reload shows the latest — you don't re-run the command.</div>
       </div>
       <div class="term">
         <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">coldstart kb view</span></div>
@@ -314,7 +314,7 @@
       <div class="flags">
         <div class="flag-row"><span class="fk">--no-open</span><span class="fv">Write <code>index.html</code> but don't launch the browser.</span></div>
       </div>
-      <div class="callout warm"><span class="ct">For the human</span>Agents use <code>kb search</code> / <code>lookup</code>; this is the view for a person who wants to browse what the agents have been keeping. The generated file self-registers in the notebook's <code>.gitignore</code>.</div>
+      <div class="callout warm"><span class="ct">For the human</span>Agents use <code>kb search</code> / <code>lookup</code>; this is the view for a person who wants to browse what the agents have been keeping. The generated file self-registers in the notebook's <code>.gitignore</code>. Leave the tab open — the keeper keeps the file current in the background, so a reload is all you ever need after the first generate.</div>
     </section>
 
     <section id="kb-maint" class="doc-sec">
@@ -378,11 +378,11 @@
     <section id="lifecycle" class="doc-sec">
       <h2>Lifecycle commands</h2>
       <div class="flags">
-        <div class="flag-row"><span class="fk">coldstart status</span><span class="fv">Keepers on this machine: alive? fresh? last patch/rebuild/save? repairs?</span></div>
+        <div class="flag-row"><span class="fk">coldstart status</span><span class="fv">Keepers on this machine: alive? fresh? last patch/rebuild/save? repairs? It also reports install health — the <code>Installed:</code> version, plus a warning if any keeper is still running an <em>older</em> version than the installed binary (run <code>coldstart restart</code>) or if a repo's wired hook paths no longer exist because a node/nvm or npm-prefix change moved the global install (run <code>coldstart init</code> there).</span></div>
         <div class="flag-row"><span class="fk">coldstart restart</span><span class="fv">Kill the current repo's keeper (respawns on next lookup). <code>--root DIR</code> targets another repo; <code>--all</code> kills every keeper.</span></div>
         <div class="flag-row"><span class="fk">coldstart index</span><span class="fv">Build + save the cache once, up front (single-writer prep).</span></div>
       </div>
-      <div class="callout"><span class="ct">When anything feels stale</span><code>coldstart restart</code> — a fresh keeper reconciles on start, so it comes back <em>correct</em>, not just alive. If something looks structurally wrong, <b>TROUBLESHOOTING.md</b> on GitHub has recovery steps.</div>
+      <div class="callout"><span class="ct">When anything feels stale</span><code>coldstart restart</code> — a fresh keeper reconciles on start, so it comes back <em>correct</em>, not just alive. If an update doesn't seem to have taken effect, run <code>coldstart status</code> first: it tells you whether the keeper is on the old version (restart), a hook path is dangling (re-init), or the install itself didn't update. If something looks structurally wrong, <b>TROUBLESHOOTING.md</b> on GitHub has recovery steps.</div>
     </section>
 
     <section id="mcp" class="doc-sec">

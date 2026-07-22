@@ -25,7 +25,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { cursorRoot } from "./cursor-input.mjs";
-// Pending-capture delivery (v5 trigger): a descent/surge/cap fire at a previous
+// Pending-capture delivery (v5 trigger): a descent/cap fire at a previous
 // stop wrote its worklist payload to a pending file instead of blocking; it
 // rides this same next-prompt channel — capture first, then the user's request.
 import { takePendingCapture } from "./elicit-core.mjs";
