@@ -224,6 +224,35 @@ h1.title .warm{color:var(--ember);}
 .vpane{padding:18px 20px;}
 .vpane p{font-size:13px;color:#cdd8e8;margin-top:10px;}
 
+/* recall / injection flow (beat 3 visual) */
+.recall{display:flex;flex-direction:column;align-items:stretch;}
+.rprompt{display:flex;align-items:center;gap:11px;background:#05080e;border:1px solid var(--line);
+  border-radius:11px;padding:13px 16px;box-shadow:0 20px 50px -40px rgba(0,0,0,.9);}
+.rprompt .who{font-family:var(--mono);font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--faint);border:1px solid var(--line);border-radius:5px;padding:3px 7px;flex:none;}
+.rprompt .q{font-family:var(--mono);font-size:13px;color:#cdd8e8;}
+.rflow{display:flex;align-items:center;gap:10px;padding:7px 0 7px 20px;position:relative;}
+.rflow::before{content:"";position:absolute;left:20px;top:-2px;bottom:-2px;width:1px;
+  background:linear-gradient(var(--frost-dim),var(--frost));}
+.rflow .glyph{color:var(--frost);font-size:13px;line-height:1;transform:translateX(-4px);}
+.rflow .rlab{font-family:var(--mono);font-size:11px;letter-spacing:.02em;}
+.rflow .rlab b{color:var(--frost);font-weight:600;}
+.rflow .rlab .sub{color:var(--faint);}
+.pill.inj{background:rgba(79,191,224,.14);color:var(--frost);}.pill.inj .d{background:var(--frost);}
+.card.injected{border-color:color-mix(in srgb,var(--frost) 34%,var(--line-warm));
+  box-shadow:0 0 0 1px rgba(79,191,224,.12),0 24px 60px -44px rgba(0,0,0,.9);}
+.rtag{align-self:flex-start;margin-top:12px;display:inline-flex;align-items:center;gap:8px;
+  font-family:var(--mono);font-size:11px;color:var(--ok);background:rgba(87,204,146,.1);
+  border:1px solid rgba(87,204,146,.25);border-radius:999px;padding:5px 12px 5px 11px;}
+.rtag .d{width:7px;height:7px;border-radius:50%;background:var(--ok);flex:none;}
+
+/* "for humans" viewer strip */
+.vhuman{margin-top:58px;max-width:780px;margin-inline:auto;}
+.vhcap{display:flex;align-items:baseline;justify-content:center;gap:11px;flex-wrap:wrap;
+  text-align:center;margin-bottom:15px;}
+.vhcap .t{font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ember);}
+.vhcap .s{font-size:14px;color:var(--muted);}
+
 /* keynote */
 .keynote{margin-top:64px;border:1px solid color-mix(in srgb,var(--ember) 40%,var(--line-warm));
   background:color-mix(in srgb,var(--ember) 7%,var(--warm-ground));border-radius:13px;
