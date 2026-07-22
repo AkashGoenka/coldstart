@@ -29,9 +29,9 @@
  */
 
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { existsSync, writeFileSync, appendFileSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, writeFileSync, appendFileSync, readFileSync, readdirSync, statSync } from "node:fs";
 
 import { extractEvidence, segmentStats } from "./evidence.mjs";
 import { initialState, step } from "./trigger.mjs";
@@ -101,6 +101,72 @@ function readStdin() {
 
 process.on("uncaughtException", (e) => { log(`uncaught ${e?.stack || e}`); process.exit(0); });
 process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); process.exit(0); });
+
+// --- Manual capture (`--manual --root <dir>`) --------------------------------
+// The `/capture-notes` command runs this to fire capture ON DEMAND, bypassing
+// the trigger score gate. There is no hook stdin, so we self-discover the
+// session: the freshest marker in tmpdir whose recorded (relative) files still
+// resolve under <root> is this repo's active session. We then emit the SAME
+// capture payload an automatic fire would, built from accumulated evidence.
+// READ-ONLY — never mutates the marker, so it cannot perturb automatic firing.
+function argValue(name) {
+  const i = process.argv.indexOf(name);
+  return i >= 0 ? process.argv[i + 1] : undefined;
+}
+function markerMtime(p) { try { return statSync(p).mtimeMs; } catch { return 0; } }
+function freshestMarkerUnderRoot(root) {
+  let names;
+  try { names = readdirSync(tmpdir()); } catch { return null; }
+  const markers = names
+    .filter((n) => /^coldstart-kb-.+-main\.json$/.test(n))
+    .map((n) => ({ n, p: join(tmpdir(), n), mtime: 0 }))
+    .map((m) => ({ ...m, mtime: markerMtime(m.p) }))
+    .sort((a, b) => b.mtime - a.mtime);
+  for (const m of markers) {
+    let state;
+    try { state = JSON.parse(readFileSync(m.p, "utf8")); } catch { continue; }
+    const files = state && state.files ? Object.keys(state.files) : [];
+    if (!files.length) continue;
+    // Belongs to THIS repo iff a recorded file still resolves under root.
+    if (files.some((rel) => existsSync(join(root, rel)))) {
+      return { sid: m.n.slice("coldstart-kb-".length, -"-main.json".length), state };
+    }
+  }
+  return null;
+}
+if (process.argv.includes("--manual")) {
+  try {
+    const rootArg = argValue("--root");
+    const root = rootArg ? resolve(rootArg) : process.cwd();
+    setLogRoot(root);
+    const found = freshestMarkerUnderRoot(root);
+    if (!found) {
+      process.stdout.write(
+        "No notebook-capture evidence for this repo yet — it accrues as you read and edit files.\n" +
+        "Do a turn or two of real work here, then run /capture-notes again.\n",
+      );
+      log(`MANUAL no-marker root=${root}`);
+      process.exit(0);
+    }
+    const { sid, state } = found;
+    const files = Object.keys(state.files).filter((rel) => !state.files[rel].captured);
+    if (!files.length) {
+      process.stdout.write("Everything worked on so far is already captured — nothing new to write right now.\n");
+      log(`MANUAL nothing-new session=${sid}`);
+      process.exit(0);
+    }
+    const entries = worklistEntries(CLI, root, files, state.files, log);
+    const payload = buildCapturePayload({ root, cli: CLI, sid, entries, envelope: "manual" });
+    logCaptureEvent(root, { event: "fire", reason: "manual", session: sid, files: files.length });
+    log(`FIRE manual session=${sid} files=${files.length}`);
+    process.stdout.write(payload + "\n");
+    process.exit(0);
+  } catch (e) {
+    log(`MANUAL error ${e?.stack || e}`);
+    process.stdout.write("Could not assemble a capture worklist right now.\n");
+    process.exit(0);
+  }
+}
 
 (async () => {
   let input = {};

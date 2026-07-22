@@ -229,6 +229,17 @@
       <p>Capture is <b>trigger-timed</b>, not every-turn. The hook keeps per-file evidence of what the session actually read or edited (search hits and passing path mentions never count), scores the uncaptured backlog, and asks for notes at natural boundaries — when a burst of work settles, or the moment a commit lands (manual commits included). Most turns end silently. The ask itself is <b>non-blocking</b>: it arrives with your next prompt as a short worklist of the files the session genuinely worked with, each annotated with its existing note's state — never a wall of instructions after every answer.</p>
       <p style="margin-top:12px">Files whose notes are already fresh don't re-trigger capture, so a warmed-up repo asks less over time. The flip side: a brand-new notebook starts empty and <b>warms with use</b> — the first few real tasks seed the file notes, and "how X works" flow notes appear as sessions actually need those answers. Don't judge recall on day one.</p>
 
+      <h4 class="subhead"><code>/capture-notes</code> — capture on demand</h4>
+      <p>Sometimes <em>you</em> know a moment is worth recording before the score crosses — a hard-won debugging insight, a confirmed absence, a decision that didn't touch many files. <code>/capture-notes</code> fires the <b>same</b> capture flow immediately: same worklist, same checklist, only the trigger threshold is skipped. It never forces a write — the agent still decides what (if anything) is worth a note, and writes nothing if the answer is nothing.</p>
+      <p style="margin-top:12px"><code>coldstart init</code> wires it for your client: <b>Claude Code</b> and <b>Cursor</b> get a <code>/capture-notes</code> slash command; <b>Codex</b> gets a <code>capture-notes</code> skill (invoke with <code>$capture-notes</code>) — Codex's custom prompts are global and deprecated, so a repo-scoped skill is the supported surface there. All three run the same one-liner, so it also works by hand:</p>
+      <div class="term">
+        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">capture on demand</span></div>
+        <div class="term-body">
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">node &lt;install&gt;/hooks/kb-elicit.mjs</span> <span class="c-flag">--manual</span>   <span class="c-dim"># prints the capture checklist for this session</span></span>
+        </div>
+      </div>
+      <p style="margin-top:12px">It reads the evidence the capture hook has already accumulated and never writes back to it, so asking for a manual capture can't disturb the automatic one. If the session hasn't done any real work yet, or everything is already captured, it says so and stops.</p>
+
       <h4 class="subhead"><code>.coldstartignore</code> — files that never get notes</h4>
       <p><code>coldstart init</code> scaffolds <code>.coldstart/.coldstartignore</code> (gitignore syntax). It's a <b>personal</b> file — kept out of git even when the notebook is shared, because the built-in defaults ship in the tool itself: <code>*.json</code>, lockfiles, <code>dist/</code>/<code>build/</code>/<code>coverage/</code>, minified/map/snapshot files, binaries and images, and <code>.env*</code> (notes are committed; secrets must never enter them). Every collaborator gets that baseline with or without the file; lines you add extend it on your machine. Re-include a default with <code>!</code>:</p>
       <div class="term">

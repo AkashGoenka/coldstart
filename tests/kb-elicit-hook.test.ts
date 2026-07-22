@@ -280,3 +280,65 @@ describe('kb-elicit SubagentStop (one-shot, still blocking)', () => {
     expect(fs.existsSync(pendingFile())).toBe(false);
   });
 });
+
+/**
+ * `--manual` (#84): the /capture-notes command fires the SAME capture flow on
+ * demand, bypassing only the trigger score gate. No hook stdin — the session is
+ * self-discovered as the freshest marker whose recorded files resolve under
+ * --root, which is also what keeps other repos' markers from being picked up.
+ */
+describe('kb-elicit --manual (on-demand capture)', () => {
+  const markerPath = (): string => path.join(os.tmpdir(), `coldstart-kb-${sid}-main.json`);
+
+  function writeMarker(files: Record<string, { edits?: number; reads?: number; captured?: boolean }>): void {
+    fs.writeFileSync(markerPath(), JSON.stringify({
+      v: 2, stop: 3, activeStops: 2, quietRun: 0, armed: false, fires: 0, lineCount: 10, head: '',
+      files: Object.fromEntries(Object.entries(files).map(([rel, f]) => [rel, {
+        reads: f.reads ?? 1, edits: f.edits ?? 0, gs: 0, firstStop: 1, lastStop: 1,
+        lastEditActive: 1, retouches: 0, captured: f.captured ?? false, fresh: false,
+      }])),
+    }));
+  }
+
+  const manual = (): string =>
+    execFileSync('node', [HOOK, '--manual', '--root', root], { encoding: 'utf8', timeout: 30000 });
+
+  it('fires the full checklist for uncaptured files, below the arm threshold', () => {
+    seed(['src/a.ts', 'src/b.ts']);
+    writeMarker({ 'src/a.ts': { edits: 2 }, 'src/b.ts': { reads: 1 } });
+
+    const out = manual();
+    expect(out).toContain('**Notebook capture point.**');
+    // The manual envelope names the user's own invocation.
+    expect(out).toContain('/capture-notes');
+    expect(out).toContain('WORKLIST');
+    expect(out).toContain('src/a.ts');
+    expect(out).toContain('src/b.ts');
+  });
+
+  it('says nothing-new when every worked file is already captured', () => {
+    seed(['src/a.ts']);
+    writeMarker({ 'src/a.ts': { edits: 2, captured: true } });
+
+    const out = manual();
+    expect(out).toContain('already captured');
+    expect(out).not.toContain('WORKLIST');
+  });
+
+  it('explains itself when the repo has no capture evidence yet', () => {
+    // No marker whose files resolve under this root.
+    const out = manual();
+    expect(out).toContain('No notebook-capture evidence');
+    expect(out).not.toContain('WORKLIST');
+  });
+
+  it('never mutates the marker — manual capture cannot perturb automatic firing', () => {
+    seed(['src/a.ts']);
+    writeMarker({ 'src/a.ts': { edits: 2 } });
+    const before = fs.readFileSync(markerPath(), 'utf8');
+
+    manual();
+
+    expect(fs.readFileSync(markerPath(), 'utf8')).toBe(before);
+  });
+});

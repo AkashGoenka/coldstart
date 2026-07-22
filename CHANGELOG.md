@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.3] - 2026-07-22
+
+### Added
+- **`/capture-notes` — capture notes on demand.** Capture is trigger-timed, but you
+  sometimes know a moment is worth recording before the score crosses the threshold —
+  a hard-won debugging insight, a confirmed absence, a decision that didn't touch many
+  files. `/capture-notes` fires the *same* capture flow immediately: same worklist, same
+  checklist, only the trigger threshold is skipped. It never forces a write — the agent
+  still decides what (if anything) is worth a note. Wired by `coldstart init` for all
+  three clients: a `/capture-notes` slash command for **Claude Code** and **Cursor**, and
+  a repo-scoped `capture-notes` **skill** for **Codex** (invoke with `$capture-notes`) —
+  Codex's custom prompts are global and deprecated, so a skill is the supported surface
+  there. `coldstart unwire` removes all of them. Runs by hand too:
+  `node <install>/hooks/kb-elicit.mjs --manual`.
+
+  Implemented as a `--manual` branch on the existing capture hook rather than a second
+  capture path: with no hook stdin it self-discovers the session (the freshest marker
+  whose recorded files resolve under the root, which also prevents picking up another
+  repo's session) and is **read-only on that marker**, so an on-demand capture can never
+  perturb automatic firing.
+
 ## [2.2.2] - 2026-07-22
 
 ### Fixed

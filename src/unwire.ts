@@ -27,6 +27,7 @@ import {
   isKbHookEntry,
   isCodexHookEntry,
   isCursorHookEntry,
+  CAPTURE_COMMAND,
   stripCodexColdstartTable,
 } from './init.js';
 
@@ -268,6 +269,8 @@ export async function runUnwire(): Promise<void> {
     path.join(cwd, '.claude', 'settings.json'), 'hooks', CLAUDE_HOOK_EVENTS,
     (e) => isColdstartHookEntry(e) || isKbHookEntry(e)))} find/gs + notebook hooks`);
   out(`    .mcp.json     — ${label(unwireJsonMcp(cwd, '.mcp.json'))} MCP server`);
+  out(`    commands/     — ${label(removeFile(
+    path.join(cwd, '.claude', 'commands', `${CAPTURE_COMMAND}.md`)))} /${CAPTURE_COMMAND} command`);
 
   // Codex
   out('  Codex');
@@ -275,6 +278,8 @@ export async function runUnwire(): Promise<void> {
   out(`    hooks.json    — ${label(stripHooksConfig(
     path.join(cwd, '.codex', 'hooks.json'), 'hooks', CLAUDE_HOOK_EVENTS, isCodexHookEntry))} Codex hooks`);
   out(`    config.toml   — ${label(unwireCodexMcp(cwd))} [mcp_servers.coldstart]`);
+  out(`    .agents/skills — ${label(removeFile(
+    path.join(cwd, '.agents', 'skills', CAPTURE_COMMAND, 'SKILL.md')))} $${CAPTURE_COMMAND} skill`);
 
   // Cursor
   out('  Cursor');
@@ -282,6 +287,8 @@ export async function runUnwire(): Promise<void> {
   out(`    hooks.json    — ${label(stripHooksConfig(
     path.join(cwd, '.cursor', 'hooks.json'), 'hooks', CURSOR_HOOK_EVENTS, isCursorHookEntry, ['version']))} Cursor hooks`);
   out(`    mcp.json      — ${label(unwireJsonMcp(cwd, path.join('.cursor', 'mcp.json')))} MCP server`);
+  out(`    commands/     — ${label(removeFile(
+    path.join(cwd, '.cursor', 'commands', `${CAPTURE_COMMAND}.md`)))} /${CAPTURE_COMMAND} command`);
 
   // Notebook
   out('  Notebook');
@@ -301,8 +308,13 @@ export async function runUnwire(): Promise<void> {
 
   // Tidy up now-empty coldstart dirs (best-effort).
   rmEmptyDirs(
+    path.join(cwd, '.agents', 'skills', CAPTURE_COMMAND),
+    path.join(cwd, '.agents', 'skills'),
+    path.join(cwd, '.agents'),
     path.join(cwd, '.cursor', 'rules'),
+    path.join(cwd, '.cursor', 'commands'),
     path.join(cwd, '.cursor'),
+    path.join(cwd, '.claude', 'commands'),
     path.join(cwd, '.claude'),
     path.join(cwd, '.codex'),
   );
