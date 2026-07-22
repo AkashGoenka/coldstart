@@ -13,6 +13,10 @@ import {
   wireCodexAgents,
   wireCodexMcp,
   wireJsonMcp,
+  CAPTURE_COMMAND,
+  wireClaudeCaptureCommand,
+  wireCursorCaptureCommand,
+  wireCodexCaptureSkill,
 } from '../src/init.js';
 
 // We can't easily test runInit interactively, but we can test that the
@@ -398,5 +402,65 @@ describe('Codex hooks + MCP writers', () => {
     fs.writeFileSync(path.join(tempDir, '.mcp.json'), '{ bad');
     const bad = wireJsonMcp(tempDir, '.mcp.json', { command: 'node', args: [] });
     expect((bad as { error: string }).error).toContain('not valid JSON');
+  });
+});
+
+// The on-demand capture command (#84). Every host runs the SAME invocation —
+// the hook defaults its root to cwd — so nothing repo-specific may be baked in.
+describe('/capture-notes command wiring', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coldstart-capture-cmd-'));
+  });
+  afterEach(() => {
+    if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true });
+  });
+
+  const claudeCmd = () => path.join(tempDir, '.claude', 'commands', `${CAPTURE_COMMAND}.md`);
+  const cursorCmd = () => path.join(tempDir, '.cursor', 'commands', `${CAPTURE_COMMAND}.md`);
+  const codexSkill = () => path.join(tempDir, '.agents', 'skills', CAPTURE_COMMAND, 'SKILL.md');
+
+  it('writes a Claude command that injects the checklist via ! expansion', () => {
+    expect(wireClaudeCaptureCommand(tempDir)).toBe('created');
+    const body = fs.readFileSync(claudeCmd(), 'utf8');
+    expect(body).toContain('allowed-tools: Bash(node:*)');
+    // `!` expansion runs it at submit time so the payload lands in the prompt.
+    expect(body).toContain('!`node ');
+    expect(body).toContain('kb-elicit.mjs --manual`');
+  });
+
+  it('writes a Cursor command that asks the agent to run it (no ! expansion)', () => {
+    expect(wireCursorCaptureCommand(tempDir)).toBe('created');
+    const body = fs.readFileSync(cursorCmd(), 'utf8');
+    expect(body).not.toContain('!`');
+    expect(body).toContain('kb-elicit.mjs --manual');
+  });
+
+  it('writes a Codex SKILL.md with the required name/description frontmatter', () => {
+    expect(wireCodexCaptureSkill(tempDir)).toBe('created');
+    const body = fs.readFileSync(codexSkill(), 'utf8');
+    // Codex skills REQUIRE name + description; prompts are global + deprecated,
+    // so the repo-scoped .agents/skills path is the supported surface.
+    expect(body).toMatch(/^---\n/);
+    expect(body).toContain(`name: ${CAPTURE_COMMAND}`);
+    expect(body).toContain('description: ');
+    expect(body).toContain('kb-elicit.mjs --manual');
+  });
+
+  it('bakes no repo-specific path — only the install path — so it works from any cwd', () => {
+    wireClaudeCaptureCommand(tempDir);
+    const body = fs.readFileSync(claudeCmd(), 'utf8');
+    expect(body).not.toContain(tempDir);
+    expect(body).not.toContain('--root');
+  });
+
+  it('is idempotent — a re-run updates in place', () => {
+    expect(wireClaudeCaptureCommand(tempDir)).toBe('created');
+    expect(wireClaudeCaptureCommand(tempDir)).toBe('updated');
+    expect(wireCursorCaptureCommand(tempDir)).toBe('created');
+    expect(wireCursorCaptureCommand(tempDir)).toBe('updated');
+    expect(wireCodexCaptureSkill(tempDir)).toBe('created');
+    expect(wireCodexCaptureSkill(tempDir)).toBe('updated');
   });
 });

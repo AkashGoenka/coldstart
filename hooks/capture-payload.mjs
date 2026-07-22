@@ -66,6 +66,8 @@ function worklistLines(entries) {
 export function buildCapturePayload({ root, cli, sid, entries, envelope }) {
   const opening = envelope === "block"
     ? "Handle capture now, then stop."
+    : envelope === "manual"
+    ? "You invoked this capture yourself (/capture-notes) — handle it now, then carry on."
     : "Handle capture first, then continue with the user's request.";
 
   const tail = envelope === "subagent"

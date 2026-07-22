@@ -592,6 +592,94 @@ ${coldstartMd(mode)}`;
   return existed ? 'updated' : 'created';
 }
 
+// ---------------------------------------------------------------------------
+// The user-invoked capture command (`/capture-notes`, issue #84)
+// ---------------------------------------------------------------------------
+
+/** Capture is trigger-timed, but the user sometimes KNOWS a moment is worth
+ *  recording before the score crosses the threshold. This command fires the
+ *  EXISTING capture flow on demand: it runs the Stop hook in `--manual` mode,
+ *  which rebuilds the same worklist + checklist an automatic fire produces from
+ *  the session's accumulated evidence, bypassing only the trigger gate. It never
+ *  forces a write — the agent still decides what (if anything) is worth noting.
+ *
+ *  Nothing repo-specific is baked in (the hook defaults its root to the cwd), so
+ *  the invocation is identical across hosts; only each host's wrapper differs.
+ *  The install path is absolute and tracks npm updates (see installRoot). */
+export const CAPTURE_COMMAND = 'capture-notes';
+
+function captureInvocation(): string {
+  return `node ${path.join(resolveHooksDir(), 'kb-elicit.mjs')} --manual`;
+}
+
+const CAPTURE_INSTRUCTIONS = `Follow the notebook-capture checklist it prints, exactly as you \
+would for an automatic capture: decide what (if anything) is worth writing, and never write a note \
+for a file that is not on the worklist. If nothing about the present code is worth recording, write \
+nothing and say so.`;
+
+/** Claude Code: `.claude/commands/capture-notes.md` → `/capture-notes`.
+ *  Claude expands a leading `!` at submit time, so the checklist is injected
+ *  straight into the prompt and the agent acts on it in the same turn. */
+export function wireClaudeCaptureCommand(cwd: string): 'created' | 'updated' {
+  const dir = path.join(cwd, '.claude', 'commands');
+  const filePath = path.join(dir, `${CAPTURE_COMMAND}.md`);
+  const existed = fs.existsSync(filePath);
+  const body = `---
+description: Capture notebook notes for the work done so far
+allowed-tools: Bash(node:*)
+---
+
+!\`${captureInvocation()}\`
+
+${CAPTURE_INSTRUCTIONS}
+`;
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(filePath, body);
+  return existed ? 'updated' : 'created';
+}
+
+/** Cursor: `.cursor/commands/capture-notes.md` → `/capture-notes`.
+ *  Cursor commands are plain prompt templates with no `!` expansion, so the
+ *  body asks the agent to run the command itself. */
+export function wireCursorCaptureCommand(cwd: string): 'created' | 'updated' {
+  const dir = path.join(cwd, '.cursor', 'commands');
+  const filePath = path.join(dir, `${CAPTURE_COMMAND}.md`);
+  const existed = fs.existsSync(filePath);
+  const body = `Run this in the terminal:
+
+\`${captureInvocation()}\`
+
+${CAPTURE_INSTRUCTIONS}
+`;
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(filePath, body);
+  return existed ? 'updated' : 'created';
+}
+
+/** Codex: `.agents/skills/capture-notes/SKILL.md` → `$capture-notes`.
+ *  Codex custom prompts are global (`~/.codex/prompts`) AND deprecated, so they
+ *  can't carry a repo-scoped command. Skills are the supported path and ARE
+ *  repo-scoped — Codex walks `.agents/skills` from the cwd up to the repo root. */
+export function wireCodexCaptureSkill(cwd: string): 'created' | 'updated' {
+  const dir = path.join(cwd, '.agents', 'skills', CAPTURE_COMMAND);
+  const filePath = path.join(dir, 'SKILL.md');
+  const existed = fs.existsSync(filePath);
+  const body = `---
+name: ${CAPTURE_COMMAND}
+description: Capture coldstart notebook notes for the work done so far in this session. Use when the user asks to capture notes, save what was learned, or write up findings before moving on.
+---
+
+Run this in the terminal:
+
+\`${captureInvocation()}\`
+
+${CAPTURE_INSTRUCTIONS}
+`;
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(filePath, body);
+  return existed ? 'updated' : 'created';
+}
+
 export const AGENTS_START = '<!-- coldstart:start -->';
 export const AGENTS_END = '<!-- coldstart:end -->';
 
@@ -751,6 +839,7 @@ function setupClaude(cwd: string, exp: Experience): void {
   out(typeof kb === 'object'
     ? `  settings.json — notebook hooks NOT wired: ${kb.error}`
     : `  settings.json — ${kb} notebook recall + capture hooks (UserPromptSubmit + Stop/SubagentStop)`);
+  out(`  commands/     — ${wireClaudeCaptureCommand(cwd)} /${CAPTURE_COMMAND} (capture notes on demand)`);
 }
 
 function setupCodex(cwd: string, exp: Experience): void {
@@ -763,6 +852,7 @@ function setupCodex(cwd: string, exp: Experience): void {
   out(typeof hooks === 'object'
     ? `  hooks.json    — Codex hooks NOT wired: ${hooks.error}`
     : `  hooks.json    — ${hooks} Codex navigation + notebook hooks`);
+  out(`  .agents/skills — ${wireCodexCaptureSkill(cwd)} $${CAPTURE_COMMAND} skill (capture notes on demand)`);
   if (typeof hooks !== 'object') {
     out('');
     out('  ⚠ Codex won\'t run these hooks until you trust them — untrusted hooks');
@@ -788,6 +878,7 @@ function setupCursor(cwd: string, exp: Experience): void {
   out(typeof hooks === 'object'
     ? `  hooks.json    — Cursor hooks NOT wired: ${hooks.error}`
     : `  hooks.json    — ${hooks} Cursor navigation + notebook hooks`);
+  out(`  commands/     — ${wireCursorCaptureCommand(cwd)} /${CAPTURE_COMMAND} (capture notes on demand)`);
 }
 
 function setupOther(cwd: string, exp: Experience): void {
