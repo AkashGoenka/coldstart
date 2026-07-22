@@ -40,6 +40,7 @@
   "applicationCategory": "DeveloperApplication",
   "operatingSystem": "Node.js 18+",
   "description": "Codebase navigation and a self-maintaining notebook for AI coding agents. A fast static index over paths, symbols, exports, and the import/call graph, plus durable agent-written notes kept honest by the index. No embeddings, no API key.",
+  "keywords": "codebase search, code search, codebase navigation, AI coding agent, agent memory, code context, Claude Code, Codex, Cursor, MCP server, code index, tree-sitter, ripgrep, notebook for agents, no embeddings",
   "url": "https://akashgoenka.github.io/coldstart/",
   "downloadUrl": "https://www.npmjs.com/package/@cstart/coldstart",
   "codeRepository": "https://github.com/AkashGoenka/coldstart",
@@ -233,32 +234,25 @@
       <!-- beat 3 -->
       <div class="beat rise">
         <div class="bt">
-          <div class="bstep"><span class="n">3</span>Recalled when it's relevant</div>
-          <h3>It comes to the next agent — unprompted.</h3>
-          <p>A matching prompt pulls the note in automatically, and a fresh <code>summary</code> rides along on every <code>find</code>. So the next agent starts a step ahead instead of re-deriving from scratch.</p>
-          <p>And when a human wants to see what the agents have been keeping, <code>coldstart kb view</code> opens the whole notebook as one HTML file — no server.</p>
+          <div class="bstep"><span class="n">3</span>Injected when it's relevant</div>
+          <h3>It's in the agent's context — before it reads a line.</h3>
+          <p>This is the part that isn't obvious: the next agent doesn't <em>decide</em> to go look. When a prompt touches something a note covers, a <b>recall hook</b> (Claude Code, Cursor, and Codex all fire one on prompt submit) matches it against the notebook and <b>injects the note straight into the context</b> — so the agent opens the task already holding what the last one learned.</p>
+          <p>Nothing matches? Nothing is injected — it stays silent. And mid-task, a fresh <code>summary</code> still rides along on every <code>find</code>, so the note surfaces even when the prompt didn't name it.</p>
         </div>
         <div class="bv">
-          <div class="viewer" role="img" aria-label="Mock of coldstart kb view: a file tree with per-file freshness dots on the left and a note pane on the right">
-            <div class="vchrome"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="vurl">file:///arches/.coldstart/notebook/index.html</span></div>
-            <div class="vapp">
-              <div class="vtop">
-                <div><div class="vk">coldstart notebook</div><div class="vrepo">arches</div></div>
-                <span class="vcount">111 notes · 108 fresh</span>
+          <div class="recall" role="img" aria-label="Flow: a user prompt fires the recall hook on submit, which injects the matching notebook note into the agent's context before it starts">
+            <div class="rprompt"><span class="who">Prompt</span><span class="q">"why is bbox wrong after we save a tile?"</span></div>
+            <div class="rflow">
+              <span class="glyph">↓</span>
+              <span class="rlab"><b>recall hook</b> · fires on prompt submit <span class="sub">— matches the notebook, injects the hit</span></span>
+            </div>
+            <div class="card injected">
+              <div class="card-top">
+                <div class="kick"><span class="pill-t">File note</span><span class="pill inj"><span class="d"></span>injected into context</span><span class="pill fresh"><span class="d"></span>fresh</span></div>
+                <div class="card-title">src/models.py · Tile</div>
               </div>
-              <div class="vtree">
-                <div class="vr dir"><span class="tw">▾</span>src</div>
-                <div class="vr on i1"><span class="tw">•</span>models.py<span class="dd fresh"></span></div>
-                <div class="vr i1"><span class="tw">•</span>search.py<span class="dd fresh"></span></div>
-                <div class="vr dir i1"><span class="tw">▾</span>views</div>
-                <div class="vr i2"><span class="tw">•</span>tile.py<span class="dd chg"></span></div>
-                <div class="vr i2"><span class="tw">•</span>map.py<span class="dd fresh"></span></div>
-                <div class="vr dir"><span class="tw">▸</span>api</div>
-              </div>
-              <div class="vpane">
-                <div class="kick"><span class="pill-t">File note</span><span class="pill fresh"><span class="d"></span>fresh</span></div>
-                <div class="card-title" style="margin-top:10px">src/models.py · Tile</div>
-                <p>Persists a map tile and its geometry. <b>save()</b> is the single write path — it stamps bbox from the geometry before insert.</p>
+              <div class="card-body">
+                <p>Persists a map tile and its geometry. <b>save()</b> is the single write path — it stamps <span class="mono-link">bbox</span> from the geometry before insert, so callers must never set bbox by hand.</p>
                 <div class="anchors">
                   <div class="lbl">Anchors</div>
                   <div class="arow">
@@ -266,6 +260,41 @@
                     <span class="anc fresh"><span class="d"></span>src/models.py <span class="sym">· save</span></span>
                   </div>
                 </div>
+              </div>
+            </div>
+            <div class="rtag"><span class="d"></span>agent starts here — no search, no wrong reads</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="vhuman rise">
+      <div class="vhcap"><span class="t">For humans · <code style="font-family:var(--mono);color:var(--ember)">coldstart kb view</code></span><span class="s">Want to read what the agents have been keeping? One self-contained HTML file — no server.</span></div>
+      <div class="viewer" role="img" aria-label="Mock of coldstart kb view: a file tree with per-file freshness dots on the left and a note pane on the right">
+        <div class="vchrome"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="vurl">file:///arches/.coldstart/notebook/index.html</span></div>
+        <div class="vapp">
+          <div class="vtop">
+            <div><div class="vk">coldstart notebook</div><div class="vrepo">arches</div></div>
+            <span class="vcount">111 notes · 108 fresh</span>
+          </div>
+          <div class="vtree">
+            <div class="vr dir"><span class="tw">▾</span>src</div>
+            <div class="vr on i1"><span class="tw">•</span>models.py<span class="dd fresh"></span></div>
+            <div class="vr i1"><span class="tw">•</span>search.py<span class="dd fresh"></span></div>
+            <div class="vr dir i1"><span class="tw">▾</span>views</div>
+            <div class="vr i2"><span class="tw">•</span>tile.py<span class="dd chg"></span></div>
+            <div class="vr i2"><span class="tw">•</span>map.py<span class="dd fresh"></span></div>
+            <div class="vr dir"><span class="tw">▸</span>api</div>
+          </div>
+          <div class="vpane">
+            <div class="kick"><span class="pill-t">File note</span><span class="pill fresh"><span class="d"></span>fresh</span></div>
+            <div class="card-title" style="margin-top:10px">src/models.py · Tile</div>
+            <p>Persists a map tile and its geometry. <b>save()</b> is the single write path — it stamps bbox from the geometry before insert.</p>
+            <div class="anchors">
+              <div class="lbl">Anchors</div>
+              <div class="arow">
+                <span class="anc fresh"><span class="d"></span>src/models.py <span class="sym">· Tile</span></span>
+                <span class="anc fresh"><span class="d"></span>src/models.py <span class="sym">· save</span></span>
               </div>
             </div>
           </div>
