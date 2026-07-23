@@ -1,6 +1,6 @@
 import { watch } from 'node:fs';
 import { join, extname, sep } from 'node:path';
-import { EXTENSION_TO_LANGUAGE } from './constants.js';
+import { EXTENSION_TO_LANGUAGE, isUnderExcludedDir } from './constants.js';
 
 export type BatchHandler = (changedPaths: Set<string>) => void;
 
@@ -58,6 +58,16 @@ export function startWatcher(
         return;
       }
       if (!EXTENSION_TO_LANGUAGE[ext]) return; // skip non-indexed files (SVG, JSON, CSS, etc.)
+
+      // Mirror the walker's dir rules: hidden/excluded directories are never
+      // indexed, so their contents must not enter the code batch. Critically,
+      // the keeper WRITES into some of them — it regenerates
+      // `.coldstart/notebook/index.html` (and re-renders derived `.md`) on every
+      // notes refresh. Without this guard those self-writes come back through
+      // the watcher as ".html changed" → handleBatch → cache save → notes
+      // refresh → regen index.html → … an endless loop that reloaded the
+      // notebook view every ~5s even when no note was written.
+      if (isUnderExcludedDir(filename.split(sep).join('/'))) return;
 
       changedSet.add(join(rootDir, filename));
       scheduleFlush();

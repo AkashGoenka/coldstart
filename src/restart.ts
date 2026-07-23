@@ -1,6 +1,7 @@
 /**
- * coldstart restart [--all] [--root <dir>] — Kill the background keeper and
- * clear its lock.
+ * coldstart restart|stop [--all] [--root <dir>] — Kill the background keeper and
+ * clear its lock. `stop` is a synonym: the keeper respawns lazily on the next
+ * reader either way, so the two commands do the same thing.
  *
  * Without flags: the keeper for the current working directory.
  * With --root: the keeper for that directory (a silently-ignored --root
@@ -40,7 +41,11 @@ export async function runRestart(): Promise<void> {
     }
     await killDaemon(lock.pid);
     await deleteLock(finalRoot).catch(() => {});
-    process.stdout.write(`[coldstart] Killed keeper (PID ${lock.pid}) — respawns on next \`coldstart find\`\n`);
+    process.stdout.write(
+      `[coldstart] Killed keeper (PID ${lock.pid}). It respawns automatically on ` +
+      `the next reader — a \`coldstart find\`/\`gs\` or a connected MCP client — so a ` +
+      `\`kill\` from \`ps\` alone will come back while any editor/agent still queries it.\n`,
+    );
     killed++;
   }
 

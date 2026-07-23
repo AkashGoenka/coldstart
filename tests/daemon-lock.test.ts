@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { readLock, writeLock, watchOwnLockfile, daemonDir } from '../src/daemon-lock.js';
+import { readLock, writeLock, watchOwnLockfile, watchOwnBinary, daemonDir } from '../src/daemon-lock.js';
 
 // These tests exercise the keeper-lock invariants that prevent the two
 // catastrophic failure modes shipped in v1.4.3:
@@ -157,6 +157,69 @@ describe('daemon-lock', () => {
       await new Promise(r => setTimeout(r, 500));
 
       expect(onMissingCalls).toBe(0);
+    });
+  });
+
+  // The keeper self-reaps when its own binary disappears (npm uninstall / moved
+  // global install) — the only thing that can stop it once the CLI is gone.
+  describe('watchOwnBinary self-reap', () => {
+    async function waitFor(cond: () => boolean, ms = 2000): Promise<boolean> {
+      const t0 = Date.now();
+      while (Date.now() - t0 < ms) {
+        if (cond()) return true;
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      return cond();
+    }
+
+    it('fires onGone once the binary is missing (after two polls)', async () => {
+      const gonePath = path.join(testRoot, 'never-existed.js');
+      let calls = 0;
+      const stop = watchOwnBinary(gonePath, () => { calls++; }, 30);
+      // A single poll must not be enough — the two-miss guard tolerates a
+      // transient unlink+rewrite during `npm update`.
+      await new Promise((r) => setTimeout(r, 35));
+      expect(calls).toBe(0);
+      expect(await waitFor(() => calls > 0)).toBe(true);
+      // ...and only once, even though the file stays missing.
+      await new Promise((r) => setTimeout(r, 120));
+      expect(calls).toBe(1);
+      stop();
+    });
+
+    it('does NOT fire while the binary exists', async () => {
+      const entry = path.join(testRoot, 'index.js');
+      fs.writeFileSync(entry, '// keeper entry\n');
+      let calls = 0;
+      const stop = watchOwnBinary(entry, () => { calls++; }, 30);
+      await new Promise((r) => setTimeout(r, 200));
+      expect(calls).toBe(0);
+      stop();
+    });
+
+    it('a transient one-poll miss (rewrite) does not trigger a spurious exit', async () => {
+      const entry = path.join(testRoot, 'index.js');
+      fs.writeFileSync(entry, '// v1\n');
+      let calls = 0;
+      const stop = watchOwnBinary(entry, () => { calls++; }, 40);
+      // Simulate `npm update`: unlink then rewrite well within two poll cycles.
+      fs.unlinkSync(entry);
+      await new Promise((r) => setTimeout(r, 45));
+      fs.writeFileSync(entry, '// v2\n');
+      await new Promise((r) => setTimeout(r, 150));
+      expect(calls).toBe(0);
+      stop();
+    });
+
+    it('stop() halts polling even if the binary is later removed', async () => {
+      const entry = path.join(testRoot, 'index.js');
+      fs.writeFileSync(entry, '// keeper\n');
+      let calls = 0;
+      const stop = watchOwnBinary(entry, () => { calls++; }, 30);
+      stop();
+      fs.unlinkSync(entry);
+      await new Promise((r) => setTimeout(r, 150));
+      expect(calls).toBe(0);
     });
   });
 });
