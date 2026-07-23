@@ -245,3 +245,35 @@ export function watchOwnLockfile(
     watcher?.close();
   };
 }
+
+export const BINARY_POLL_INTERVAL_MS = 15_000;
+
+/**
+ * Self-reap safety net: poll for the keeper's own entry script and fire
+ * onGone() once it disappears (an `npm uninstall`/`npm rm`, or a moved global
+ * install). This is the ONLY thing that can stop a keeper after an uninstall —
+ * the lockfile is left untouched, no reader ever runs to replace it, and
+ * `coldstart stop` is gone along with the binary — so without it the keeper runs
+ * forever. Two consecutive misses are required so a transient unlink+rewrite
+ * during `npm update` doesn't trigger a spurious exit (and even if one slips
+ * through, a reader just respawns from the new binary — the intended upgrade
+ * path). Returns a function to stop polling.
+ */
+export function watchOwnBinary(
+  entryPath: string,
+  onGone: () => void,
+  pollIntervalMs = BINARY_POLL_INTERVAL_MS, // injectable so tests don't wait 15s
+): () => void {
+  let misses = 0;
+  let fired = false;
+  const poll = setInterval(() => {
+    if (fired) return;
+    if (entryPath && !existsSync(entryPath)) {
+      if (++misses >= 2) { fired = true; onGone(); }
+    } else {
+      misses = 0;
+    }
+  }, pollIntervalMs);
+  poll.unref();
+  return () => clearInterval(poll);
+}

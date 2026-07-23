@@ -43,7 +43,7 @@ import { loadCachedIndex, saveCachedIndex, getCacheDir, updateCachedGitHead } fr
 import { startMCPServer } from './server/mcp.js';
 import { IndexManager } from './index-manager.js';
 import type { IndexContext } from './index-manager.js';
-import { readLock, writeLock, deleteLock, isDaemonAlive, getCurrentVersion, watchOwnLockfile } from './daemon-lock.js';
+import { readLock, writeLock, deleteLock, isDaemonAlive, getCurrentVersion, watchOwnLockfile, watchOwnBinary } from './daemon-lock.js';
 import { ensureKeeper, waitForKeeperCache } from './keeper.js';
 import { attachDaemonLogger } from './daemon-log.js';
 import { migrateLegacyMcpConfig } from './migrate.js';
@@ -588,10 +588,19 @@ async function runKeeper(
     cleanup();
   });
 
+  // Self-reap when our own binary is uninstalled or moved. After `npm uninstall`
+  // nothing else can stop us (lockfile untouched, no reader to replace us, the
+  // CLI gone), so this is the keeper's only path to a clean death on uninstall.
+  const stopBinaryWatcher = watchOwnBinary(resolve(process.argv[1] ?? ''), () => {
+    log(quiet, '[coldstart] Keeper binary gone (uninstalled or moved) — shutting down');
+    cleanup();
+  });
+
   process.on('SIGTERM', cleanup);
   process.on('SIGINT', cleanup);
   process.on('exit', () => {
     stopLockWatcher();
+    stopBinaryWatcher();
     manager?.stopWatching();
     detachLogger();
   });
