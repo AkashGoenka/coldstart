@@ -1,7 +1,7 @@
 {
   "name": "@cstart/coldstart",
-  "version": "2.2.5",
-  "mcpName": "io.github.akashgoenka/coldstart",
+  "version": "2.2.6",
+  "mcpName": "io.github.AkashGoenka/coldstart",
   "publishConfig": {
     "access": "public"
   },
