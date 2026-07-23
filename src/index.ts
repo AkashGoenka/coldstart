@@ -678,9 +678,11 @@ async function main(): Promise<void> {
     return;
   }
 
-  // `restart` — kill the keeper for this root (or --all) and clear its lock.
-  // The keeper respawns lazily on the next reader.
-  if (process.argv[2] === 'restart') {
+  // `restart`/`stop` — kill the keeper for this root (or --all) and clear its
+  // lock. The keeper respawns lazily on the next reader (a `coldstart find` or a
+  // connected MCP client), so both are really "stop now, fresh keeper on next
+  // use"; they share one implementation.
+  if (process.argv[2] === 'restart' || process.argv[2] === 'stop') {
     const { runRestart } = await import('./restart.js');
     await runRestart();
     return;
@@ -710,6 +712,23 @@ async function main(): Promise<void> {
   if (process.argv[2] === 'kb') {
     const { runKb } = await import('./kb/cli.js');
     process.exit(await runKb(process.argv.slice(3)));
+  }
+
+  // Anything past this point is a flag-driven invocation: the background keeper
+  // (`--daemon`), the self-contained MCP server (`--no-daemon`), `--probe`, or
+  // the default stdio MCP reader (how MCP clients launch us — always with
+  // `--root`/flags, never a bare subcommand). So a leftover FIRST arg that
+  // isn't a flag is an unrecognized command — reject it. Silently falling
+  // through meant `coldstart stop` (before `stop` existed) booted an MCP reader
+  // that hung on `roots/list` and spawned a keeper (issue: protocol noise + a
+  // process that "won't die").
+  const firstArg = process.argv[2];
+  if (firstArg && !firstArg.startsWith('-')) {
+    process.stderr.write(
+      `[coldstart] Unknown command: ${firstArg}\n` +
+      `Commands: find, gs, index, consumers, kb, status, restart, stop, init, unwire\n`,
+    );
+    process.exit(2);
   }
 
   const { root: cliRoot, rootExplicit, excludes, includes, cacheDir, quiet, noCache, daemon, noDaemon, probe } = parseArgs(process.argv);

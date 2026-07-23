@@ -95,6 +95,19 @@ export const DEFAULT_EXCLUDES = new Set([
   "notebook", // coldstart knowledge-base/memory notes — surfaced via find's KB section, never indexed as code (would out-rank real source)
 ]);
 
+/**
+ * Mirror the walker's directory rules for a repo-relative path (forward
+ * slashes): the walker never descends into hidden dirs (a segment starting
+ * with `.`) or DEFAULT_EXCLUDES dirs, so anything under one is not indexed.
+ * Only DIRECTORY segments count — hidden files at the root (.rubocop.yml) are
+ * kept. Shared by the walker's downstream consumers (the live watcher and
+ * patch) so a change to the rule can't drift between them.
+ */
+export function isUnderExcludedDir(relPath: string): boolean {
+  const dirSegments = relPath.split('/').slice(0, -1);
+  return dirSegments.some((s) => s.startsWith('.') || DEFAULT_EXCLUDES.has(s));
+}
+
 // Cache version — bump when index schema changes to force re-index
 // 18.0.0: consumer-scoped gzipped segments + fileId table + fingerprints;
 // TTL deleted (validity = version + git HEAD + the keeper's live watcher).

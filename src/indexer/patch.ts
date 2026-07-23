@@ -1,7 +1,7 @@
 import { stat } from 'node:fs/promises';
 import { relative, extname } from 'node:path';
 import type { CodebaseIndex, IndexedFile, ParsedFile, Language } from '../types.js';
-import { EXTENSION_TO_LANGUAGE, DEFAULT_EXCLUDES } from '../constants.js';
+import { EXTENSION_TO_LANGUAGE, isUnderExcludedDir } from '../constants.js';
 import { parseFile, buildFileId } from './parser.js';
 import { buildFileDomains, isTestPath } from './tokenize.js';
 import { resolveImportsForFiles, buildPackageIndex } from './resolvers/index.js';
@@ -65,8 +65,7 @@ export async function patchIndex(
     // .claude/settings.json) and reconcile (porcelain lists it as untracked).
     // Hidden FILES at the root (.rubocop.yml) are walked, so only dir
     // segments are filtered.
-    const dirSegments = relPath.split('/').slice(0, -1);
-    if (dirSegments.some((s) => s.startsWith('.') || DEFAULT_EXCLUDES.has(s))) continue;
+    if (isUnderExcludedDir(relPath)) continue;
 
     const fileId = buildFileId(relPath);
 
