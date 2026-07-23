@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.6] - 2026-07-23
+
+### Fixed
+- **MCP registry publish returned 403 on a namespace-casing mismatch.** The registry grants
+  `io.github.<GitHubUsername>/*` using the account's **exact** casing, and 2.2.4/2.2.5 shipped
+  the username lowercased — so `mcp-publisher publish` failed with *"You do not have permission
+  to publish this server. You have permission to publish: io.github.AkashGoenka/*"*. Corrected
+  in both `server.json` (`name`) and `package.json` (`mcpName`); the two must stay identical,
+  and the registry checks `mcpName` against the *published npm tarball*, which is why the fix
+  needs its own release.
+
 ## [2.2.5] - 2026-07-23
 
 ### Added
