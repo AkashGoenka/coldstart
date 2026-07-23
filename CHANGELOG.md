@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tool descriptions (which load into context every session). Says what the two layers are and
   that `init` wires the hooks.
 
+- **Richer registry listing.** `server.json` now carries an `icons` entry (the site logo) and
+  a publisher-provided `_meta` block spelling out the `npm i -g` → `coldstart init` setup and
+  why it matters. `_meta` is documented as metadata "for downstream registries" (Glama,
+  mcp.so and friends) — a survey of 100 published entries found *no* server using it and
+  nothing known to render it, so treat it as opportunistic rather than a delivery channel.
+
 ### Fixed
 - **`server.json` would have been rejected by the MCP registry.** The registry schema caps
   `description` at **100 characters**; 2.2.4 shipped 215, so `mcp-publisher publish` would
