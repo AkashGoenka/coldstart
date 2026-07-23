@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.5] - 2026-07-23
+
+### Fixed
+- **`server.json` would have been rejected by the MCP registry.** The registry schema caps
+  `description` at **100 characters**; 2.2.4 shipped 215, so `mcp-publisher publish` would
+  have failed validation. Trimmed to 85 and added the optional `title` field. `server.json`
+  is now validated against the published `2025-12-11` schema with a real JSON-Schema
+  validator rather than by eye.
+- **npm truncated the package description mid-word.** npm cuts display at ~250 characters
+  and the 2.2.4 description was 289, so it rendered ending in `…no-shell MCP server f`.
+  Trimmed to 213.
+
 ## [2.2.4] - 2026-07-23
 
 ### Changed

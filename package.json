@@ -1,11 +1,11 @@
 {
   "name": "@cstart/coldstart",
-  "version": "2.2.4",
+  "version": "2.2.5",
   "mcpName": "io.github.akashgoenka/coldstart",
   "publishConfig": {
     "access": "public"
   },
-  "description": "Self-maintaining codebase memory for AI coding agents: a deterministic AST index that answers which files matter, plus agent-written notes that flag themselves stale when the code changes. No embeddings, no API key. CLI-first; also a no-shell MCP server for Claude Code, Cursor, and Codex.",
+  "description": "Self-maintaining codebase memory for AI coding agents: an AST index that answers which files matter, plus agent-written notes that flag themselves stale when the code changes. No embeddings, no API key. CLI + MCP.",
   "type": "module",
   "bin": {
     "coldstart": "./dist/index.js",
