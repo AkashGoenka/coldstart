@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.4] - 2026-07-23
+
+### Changed
+- **Package metadata now says "memory."** The npm `description` and `keywords` still
+  carried the pre-2.0 "fast static navigation" framing and contained no *memory* token
+  at all, so npm search — and the aggregators that crawl those fields — had nothing to
+  match "codebase memory" or "agent memory" against. Both now lead with the notebook and
+  name the supported clients. No behaviour change.
+
+### Added
+- **`server.json` — listing in the official MCP registry.** `registry.modelcontextprotocol.io`
+  is the canonical index MCP-aware clients enumerate. Publishing there requires an
+  `mcpName` in `package.json` that the registry validates against the *published npm
+  tarball*, so the entry can only reference a version that already exists on npm — which
+  is why this ships as its own release.
+
 ## [2.2.3] - 2026-07-22
 
 ### Added
