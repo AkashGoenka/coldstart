@@ -1,22 +1,46 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.akashgoenka/coldstart",
-  "description": "Self-maintaining codebase memory for AI coding agents: a deterministic AST index that answers which files matter, plus agent-written notes that flag themselves stale when the code changes. No embeddings, no API key.",
+  "title": "coldstart",
+  "description": "Codebase memory for AI agents: an AST index plus agent-written notes that self-stale.",
   "repository": {
     "url": "https://github.com/AkashGoenka/coldstart",
     "source": "github"
   },
-  "version": "2.2.4",
+  "version": "2.2.5",
   "websiteUrl": "https://akashgoenka.github.io/coldstart/",
+  "icons": [
+    {
+      "src": "https://akashgoenka.github.io/coldstart/logo.svg",
+      "mimeType": "image/svg+xml",
+      "sizes": ["any"]
+    }
+  ],
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@cstart/coldstart",
-      "version": "2.2.4",
+      "version": "2.2.5",
       "transport": {
         "type": "stdio"
       }
     }
-  ]
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "setup": {
+        "install": "npm i -g @cstart/coldstart",
+        "thenRun": "coldstart init",
+        "runIn": "the repository root, once",
+        "why": "The MCP server exposes all six tools without it. `init` additionally wires the hooks that capture notes automatically when a task ends and surface matching notes when a prompt arrives — without it the notebook stays empty unless the agent calls kb_write itself.",
+        "docs": "https://akashgoenka.github.io/coldstart/docs.html"
+      },
+      "interfaces": ["cli", "mcp"],
+      "primaryInterface": "cli",
+      "tools": ["find", "gs", "kb_search", "kb_lookup", "kb_write", "kb_status"],
+      "requiresApiKey": false,
+      "requiresNetwork": false
+    }
+  }
 }

@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.5] - 2026-07-23
+
+### Added
+- **The MCP server now tells the agent that `coldstart init` exists.** A user who installs
+  coldstart from the MCP registry gets the six tools but never runs `init`, so no hooks are
+  wired — no automatic capture, no recall — and nothing told them. The server now sets the
+  protocol's `instructions` field, which clients send to the model **once at the initialize
+  handshake** rather than on every tool call, so setup guidance no longer has to ride on the
+  tool descriptions (which load into context every session). Says what the two layers are and
+  that `init` wires the hooks.
+
+- **Richer registry listing.** `server.json` now carries an `icons` entry (the site logo) and
+  a publisher-provided `_meta` block spelling out the `npm i -g` → `coldstart init` setup and
+  why it matters. `_meta` is documented as metadata "for downstream registries" (Glama,
+  mcp.so and friends) — a survey of 100 published entries found *no* server using it and
+  nothing known to render it, so treat it as opportunistic rather than a delivery channel.
+
+### Fixed
+- **`server.json` would have been rejected by the MCP registry.** The registry schema caps
+  `description` at **100 characters**; 2.2.4 shipped 215, so `mcp-publisher publish` would
+  have failed validation. Trimmed to 85 and added the optional `title` field. `server.json`
+  is now validated against the published `2025-12-11` schema with a real JSON-Schema
+  validator rather than by eye.
+- **npm truncated the package description mid-word.** npm cuts display at ~250 characters
+  and the 2.2.4 description was 289, so it rendered ending in `…no-shell MCP server f`.
+  Trimmed to 213.
+
 ## [2.2.4] - 2026-07-23
 
 ### Changed

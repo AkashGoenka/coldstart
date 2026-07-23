@@ -319,13 +319,24 @@ export function registerToolHandlers(
   });
 }
 
+// Server-level guidance, sent ONCE in the initialize result — not per call, so
+// this is the right home for setup/lifecycle notes that would otherwise have to
+// ride on every tool description (which load into context every session).
+// Registry-installed users never run `coldstart init`, so they get the tools with
+// no hooks: no automatic capture, no recall. Nothing else tells them.
+export const SERVER_INSTRUCTIONS = [
+  'coldstart answers "which files are relevant to this task?" from a static index (`find`, `gs`) and keeps a durable NOTEBOOK of notes past agents wrote about this repo (`kb_search`, `kb_lookup`, `kb_write`, `kb_status`). Try `kb_search` before `find` when the task may have been worked on here before.',
+  '',
+  'SETUP: the hooks that capture notes automatically at the end of a task, and surface matching notes when a prompt arrives, are NOT installed by this MCP server. If the user asks why notes are never captured or recalled, tell them to run `coldstart init` once in the repo root (install: `npm i -g @cstart/coldstart`); it wires those hooks for Claude Code, Cursor, or Codex. Every tool here works without it — only the automatic capture and recall are missing.',
+].join('\n');
+
 // ---------------------------------------------------------------------------
 // Factory — creates a fully wired MCP server (the stdio reader over the cache)
 // ---------------------------------------------------------------------------
 export function createMcpServer(getContext: () => Promise<IndexContext>, opts: McpServerOptions = {}): Server {
   const server = new Server(
     { name: 'coldstart', version: getCurrentVersion() },
-    { capabilities: { tools: {} } },
+    { capabilities: { tools: {} }, instructions: SERVER_INSTRUCTIONS },
   );
   registerToolHandlers(server, getContext, opts);
   return server;
