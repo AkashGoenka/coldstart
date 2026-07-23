@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.2.5] - 2026-07-23
 
+### Added
+- **The MCP server now tells the agent that `coldstart init` exists.** A user who installs
+  coldstart from the MCP registry gets the six tools but never runs `init`, so no hooks are
+  wired — no automatic capture, no recall — and nothing told them. The server now sets the
+  protocol's `instructions` field, which clients send to the model **once at the initialize
+  handshake** rather than on every tool call, so setup guidance no longer has to ride on the
+  tool descriptions (which load into context every session). Says what the two layers are and
+  that `init` wires the hooks.
+
 ### Fixed
 - **`server.json` would have been rejected by the MCP registry.** The registry schema caps
   `description` at **100 characters**; 2.2.4 shipped 215, so `mcp-publisher publish` would
