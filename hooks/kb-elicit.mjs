@@ -108,7 +108,13 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
 // session: the freshest marker in tmpdir whose recorded (relative) files still
 // resolve under <root> is this repo's active session. We then emit the SAME
 // capture payload an automatic fire would, built from accumulated evidence.
-// READ-ONLY — never mutates the marker, so it cannot perturb automatic firing.
+//
+// It marks the files it LISTED as captured (and nothing else). Without that, a
+// manual capture left every file uncaptured, so the next automatic fire re-asked
+// for notes on the exact same worklist the user had just written up. The trigger's
+// own timing counters (armed / activeStops / stopsSinceFire / quietRun) are left
+// untouched, which is what preserves the real guarantee: an on-demand capture
+// cannot change WHEN automatic capture fires, only what is still outstanding.
 function argValue(name) {
   const i = process.argv.indexOf(name);
   return i >= 0 ? process.argv[i + 1] : undefined;
@@ -129,7 +135,7 @@ function freshestMarkerUnderRoot(root) {
     if (!files.length) continue;
     // Belongs to THIS repo iff a recorded file still resolves under root.
     if (files.some((rel) => existsSync(join(root, rel)))) {
-      return { sid: m.n.slice("coldstart-kb-".length, -"-main.json".length), state };
+      return { sid: m.n.slice("coldstart-kb-".length, -"-main.json".length), state, path: m.p };
     }
   }
   return null;
@@ -148,7 +154,7 @@ if (process.argv.includes("--manual")) {
       log(`MANUAL no-marker root=${root}`);
       process.exit(0);
     }
-    const { sid, state } = found;
+    const { sid, state, path: markerPath } = found;
     const files = Object.keys(state.files).filter((rel) => !state.files[rel].captured);
     if (!files.length) {
       process.stdout.write("Everything worked on so far is already captured — nothing new to write right now.\n");
@@ -157,6 +163,17 @@ if (process.argv.includes("--manual")) {
     }
     const entries = worklistEntries(CLI, root, files, state.files, log);
     const payload = buildCapturePayload({ root, cli: CLI, sid, entries, envelope: "manual" });
+    // Mark ONLY the listed files captured. Re-read first: a Stop hook may have
+    // written the marker since we loaded it, and we must not clobber its
+    // counters. Best-effort — a failure here costs a duplicate ask, never the
+    // payload the user asked for.
+    try {
+      const live = JSON.parse(readFileSync(markerPath, "utf8"));
+      if (live && live.files) {
+        for (const rel of files) if (live.files[rel]) live.files[rel].captured = true;
+        writeFileSync(markerPath, JSON.stringify(live));
+      }
+    } catch (e) { log(`MANUAL mark-captured skipped ${e}`); }
     logCaptureEvent(root, { event: "fire", reason: "manual", session: sid, files: files.length });
     log(`FIRE manual session=${sid} files=${files.length}`);
     process.stdout.write(payload + "\n");

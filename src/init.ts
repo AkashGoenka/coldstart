@@ -33,7 +33,7 @@ import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
-import { ensureKeeper } from './keeper.js';
+import { ensureKeeper, waitForKeeperCache } from './keeper.js';
 import { initSkeleton, logMetric } from './kb/store.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -991,13 +991,25 @@ export async function runInit(): Promise<void> {
   // are wired by their client setup above; Cursor/other use the explicit CLI.
   setupNotebook(cwd, commitNotebook);
 
-  // Warm the index now, while the user is here at setup, so the first lookup
-  // isn't a cold build. ensureKeeper spawns the background keeper (detached) and
-  // returns immediately; the keeper walks + indexes + watches from here on.
-  // Best-effort — a spawn failure just means the first query builds lazily.
+  // Build the index now, while the user is here at setup, and BLOCK until it
+  // lands. ensureKeeper only spawns the detached keeper and returns immediately,
+  // so init used to exit mid-walk: the agent's very first `find` hit a cache
+  // miss, printed "keeper is still building this repo", and fell back to grep —
+  // a first impression of coldstart not working. Waiting here costs setup a few
+  // seconds once and makes the first lookup genuinely instant.
+  // Best-effort in every failure direction: a spawn failure, a slow repo, or a
+  // timeout all still leave a wired repo whose first query builds lazily.
   out('');
-  out('Indexing this repo in the background — your first lookup will be instant.');
+  out('Indexing this repo — the first lookup will be instant.');
   await ensureKeeper(cwd);
+  const waited = await waitForKeeperCache(cwd, undefined, 180_000, (m) => out(m));
+  if (waited === 'ready') {
+    out('Index ready.');
+  } else if (waited === 'no-keeper') {
+    out('Could not start the background indexer — your first lookup will build it instead.');
+  } else {
+    out('Still indexing (large repo) — it will finish in the background.');
+  }
 
   out('');
   out(DIVIDER);

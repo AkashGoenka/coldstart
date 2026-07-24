@@ -332,13 +332,37 @@ describe('kb-elicit --manual (on-demand capture)', () => {
     expect(out).not.toContain('WORKLIST');
   });
 
-  it('never mutates the marker — manual capture cannot perturb automatic firing', () => {
+  it('marks the files it listed captured, so the next fire does not re-ask for them', () => {
     seed(['src/a.ts']);
     writeMarker({ 'src/a.ts': { edits: 2 } });
-    const before = fs.readFileSync(markerPath(), 'utf8');
+
+    const out = manual();
+    expect(out).toContain('src/a.ts');
+
+    const after = JSON.parse(fs.readFileSync(markerPath(), 'utf8'));
+    expect(after.files['src/a.ts'].captured).toBe(true);
+
+    // …and a second manual run now has nothing outstanding.
+    expect(manual()).toContain('already captured');
+  });
+
+  it('touches ONLY captured — manual capture cannot perturb automatic firing', () => {
+    seed(['src/a.ts']);
+    writeMarker({ 'src/a.ts': { edits: 2 } });
+    const before = JSON.parse(fs.readFileSync(markerPath(), 'utf8'));
 
     manual();
 
-    expect(fs.readFileSync(markerPath(), 'utf8')).toBe(before);
+    // The trigger's timing counters decide WHEN capture fires. Manual capture
+    // changes only WHAT is still outstanding, so every one of them must survive
+    // untouched — that is the real guarantee, not byte-equality of the marker.
+    const after = JSON.parse(fs.readFileSync(markerPath(), 'utf8'));
+    for (const k of ['v', 'stop', 'activeStops', 'stopsSinceFire', 'quietRun', 'armed', 'fires', 'lineCount', 'head']) {
+      expect(after[k]).toEqual(before[k]);
+    }
+    // Per-file evidence is untouched apart from the capture flag itself.
+    const { captured: _c1, ...restBefore } = before.files['src/a.ts'];
+    const { captured: _c2, ...restAfter } = after.files['src/a.ts'];
+    expect(restAfter).toEqual(restBefore);
   });
 });

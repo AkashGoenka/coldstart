@@ -119,12 +119,24 @@ export interface ViewOptions {
   generated: string; // ISO date, injected by the caller (cli stamps it)
 }
 
-/** Returns the written file path. */
+/** Returns the written file path.
+ *
+ *  The write is content-conditional. The keeper re-renders this file after every
+ *  cache save (refreshKbNotesIndex → regenerateKbViewIfPresent), which means a
+ *  plain code edit — no note involved — used to rewrite index.html and bump its
+ *  mtime. That churned the file all day and re-triggered anything watching it.
+ *  #92 stopped the keeper's own writes from re-entering its watcher; this stops
+ *  the pointless write from happening at all. `generated` is date-stamped, not
+ *  clock-stamped, so identical notes really do render identical bytes. */
 export function kbView(root: string, template: string, opts: ViewOptions): string {
   const data = buildViewData(root, opts.generated);
   const html = renderViewHtml(template, data);
   const outPath = join(notebookDir(root), 'index.html');
-  writeFileSync(outPath, html);
+  let unchanged = false;
+  try {
+    unchanged = existsSync(outPath) && readFileSync(outPath, 'utf8') === html;
+  } catch { /* unreadable → fall through and write */ }
+  if (!unchanged) writeFileSync(outPath, html);
   ignoreIndexHtml(root);
   if (opts.open !== false) openInBrowser(outPath);
   return outPath;
