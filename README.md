@@ -274,4 +274,4 @@ See [PHILOSOPHY.md](./PHILOSOPHY.md) for why coldstart computes no semantics of 
 
 ## License
 
-MIT
+MIT — see [LICENSE](./LICENSE).
