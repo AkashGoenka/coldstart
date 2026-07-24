@@ -4,6 +4,9 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
   ListRootsResultSchema,
+  ListResourcesRequestSchema,
+  ListResourceTemplatesRequestSchema,
+  ListPromptsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { IndexContext } from '../index-manager.js';
 import { getCurrentVersion } from '../daemon-lock.js';
@@ -174,6 +177,12 @@ export function registerToolHandlers(
     tools: TOOL_DEFINITIONS,
   }));
 
+  // Stubs backing the empty resources/prompts capabilities declared in
+  // createMcpServer — coldstart exposes tools only.
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: [] }));
+  server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({ resourceTemplates: [] }));
+  server.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts: [] }));
+
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
     const params = (args ?? {}) as Record<string, unknown>;
@@ -336,7 +345,17 @@ export const SERVER_INSTRUCTIONS = [
 export function createMcpServer(getContext: () => Promise<IndexContext>, opts: McpServerOptions = {}): Server {
   const server = new Server(
     { name: 'coldstart', version: getCurrentVersion() },
-    { capabilities: { tools: {} }, instructions: SERVER_INSTRUCTIONS },
+    {
+      // resources/prompts are declared EMPTY on purpose. coldstart has neither,
+      // and answering `-32601 Method not found` is spec-correct — but directory
+      // crawlers (Glama) introspect all three lists in one pass, and at least one
+      // treats an error reply as a failed inspection and stores nothing at all,
+      // losing the tools it had already read. An empty list costs nothing and
+      // cannot be misread. See registerToolHandlers for the stub handlers that
+      // make these declarations honest.
+      capabilities: { tools: {}, resources: {}, prompts: {} },
+      instructions: SERVER_INSTRUCTIONS,
+    },
   );
   registerToolHandlers(server, getContext, opts);
   return server;
@@ -352,10 +371,27 @@ export async function startMCPServer(
 ): Promise<void> {
   const server = createMcpServer(getContext, opts);
 
+  // Wait for `notifications/initialized` before originating any request of our
+  // own. `server.connect()` resolves when the TRANSPORT opens, not when the
+  // handshake completes — asking for roots straight after it put a server→client
+  // request on the wire BEFORE we had answered the client's `initialize`, and it
+  // carried outbound id 0, which collides with clients that number their own
+  // requests from 0. Spec-legal (ids are scoped per requestor) but a client
+  // keeping one id table for both directions loses its pending initialize.
+  const initialized = new Promise<void>((resolve) => {
+    server.oninitialized = () => resolve();
+  });
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  // After connect, ask for roots — cap at 1s so standalone runs don't stall
+  // Don't hang forever on a client that never sends `initialized`.
+  await Promise.race([
+    initialized,
+    new Promise<void>((resolve) => setTimeout(resolve, 2000).unref?.()),
+  ]);
+
+  // Handshake done — now ask for roots. Cap at 1s so standalone runs don't stall.
   let clientRoots: string[] = [];
   try {
     const result = await server.request(
