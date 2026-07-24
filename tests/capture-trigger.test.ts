@@ -181,6 +181,59 @@ describe('trigger', () => {
     expect(r.decision).toBeNull();
   });
 
+  // --- the discussion shape (regression: descent had NEVER fired in the wild) ---
+  // The 2026-07-21 change made synthesis quiet so it could feed descent, but the
+  // score's stop term still read activeStops — so a session that reads a couple of
+  // files and then TALKS about them for ten turns never grew a score and never
+  // armed. Measured: 104 stops, 24 fires, zero descent. These lock the fix in.
+
+  it('a discussion session (few files, many quiet stops) reaches descent', () => {
+    let r = step(initialState(), { ...QUIET, delta: reads('a', 'b', 'c') });
+    expect(r.decision).toBeNull();
+    // Nothing but talk from here. Under the old rule the score froze at 4 forever.
+    let fired: string | undefined;
+    for (let i = 0; i < 12 && !fired; i++) {
+      r = step(r.state, QUIET);
+      fired = r.decision?.fire;
+    }
+    expect(fired).toBe('descent');
+    expect(r.decision?.mode).toBe('inject'); // never blocks
+    expect(r.decision?.files).toEqual(expect.arrayContaining(['a', 'b', 'c']));
+  });
+
+  it('a SINGLE-file deep dive still reaches descent (MIN_FILES_ARM = 1)', () => {
+    let r = step(initialState(), { ...QUIET, delta: reads('a') });
+    let fired: string | undefined;
+    for (let i = 0; i < 14 && !fired; i++) {
+      r = step(r.state, QUIET);
+      fired = r.decision?.fire;
+    }
+    expect(fired).toBe('descent');
+    expect(r.decision?.files).toEqual(['a']);
+  });
+
+  it('but a session with NO files never fires, however long it runs', () => {
+    let r = step(initialState(), QUIET);
+    for (let i = 0; i < 30; i++) {
+      r = step(r.state, QUIET);
+      expect(r.decision).toBeNull();
+    }
+    expect(r.state.armed).toBe(false);
+  });
+
+  it('one uncaptured file never triggers the BLOCKING head-drift path', () => {
+    // MIN_FILES_ARM=1 is for arming only. Blocking on a single file is the v4
+    // agitation the redesign exists to kill, so head-drift keeps MIN_FILES=2.
+    let r = step(initialState(), { ...QUIET, delta: reads('a') });
+    r = step(r.state, { ...QUIET, headDrift: true });
+    expect(r.decision).toBeNull();
+    // Two files and the same drift does fire, blocking.
+    r = step(r.state, { ...QUIET, delta: reads('b') });
+    r = step(r.state, { ...QUIET, headDrift: true });
+    expect(r.decision?.fire).toBe('head-drift');
+    expect(r.decision?.mode).toBe('block');
+  });
+
   it('fresh-noted files score nothing; editing one clears the discount', () => {
     let s = initialState();
     const freshNoted = new Set(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i']);
