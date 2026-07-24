@@ -275,3 +275,11 @@ See [PHILOSOPHY.md](./PHILOSOPHY.md) for why coldstart computes no semantics of 
 ## License
 
 MIT — see [LICENSE](./LICENSE).
+
+---
+
+<div align="center">
+
+<a href="https://glama.ai/mcp/servers/AkashGoenka/coldstart"><img alt="coldstart MCP server" src="https://glama.ai/mcp/servers/AkashGoenka/coldstart/badges/card.svg" width="380" height="200" /></a>
+
+</div>
