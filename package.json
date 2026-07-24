@@ -39,10 +39,11 @@
     "tree-sitter"
   ],
   "license": "MIT",
+  "author": "Akash Goenka (https://github.com/AkashGoenka)",
   "homepage": "https://akashgoenka.github.io/coldstart/",
   "repository": {
     "type": "git",
-    "url": "https://github.com/AkashGoenka/coldstart"
+    "url": "git+https://github.com/AkashGoenka/coldstart.git"
   },
   "bugs": {
     "url": "https://github.com/AkashGoenka/coldstart/issues"

@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.7] - 2026-07-24
+
+### Fixed
+- **The notebook view reloaded in a loop.** The keeper regenerates
+  `.coldstart/notebook/index.html` on every KB-notes refresh, but the live watcher didn't
+  mirror the walker's hidden/excluded-dir rules — so it caught the keeper's *own* regen write
+  as "repo changed" → cache save → notes refresh → regen, forever. `src/watcher.ts` now drops
+  paths under a hidden/excluded directory via a shared `isUnderExcludedDir`
+  (`src/constants.ts`) that `patchIndex` reuses, so the rule can't drift between the two.
+  Auto-refresh on *real* note writes is unaffected — those arrive via `.raw/*.jsonl`. (#92)
+- **`coldstart stop` is a real command**, and unknown subcommands now error instead of being
+  silently matched. (#92)
+- **The keeper self-reaps when its binary disappears.** `watchOwnBinary` (`src/daemon-lock.ts`)
+  polls the keeper's own entry script every 15s and shuts down after two consecutive misses —
+  two, so a transient unlink+rewrite during `npm update` doesn't trigger a spurious exit. (#92)
+- **No LICENSE file in the repository.** `package.json`, npm, and the README all declared MIT,
+  but the license text was nowhere in the tree — so GitHub's license detection reported `null`
+  and every downstream directory that reads it (the MCP registry consumers, Glama) showed the
+  package as unlicensed. Added the MIT text at the repo root; npm packs `LICENSE` into the
+  tarball regardless of the `files` allowlist.
+
+### Changed
+- `server.json` now tracks the release version (it was stranded at 2.2.6 while `package.json`
+  moved to 2.2.7). Both `version` and `packages[0].version` must equal the published npm
+  version — the registry validates `mcpName` against the *published tarball*, so a mismatch
+  here fails at publish time, not at validation time.
+- `package.json` gained an `author` field (previously unset, so npm rendered it blank) and its
+  `repository.url` now uses the canonical `git+https://...git` form.
+
 ## [2.2.6] - 2026-07-23
 
 ### Fixed
