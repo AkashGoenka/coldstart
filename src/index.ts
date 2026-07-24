@@ -665,7 +665,49 @@ function makeCacheReader(
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
+const USAGE = `coldstart — fast codebase navigation for AI agents
+
+Usage: coldstart <command> [options]
+
+Navigation
+  find <terms...>     rank files relevant to a concept
+  gs <file>           one file: symbols, importers, callers
+  consumers <file>    who depends on this file
+  index               build/refresh the index for this repo
+
+Notebook
+  kb <sub>            search | lookup | write | commit | status | lint | render | view | init
+
+Lifecycle
+  init                wire coldstart into this repo (asks experience + client)
+  unwire              remove coldstart's wiring (--purge also deletes the notebook)
+  status              keeper liveness + index freshness
+  restart | stop      keeper lifecycle
+
+  --version, -v       print the installed version
+  --help, -h          this message
+
+Docs: https://github.com/AkashGoenka/coldstart
+`;
+
 async function main(): Promise<void> {
+  // `--version`/`--help` are handled FIRST and by exact match. They begin with
+  // `-`, so the unknown-command guard further down waves them through into the
+  // flag-driven section, where they used to boot the default stdio MCP reader —
+  // a server that then sat forever waiting for protocol traffic no one was
+  // sending. `coldstart --version` is the first thing anyone types to check an
+  // upgrade landed, and having it hang reads as a broken install. Same bug class
+  // #92 closed for bare subcommands, left open on the flag path.
+  const flagArg = process.argv[2];
+  if (flagArg === '--version' || flagArg === '-v') {
+    process.stdout.write(`${getCurrentVersion()}\n`);
+    return;
+  }
+  if (flagArg === '--help' || flagArg === '-h') {
+    process.stdout.write(USAGE);
+    return;
+  }
+
   if (process.argv[2] === 'init') {
     const { runInit } = await import('./init.js');
     await runInit();
