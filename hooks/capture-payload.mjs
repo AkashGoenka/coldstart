@@ -127,25 +127,27 @@ agent; there is no "next".
 11. Never copy secret VALUES (env contents, tokens, keys) into a note — notes are committed \
 to git.
 
-FLOWS — rare. While investigating you will see flows everywhere: every file connects to \
-something, every feature has a chain. Those connections are not flow notes — at that rate, \
-everything would be a flow.
-A flow note records PRODUCT-level knowledge: how the system behaves as a whole, knowledge no \
-single file owns. The test, for every candidate: is this about how the CODEBASE works, or \
-about how one file works? File-level → it belongs in that file's note. Product-level → flow.
-Examples that can qualify:
+FLOWS — the product-level layer. A flow note records knowledge no single file owns: how the \
+system behaves as a whole. The test, for every candidate: is this about how the CODEBASE \
+works, or about how one file works? File-level → it belongs in that file's note. \
+Product-level → flow.
+Examples that qualify:
 - how authentication works end-to-end
 - how UI components get rendered under different conditions
 - how a file is consumed along a path when its imports don't reveal it and the gotcha spans \
 the path (a single non-obvious consumer is NOT a flow — it goes in that file's own note, rule 6)
 The summary's FIRST sentence states the product-level fact — the thing a reader of all the \
-file notes would still be missing.
+file notes would still be missing. If you cannot write that sentence, there is no flow.
 Steps are the minimal chain, each with its role. kb write WARNS when fewer than two steps \
 are files you read this session — a flow assembled from grep hits is the classic bad flow; \
 take that warning seriously.
 Never a flow: a feature's parts-list, a relationship the import graph already shows, a \
 mechanism living in one file.
-kb search first — update the existing flow, never a near-duplicate.
+kb search first. UPDATE an existing flow only when your missing-fact sentence is THE SAME \
+fact it already leads with — new detail about a mechanism it already tells. A DIFFERENT \
+missing fact is a NEW flow, even in the same subsystem, even across the same files. Folding \
+an unrelated fact into a nearby flow buries it: nobody searching for your fact will find that \
+title.
 
 WRITE — one Bash block total: specs as heredocs, writes chained with &&.
   {"type":"file-single","path":"src/x.py","summary":"1-3 sentences","aliases":["symptom words"]}
@@ -156,5 +158,7 @@ with several of its symbols. file-hub is ONLY for grab-bag files that have no si
 not make a file a hub; having no one purpose does.
   Update = the same spec plus "id":"<id from the worklist>".
   node ${cli} kb write /tmp/spec1.json --root ${root} --session ${sid} --force
-  Flow/lesson shapes: run \`node ${cli} kb write --root ${root}\` with no spec — it prints the full guide.${tail}`;
+  Flow/lesson shapes: run \`node ${cli} kb write --root ${root}\` with no spec — it prints the full guide.
+  LAST line of the block, always — even when you wrote nothing at all:
+  node ${cli} kb flow-decision --decision <none|new|update> [--id <flow id>] --why "<one clause>" --root ${root} --session ${sid}${tail}`;
 }

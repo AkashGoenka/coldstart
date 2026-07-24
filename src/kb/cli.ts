@@ -53,6 +53,8 @@ interface KbFlags {
   session?: string;
   message?: string;
   noOpen: boolean;
+  decision?: string;
+  why?: string;
 }
 
 function parseKbArgs(argv: string[]): { positional: string[]; flags: KbFlags } {
@@ -75,6 +77,8 @@ function parseKbArgs(argv: string[]): { positional: string[]; flags: KbFlags } {
       case '--paths': flags.paths = String(argv[++i] ?? '').split(',').map((s) => s.trim()).filter(Boolean); break;
       case '--session': flags.session = argv[++i]; break;
       case '-m': case '--message': flags.message = argv[++i]; break;
+      case '--decision': flags.decision = argv[++i]; break;
+      case '--why': flags.why = argv[++i]; break;
       default:
         if (a.startsWith('--')) err(`[coldstart kb] unknown flag: ${a}`);
         else positional.push(a);
@@ -106,6 +110,7 @@ export async function runKb(argv: string[]): Promise<number> {
     case 'lookup': return cmdLookup(positional, flags);
     case 'write': return cmdWrite(positional, flags);
     case 'status': return cmdStatus(flags);
+    case 'flow-decision': return cmdFlowDecision(flags);
     case 'lint': return cmdLint(flags);
     case 'render': {
       if (!requireNotebook(root)) return 2;
@@ -279,6 +284,29 @@ async function cmdWrite(positional: string[], flags: KbFlags): Promise<number> {
     ? '\n' + warnings.map((w) => `warning: ${w}`).join('\n')
     : '';
   out(`kb write: ${result.op} → ${result.id}${warned}`);
+  return 0;
+}
+
+/** Record the capture's flow decision — the one capture outcome writes cannot show.
+ *  `capture.jsonl` already logs every note WRITTEN with its type, so "a flow was
+ *  created/updated" is observable; "a flow was considered and declined" is not, and
+ *  neither is "the knowledge was folded into an existing flow instead of a new one".
+ *  Without those two, a flow-rate change is uninterpretable — we cannot tell a prompt
+ *  that suppresses flows from one agents never reach. Diagnostic instrument: remove it
+ *  once the flow gate is tuned. Best-effort, never fails a capture. */
+function cmdFlowDecision(flags: KbFlags): number {
+  const decision = flags.decision;
+  if (!decision || !['none', 'new', 'update'].includes(decision)) {
+    out('usage: kb flow-decision --decision none|new|update [--id <flow id>] [--why "<one clause>"]');
+    return 2;
+  }
+  logMetric(flags.root, 'capture', {
+    event: 'flow-decision',
+    decision,
+    id: flags.id,
+    why: flags.why,
+    session: flags.session,
+  });
   return 0;
 }
 
