@@ -278,8 +278,4 @@ MIT — see [LICENSE](./LICENSE).
 
 ---
 
-<div align="center">
-
-<a href="https://glama.ai/mcp/servers/AkashGoenka/coldstart"><img alt="coldstart MCP server" src="https://glama.ai/mcp/servers/AkashGoenka/coldstart/badges/card.svg" width="380" height="200" /></a>
-
-</div>
+[![coldstart MCP server](https://glama.ai/mcp/servers/AkashGoenka/coldstart/badges/card.svg)](https://glama.ai/mcp/servers/AkashGoenka/coldstart)
