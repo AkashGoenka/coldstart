@@ -234,7 +234,12 @@ ul.tight li b { color: var(--ink); }
    ========================================================= */
 body.essay-page {
   --nav-wrap: 1080px;
-  --measure: 68ch;          /* ~65-70 characters — the readable line length */
+  /* The readable line length, ~66 characters at the 19px body size.
+     MUST be an absolute length, never `ch`: ch resolves against each
+     element's OWN font-size, so a 46px h1 and a 19px p would compute
+     different widths, and margin-inline:auto would then centre them on
+     different left edges. Every child of .essay-article shares this. */
+  --measure: 680px;
 
   --bg: #fcfcfb;
   --surface: #f4f3f0;
@@ -383,7 +388,10 @@ body.essay-page .term { border-color: var(--term-border); }
 .essay-article .back-link:hover { color: var(--frost); }
 
 .essay-article .essay-hero {
-  width: 100%;
+  /* same width as every other child, so the divider under the byline ends
+     flush with the text column instead of overhanging it */
+  width: min(var(--measure), 100%);
+  margin-inline: auto;
   padding-bottom: 26px;
   border-bottom: 1px solid var(--line);
 }
