@@ -126,6 +126,7 @@
     <span class="nav-sp"></span>
     <div class="nav-links">
       <a href="docs.html">Docs</a>
+      <a href="blog.html">Blog</a>
       <a href="https://github.com/AkashGoenka/coldstart">GitHub</a>
       <a href="https://www.npmjs.com/package/@cstart/coldstart">npm</a>
     </div>
@@ -142,7 +143,7 @@
       <p class="hero-sub">coldstart gives a coding agent a <b>notebook it writes itself</b>, so what one session figures out, the next already knows — plus a fast index to <b>find the right file without three wrong reads</b>. No embeddings, no API key: it runs on the model you already pay for.</p>
       <div class="cta">
         <a class="btn btn-primary" href="#install">Install →</a>
-        <a class="btn btn-ghost" href="https://github.com/AkashGoenka/coldstart">View on GitHub</a>
+        <a class="btn btn-ghost" href="blog.html">Read the blog</a>
         <span class="hero-note">MIT · Node 18+ · runs offline</span>
       </div>
     </div>
@@ -398,6 +399,32 @@
   </div>
 </section>
 
+<!-- ===================== ARTICLES ===================== -->
+<section id="blog" class="blog-sec">
+  <div class="wrap">
+    <div class="rise">
+      <div class="eyebrow">Blog</div>
+      <h2>Engineering notes from building coldstart.</h2>
+      <p class="lead">Longer pieces about the problem coldstart is built around: agents starting cold, repository orientation, and notes that stay tied to the code instead of becoming another stale document.</p>
+    </div>
+    <div class="article-grid rise">
+      <a class="article-card" href="blog/where-the-tokens-go.html">
+        <span>Cost</span>
+        <h3>Where the tokens go in an agent session</h3>
+        <p>Most of what a session bills for is not the answer it produced. It is the same context, re-sent on every turn.</p>
+      </a>
+      <a class="article-card" href="blog/an-index-cannot-answer-twice.html">
+        <span>Codebase memory</span>
+        <h3>Why an index of your code cannot answer the same question twice</h3>
+        <p>A graph makes each hop cheaper. It does not reduce the number of hops, and it is regenerated identical every time.</p>
+      </a>
+    </div>
+    <div class="cta rise">
+      <a class="btn btn-ghost" href="blog.html">All posts</a>
+    </div>
+  </div>
+</section>
+
 <!-- ===================== INSTALL ===================== -->
 <section id="install" class="install">
   <div class="wrap">
@@ -419,6 +446,7 @@
     </div>
     <div class="cta rise">
       <a class="btn btn-primary" href="docs.html">Read the docs →</a>
+      <a class="btn btn-ghost" href="blog.html">Read the blog</a>
       <a class="btn btn-ghost" href="https://github.com/AkashGoenka/coldstart">GitHub</a>
       <a class="btn btn-ghost" href="https://www.npmjs.com/package/@cstart/coldstart">npm</a>
     </div>
@@ -429,7 +457,7 @@
   <div class="foot-in">
     <span class="foot-brand"><span class="brand" style="font-size:14px"><svg class="mark s2" width="17" height="17" viewBox="0 0 32 32" aria-hidden="true"><use href="#flake" class="fl"/><circle class="fl" cx="16" cy="16" r="6" fill="none"/><circle class="core" cx="16" cy="16" r="3" fill="url(#core)"/></svg>coldstart</span> &nbsp; navigation + memory for coding agents · MIT</span>
     <div class="foot-links">
-      <a href="docs.html">Docs</a><a href="https://github.com/AkashGoenka/coldstart">GitHub</a><a href="https://www.npmjs.com/package/@cstart/coldstart">npm</a><a href="#notebook">Notebook</a><a href="#philosophy">Philosophy</a>
+      <a href="docs.html">Docs</a><a href="blog.html">Blog</a><a href="https://github.com/AkashGoenka/coldstart">GitHub</a><a href="https://www.npmjs.com/package/@cstart/coldstart">npm</a><a href="#notebook">Notebook</a><a href="#blog">Blog</a>
     </div>
   </div>
 </footer>
