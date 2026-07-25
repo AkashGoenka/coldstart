@@ -35,6 +35,61 @@ No embeddings, no model to run, no service to babysit. Agents are already good a
 
 ---
 
+## What it looks like
+
+Both commands print to your terminal in milliseconds. This is real output from this repo — the
+`find` page below is abridged (it ranks a third file, and each entry carries more preview lines);
+the `gs` page is complete and unedited.
+
+```console
+$ coldstart find keeper lockfile watchOwnBinary
+find: keeper lockfile watchOwnBinary  (3 terms, 41 candidate files)
+
+▸ src/daemon-lock.ts   [3/3]
+   Role:  defines `lockfile`, `watchOwnBinary`
+   Read:  watchOwnLockfile.lockLost [L209-217], watchOwnBinary [L262-279]
+   Wired: used by `index.ts`, `restart.ts` · near `keeper-state.ts`
+
+▸ src/index.ts   [3/3]
+   Role:  defines `keeper`; imports `lockfile`, `watchOwnBinary` (from daemon-lock.ts)
+   Summary: facets: main [fresh] · full note: .coldstart/notebook/notes/src-index-ts-c5fb8502.md
+   in function runKeeper [L526-610]:
+     L594: const stopBinaryWatcher = watchOwnBinary(resolve(process.argv[1] ?? ''), () => {
+     L595: log(quiet, '[coldstart] Keeper binary gone (uninstalled or moved) — shutting down');
+```
+
+`[3/3]` is term coverage. `Role:` separates the file that _defines_ a name from one that merely
+imports it. `Summary:` is a note a past agent wrote, and `[fresh]` means the file hasn't changed
+since — so you can trust it without opening the file. Nothing here is a similarity score.
+
+```console
+$ coldstart gs src/watcher.ts
+src/watcher.ts (86 lines, importedBy: 2)
+
+Symbols:
+type BatchHandler [L5]
+function startWatcher [L23-85]  ← src/index-manager.ts:73 (IndexManager.startWatching)
+function startWatcher.scheduleFlush [L33-48]
+
+Imports:
+src/constants.ts
+
+Importers (2):
+  Source (1):
+    src/index-manager.ts
+  Tests (1):
+    tests/kb-watcher.test.ts
+
+Related (shares rare tokens, no import edge — name-reference relations the import graph cannot see):
+  src/indexer/patch.ts — shares `isUnderExcludedDir`, `EXTENSION_TO_LANGUAGE`, `ReturnType`
+```
+
+That is the whole file's shape and every consumer of it, without reading the file. The `←` on
+`startWatcher` names the exact call site. `Related` catches files the import graph can't connect —
+the ones grep finds only if you already guessed the right token.
+
+---
+
 ## Install
 
 Requires Node.js 18+.
