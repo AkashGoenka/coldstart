@@ -223,3 +223,347 @@ ul.tight li b { color: var(--ink); }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } html { scroll-behavior: auto !important; } }
 :focus-visible { outline: 2px solid var(--frost); outline-offset: 2px; border-radius: 4px; }
+
+/* =========================================================
+   BLOG / ESSAYS  —  a reading surface, not a product surface.
+   Light by default (long-form prose), dark when the OS asks.
+   Scoped to body.essay-page so index.html + docs.html stay dark.
+   To make the blog permanently dark: move the tokens inside the
+   prefers-color-scheme block up into body.essay-page and delete
+   the light set. Nothing else needs to change.
+   ========================================================= */
+body.essay-page {
+  --nav-wrap: 1080px;
+  --measure: 68ch;          /* ~65-70 characters — the readable line length */
+
+  --bg: #fcfcfb;
+  --surface: #f4f3f0;
+  --surface-2: #f8f7f5;
+  --ink: #14171c;           /* headings */
+  --prose: #2a2f38;         /* body copy — 14.5:1, NOT the grey used for meta */
+  --muted: #5f6875;         /* metadata, captions, secondary only */
+  --faint: #8b93a0;
+  --line: #e4e2dd;
+  --line-soft: #eeece8;
+  --frost: #12708f;
+  --frost-bright: #0d5a74;
+  --ember: #a8571a;
+  --ember-bright: #8c4813;
+  --term-border: #232a3a;
+  --sel: rgba(18,112,143,.16);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  body.essay-page {
+    --bg: #0b0e14;          /* lifted off pure black — easier for sustained reading */
+    --surface: #141a24;
+    --surface-2: #10151d;
+    --ink: #eef3fb;
+    --prose: #c9d3e2;       /* 12.8:1 — was #8b9ab2 at 6.9:1 */
+    --muted: #8b9ab2;
+    --faint: #6b7789;
+    --line: #1e2735;
+    --line-soft: #182029;
+    --frost: #4fbfe0;
+    --frost-bright: #6fd3ef;
+    --ember: #ef9448;
+    --ember-bright: #ffb267;
+    --term-border: #1e2735;
+    --sel: rgba(79,191,224,.20);
+    color-scheme: dark;
+  }
+}
+
+body.essay-page ::selection { background: var(--sel); }
+body.essay-page .term { border-color: var(--term-border); }
+
+/* ---- shared shell ---- */
+.essay-wrap {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 40px 24px 96px;
+}
+
+.essay-hero { padding: 10px 0 30px; }
+
+.essay-hero h1 {
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: clamp(31px, 4.4vw, 46px);
+  line-height: 1.1;
+  letter-spacing: -.028em;
+  color: var(--ink);
+}
+
+.essay-hero .lead-p {
+  color: var(--muted);
+  font-size: clamp(17px, 2vw, 19px) !important;
+  line-height: 1.6;
+  margin-top: 16px;
+}
+
+/* ---- INDEX (blog.html) — a stacked list, not a grid.
+       Two posts in a 2-col grid looks like a page that failed to load. ---- */
+.essay-list {
+  display: block;
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.essay-card {
+  display: block;
+  padding: 30px 20px 30px 0;
+  border-bottom: 1px solid var(--line);
+  text-decoration: none;
+  transition: background .16s, padding-left .16s;
+}
+
+.essay-card:hover {
+  background: var(--surface-2);
+  padding-left: 20px;
+}
+
+.essay-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--frost);
+  margin-bottom: 12px;
+}
+
+.essay-meta .sep { color: var(--faint); letter-spacing: 0; }
+.essay-meta time,
+.essay-meta .rt { color: var(--muted); letter-spacing: .06em; }
+
+.essay-card h2 {
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: clamp(20px, 2.2vw, 25px);
+  line-height: 1.22;
+  letter-spacing: -.022em;
+  color: var(--ink);
+  max-width: 30ch;
+}
+
+.essay-card:hover h2 { color: var(--frost); }
+
+.essay-card p {
+  color: var(--muted);
+  margin-top: 10px;
+  font-size: 16px;
+  line-height: 1.6;
+  max-width: 68ch;
+}
+
+/* ---- ARTICLE — one centered column, everything constrained to the measure ---- */
+.essay-article { max-width: 1080px; }
+
+.essay-article > *,
+.essay-article > .essay-hero > * {
+  width: min(var(--measure), 100%);
+  margin-inline: auto;
+}
+
+/* opt-out for anything that should run wider than the prose column */
+.essay-article > .wide { width: min(920px, 100%); }
+
+.essay-article .back-link {
+  display: block;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 13px;
+  text-decoration: none;
+  margin-bottom: 30px;
+}
+.essay-article .back-link:hover { color: var(--frost); }
+
+.essay-article .essay-hero {
+  width: 100%;
+  padding-bottom: 26px;
+  border-bottom: 1px solid var(--line);
+}
+
+.essay-article .kicker { margin-bottom: 14px; }
+
+.article-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.article-meta .sep { color: var(--faint); }
+
+.essay-article p {
+  color: var(--prose);
+  font-size: 19px;
+  line-height: 1.7;
+  margin-top: 22px;
+}
+
+.essay-article h2 {
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: clamp(22px, 2.8vw, 28px);
+  line-height: 1.2;
+  letter-spacing: -.024em;
+  color: var(--ink);
+  margin-top: 54px;
+}
+
+.essay-article h3 {
+  font-family: var(--sans);
+  font-weight: 650;
+  font-size: 19.5px;
+  line-height: 1.3;
+  letter-spacing: -.015em;
+  color: var(--ink);
+  margin-top: 36px;
+}
+
+.essay-article h2 + p,
+.essay-article h3 + p { margin-top: 14px; }
+
+.essay-article b,
+.essay-article strong { color: var(--ink); font-weight: 650; }
+
+.essay-article em { color: inherit; font-style: italic; }
+
+.essay-article a:not(.back-link) {
+  color: var(--frost);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, var(--frost) 42%, transparent);
+}
+.essay-article a:not(.back-link):hover { text-decoration-color: currentColor; }
+
+/* prose furniture — lists, quotes, code, rules, tables.
+   None of this existed; anything beyond <p> fell back to browser defaults. */
+.essay-article ul,
+.essay-article ol {
+  color: var(--prose);
+  font-size: 19px;
+  line-height: 1.65;
+  margin-top: 20px;
+  padding-left: 26px;
+}
+.essay-article li { margin-top: 10px; }
+.essay-article li::marker { color: var(--faint); }
+.essay-article li > ul,
+.essay-article li > ol { margin-top: 8px; }
+
+.essay-article blockquote {
+  margin: 30px auto;
+  padding: 4px 0 4px 22px;
+  border-left: 2px solid color-mix(in srgb, var(--ember) 60%, transparent);
+}
+.essay-article blockquote p {
+  color: var(--muted);
+  font-size: 19px;
+  font-style: italic;
+  margin-top: 10px;
+}
+.essay-article blockquote p:first-child { margin-top: 0; }
+
+.essay-article code {
+  font-size: .82em;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 1.5px 6px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.essay-article pre {
+  margin-top: 24px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--ink);
+}
+.essay-article pre code {
+  background: none; border: 0; padding: 0;
+  font-size: inherit; white-space: pre;
+}
+
+.essay-article hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 46px auto;
+}
+
+.essay-article figure { margin: 30px auto; }
+.essay-article img { max-width: 100%; height: auto; border-radius: var(--radius); display: block; }
+.essay-article figcaption {
+  margin-top: 10px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.essay-article .table-scroll { overflow-x: auto; margin-top: 24px; }
+.essay-article table { border-collapse: collapse; width: 100%; font-size: 15.5px; }
+.essay-article th,
+.essay-article td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.essay-article th {
+  font-family: var(--mono); font-size: 12px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted); font-weight: 600;
+}
+.essay-article td { color: var(--prose); }
+
+/* ---- end-of-article ---- */
+.essay-end {
+  margin-top: 60px;
+  padding-top: 28px;
+  border-top: 1px solid var(--line);
+}
+.essay-end .el {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--faint);
+}
+.essay-end .next {
+  display: block;
+  margin-top: 12px;
+  font-family: var(--sans);
+  font-weight: 650;
+  font-size: 21px;
+  line-height: 1.25;
+  letter-spacing: -.02em;
+  color: var(--ink);
+  text-decoration: none;
+}
+.essay-end .next:hover { color: var(--frost); }
+.essay-end .note {
+  margin-top: 20px;
+  font-size: 15.5px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.essay-end .note a { color: var(--frost); text-decoration: none; }
+.essay-end .note a:hover { text-decoration: underline; }
+
+@media (max-width: 640px) {
+  .essay-wrap { padding: 30px 20px 72px; }
+  .essay-article p,
+  .essay-article ul,
+  .essay-article ol,
+  .essay-article blockquote p { font-size: 17px; }
+  .essay-article h2 { margin-top: 44px; }
+  .essay-card { padding: 24px 0; }
+  .essay-card:hover { padding-left: 0; }
+}

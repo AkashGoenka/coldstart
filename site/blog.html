@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>coldstart blog - engineering writing on AI coding agents</title>
+<meta name="description" content="The coldstart blog: engineering notes on AI coding agents, repeated repository orientation, codebase notes, and why durable context is harder than generic memory." />
+<meta name="keywords" content="AI coding agents, codebase memory, repository orientation, coding agent notes, Claude Code, Codex, Cursor, coldstart blog" />
+<meta name="author" content="Akash Goenka" />
+<meta name="robots" content="index, follow, max-image-preview:large" />
+<meta name="theme-color" content="#fcfcfb" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#0b0e14" media="(prefers-color-scheme: dark)" />
+<link rel="canonical" href="https://akashgoenka.github.io/coldstart/blog.html" />
+<link rel="icon" type="image/svg+xml" href="logo.svg" />
+<link rel="apple-touch-icon" href="logo.svg" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="coldstart" />
+<meta property="og:title" content="coldstart blog - engineering writing on AI coding agents" />
+<meta property="og:description" content="Engineering notes about repeated repository orientation, codebase notes, and durable context for AI coding agents." />
+<meta property="og:url" content="https://akashgoenka.github.io/coldstart/blog.html" />
+<meta property="og:image" content="https://akashgoenka.github.io/coldstart/og.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="coldstart blog - engineering writing on AI coding agents" />
+<meta name="twitter:description" content="Engineering notes about repeated repository orientation, codebase notes, and durable context for AI coding agents." />
+<meta name="twitter:image" content="https://akashgoenka.github.io/coldstart/og.png" />
+<link rel="stylesheet" href="docs.css" />
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Blog",
+  "name": "coldstart blog",
+  "description": "Engineering notes on AI coding agents, repeated repository orientation, and codebase notes.",
+  "url": "https://akashgoenka.github.io/coldstart/blog.html",
+  "author": { "@type": "Person", "name": "Akash Goenka" },
+  "blogPost": [
+    {
+      "@type": "BlogPosting",
+      "headline": "Where the tokens go in an agent session",
+      "url": "https://akashgoenka.github.io/coldstart/blog/where-the-tokens-go.html",
+      "datePublished": "2026-07-25",
+      "author": { "@type": "Person", "name": "Akash Goenka" }
+    },
+    {
+      "@type": "BlogPosting",
+      "headline": "Why an index of your code cannot answer the same question twice",
+      "url": "https://akashgoenka.github.io/coldstart/blog/an-index-cannot-answer-twice.html",
+      "datePublished": "2026-07-25",
+      "author": { "@type": "Person", "name": "Akash Goenka" }
+    },
+    {
+      "@type": "BlogPosting",
+      "headline": "The tool the agent does not call",
+      "url": "https://akashgoenka.github.io/coldstart/blog/the-tool-the-agent-doesnt-call.html",
+      "datePublished": "2026-07-25",
+      "author": { "@type": "Person", "name": "Akash Goenka" }
+    },
+    {
+      "@type": "BlogPosting",
+      "headline": "From four tools to two",
+      "url": "https://akashgoenka.github.io/coldstart/blog/from-four-tools-to-two.html",
+      "datePublished": "2026-07-25",
+      "author": { "@type": "Person", "name": "Akash Goenka" }
+    },
+    {
+      "@type": "BlogPosting",
+      "headline": "Notes about code should be written by whoever read the code",
+      "url": "https://akashgoenka.github.io/coldstart/blog/notes-should-be-written-by-whoever-read-the-code.html",
+      "datePublished": "2026-07-25",
+      "author": { "@type": "Person", "name": "Akash Goenka" }
+    }
+  ]
+}
+</script>
+</head>
+<body class="docs-page essay-page">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <radialGradient id="core" cx="38%" cy="32%" r="75%"><stop offset="0" stop-color="#ffc884"/><stop offset="100%" stop-color="#ef9448"/></radialGradient>
+  <radialGradient id="warm" gradientUnits="userSpaceOnUse" cx="16" cy="16" r="13"><stop offset="0" stop-color="#ffb267"/><stop offset="52%" stop-color="#ef9448"/><stop offset="100%" stop-color="#4fbfe0"/></radialGradient>
+  <path id="arm" d="M16 14.5L16 4M16 8.2L13 5.6M16 8.2L19 5.6" fill="none" stroke-linecap="round"/>
+  <g id="flake"><use href="#arm"/><use href="#arm" transform="rotate(60 16 16)"/><use href="#arm" transform="rotate(120 16 16)"/><use href="#arm" transform="rotate(180 16 16)"/><use href="#arm" transform="rotate(240 16 16)"/><use href="#arm" transform="rotate(300 16 16)"/></g>
+</defs></svg>
+
+<nav>
+  <div class="nav-in">
+    <a class="brand" href="index.html"><svg class="mark s2" width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><use href="#flake" class="fl"/><circle class="fl" cx="16" cy="16" r="6" fill="none"/><circle class="core" cx="16" cy="16" r="3" fill="url(#core)"/></svg>coldstart <span class="tag">blog</span></a>
+    <span class="nav-spacer"></span>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="docs.html">Docs</a>
+      <a href="https://github.com/AkashGoenka/coldstart">GitHub</a>
+      <a href="https://www.npmjs.com/package/@cstart/coldstart">npm</a>
+    </div>
+    <a class="nav-cta" href="index.html#install">Install</a>
+  </div>
+</nav>
+<hr class="thread" />
+
+<main class="essay-wrap">
+  <section class="essay-hero">
+    <div class="kicker">Blog</div>
+    <h1>Notes on agents, codebases, and the work before the work.</h1>
+    <p class="lead-p">Problem-first engineering writing about why agents keep starting cold, why notes are different from documentation, and why some context should be captured only after real work.</p>
+  </section>
+
+  <section class="essay-list" aria-label="Blog">
+    <a class="essay-card" href="blog/where-the-tokens-go.html">
+      <span class="essay-meta">Cost <span class="sep">·</span> <time datetime="2026-07-25">25 Jul 2026</time> <span class="sep">·</span> <span class="rt">7 min</span></span>
+      <h2>Where the tokens go in an agent session</h2>
+      <p>Most of what a session bills for is not the answer it produced. It is the same context, re-sent on every turn. Decomposing that leaves exactly one lever worth pulling.</p>
+    </a>
+    <a class="essay-card" href="blog/an-index-cannot-answer-twice.html">
+      <span class="essay-meta">Codebase memory <span class="sep">·</span> <time datetime="2026-07-25">25 Jul 2026</time> <span class="sep">·</span> <span class="rt">9 min</span></span>
+      <h2>Why an index of your code cannot answer the same question twice</h2>
+      <p>A graph makes each hop cheaper. It does not reduce the number of hops, and because it is regenerated from source, the second investigation costs exactly what the first one did.</p>
+    </a>
+    <a class="essay-card" href="blog/the-tool-the-agent-doesnt-call.html">
+      <span class="essay-meta">Adoption <span class="sep">·</span> <time datetime="2026-07-25">25 Jul 2026</time> <span class="sep">·</span> <span class="rt">8 min</span></span>
+      <h2>The tool the agent does not call</h2>
+      <p>Availability, documentation, and an explicit instruction still do not add up to adoption. Including the hook-gating mistake I shipped and then found in someone else's source.</p>
+    </a>
+    <a class="essay-card" href="blog/from-four-tools-to-two.html">
+      <span class="essay-meta">Design <span class="sep">·</span> <time datetime="2026-07-25">25 Jul 2026</time> <span class="sep">·</span> <span class="rt">12 min</span></span>
+      <h2>From four tools to two</h2>
+      <p>An origin story told through deletions. Two traversal tools that turned out to be missing fields, a set of labels that were guesses in the costume of facts, and a server that served nothing.</p>
+    </a>
+    <a class="essay-card" href="blog/notes-should-be-written-by-whoever-read-the-code.html">
+      <span class="essay-meta">Codebase notes <span class="sep">·</span> <time datetime="2026-07-25">25 Jul 2026</time> <span class="sep">·</span> <span class="rt">6 min</span></span>
+      <h2>Notes about code should be written by whoever read the code</h2>
+      <p>A transcript is not the same thing as context. The agent that did the work is usually the only one qualified to write down what was learned.</p>
+    </a>
+  </section>
+</main>
+
+<hr class="thread" />
+<footer>
+  <div class="foot-in">
+    <span class="foot-brand"><a class="brand" href="index.html" style="font-size:15px"><svg class="mark s2" width="17" height="17" viewBox="0 0 32 32" aria-hidden="true"><use href="#flake" class="fl"/><circle class="fl" cx="16" cy="16" r="6" fill="none"/><circle class="core" cx="16" cy="16" r="3" fill="url(#core)"/></svg>coldstart</a> - blog · MIT</span>
+    <div class="foot-links">
+      <a href="index.html">Home</a>
+      <a href="docs.html">Docs</a>
+      <a href="https://github.com/AkashGoenka/coldstart">GitHub</a>
+      <a href="https://www.npmjs.com/package/@cstart/coldstart">npm</a>
+    </div>
+  </div>
+</footer>
+</body>
+</html>
