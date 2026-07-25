@@ -94,11 +94,11 @@
   <p>The transcript now holds that sentence and a record that a file got read. It does not hold the file in the same way the agent held it while working. The agent had 400 lines in front of it when it reached the conclusion. The transcript has a short sentence about them.</p>
   <p>A background job reading this later has two choices. It can write a note from the sentence, which means the note says roughly what the sentence said and nothing more. Or it can go open the file and work it out again.</p>
 
-  <figure class="wide essay-fig ">
+  <figure class="wide essay-fig">
     <div class="fig-plot">
-    <svg viewBox="0 0 920 380" role="img" aria-labelledby="r4t r4d">
-      <title id="r4t">What the writer of a note can still see</title>
-      <desc id="r4d">Two timelines. In the first, capture fires before the session ends, while the files the agent read are still in context. In the second, the session ends and its context is discarded, leaving a background job to write from a single sentence in the transcript.</desc>
+    <svg viewBox="0 0 920 340" role="img" aria-labelledby="r4t r4d">
+      <title id="r4t">What the writer of a note can still see, over time</title>
+      <desc id="r4d">One timeline. While the session runs, everything the agent opened is in context, drawn as a tall band. When the session ends the band falls to a sliver, because the context is discarded and only the transcript remains. Two pins mark where a note could be written: one before the drop with the files still in hand, one after it with only a sentence.</desc>
       <defs>
         <filter id="r4" x="-6%" y="-6%" width="112%" height="112%">
           <feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="5" result="n"/>
@@ -106,25 +106,24 @@
         </filter>
       </defs>
       <g filter="url(#r4)">
-        <path class="f-area-a" d="M90 150 L560 150 L560 60 L90 60 Z"/>
-        <path class="f-axis" d="M90 150 L860 150"/>
-        <path class="f-tick" d="M560 44 L560 166"/>
-        <path class="f-area-a" d="M90 330 L560 330 L560 240 L90 240 Z"/>
-        <path class="f-area-b" d="M560 330 L860 330 L860 316 L560 316 Z"/>
-        <path class="f-axis" d="M90 330 L860 330"/>
-        <path class="f-tick" d="M560 224 L560 346"/>
+        <path class="f-area-a" d="M100 280 L100 90 L520 90 L520 266 L840 266 L840 280 Z"/>
+        <path class="f-axis" d="M86 280 L856 280"/>
+        <path class="f-tick" d="M520 62 L520 300"/>
+        <path class="f-pen" d="M470 86 L470 56"/>
+        <circle class="f-pin" cx="470" cy="90" r="6"/>
+        <path class="f-pen" d="M700 262 L700 214"/>
+        <circle class="f-pin" cx="700" cy="266" r="6"/>
       </g>
-      <text class="f-head" x="90" y="36" text-anchor="start">capture inside the session</text>
-      <text class="f-head" x="90" y="216" text-anchor="start">a background job, later</text>
-      <text class="f-key" x="300" y="110" text-anchor="middle">400 lines still in context</text>
-      <text class="f-key" x="300" y="290" text-anchor="middle">400 lines still in context</text>
-      <text class="f-key" x="710" y="296" text-anchor="middle">one sentence in the transcript</text>
-      <text class="f-lab" x="572" y="180" text-anchor="start">session ends — the context is gone</text>
-      <text class="f-note" x="548" y="52" text-anchor="end">the agent that read the code writes the note here</text>
-      <text class="f-note" x="710" y="356" text-anchor="middle">the job that never read the code writes the note here</text>
+      <text class="f-head" x="64" y="185" transform="rotate(-90 64 185)" text-anchor="middle">what the writer can still see</text>
+      <text class="f-note" x="470" y="44" text-anchor="middle">the agent that read the code writes here</text>
+      <text class="f-key" x="300" y="192" text-anchor="middle">every file it opened, still in context</text>
+      <text class="f-note" x="700" y="204" text-anchor="middle">a background job writes here, later</text>
+      <text class="f-key" x="770" y="304" text-anchor="middle">one sentence that survived into the transcript</text>
+      <text class="f-lab" x="520" y="316" text-anchor="middle">the session ends, its context is discarded</text>
+      <text class="f-lab" x="86" y="316">time →</text>
     </svg>
     </div>
-    <figcaption>The transcript does not hold the file the way the agent held it while working. Capture at the end of the session writes from 400 lines still in context; a job running later writes from the sentence that survived.</figcaption>
+    <figcaption>The same session either way. What changes is when the note gets written: before the drop, by the agent still holding the file, or after it, from the one sentence that made it into the log.</figcaption>
   </figure>
 
   <h2>Re-reading is a different job than remembering</h2>

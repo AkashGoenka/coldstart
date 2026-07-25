@@ -561,6 +561,7 @@ body.essay-page .term { border-color: var(--term-border); }
 .f-box    { fill: var(--surface); stroke: var(--prose); stroke-width: 1.9; }
 .f-box-ok { fill: var(--frost); fill-opacity: .16; stroke: var(--frost); stroke-width: 1.9; }
 .f-hop    { fill: var(--surface); stroke: var(--prose); stroke-width: 1.9; }
+.f-pin    { fill: var(--ember); stroke: var(--ember); stroke-width: 1.9; }
 .f-area-a { fill: var(--frost); fill-opacity: .34; stroke: var(--frost); stroke-width: 1.8; }
 .f-area-b { fill: var(--ember); fill-opacity: .5;  stroke: var(--ember); stroke-width: 1.8; }
 .f-axis { fill: none; stroke: var(--faint); stroke-width: 1.5; }
