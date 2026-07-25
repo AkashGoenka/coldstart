@@ -234,12 +234,15 @@ ul.tight li b { color: var(--ink); }
    ========================================================= */
 body.essay-page {
   --nav-wrap: 1080px;
-  /* The readable line length, ~66 characters at the 19px body size.
+  /* The readable line length, ~71 characters at the 19px body size — the top
+     of the comfortable range, chosen so the figure bleed either side stays
+     small. Do not push past ~760px; beyond that the line is hard to track
+     back to the start of.
      MUST be an absolute length, never `ch`: ch resolves against each
      element's OWN font-size, so a 46px h1 and a 19px p would compute
      different widths, and margin-inline:auto would then centre them on
      different left edges. Every child of .essay-article shares this. */
-  --measure: 680px;
+  --measure: 740px;
 
   --bg: #fcfcfb;
   --surface: #f4f3f0;
@@ -374,8 +377,11 @@ body.essay-page .term { border-color: var(--term-border); }
   margin-inline: auto;
 }
 
-/* opt-out for anything that should run wider than the prose column */
-.essay-article > .wide { width: min(920px, 100%); }
+/* opt-out for anything that should run wider than the prose column. Kept close
+   to --measure on purpose: a figure that overhangs by a lot stops reading as
+   part of the same column and makes the prose look narrow next to it. 40px
+   either side is a deliberate bleed; 120px was an unrelated block. */
+.essay-article > .wide { width: min(820px, 100%); }
 
 .essay-article .back-link {
   display: block;
@@ -545,7 +551,9 @@ body.essay-page .term { border-color: var(--term-border); }
   line-height: 1.55;
   color: var(--muted);
   text-align: left;
-  max-width: 680px;
+  /* tied to --measure, never a literal: the caption must share the prose
+     left edge, and a fixed width silently indents it whenever --measure moves */
+  max-width: var(--measure);
   margin: 14px auto 0;
 }
 
