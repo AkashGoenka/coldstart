@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.8] - 2026-07-25
+
+### Fixed
+- **Notebook capture almost never fired on the "descent" signal.** The score that decides when
+  to offer a capture was supposed to grow with every turn of engagement, but a prior change made
+  discussion/synthesis turns read as *quiet* — which silently deleted the only score-growth term
+  a read-and-discuss session has, so capture collapsed onto the commit boundary and `descent`
+  fired zero times in practice. The trigger now asks two questions of two separate counters:
+  *"has enough happened?"* counts **every** stop, *"has it wound down?"* counts only quiet stops.
+  A one-file read-and-discuss session now arms and fires as intended. (`hooks/trigger.mjs`, #96)
+- **`coldstart init` exited before the index was built.** `init` spawned the background keeper and
+  returned immediately, so the agent's very first `find` hit a cold cache, printed "keeper is still
+  building this repo", and fell back to grep — a first impression of coldstart being broken. `init`
+  now blocks on the first index with live progress (`keeper is building the index… (Ns)`) and a
+  clear terminal line for each outcome (ready / slow repo / spawn failure). (`src/init.ts`, #96)
+- **`coldstart --version` and `--help` could hang** waiting on keeper/stdin work that those commands
+  never need; they now return immediately. (#96)
+- **The notebook worklist could name files from another repository.** `init.cwd` tracks the session
+  shell, so a `cd` out of the repo (into a cloned/forked/worktree'd project) let a capture record
+  foreign absolute paths — even files that exist in no repo at all — as if they were local. The repo
+  root is now frozen once, by walking up to `.coldstart/notebook`, and reused for the rest of the
+  session regardless of where the shell wanders. (`hooks/kb-elicit.mjs`, #102)
+
+### Changed
+- **Flow notes are easier to create, and the flow decision is always recorded.** The capture
+  checklist's flow section previously biased agents toward folding every observation into one
+  existing note; it now leads neutrally and states an explicit create-vs-update rule (a *different*
+  missing fact is a new flow, even in the same subsystem). A `kb flow-decision` line runs on every
+  capture as its own step — even when no note was written — so the flow gate's behavior can be
+  measured. This telemetry is **local-only**; nothing leaves your machine. (#100, #102)
+- **The MCP server survives directory build-sandbox introspection.** Registries like Glama boot the
+  server and probe every capability; the server declared `resources`/`prompts` support but returned
+  `-32601 (Method not found)` when asked to list them, aborting the introspection mid-pass so no
+  tools were ever recorded. It now advertises empty `resources`/`prompts` lists and defers
+  `roots/list` until after the client's `initialized` notification, so a full capability scan
+  completes and all tools are inspected. (`src/server/mcp.ts`, #101)
+
 ## [2.2.7] - 2026-07-24
 
 ### Fixed
