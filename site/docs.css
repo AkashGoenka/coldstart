@@ -524,6 +524,45 @@ body.essay-page .term { border-color: var(--term-border); }
   text-align: center;
 }
 
+/* ---- FIGURES — inline SVG only.
+       Every colour resolves through the essay-page tokens, so a figure
+       re-themes with the page instead of glowing in dark mode the way a
+       raster image would. Nothing here loads over the network. ---- */
+.essay-fig { margin: 40px auto; }
+.essay-fig .fig-plot {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  padding: 22px 20px 16px;
+  overflow-x: auto;
+}
+.essay-fig svg { display: block; width: 100%; height: auto; min-width: 620px; }
+/* the base figcaption is mono/centered, which reads as a code comment under
+   a diagram — captions here are prose and set like prose */
+.essay-fig figcaption {
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--muted);
+  text-align: left;
+  max-width: 680px;
+  margin: 14px auto 0;
+}
+
+.f-base { fill: var(--muted); opacity: .30; }
+.f-grow { fill: var(--frost); opacity: .55; }
+.f-out  { fill: var(--ember); }
+.f-axis { stroke: var(--line); stroke-width: 1; }
+.f-mark { stroke: var(--ember); stroke-width: 1.4; stroke-dasharray: 4 4; fill: none; opacity: .9; }
+.f-key  { fill: var(--prose); font-family: var(--sans); font-size: 13px; }
+.f-lab  { fill: var(--faint); font-family: var(--mono); font-size: 12px; }
+.f-note { fill: var(--ember); font-family: var(--sans); font-size: 13px; font-weight: 600; }
+
+@media (max-width: 640px) {
+  .essay-fig { margin: 30px auto; }
+  .essay-fig .fig-plot { padding: 16px 14px 12px; }
+}
+
 .essay-article .table-scroll { overflow-x: auto; margin-top: 24px; }
 .essay-article table { border-collapse: collapse; width: 100%; font-size: 15.5px; }
 .essay-article th,
