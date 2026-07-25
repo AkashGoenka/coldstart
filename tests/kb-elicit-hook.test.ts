@@ -46,13 +46,13 @@ function turn(tools: Array<{ name: string; input: Record<string, unknown> }>): s
 }
 
 /** Append lines to the session transcript and invoke one Stop. */
-function stop(lines: string[], opts: { event?: string; aid?: string; transcriptPath?: string } = {}): string {
+function stop(lines: string[], opts: { event?: string; aid?: string; transcriptPath?: string; cwd?: string } = {}): string {
   const tp = opts.transcriptPath ?? transcript;
   fs.appendFileSync(tp, lines.length ? lines.join('\n') + '\n' : '');
   const payload = JSON.stringify({
     session_id: sid,
     agent_id: opts.aid,
-    cwd: root,
+    cwd: opts.cwd ?? root,
     transcript_path: transcript,
     ...(opts.aid ? { agent_transcript_path: tp } : {}),
     hook_event_name: opts.event ?? 'Stop',
@@ -79,6 +79,26 @@ describe('kb-elicit v5 trigger', () => {
     const marker = JSON.parse(fs.readFileSync(path.join(os.tmpdir(), `coldstart-kb-${sid}-main.json`), 'utf8'));
     expect(marker.files['src/app.py'].reads).toBe(1);
     expect(fs.existsSync(pendingFile())).toBe(false);
+  });
+
+  it('a cwd that drifts OUT of the repo cannot admit a foreign file into the worklist', () => {
+    seed(['src/app.py']);
+    const markerPath = path.join(os.tmpdir(), `coldstart-kb-${sid}-main.json`);
+    // stop 1: a normal in-repo read freezes root = the repo (recorded in the marker).
+    stop(turn([{ name: 'Read', input: { file_path: path.join(root, 'src/app.py') } }]));
+    const m1 = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+    expect(m1.root).toBe(root);
+    expect(m1.files['src/app.py'].reads).toBe(1);
+
+    // stop 2: the shell has cd'd clean out of the repo (e.g. into ~/.claude/…/memory)
+    // and edited a private file there. Its absolute path is OUTSIDE the frozen root,
+    // so it must be dropped — never stripped to a repo-relative-looking "MEMORY.md".
+    const foreign = path.join(os.tmpdir(), `not-the-repo-${sid}`, 'MEMORY.md');
+    stop(turn([{ name: 'Edit', input: { file_path: foreign } }]), { cwd: path.dirname(foreign) });
+    const m2 = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+    expect(m2.root).toBe(root); // frozen root held against the drifted cwd
+    expect(m2.files['MEMORY.md']).toBeUndefined();
+    expect(Object.keys(m2.files)).toEqual(['src/app.py']);
   });
 
   it('arm on volume, fire on descent → pending file for next-prompt delivery, stop never blocked', () => {

@@ -159,6 +159,10 @@ not make a file a hub; having no one purpose does.
   Update = the same spec plus "id":"<id from the worklist>".
   node ${cli} kb write /tmp/spec1.json --root ${root} --session ${sid} --force
   Flow/lesson shapes: run \`node ${cli} kb write --root ${root}\` with no spec — it prints the full guide.
-  LAST line of the block, always — even when you wrote nothing at all:
+
+FLOW DECISION — run this EVERY time, as its own command. It stands apart from the WRITE block \
+above: run it even when you decided no note was warranted and emitted no Bash block at all. It \
+records only what you decided about FLOWS (created a new one, folded into an existing one, or \
+none) so the flow gate can be measured.
   node ${cli} kb flow-decision --decision <none|new|update> [--id <flow id>] --why "<one clause>" --root ${root} --session ${sid}${tail}`;
 }
