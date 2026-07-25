@@ -97,6 +97,46 @@
   <p>That is a much worse trade than it looks, because a round trip in an agent session is not a cheap operation. Every turn re-sends the entire conversation so far. Splitting one answer across two calls does not cost you a small message. It costs you the whole context again.</p>
   <p>So the relationships moved into the results. Asking where something lives now tells you what imports it in the same breath, and asking about a file returns who calls each of its symbols without a second question. Four operations became two, and the capability count did not go down.</p>
 
+  <figure class="wide essay-fig ">
+    <div class="fig-plot">
+    <svg viewBox="0 0 920 330" role="img" aria-labelledby="r2t r2d">
+      <title id="r2t">Two operations became fields on the other two</title>
+      <desc id="r2d">Top row: a first call finds the files but its output raises a question it cannot answer, so a second call traces the callers before the answer arrives. Bottom row: the same answer in one call, because the relationships are returned as fields of the first result.</desc>
+      <defs>
+        <filter id="r2" x="-6%" y="-6%" width="112%" height="112%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="7" result="n"/>
+          <feDisplacementMap in="SourceGraphic" in2="n" scale="2.6" xChannelSelector="R" yChannelSelector="G"/>
+        </filter>
+      </defs>
+      <g filter="url(#r2)">
+        <rect class="f-box" x="70" y="74" width="250" height="62" rx="6"/>
+        <rect class="f-box" x="400" y="74" width="250" height="62" rx="6"/>
+        <rect class="f-box-ok" x="730" y="74" width="120" height="62" rx="6"/>
+        <path class="f-pen" d="M330 105 L390 105"/>
+        <path class="f-pen" d="M379 99 L390 105 M379 111 L390 105"/>
+        <path class="f-pen" d="M660 105 L720 105"/>
+        <path class="f-pen" d="M709 99 L720 105 M709 111 L720 105"/>
+        <rect class="f-box" x="70" y="244" width="580" height="62" rx="6"/>
+        <rect class="f-box-ok" x="730" y="244" width="120" height="62" rx="6"/>
+        <path class="f-pen" d="M660 275 L720 275"/>
+        <path class="f-pen" d="M709 269 L720 275 M709 281 L720 275"/>
+      </g>
+      <text class="f-head" x="70" y="50" text-anchor="start">four operations</text>
+      <text class="f-head" x="70" y="220" text-anchor="start">two operations</text>
+      <text class="f-key" x="195" y="100" text-anchor="middle">find the files</text>
+      <text class="f-sub" x="195" y="120" text-anchor="middle">output raises a question it cannot answer</text>
+      <text class="f-key" x="525" y="100" text-anchor="middle">trace the callers</text>
+      <text class="f-sub" x="525" y="120" text-anchor="middle">a whole extra round trip</text>
+      <text class="f-key" x="790" y="110" text-anchor="middle">answer</text>
+      <text class="f-key" x="360" y="270" text-anchor="middle">find the files — callers and importers already in the result</text>
+      <text class="f-sub" x="360" y="290" text-anchor="middle">the relationships became fields, the graph never went anywhere</text>
+      <text class="f-key" x="790" y="280" text-anchor="middle">answer</text>
+      <text class="f-note" x="525" y="180" text-anchor="middle">this turn re-sent the entire conversation to ask one follow-up</text>
+    </svg>
+    </div>
+    <figcaption>The traversal tools were never called first — every invocation followed another call, answering a gap the previous output had left. A tool only ever called that way is a missing field, and keeping it separate charged a full round trip for it.</figcaption>
+  </figure>
+
   <h2>The part that did go down, stated honestly</h2>
   <p>One thing was genuinely lost and I would rather name it than let it be discovered.</p>
   <p>The impact tool could follow a chain. Ask what breaks if this signature changes and it would walk outward through several levels of callers. What replaced it does one hop. You get the direct callers of a symbol and the direct importers of a file, and if you want the level beyond that you ask again about one of the results.</p>

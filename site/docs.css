@@ -524,6 +524,64 @@ body.essay-page .term { border-color: var(--term-border); }
   text-align: center;
 }
 
+/* ---- FIGURES — inline SVG only.
+       Every colour resolves through the essay-page tokens, so a figure
+       re-themes with the page instead of glowing in dark mode the way a
+       raster image would. Nothing here loads over the network. ---- */
+.essay-fig { margin: 40px auto; }
+.essay-fig .fig-plot {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  padding: 22px 20px 16px;
+  overflow-x: auto;
+}
+.essay-fig svg { display: block; width: 100%; height: auto; min-width: 620px; }
+/* the base figcaption is mono/centered, which reads as a code comment under
+   a diagram — captions here are prose and set like prose */
+.essay-fig figcaption {
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--muted);
+  text-align: left;
+  max-width: 680px;
+  margin: 14px auto 0;
+}
+
+/* Hand-drawn look: a seeded feTurbulence displacement, applied per-figure to a
+   group that holds ONLY shapes. Text is never inside the filtered group — a
+   wobbly label is unreadable, and it is the strokes that should look drawn.
+   Everything is stroked rather than flat-filled so the roughness reads. */
+.essay-fig svg :is(path, rect, circle, line) { stroke-linecap: round; stroke-linejoin: round; }
+
+.f-base { fill: var(--muted); fill-opacity: .22; stroke: var(--muted); stroke-width: 1.7; }
+.f-grow { fill: var(--frost); fill-opacity: .38; stroke: var(--frost); stroke-width: 1.7; }
+.f-out  { fill: var(--ember); fill-opacity: .85; stroke: var(--ember); stroke-width: 1.7; }
+.f-box    { fill: var(--surface); stroke: var(--prose); stroke-width: 1.9; }
+.f-box-ok { fill: var(--frost); fill-opacity: .16; stroke: var(--frost); stroke-width: 1.9; }
+.f-hop    { fill: var(--surface); stroke: var(--prose); stroke-width: 1.9; }
+.f-pin    { fill: var(--ember); stroke: var(--ember); stroke-width: 1.9; }
+.f-area-a { fill: var(--frost); fill-opacity: .34; stroke: var(--frost); stroke-width: 1.8; }
+.f-area-b { fill: var(--ember); fill-opacity: .5;  stroke: var(--ember); stroke-width: 1.8; }
+.f-axis { fill: none; stroke: var(--faint); stroke-width: 1.5; }
+.f-pen  { fill: none; stroke: var(--prose); stroke-width: 1.9; }
+.f-div  { fill: none; stroke: var(--line);  stroke-width: 1.5; stroke-dasharray: 2 9; }
+.f-tick { fill: none; stroke: var(--faint); stroke-width: 1.5; stroke-dasharray: 5 5; }
+.f-mark { fill: none; stroke: var(--ember); stroke-width: 1.6; stroke-dasharray: 5 5; }
+
+.f-head { fill: var(--ink);   font-family: var(--sans); font-size: 13px; font-weight: 700;
+          letter-spacing: .07em; text-transform: uppercase; }
+.f-key  { fill: var(--prose); font-family: var(--sans); font-size: 13.5px; }
+.f-sub  { fill: var(--muted); font-family: var(--sans); font-size: 12px; }
+.f-lab  { fill: var(--faint); font-family: var(--mono); font-size: 12px; }
+.f-note { fill: var(--ember); font-family: var(--sans); font-size: 13px; font-weight: 600; }
+
+@media (max-width: 640px) {
+  .essay-fig { margin: 30px auto; }
+  .essay-fig .fig-plot { padding: 16px 14px 12px; }
+}
+
 .essay-article .table-scroll { overflow-x: auto; margin-top: 24px; }
 .essay-article table { border-collapse: collapse; width: 100%; font-size: 15.5px; }
 .essay-article th,
