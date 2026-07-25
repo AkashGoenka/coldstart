@@ -124,6 +124,59 @@
   <p>Six weeks later the same area breaks again. The graph is regenerated from the same source and it is byte for byte what it was before. It has learned nothing, because it is not the kind of thing that can learn. The second investigation starts exactly where the first one did, and re-derives the same conclusions at the same cost.</p>
   <p>That is the claim in one line. A graph makes each hop cheaper. It does not reduce the number of hops, and it never makes the second occurrence of a question cheaper than the first.</p>
 
+  <figure class="wide essay-fig ">
+    <div class="fig-plot">
+    <svg viewBox="0 0 920 360" role="img" aria-labelledby="r3t r3d">
+      <title id="r3t">The second investigation costs what the first one did</title>
+      <desc id="r3d">Two identical tracks of five hops ending in the same conclusion, separated by a regeneration of the graph. The second run repeats every hop of the first because nothing about the first was recorded.</desc>
+      <defs>
+        <filter id="r3" x="-6%" y="-6%" width="112%" height="112%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="11" result="n"/>
+          <feDisplacementMap in="SourceGraphic" in2="n" scale="2.6" xChannelSelector="R" yChannelSelector="G"/>
+        </filter>
+      </defs>
+      <g filter="url(#r3)">
+        <path class="f-axis" d="M90 108 L640 108"/>
+        <circle class="f-hop" cx="100" cy="108" r="9"/>
+        <circle class="f-hop" cx="230" cy="108" r="9"/>
+        <circle class="f-hop" cx="360" cy="108" r="9"/>
+        <circle class="f-hop" cx="490" cy="108" r="9"/>
+        <circle class="f-hop" cx="620" cy="108" r="9"/>
+        <rect class="f-box-ok" x="690" y="77" width="170" height="62" rx="6"/>
+        <path class="f-pen" d="M650 108 L680 108"/>
+        <path class="f-pen" d="M669 102 L680 108 M669 114 L680 108"/>
+        <path class="f-axis" d="M90 286 L640 286"/>
+        <circle class="f-hop" cx="100" cy="286" r="9"/>
+        <circle class="f-hop" cx="230" cy="286" r="9"/>
+        <circle class="f-hop" cx="360" cy="286" r="9"/>
+        <circle class="f-hop" cx="490" cy="286" r="9"/>
+        <circle class="f-hop" cx="620" cy="286" r="9"/>
+        <rect class="f-box-ok" x="690" y="255" width="170" height="62" rx="6"/>
+        <path class="f-pen" d="M650 286 L680 286"/>
+        <path class="f-pen" d="M669 280 L680 286 M669 292 L680 286"/>
+        <path class="f-div" d="M70 197 L860 197"/>
+      </g>
+      <text class="f-head" x="90" y="72" text-anchor="start">first investigation</text>
+      <text class="f-head" x="90" y="250" text-anchor="start">six weeks later, the same question</text>
+      <text class="f-lab" x="100" y="138" text-anchor="middle">hop 1</text>
+      <text class="f-lab" x="230" y="138" text-anchor="middle">hop 2</text>
+      <text class="f-lab" x="360" y="138" text-anchor="middle">hop 3</text>
+      <text class="f-lab" x="490" y="138" text-anchor="middle">hop 4</text>
+      <text class="f-lab" x="620" y="138" text-anchor="middle">hop 5</text>
+      <text class="f-lab" x="100" y="316" text-anchor="middle">hop 1</text>
+      <text class="f-lab" x="230" y="316" text-anchor="middle">hop 2</text>
+      <text class="f-lab" x="360" y="316" text-anchor="middle">hop 3</text>
+      <text class="f-lab" x="490" y="316" text-anchor="middle">hop 4</text>
+      <text class="f-lab" x="620" y="316" text-anchor="middle">hop 5</text>
+      <text class="f-key" x="775" y="113" text-anchor="middle">conclusion</text>
+      <text class="f-key" x="775" y="291" text-anchor="middle">conclusion</text>
+      <text class="f-sub" x="465" y="188" text-anchor="middle">the graph is regenerated from the same source and is byte for byte what it was</text>
+      <text class="f-note" x="465" y="222" text-anchor="middle">it has learned nothing, because it is not the kind of thing that can learn</text>
+    </svg>
+    </div>
+    <figcaption>A graph makes each hop cheaper. It does not reduce how many hops you need, and because everything in it was already in the source, it cannot hold a conclusion — so the second occurrence of a question costs what the first one did.</figcaption>
+  </figure>
+
   <h2>A note about the visualisation</h2>
   <p>Since it comes up: the three-dimensional rendering of your codebase is for you, not for the agent. The agent receives text. It never sees the picture. A beautiful graph view is a fine thing to build and I understand why it demos well, but it is evidence about the tool's presentation layer and not about whether an agent finished a task in fewer steps.</p>
   <p>The metric that would settle these arguments is unglamorous: for a fixed set of tasks, how many actions did the agent take before it had the right answer. Steps, not tokens, because tokens follow from steps. I have not seen that number published by anyone, including by me, and I am wary of any comparison that leads with something else.</p>

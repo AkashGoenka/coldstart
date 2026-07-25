@@ -115,51 +115,59 @@
   <p>So the effort I put into trimming a tool's output was aimed at the term that mattered least. A tool that prints twenty extra lines has added twenty lines to the resident context. Real, but marginal.</p>
   <p>A tool that causes one extra turn has re-billed the entire conversation.</p>
 
-  <figure class="wide essay-fig">
+  <figure class="wide essay-fig ">
     <div class="fig-plot">
-    <svg viewBox="0 0 920 410" role="img" aria-labelledby="figt figd">
-      <title id="figt">What a session bills for, turn by turn</title>
-      <desc id="figd">Eight columns, one per turn. Each column is the whole conversation resident at that moment, and every column is billed in full. A fixed base of system prompt and tool schemas repeats unchanged. Above it, everything read so far accumulates and never shrinks. The model's own output for that turn is the thin band on top, a small fraction of each column.</desc>
-      <rect class="f-base" x="78" y="16" width="13" height="13" rx="2"/>
-      <text class="f-key" x="99" y="27">fixed: system prompt + tool schemas</text>
-      <rect class="f-grow" x="372" y="16" width="13" height="13" rx="2"/>
-      <text class="f-key" x="393" y="27">everything read or run so far</text>
-      <rect class="f-out" x="666" y="16" width="13" height="13" rx="2"/>
-      <text class="f-key" x="687" y="27">what the model wrote this turn</text>
-      <line class="f-axis" x1="60" y1="340" x2="860" y2="340"/>
-      <rect class="f-base" x="78" y="296" width="58" height="44" rx="2"/>
-      <rect class="f-out" x="78" y="288" width="58" height="8" rx="2"/>
+    <svg viewBox="0 0 920 410" role="img" aria-labelledby="r1t r1d">
+      <title id="r1t">What a session bills for, turn by turn</title>
+      <desc id="r1d">Eight columns, one per turn. Each is the whole conversation resident at that moment and each is billed in full. A fixed base of system prompt and tool schemas repeats unchanged. Above it, everything read so far accumulates and never shrinks. The model output for that turn is the thin band on top.</desc>
+      <defs>
+        <filter id="r1" x="-6%" y="-6%" width="112%" height="112%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="3" result="n"/>
+          <feDisplacementMap in="SourceGraphic" in2="n" scale="2.6" xChannelSelector="R" yChannelSelector="G"/>
+        </filter>
+      </defs>
+      <g filter="url(#r1)">
+        <rect class="f-base" x="78" y="296" width="58" height="44" rx="6"/>
+        <rect class="f-out" x="78" y="288" width="58" height="8" rx="6"/>
+        <rect class="f-base" x="174" y="296" width="58" height="44" rx="6"/>
+        <rect class="f-grow" x="174" y="270" width="58" height="26" rx="6"/>
+        <rect class="f-out" x="174" y="262" width="58" height="8" rx="6"/>
+        <rect class="f-base" x="270" y="296" width="58" height="44" rx="6"/>
+        <rect class="f-grow" x="270" y="244" width="58" height="52" rx="6"/>
+        <rect class="f-out" x="270" y="236" width="58" height="8" rx="6"/>
+        <rect class="f-base" x="366" y="296" width="58" height="44" rx="6"/>
+        <rect class="f-grow" x="366" y="218" width="58" height="78" rx="6"/>
+        <rect class="f-out" x="366" y="210" width="58" height="8" rx="6"/>
+        <rect class="f-base" x="462" y="296" width="58" height="44" rx="6"/>
+        <rect class="f-grow" x="462" y="192" width="58" height="104" rx="6"/>
+        <rect class="f-out" x="462" y="184" width="58" height="8" rx="6"/>
+        <rect class="f-base" x="558" y="296" width="58" height="44" rx="6"/>
+        <rect class="f-grow" x="558" y="166" width="58" height="130" rx="6"/>
+        <rect class="f-out" x="558" y="158" width="58" height="8" rx="6"/>
+        <rect class="f-base" x="654" y="296" width="58" height="44" rx="6"/>
+        <rect class="f-grow" x="654" y="140" width="58" height="156" rx="6"/>
+        <rect class="f-out" x="654" y="132" width="58" height="8" rx="6"/>
+        <rect class="f-base" x="750" y="296" width="58" height="44" rx="6"/>
+        <rect class="f-grow" x="750" y="114" width="58" height="182" rx="6"/>
+        <rect class="f-out" x="750" y="106" width="58" height="8" rx="6"/>
+        <path class="f-axis" d="M60 340 L860 340"/>
+        <rect class="f-mark" x="742" y="98" width="74" height="250" rx="6"/>
+      </g>
+      <g filter="url(#r1)"><rect class="f-base" x="78" y="16" width="13" height="13" rx="3"/></g>
+      <text class="f-key" x="99" y="27" text-anchor="start">fixed: system prompt + tool schemas</text>
+      <g filter="url(#r1)"><rect class="f-grow" x="372" y="16" width="13" height="13" rx="3"/></g>
+      <text class="f-key" x="393" y="27" text-anchor="start">everything read or run so far</text>
+      <g filter="url(#r1)"><rect class="f-out" x="666" y="16" width="13" height="13" rx="3"/></g>
+      <text class="f-key" x="687" y="27" text-anchor="start">what the model wrote this turn</text>
       <text class="f-lab" x="107" y="360" text-anchor="middle">1</text>
-      <rect class="f-base" x="174" y="296" width="58" height="44" rx="2"/>
-      <rect class="f-grow" x="174" y="270" width="58" height="26" rx="2"/>
-      <rect class="f-out" x="174" y="262" width="58" height="8" rx="2"/>
       <text class="f-lab" x="203" y="360" text-anchor="middle">2</text>
-      <rect class="f-base" x="270" y="296" width="58" height="44" rx="2"/>
-      <rect class="f-grow" x="270" y="244" width="58" height="52" rx="2"/>
-      <rect class="f-out" x="270" y="236" width="58" height="8" rx="2"/>
       <text class="f-lab" x="299" y="360" text-anchor="middle">3</text>
-      <rect class="f-base" x="366" y="296" width="58" height="44" rx="2"/>
-      <rect class="f-grow" x="366" y="218" width="58" height="78" rx="2"/>
-      <rect class="f-out" x="366" y="210" width="58" height="8" rx="2"/>
       <text class="f-lab" x="395" y="360" text-anchor="middle">4</text>
-      <rect class="f-base" x="462" y="296" width="58" height="44" rx="2"/>
-      <rect class="f-grow" x="462" y="192" width="58" height="104" rx="2"/>
-      <rect class="f-out" x="462" y="184" width="58" height="8" rx="2"/>
       <text class="f-lab" x="491" y="360" text-anchor="middle">5</text>
-      <rect class="f-base" x="558" y="296" width="58" height="44" rx="2"/>
-      <rect class="f-grow" x="558" y="166" width="58" height="130" rx="2"/>
-      <rect class="f-out" x="558" y="158" width="58" height="8" rx="2"/>
       <text class="f-lab" x="587" y="360" text-anchor="middle">6</text>
-      <rect class="f-base" x="654" y="296" width="58" height="44" rx="2"/>
-      <rect class="f-grow" x="654" y="140" width="58" height="156" rx="2"/>
-      <rect class="f-out" x="654" y="132" width="58" height="8" rx="2"/>
       <text class="f-lab" x="683" y="360" text-anchor="middle">7</text>
-      <rect class="f-base" x="750" y="296" width="58" height="44" rx="2"/>
-      <rect class="f-grow" x="750" y="114" width="58" height="182" rx="2"/>
-      <rect class="f-out" x="750" y="106" width="58" height="8" rx="2"/>
       <text class="f-lab" x="779" y="360" text-anchor="middle">8</text>
-      <text class="f-lab" x="60" y="384">turn →</text>
-      <rect class="f-mark" x="743" y="99" width="72" height="248" rx="5"/>
+      <text class="f-lab" x="60" y="384" text-anchor="start">turn →</text>
       <text class="f-note" x="808" y="398" text-anchor="end">one more turn re-bills every layer below it</text>
     </svg>
     </div>

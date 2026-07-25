@@ -549,12 +549,30 @@ body.essay-page .term { border-color: var(--term-border); }
   margin: 14px auto 0;
 }
 
-.f-base { fill: var(--muted); opacity: .30; }
-.f-grow { fill: var(--frost); opacity: .55; }
-.f-out  { fill: var(--ember); }
-.f-axis { stroke: var(--line); stroke-width: 1; }
-.f-mark { stroke: var(--ember); stroke-width: 1.4; stroke-dasharray: 4 4; fill: none; opacity: .9; }
-.f-key  { fill: var(--prose); font-family: var(--sans); font-size: 13px; }
+/* Hand-drawn look: a seeded feTurbulence displacement, applied per-figure to a
+   group that holds ONLY shapes. Text is never inside the filtered group — a
+   wobbly label is unreadable, and it is the strokes that should look drawn.
+   Everything is stroked rather than flat-filled so the roughness reads. */
+.essay-fig svg :is(path, rect, circle, line) { stroke-linecap: round; stroke-linejoin: round; }
+
+.f-base { fill: var(--muted); fill-opacity: .22; stroke: var(--muted); stroke-width: 1.7; }
+.f-grow { fill: var(--frost); fill-opacity: .38; stroke: var(--frost); stroke-width: 1.7; }
+.f-out  { fill: var(--ember); fill-opacity: .85; stroke: var(--ember); stroke-width: 1.7; }
+.f-box    { fill: var(--surface); stroke: var(--prose); stroke-width: 1.9; }
+.f-box-ok { fill: var(--frost); fill-opacity: .16; stroke: var(--frost); stroke-width: 1.9; }
+.f-hop    { fill: var(--surface); stroke: var(--prose); stroke-width: 1.9; }
+.f-area-a { fill: var(--frost); fill-opacity: .34; stroke: var(--frost); stroke-width: 1.8; }
+.f-area-b { fill: var(--ember); fill-opacity: .5;  stroke: var(--ember); stroke-width: 1.8; }
+.f-axis { fill: none; stroke: var(--faint); stroke-width: 1.5; }
+.f-pen  { fill: none; stroke: var(--prose); stroke-width: 1.9; }
+.f-div  { fill: none; stroke: var(--line);  stroke-width: 1.5; stroke-dasharray: 2 9; }
+.f-tick { fill: none; stroke: var(--faint); stroke-width: 1.5; stroke-dasharray: 5 5; }
+.f-mark { fill: none; stroke: var(--ember); stroke-width: 1.6; stroke-dasharray: 5 5; }
+
+.f-head { fill: var(--ink);   font-family: var(--sans); font-size: 13px; font-weight: 700;
+          letter-spacing: .07em; text-transform: uppercase; }
+.f-key  { fill: var(--prose); font-family: var(--sans); font-size: 13.5px; }
+.f-sub  { fill: var(--muted); font-family: var(--sans); font-size: 12px; }
 .f-lab  { fill: var(--faint); font-family: var(--mono); font-size: 12px; }
 .f-note { fill: var(--ember); font-family: var(--sans); font-size: 13px; font-weight: 600; }
 
