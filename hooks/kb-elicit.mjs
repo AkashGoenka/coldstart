@@ -29,7 +29,7 @@
  */
 
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync, writeFileSync, appendFileSync, readFileSync, readdirSync, statSync } from "node:fs";
 
@@ -49,6 +49,31 @@ let LOG_FILE = join(tmpdir(), "coldstart-kb-hook.log");
 function setLogRoot(root) { if (root) LOG_FILE = join(root, ".coldstart", "kb-hook.log"); }
 function log(msg) {
   try { appendFileSync(LOG_FILE, `[${new Date().toISOString()}] elicit: ${msg}\n`); } catch { /* never fail logging */ }
+}
+
+// --- Repo-root resolution ----------------------------------------------------
+/**
+ * The Stop payload's `cwd` tracks the session's shell, which a `cd` inside a
+ * Bash call moves — sometimes clean OUT of the repo (e.g. into ~/.claude/…/memory
+ * to edit private files). Root was taken raw from that cwd, so normRel would then
+ * strip the WRONG prefix and admit a foreign absolute path into the worklist as if
+ * it were repo-local (observed 2026-07-25: MEMORY.md / drive.mjs entered a marker).
+ * A notebook-inited repo carries a `.coldstart/notebook/` dir, so walk up from cwd
+ * to the nearest ancestor that has one — that is the true root regardless of shell
+ * drift. `.coldstart/notebook` (not bare `.coldstart`) is the marker on purpose: the
+ * GLOBAL `~/.coldstart` dir holds daemon/searcher state and no notebook, so a drift
+ * into ~ must not resolve to the home directory.
+ * Returns "" when cwd is not inside any notebook-inited repo.
+ */
+function findRepoRoot(startDir) {
+  let dir = resolve(startDir || ".");
+  for (let i = 0; i < 40; i++) {
+    if (existsSync(join(dir, ".coldstart", "notebook"))) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return "";
 }
 
 // --- Subagent transcript resolution ------------------------------------------
@@ -193,8 +218,8 @@ if (process.argv.includes("--manual")) {
   } catch (e) { log(`bad stdin ${e}`); }
 
   try {
-    const root = String(input.cwd || "");
-    setLogRoot(root);
+    const cwd = String(input.cwd || "");
+    setLogRoot(cwd);
 
     // Guard 1: already inside a hook-induced continuation → let it stop.
     if (input.stop_hook_active === true) { log("SKIP stop_hook_active"); process.exit(0); }
@@ -229,7 +254,6 @@ if (process.argv.includes("--manual")) {
     }
     if (!transcriptPath || !existsSync(transcriptPath)) { log("SKIP no-transcript"); process.exit(0); }
 
-    const ignore = loadIgnore(root);
     const marker = join(tmpdir(), `coldstart-kb-${sid}-${aid}.json`);
     let state = null;
     try {
@@ -238,6 +262,15 @@ if (process.argv.includes("--manual")) {
     } catch { /* first Stop of this session (or a pre-v5 marker: start fresh) */ }
     const freshMarker = !state; // no valid prior marker: we're attaching, not resuming our own place
     if (!state) state = initialState();
+
+    // Freeze the repo root in the marker: derive it once (walk-up from cwd), then
+    // reuse the stored value on every later stop so a mid-session `cd` out of the
+    // repo can never re-point root at a foreign tree. Fall back to the raw cwd only
+    // when neither a stored root nor a `.coldstart` ancestor exists.
+    const root = (typeof state.root === "string" && state.root) ? state.root : (findRepoRoot(cwd) || cwd);
+    state.root = root;
+    setLogRoot(root);
+    const ignore = loadIgnore(root);
 
     // This stop's transcript slice (everything since the last processed line).
     const text = readFileSync(transcriptPath, "utf8");
