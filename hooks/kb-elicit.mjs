@@ -38,7 +38,7 @@ import { initialState, step } from "./trigger.mjs";
 import { loadIgnore } from "./ignore.mjs";
 import { buildCapturePayload } from "./capture-payload.mjs";
 import {
-  worklistEntries, freshNotedSet, gitHead, logCaptureEvent, writePendingCapture,
+  worklistEntries, freshNotedSet, gitHead, logCaptureEvent, writePendingCapture, MAX_WORKLIST,
 } from "./elicit-core.mjs";
 
 // hooks/ sits beside dist/ in both the repo and the published package.
@@ -180,7 +180,23 @@ if (process.argv.includes("--manual")) {
       process.exit(0);
     }
     const { sid, state, path: markerPath } = found;
-    const files = Object.keys(state.files).filter((rel) => !state.files[rel].captured);
+    // A manual /capture-notes is an EXPLICIT request to write up THIS session's
+    // work, so its scope is everything worked on — not merely what an automatic
+    // fire has yet to offer. Files EDITED this session are the highest-value
+    // notes (the fix, a brand-new helper), and an earlier automatic fire may
+    // have already marked them `captured` — a flag that means "offered once",
+    // never "a good note exists". Excluding them left the single most valuable
+    // note unwritten and a now-stale note unfixed (the Bug-1 report). So:
+    // include every edited file regardless of the flag, and drop only READ-ONLY
+    // files that were already offered (re-listing those on demand is just
+    // noise). Rank most-worked first (edits → retouches → reads) so new/edited
+    // files lead; the per-file annotations flag when a fresh note needs nothing.
+    const files = Object.entries(state.files)
+      .filter(([, f]) => (f.reads + f.edits + f.gs) > 0 && (f.edits > 0 || !f.captured))
+      .sort((a, b) => (b[1].edits - a[1].edits)
+        || ((b[1].retouches || 0) - (a[1].retouches || 0))
+        || (b[1].reads - a[1].reads))
+      .map(([rel]) => rel);
     if (!files.length) {
       process.stdout.write("Everything worked on so far is already captured — nothing new to write right now.\n");
       log(`MANUAL nothing-new session=${sid}`);
@@ -188,14 +204,16 @@ if (process.argv.includes("--manual")) {
     }
     const entries = worklistEntries(CLI, root, files, state.files, log);
     const payload = buildCapturePayload({ root, cli: CLI, sid, entries, envelope: "manual" });
-    // Mark ONLY the listed files captured. Re-read first: a Stop hook may have
-    // written the marker since we loaded it, and we must not clobber its
-    // counters. Best-effort — a failure here costs a duplicate ask, never the
-    // payload the user asked for.
+    // Mark ONLY the files actually LISTED (the worklist caps its display to
+    // MAX_WORKLIST) captured — any overflow stays uncaptured so it rolls into
+    // the next capture rather than being marked done but never shown. Re-read
+    // first: a Stop hook may have written the marker since we loaded it, and we
+    // must not clobber its counters. Best-effort — a failure here costs a
+    // duplicate ask, never the payload the user asked for.
     try {
       const live = JSON.parse(readFileSync(markerPath, "utf8"));
       if (live && live.files) {
-        for (const rel of files) if (live.files[rel]) live.files[rel].captured = true;
+        for (const rel of files.slice(0, MAX_WORKLIST)) if (live.files[rel]) live.files[rel].captured = true;
         writeFileSync(markerPath, JSON.stringify(live));
       }
     } catch (e) { log(`MANUAL mark-captured skipped ${e}`); }

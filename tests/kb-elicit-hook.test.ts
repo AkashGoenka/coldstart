@@ -336,13 +336,35 @@ describe('kb-elicit --manual (on-demand capture)', () => {
     expect(out).toContain('src/b.ts');
   });
 
-  it('says nothing-new when every worked file is already captured', () => {
+  it('says nothing-new when every worked file is a read-only already-captured file', () => {
     seed(['src/a.ts']);
-    writeMarker({ 'src/a.ts': { edits: 2, captured: true } });
+    // Read-only + already offered → re-listing on demand is just noise.
+    writeMarker({ 'src/a.ts': { reads: 3, captured: true } });
 
     const out = manual();
     expect(out).toContain('already captured');
     expect(out).not.toContain('WORKLIST');
+  });
+
+  it('re-lists EDITED files even when a prior automatic fire marked them captured (Bug 1)', () => {
+    seed(['src/fix.ts', 'src/helper.ts', 'src/read.ts']);
+    // The session edited two files (the fix + a brand-new helper) and read one.
+    // An earlier AUTOMATIC fire already offered — and thus captured=true'd — all
+    // three. The edited ones are the highest-value notes and must still appear.
+    writeMarker({
+      'src/fix.ts': { edits: 3, captured: true },
+      'src/helper.ts': { edits: 1, captured: true },
+      'src/read.ts': { reads: 2, captured: true },
+    });
+
+    const out = manual();
+    expect(out).toContain('WORKLIST');
+    expect(out).toContain('src/fix.ts');
+    expect(out).toContain('src/helper.ts');
+    // Read-only + already-captured stays excluded (offered once, low value).
+    expect(out).not.toContain('src/read.ts');
+    // Most-worked leads: the 3× fix outranks the 1× helper.
+    expect(out.indexOf('src/fix.ts')).toBeLessThan(out.indexOf('src/helper.ts'));
   });
 
   it('explains itself when the repo has no capture evidence yet', () => {
@@ -352,18 +374,24 @@ describe('kb-elicit --manual (on-demand capture)', () => {
     expect(out).not.toContain('WORKLIST');
   });
 
-  it('marks the files it listed captured, so the next fire does not re-ask for them', () => {
-    seed(['src/a.ts']);
-    writeMarker({ 'src/a.ts': { edits: 2 } });
+  it('marks the files it listed captured, so the next AUTOMATIC fire does not re-ask', () => {
+    seed(['src/a.ts', 'src/b.ts']);
+    writeMarker({ 'src/a.ts': { edits: 2 }, 'src/b.ts': { reads: 1 } });
 
     const out = manual();
     expect(out).toContain('src/a.ts');
+    expect(out).toContain('src/b.ts');
 
     const after = JSON.parse(fs.readFileSync(markerPath(), 'utf8'));
     expect(after.files['src/a.ts'].captured).toBe(true);
+    expect(after.files['src/b.ts'].captured).toBe(true);
 
-    // …and a second manual run now has nothing outstanding.
-    expect(manual()).toContain('already captured');
+    // The read-only file, now captured, drops out of a second manual run; the
+    // edited file stays in scope (an explicit capture always shows this
+    // session's changes).
+    const second = manual();
+    expect(second).toContain('src/a.ts');
+    expect(second).not.toContain('src/b.ts');
   });
 
   it('touches ONLY captured — manual capture cannot perturb automatic firing', () => {

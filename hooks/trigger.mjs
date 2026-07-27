@@ -43,6 +43,12 @@
 
 export const T_ARM = 10;
 export const T_CAP = 20;
+/** Files a single fire CLAIMS (marks captured) and lists — the same cap the
+ *  worklist prompt renders (elicit-core slices its display to it). Files beyond
+ *  it stay UNCAPTURED so they roll into the NEXT fire's worklist, rather than
+ *  being marked done but never shown — which silently dropped notes on sessions
+ *  that touched more than this many files (a long autonomous grind). */
+export const MAX_CAPTURE_FILES = 30;
 export const SETTLE_ACTIVE_STOPS = 3;
 export const DESCENT_QUIET = 1;
 /** Uncaptured-file floor for the BLOCKING/backlog paths (head-drift, cap).
@@ -152,11 +158,15 @@ export function step(state, obs) {
 
   let decision = null;
   if (fire) {
-    // worklist = the uncaptured set, most-worked first (edits, then retouches)
-    const files = uncaptured
+    // worklist = the uncaptured set, most-worked first (edits, then retouches),
+    // capped to what one fire claims. Mark ONLY the listed files captured; the
+    // overflow stays uncaptured and rolls into the next fire (which re-fires
+    // soon, since the backlog keeps the score high).
+    const ranked = uncaptured
       .sort((a, b) => (b[1].edits - a[1].edits) || (b[1].retouches - a[1].retouches) || (b[1].reads - a[1].reads))
-      .map(([rel]) => rel);
-    for (const [, f] of uncaptured) f.captured = true;
+      .slice(0, MAX_CAPTURE_FILES);
+    const files = ranked.map(([rel]) => rel);
+    for (const [, f] of ranked) f.captured = true;
     s.armed = false;
     s.activeStops = 0;
     s.stopsSinceFire = 0;

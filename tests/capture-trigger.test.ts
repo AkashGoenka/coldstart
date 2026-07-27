@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 // hooks/ modules are plain ESM — import them directly.
 import { compileIgnore, loadIgnore, DEFAULT_IGNORES } from '../hooks/ignore.mjs';
 import { extractEvidence, contentReadFiles, segmentStats } from '../hooks/evidence.mjs';
-import { initialState, step, T_ARM, T_CAP } from '../hooks/trigger.mjs';
+import { initialState, step, T_ARM, T_CAP, MAX_CAPTURE_FILES } from '../hooks/trigger.mjs';
 import { ensureColdstartignore } from '../src/init.js';
 import { appendRecord } from '../src/kb/raw-log.js';
 import { initSkeleton } from '../src/kb/store.js';
@@ -320,6 +320,26 @@ describe('trigger', () => {
     const edit = new Map([['a', { reads: 0, edits: 1, gs: 0 }]]);
     r = step(r.state, { ...QUIET, delta: edit });
     expect(r.state.files['a'].captured).toBe(false);
+  });
+
+  it('a fire claims at most MAX_CAPTURE_FILES; the overflow rolls into the next fire', () => {
+    const many = Array.from({ length: MAX_CAPTURE_FILES + 5 }, (_, i) => `f${i}.ts`);
+    // One big burst clears the cap threshold on the first stop.
+    let r = step(initialState(), { ...QUIET, delta: reads(...many) });
+    expect(r.decision?.fire).toBe('cap');
+    // Only a cap's worth is listed AND marked captured...
+    expect(r.decision?.files.length).toBe(MAX_CAPTURE_FILES);
+    const capturedAfterFirst = Object.values(r.state.files).filter((f) => f.captured).length;
+    expect(capturedAfterFirst).toBe(MAX_CAPTURE_FILES);
+    // ...the 5 overflow files stay UNCAPTURED (not marked done-but-unshown).
+    expect(Object.values(r.state.files).filter((f) => !f.captured).length).toBe(5);
+
+    // The uncaptured backlog keeps the score alive, so a later stop re-fires and
+    // picks up exactly the overflow — nothing is silently dropped.
+    let fired: string | undefined;
+    for (let i = 0; i < 25 && !fired; i++) { r = step(r.state, QUIET); fired = r.decision?.fire; }
+    expect(fired).toBeTruthy();
+    expect(Object.values(r.state.files).every((f) => f.captured)).toBe(true);
   });
 
   it('T_ARM sanity: exported constants match the frozen spec', () => {
