@@ -87,7 +87,7 @@ for it — your findings, not the notebook decision.`
     body = body.includes("{{WORKLIST}}")
       ? body.replaceAll("{{WORKLIST}}", worklist)
       : `${body.trimEnd()}\n\nWORKLIST — files you actually read this session, most-worked first \
-(the complete scope; never write a note for an unlisted file):\n\n${worklist}`;
+(your scope; if you edited or deep-read a file that isn't listed, you can note it too):\n\n${worklist}`;
     return `**Notebook capture point.** ${opening}\n\n${body.trimEnd()}${tail}`;
   }
 
@@ -102,8 +102,9 @@ branch, reviewing a PR, or reading vendored/generated code, that knowledge is ab
 or the future — write nothing and say so.
 2. If nothing about the current code is worth recording, no note is the right answer. If a \
 future agent would not act differently for knowing it, don't store it.
-3. The worklist below is the complete scope. Unlisted files are out — ignored \
-(.coldstartignore) or already captured. Never write a note for an unlisted file.
+3. The worklist below is your scope, most-worked first. Unlisted files are out — ignored \
+(.coldstartignore) or already captured. If you edited or deep-read a file this session that \
+isn't listed, you can write a note for it too.
 
 WORKLIST — files you actually read this session, most-worked first:
 

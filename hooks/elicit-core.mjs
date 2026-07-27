@@ -16,7 +16,10 @@ import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync, unlinkSync, appendFileSync, mkdirSync } from "node:fs";
 
-export const MAX_WORKLIST = 30;
+import { MAX_CAPTURE_FILES } from "./trigger.mjs";
+// One source of truth: the display cap equals what a fire claims, so the prompt
+// never shows fewer (or more) files than the fire marks captured.
+export const MAX_WORKLIST = MAX_CAPTURE_FILES;
 
 const noop = () => {};
 
