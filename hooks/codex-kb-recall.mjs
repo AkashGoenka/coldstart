@@ -29,6 +29,9 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 // Strip host telemetry wrappers before the query is built — see recall-query.mjs.
 import { recallQuery } from "./recall-query.mjs";
+// Per-session dedup shared with the other recall hooks — see recall-seen.mjs.
+// Hosts with no transcript path never reset; dedup still holds for the session.
+import { readSeen, writeSeen, idsInPage, seenArgs } from "./recall-seen.mjs";
 
 // hooks/ sits beside dist/ in both the repo and the published package.
 const CLI = fileURLToPath(new URL("../dist/index.js", import.meta.url));
@@ -73,15 +76,23 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     if (!root) process.exit(0);
     setLogRoot(root);
 
+    const sid = String(input.session_id || "").replace(/[^\w-]/g, "");
+
     // No notebook → no tax, not even a child process.
     if (!existsSync(join(root, ".coldstart", "notebook", ".raw"))) process.exit(0);
 
     const prompt = recallQuery(input.prompt, MAX_QUERY_CHARS);
     if (!prompt) process.exit(0);
 
+    // Ephemeral Codex runs expose no rollout path; readSeen then never resets,
+    // which is the safe direction — dedup simply holds for the whole session.
+    const tPath = String(input.transcript_path || "");
+    const seen = readSeen(sid, tPath, log);
+
     let page = "";
     try {
-      page = execFileSync("node", [CLI, "kb", "search", "--hook", "--max", "3", "--root", root, prompt], {
+      const args = [CLI, "kb", "search", "--hook", "--max", "3", "--root", root, ...seenArgs(seen.ids)];
+      page = execFileSync("node", [...args, prompt], {
         encoding: "utf8",
         timeout: SEARCH_TIMEOUT_MS,
         stdio: ["ignore", "pipe", "ignore"],
@@ -95,6 +106,10 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
       log(`no hits (promptChars=${prompt.length})`);
       process.exit(0);
     }
+
+    // Record what this page hands over before the size guards can trim it — a
+    // note the agent was shown is seen, whichever way it ends up rendered.
+    writeSeen(sid, [...seen.ids, ...idsInPage(page)], tPath);
 
     // Pointer page (rulings 2026-07-06/08): titles + gists + an OPENABLE note
     // path, never a full body — a wrong pointer costs a glance, a wrong
@@ -132,7 +147,6 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     // grep-spiral unguarded otherwise. Path/shape must match the handler's state
     // file: literal /tmp + main-agent key = session_id.
     try {
-      const sid = String(input.session_id || "");
       if (sid && /^[\w-]+$/.test(sid)) {
         const sf = `/tmp/find_nudge_${sid}.json`;
         let st = {};
