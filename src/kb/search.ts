@@ -47,6 +47,16 @@ export interface KbSearchOptions {
    * (the agent chose its terms).
    */
   strongOnly?: boolean;
+  /**
+   * Note ids already injected earlier in THIS session — dropped from the
+   * final page. Recall re-showed the same note inside one session on 61% of
+   * injections (worst: 12×), which is pure tax: the agent already has the
+   * title and gist in context. Applied AFTER ranking, so a suppressed repeat
+   * does NOT get backfilled by a lower-ranked note — the page just shrinks
+   * (and an all-seen page injects nothing). Hook-side bookkeeping, so tool
+   * `kb search` is unaffected.
+   */
+  excludeIds?: ReadonlySet<string>;
 }
 
 // English glue words that survive parseTerms' ≥3-char rule but carry zero
@@ -86,6 +96,11 @@ export interface KbSearchHit {
    *  a scale-free convergence measure: a boilerplate graze shares ONE word
    *  with the top note; a task that names a mechanism lands several. */
   strongTerms: number;
+  /** The eligible terms that actually carried this hit, with the channel each
+   *  landed in (n=name, a=anchor, b=body) — e.g. "keeper:na". Recorded so the
+   *  injection log can be analyzed after the fact: which words are doing the
+   *  work is not recoverable from the query string alone. */
+  carriers: string[];
 }
 
 export interface KbSearchResult {
@@ -173,6 +188,36 @@ const rarityMax = (n: number): number => Math.ceil(n / HOOK_RARITY_DIVISOR);
  *  strongTerms is logged on every injection decision for re-calibration. */
 const HOOK_CONVERGE_MIN = 4;
 
+/**
+ * Hook mode: a hit carried by ONE PLAIN-ENGLISH term is a graze, not a match.
+ *
+ * Measured 2026-07-30 on 140 hand-labeled injections (two 70-query samples
+ * drawn from 563 logged prompts, the second held out). Single-carrier hits are
+ * 61% of all injections, but they are not one population — split by the same
+ * evidence distinction the eligibility gate above already makes:
+ *
+ *   plain prose, no convergence   65 hits    3 good / 53 junk    5% precise
+ *   code-shaped term               7 hits    4 good /  2 junk   67% precise
+ *   converged term                15 hits    7 good /  8 junk   47% precise
+ *
+ * So the defect is not "one term", it is "one ORDINARY WORD": a prose word
+ * landing in one note's alias list is a homonym far more often than a topic
+ * match — "merge the PR" hits the fold note (whose aliases say "notebook merge
+ * conflict"), "status 403" hits the status note, "docker image" hits the site
+ * page. An identifier (max_files, AddAddress) or a term that converged on a
+ * declared symbol in the note's own anchor carries real evidence at n=1 and is
+ * kept; those match the multi-carrier population's precision (54%).
+ *
+ * Deliberately NOT a score threshold and NOT a stopword list: the best
+ * score-based rule won on one half and collapsed to 46% on the other, and a
+ * stoplist fitted on the first sample fell 72% → 38% held out. This counts
+ * evidence, so it stays scale-free as the notebook grows.
+ *
+ * A prompt that NAMES the note's path is exempt — an explicit request, not a
+ * graze.
+ */
+const HOOK_MIN_CARRIERS = 2;
+
 /** Path-name override: when the raw prompt literally contains a note's anchor
  *  path (case/separator-insensitive), the user named that file — surface its
  *  note regardless of term rarity. parseTerms drops `/`-glued paths (the `/`
@@ -185,6 +230,25 @@ const PATH_MATCH_MIN_SQUASH = 6;
 const PATH_MATCH_BOOST = 100;
 
 const tokenCount = (s: string): number => (s ? s.split(/\s+/).filter(Boolean).length : 0);
+
+/** Divisor applied to the hook-mode name channel so a note cannot buy rank with
+ *  alias volume: a note's size RELATIVE to the corpus average, floored at 1.
+ *  Only bloat is penalised — a median-length note scores exactly as it did
+ *  before, and a terse note gets no windfall for being short (floor).
+ *
+ *  Measured against the literal matches/identifiers form (divide by the raw
+ *  count) on 563 logged queries, 2026-07-29:
+ *    off  444 injected · magnet note 123 (28%) · top-5 share 58%
+ *    rel  437 injected · magnet note  66 (15%) · top-5 share 48%
+ *    abs  400 injected · magnet note 101 (25%) · top-5 share 54%
+ *  The absolute form loses 57 injections and barely dents the magnet: dividing
+ *  every name score by ~22 does not change name-vs-name ranking, it just sinks
+ *  the whole name channel beneath the unnormalised anchor (2) and body (1)
+ *  weights, so bloated notes keep winning through their other channels. */
+function hookNameNorm(ids: number, avg: number): number {
+  return Math.max(1, ids / avg);
+}
+
 
 /** Substring occurrence count in normalized text; a squash-only match counts 1. */
 function countOcc(hay: string, haySquash: string, term: string): number {
@@ -213,9 +277,52 @@ function isCodeShaped(term: string): boolean {
   return false;
 }
 
-/** Whole-word, case-insensitive hit — "error" must not match "LoadErrors". */
+/** Light Porter-style step-1 stem: plural and tense suffixes only, so that a
+ *  prompt's "fires" reaches a note titled "…capture fire". Deliberately NOT a
+ *  full stemmer — aggressive stemming collapses distinct identifiers, and this
+ *  runs on the name channel where a false merge is a wrong injection. */
+const STEM_CACHE = new Map<string, string>();
+function stem(word: string): string {
+  const k = word.toLowerCase();
+  const cached = STEM_CACHE.get(k);
+  if (cached !== undefined) return cached;
+  // A doubled final consonant is an artifact of the suffix ("stopping" →
+  // "stopp"); l/s/z double legitimately ("call", "pass", "buzz").
+  const dedouble = (s: string) =>
+    s.length > 2 && s[s.length - 1] === s[s.length - 2] && !'lsz'.includes(s[s.length - 1])
+      ? s.slice(0, -1)
+      : s;
+  let s = k;
+  if (s.length > 4 && s.endsWith('ies')) s = `${s.slice(0, -3)}y`;
+  else if (s.length > 4 && s.endsWith('ing')) s = dedouble(s.slice(0, -3));
+  else if (s.length > 3 && s.endsWith('ed')) s = dedouble(s.slice(0, -2));
+  // "boxes"/"matches" drop "es"; "fires"/"notes" drop only the "s", so the
+  // stem keeps its "e" and cannot collide with an unrelated short word.
+  else if (s.length > 3 && /(?:s|x|z|ch|sh)es$/.test(s)) s = s.slice(0, -2);
+  else if (s.length > 3 && s.endsWith('s') && !s.endsWith('ss')) s = s.slice(0, -1);
+  STEM_CACHE.set(k, s);
+  return s;
+}
+
+/** Stems agree, allowing the silent "e" the suffix rules drop ("fire" → "fire",
+ *  "firing" → "fir"). */
+const sameStem = (a: string, b: string): boolean => {
+  const sa = stem(a);
+  const sb = stem(b);
+  return sa === sb || sa === `${sb}e` || sb === `${sa}e`;
+};
+
+/** Whole-word, case-insensitive, stem-tolerant hit — "error" must not match
+ *  "LoadErrors" (not a word boundary), but "fires" must match "fire". */
 function wordHit(hay: string, term: string): boolean {
-  return new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(hay);
+  const words = hay.match(/[A-Za-z0-9]+/g);
+  if (!words) return false;
+  const t = norm(term);
+  for (const w of words) {
+    const lw = w.toLowerCase();
+    if (lw === t || sameStem(lw, t)) return true;
+  }
+  return false;
 }
 
 /** Case- and separator-insensitive containment (LoadStaging ≡ load_staging). */
@@ -242,10 +349,35 @@ function resolveTermToAnchors(kb: KbNotesIndex, term: string): Set<string> {
 function resolveTermToSymbolFiles(kb: KbNotesIndex, term: string): Set<string> {
   const out = new Set<string>();
   const t = norm(term);
+  // Same asymmetry the eligibility gate uses below: a code-shaped term may
+  // match a fragment of a symbol ("loadstaging" → LoadStagingFiles), but a
+  // plain English word must equal a WHOLE identifier token. Substring for
+  // English words is a lottery, measured on 236 logged queries: 164 terms
+  // resolved but only 8 were real symbol names — "but" matched
+  // ensureGitattri(but)es, "see" matched par(seE)xperience, "our" matched
+  // stripOurs. Token equality drops that class and keeps the real one.
+  const codeShaped = isCodeShaped(term);
   for (const [path, symbols] of Object.entries(kb.anchors)) {
-    if (symbols.some((s) => norm(s).includes(t))) out.add(path);
+    const hit = symbols.some((s) => (codeShaped ? norm(s).includes(t) : symbolTokens(s).includes(t)));
+    if (hit) out.add(path);
   }
   return out;
+}
+
+/** Split an identifier into its lowercase word tokens: camelCase, PascalCase,
+ *  ALLCAPS runs, snake_case, kebab-case, and dotted members. */
+const TOKEN_CACHE = new Map<string, string[]>();
+function symbolTokens(symbol: string): string[] {
+  const cached = TOKEN_CACHE.get(symbol);
+  if (cached) return cached;
+  const tokens = symbol
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((x) => x.toLowerCase());
+  TOKEN_CACHE.set(symbol, tokens);
+  return tokens;
 }
 
 /** An absence note's verdict comes from the keeper's stamp (it re-runs the
@@ -296,14 +428,35 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
   const lens = stacks.map(bm25Len);
   const avgLen = Math.max(1, lens.reduce((a, b) => a + b, 0) / Math.max(1, lens.length));
 
+  // Hook-mode name-channel length normalization. Hook scoring is a flat
+  // presence·idf sum with NO length term, so a note's name channel (title +
+  // aliases) buys score by SURFACE AREA: aliases are natural-language symptom
+  // phrases, and every content word in them is another chance to match. Measured
+  // 2026-07-29 on 563 logged queries — hooks/kb-elicit.mjs carries 34 aliases
+  // (108 name tokens vs a 22-token median) and won 123/456 injections (27%),
+  // pulled in by "another", "first", "already", "resume" sitting inside phrases
+  // like "capture worklist has files from another directory". Across the corpus,
+  // name-channel size vs injections won: r = 0.71. Tool mode already divides by
+  // length (BM25 b·len/avgLen); this is the same correction for the mode where
+  // precision actually matters.
+  const nameIds = stacks.map((h) => Math.max(1, tokenCount(h.name)));
+  const avgNameIds = Math.max(1, nameIds.reduce((a, b) => a + b, 0) / Math.max(1, nameIds.length));
+
   // Convergence channel: code-shaped term → files where it's a declared symbol.
   const symFiles = new Map<string, Set<string>>();
   if (opts.notesIndex) {
-    for (const t of terms) if (isCodeShaped(t)) symFiles.set(t, resolveTermToSymbolFiles(opts.notesIndex, t));
+    // Every term gets the lookup, not just code-shaped ones. isCodeShaped is a
+    // SPELLING test (digits/underscore/hyphen/interior caps), not a "does this
+    // match the codebase" test — it rejects `keeper` though src/keeper.ts
+    // exists, so in a repo whose domain nouns are ordinary words the strongest
+    // channel we have was switched off: convergence fired on 1 of 236 logged
+    // queries. The shape asymmetry now lives inside the resolver, where it
+    // guards precision without gating access.
+    for (const t of terms) symFiles.set(t, resolveTermToSymbolFiles(opts.notesIndex, t));
   }
 
   const rareMax = rarityMax(notes.length);
-  const scored: { note: FoldedNote; score: number; convergence: boolean; rare: boolean; strongTerms: number }[] = [];
+  const scored: { note: FoldedNote; score: number; convergence: boolean; rare: boolean; strongTerms: number; carriers: string[] }[] = [];
   for (let i = 0; i < notes.length; i++) {
     const note = notes[i];
     const h = stacks[i];
@@ -313,9 +466,11 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
     let strongTerms = 0;
     let convergence = false;
     let rare = false;
+    let hardEvidence = false;
+    const carriers: string[] = [];
     for (let k = 0; k < terms.length; k++) {
       const t = terms[k];
-      const inName = hits(h.name, h.nameSquash, t);
+      let inName = hits(h.name, h.nameSquash, t);
       let inAnchor = hits(h.anchor, h.anchorSquash, t);
       // Lane-2 admission (term matches ONLY via the keeper's symbol inventory)
       // stays off in strongOnly: an arbitrary sentence sharing one symbol with
@@ -328,7 +483,15 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
         inAnchor = note.anchors.some((a) => files.has(a.path));
       }
       const inBody = h.body.includes(norm(t));
-      if (!inName && !inAnchor && !inBody) continue;
+      if (!inName && !inAnchor && !inBody) {
+        // Presence above is substring containment, so "charging" misses a title
+        // that says "charge" and the term is dropped before the shape gate ever
+        // sees it — stemming in wordHit alone would be a no-op. Hook mode only:
+        // tool mode scores by countOcc, which would credit a stem hit with zero
+        // weight, so its behaviour stays byte-identical.
+        if (!(opts.strongOnly && !isCodeShaped(t) && wordHit(h.nameRaw, t))) continue;
+        inName = true;
+      }
       // Hook-mode term eligibility — the query is an arbitrary English
       // sentence, so a term counts only when it (a) DISCRIMINATES (a word
       // matching half the notebook — "save", "files" — identifies nothing)
@@ -345,11 +508,17 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
       if (inName || inAnchor) { strong = true; strongTerms++; }
       if (df[k] <= rareMax) rare = true;
       const files = symFiles.get(t);
-      if (files?.size && note.anchors.some((a) => files.has(a.path))) convergence = true;
+      const converged = !!files?.size && note.anchors.some((a) => files.has(a.path));
+      if (converged) convergence = true;
+      // Evidence strong enough to stand alone: an identifier the user typed, or
+      // a term confirmed by the note's own anchor symbols. See HOOK_MIN_CARRIERS.
+      if (converged || isCodeShaped(t)) hardEvidence = true;
+      carriers.push(`${t}:${inName ? 'n' : ''}${inAnchor ? 'a' : ''}${inBody ? 'b' : ''}${converged ? 'c' : ''}`);
       if (opts.strongOnly) {
-        // Hook mode keeps its calibrated presence·idf boost (unwired in the
-        // validation config; kept intact for a possible injection A/B).
-        boost += ((inName ? 3 : 0) + (inAnchor ? 2 : 0) + (inBody ? 1 : 0)) * idf(k);
+        // Presence·idf, with the name channel divided by how many identifiers
+        // that note put in the channel — a match on a 3-alias note outranks the
+        // same match on a 34-alias one. See nameIds above for the measurement.
+        boost += ((inName ? CHANNEL_W.name / hookNameNorm(nameIds[i], avgNameIds) : 0) + (inAnchor ? CHANNEL_W.anchor : 0) + (inBody ? CHANNEL_W.body : 0)) * idf(k);
       } else {
         // BM25: term frequency across weighted channels, saturated by k1,
         // normalized by doc length. Lane-2 anchor admission (presence with no
@@ -371,10 +540,15 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
       rare = true;
       strongTerms = Math.max(strongTerms, 1);
       boost += PATH_MATCH_BOOST;
+      carriers.push('<path>');
     }
     if (!covered) continue;
     if (opts.strongOnly && !strong) continue; // body-word coverage ≠ a hit on an arbitrary sentence
-    scored.push({ note, score: boost, convergence, rare, strongTerms });
+    // One ORDINARY word is a graze — see HOOK_MIN_CARRIERS. Uniform on every
+    // candidate at every rank: a hit that clears the bar is eligible to rank
+    // first, whatever fell away above it.
+    if (opts.strongOnly && !pathNamedIds.has(note.id) && !hardEvidence && carriers.length < HOOK_MIN_CARRIERS) continue;
+    scored.push({ note, score: boost, convergence, rare, strongTerms, carriers });
   }
 
   if (!scored.length) {
@@ -384,7 +558,7 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
 
   // Freshness NOW for everything scored, then hard-tier: fresh+active first.
   const rareById = new Map(scored.map((s) => [s.note.id, s.rare]));
-  const withTier: KbSearchHit[] = scored.map(({ note, score, convergence, strongTerms }) => {
+  const withTier: KbSearchHit[] = scored.map(({ note, score, convergence, strongTerms, carriers }) => {
     // The keeper's rename overlay lets a note whose file was renamed resolve to
     // its new path ('moved', not 'missing'), so a byte-exact refactor doesn't
     // send the note inactive. Live-re-verified inside stampAnchors.
@@ -394,13 +568,14 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
     const inactive = note.type !== 'lesson' && anchorsAllMissing(stamped);
     const stale = stamped.some((s) => s.state === 'changed' || s.state === 'missing');
     const tier = inactive ? 3 : note.status !== 'active' ? 2 : stale ? 1 : 0;
-    return { note, score, tier, inactive, stamped, absence: absenceVerdict(note, opts.notesIndex), convergence, strongTerms };
+    return { note, score, tier, inactive, stamped, absence: absenceVerdict(note, opts.notesIndex), convergence, strongTerms, carriers };
   });
   // Recall (hook mode) must never inject a note whose subject doesn't exist on
   // the current branch — a review/feature-branch note viewed from elsewhere.
   // Tool search keeps them (findable, bottom tier, labelled below).
   const surfaced = opts.strongOnly ? withTier.filter((h) => !h.inactive) : withTier;
   surfaced.sort((a, b) => a.tier - b.tier || b.score - a.score || (a.note.id < b.note.id ? -1 : 1));
+
 
   // Hook-mode rarity gate (calibrated 2026-07-06, 117-note arches corpus:
   // 27/27 real prompts inject, 8/8 boilerplate probes silent): a top hit
@@ -411,11 +586,18 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
   // corpus grows. Every suppression is metric-logged for re-calibration.
   // The convergence override (HOOK_CONVERGE_MIN) rescues the one measured
   // false-suppression mode: a real task named entirely in common words.
+  // Convergence is the strictest evidence in the system — the term matched the
+  // note's own authored text AND is a declared symbol in that note's anchor
+  // file, two independent channels agreeing (11/11 precise at rank 0 on the 27q
+  // corpus). It was computed and used for the implant tier but never consulted
+  // here, so an exact-symbol prompt could be suppressed purely because the
+  // symbol is common across sibling notes in a small notebook.
   if (
     opts.strongOnly && notes.length >= HOOK_FLOOR_MIN_NOTES && surfaced.length &&
-    !rareById.get(surfaced[0].note.id) && surfaced[0].strongTerms < HOOK_CONVERGE_MIN
+    !rareById.get(surfaced[0].note.id) && !surfaced[0].convergence &&
+    surfaced[0].strongTerms < HOOK_CONVERGE_MIN
   ) {
-    if (!opts.noMissLog) logMetric(root, 'inject-log', { query: query.slice(0, 200), suppressed: true, top: surfaced[0].note.id, score: Math.round(surfaced[0].score * 10) / 10, strongTerms: surfaced[0].strongTerms });
+    if (!opts.noMissLog) logMetric(root, 'inject-log', { query: query.slice(0, 200), suppressed: true, top: surfaced[0].note.id, score: Math.round(surfaced[0].score * 10) / 10, strongTerms: surfaced[0].strongTerms, carriers: surfaced[0].carriers });
     return { hits: [], terms, warnings };
   }
 
@@ -431,7 +613,17 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
   const top = trimmed[0]?.score ?? 0;
   const omitted = trimmed.slice(max).filter((h) => h.score >= RESULTS_FLOOR * top).length;
 
-  return { hits: trimmed.slice(0, max), terms, warnings, omitted, maxUsed: max };
+  // Session dedup runs LAST, on the page we would actually have shown, so a
+  // suppressed repeat frees no slot: the page shrinks (all-seen → inject
+  // nothing) instead of pulling up a note the cap had already rejected. That
+  // keeps this "don't repeat yourself" and not a second ranking pass. See
+  // excludeIds.
+  const page = trimmed.slice(0, max);
+  const deduped = opts.excludeIds?.size
+    ? page.filter((h) => !opts.excludeIds!.has(h.note.id))
+    : page;
+
+  return { hits: deduped, terms, warnings, omitted, maxUsed: max };
 }
 
 /** Body section of the rendered md (frontmatter stripped) for inlining. */

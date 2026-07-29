@@ -34,12 +34,20 @@ import { fileURLToPath } from "node:url";
 // the user's request. Consumed (deleted) on delivery; stale pendings (>24h,
 // e.g. a session resumed days later) are dropped.
 import { takePendingCapture } from "./elicit-core.mjs";
+// The host wraps the user's words in editor/subagent telemetry; that text is
+// file-rich and hijacks the path-name override in kb search. Strip it BEFORE
+// truncating, or a long <ide_selection> eats the whole query budget.
+import { recallQuery } from "./recall-query.mjs";
+// Per-session dedup: don't re-show a note this session already got, and forget
+// what was shown once the transcript shrinks (a compact). See recall-seen.mjs.
+import { readSeen, writeSeen, idsInPage, seenArgs } from "./recall-seen.mjs";
 
 // hooks/ sits beside dist/ in both the repo and the published package.
 const CLI = fileURLToPath(new URL("../dist/index.js", import.meta.url));
 
 const MAX_QUERY_CHARS = 2000; // pasted-code prompts: the head carries the ask
 const SEARCH_TIMEOUT_MS = 4000;
+
 
 let LOG_FILE = join(tmpdir(), "coldstart-kb-hook.log");
 function setLogRoot(root) { if (root) LOG_FILE = join(root, ".coldstart", "kb-hook.log"); }
@@ -85,13 +93,17 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     // (the first capture is what creates it).
     const pending = takePendingCapture(sid);
 
-    const prompt = String(input.prompt || "").slice(0, MAX_QUERY_CHARS).trim();
+    const prompt = recallQuery(input.prompt, MAX_QUERY_CHARS);
+
+    const tPath = String(input.transcript_path || "");
+    const seen = readSeen(sid, tPath, log);
 
     let page = "";
     // No notebook / no prompt → no recall search, not even a child process.
     if (prompt && existsSync(join(root, ".coldstart", "notebook", ".raw"))) {
+      const args = [CLI, "kb", "search", "--hook", "--max", "3", "--root", root, ...seenArgs(seen.ids)];
       try {
-        page = execFileSync("node", [CLI, "kb", "search", "--hook", "--max", "3", "--root", root, prompt], {
+        page = execFileSync("node", [...args, prompt], {
           encoding: "utf8",
           timeout: SEARCH_TIMEOUT_MS,
           stdio: ["ignore", "pipe", "ignore"],
@@ -117,6 +129,10 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     // agents never used it). Trust framing: [fresh] content is reliable
     // as-is; the caution that remains is about COMPLETENESS (a note names a
     // finding, not necessarily your whole file set), not about content.
+    // Record what this page hands over BEFORE the size guards below can trim
+    // it — a note the agent was shown is seen, whichever way it was rendered.
+    if (page) writeSeen(sid, [...seen.ids, ...idsInPage(page)], tPath);
+
     let block = "";
     if (page) block =
       `The repo's notebook (notes written by past agents after real tasks here) has entries ` +

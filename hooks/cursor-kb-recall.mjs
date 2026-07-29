@@ -29,6 +29,11 @@ import { cursorRoot } from "./cursor-input.mjs";
 // stop wrote its worklist payload to a pending file instead of blocking; it
 // rides this same next-prompt channel — capture first, then the user's request.
 import { takePendingCapture } from "./elicit-core.mjs";
+// Strip host telemetry wrappers before the query is built — see recall-query.mjs.
+import { recallQuery } from "./recall-query.mjs";
+// Per-session dedup shared with the other recall hooks — see recall-seen.mjs.
+// Hosts with no transcript path never reset; dedup still holds for the session.
+import { readSeen, writeSeen, idsInPage, seenArgs } from "./recall-seen.mjs";
 
 // hooks/ sits beside dist/ in both the repo and the published package.
 const CLI = fileURLToPath(new URL("../dist/index.js", import.meta.url));
@@ -80,13 +85,17 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     // (the first capture is what creates it).
     const pending = takePendingCapture(sid);
 
-    const prompt = String(input.prompt || "").slice(0, MAX_QUERY_CHARS).trim();
+    const prompt = recallQuery(input.prompt, MAX_QUERY_CHARS);
+
+    const tPath = String(input.transcript_path || "");
+    const seen = readSeen(sid, tPath, log);
 
     let page = "";
     // No notebook / no prompt → no recall search, not even a child process.
     if (prompt && existsSync(join(root, ".coldstart", "notebook", ".raw"))) {
+      const args = [CLI, "kb", "search", "--hook", "--max", "3", "--root", root, ...seenArgs(seen.ids)];
       try {
-        page = execFileSync("node", [CLI, "kb", "search", "--hook", "--max", "3", "--root", root, prompt], {
+        page = execFileSync("node", [...args, prompt], {
           encoding: "utf8",
           timeout: SEARCH_TIMEOUT_MS,
           stdio: ["ignore", "pipe", "ignore"],
@@ -108,6 +117,10 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     // Pointer page — titles + gists + an OPENABLE note path, never a full body.
     // (Same framing as codex-kb-recall.mjs; notes are REFERENCE DATA, not
     // instructions.)
+    // Record what this page hands over before the size guards can trim it — a
+    // note the agent was shown is seen, whichever way it ends up rendered.
+    if (page) writeSeen(sid, [...seen.ids, ...idsInPage(page)], tPath);
+
     let block = "";
     if (page) block =
       `The repo's notebook (notes written by past agents after real tasks here) has entries ` +
