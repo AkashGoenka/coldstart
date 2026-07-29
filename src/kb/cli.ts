@@ -2,7 +2,7 @@
  * `coldstart kb <verb>` — the notebook's CLI surface. Same reader discipline
  * as find/gs: stdout carries only the answer, diagnostics go to stderr.
  *
- *   kb search <words...> [--max N] [--json] [--hook] [--no-index]
+ *   kb search <words...> [--max N] [--json] [--hook] [--no-index] [--seen a,b]
  *   kb lookup <path> [symbol] [--json]
  *   kb write <spec.json | ->  [--into ID] [--new] [--force] [--session S]
  *   kb status [--paths a,b,c] [--json]
@@ -55,6 +55,8 @@ interface KbFlags {
   noOpen: boolean;
   decision?: string;
   why?: string;
+  /** --seen a,b,c — note ids already injected this session (hook dedup). */
+  seen?: string[];
 }
 
 function parseKbArgs(argv: string[]): { positional: string[]; flags: KbFlags } {
@@ -68,6 +70,7 @@ function parseKbArgs(argv: string[]): { positional: string[]; flags: KbFlags } {
       case '--hook': flags.hook = true; break;
       case '--no-index': flags.noIndex = true; break;
       case '--max': flags.max = Number(argv[++i]) || undefined; break;
+      case '--seen': flags.seen = (argv[++i] ?? '').split(',').map((s) => s.trim()).filter(Boolean); break;
       case '--into': flags.into = argv[++i]; break;
       case '--new': flags.isNew = true; break;
       case '--force': flags.force = true; break;
@@ -178,6 +181,7 @@ async function cmdSearch(words: string[], flags: KbFlags): Promise<number> {
     maxResults: flags.max ?? (flags.hook ? 3 : 8),
     source: flags.hook ? 'hook' : 'tool',
     strongOnly: flags.hook, // an arbitrary user sentence must not inject weak grazes
+    excludeIds: flags.seen?.length ? new Set(flags.seen) : undefined,
   });
   for (const w of result.warnings) err(`[coldstart kb] ${w}`);
 
@@ -190,6 +194,10 @@ async function cmdSearch(words: string[], flags: KbFlags): Promise<number> {
       implant: shouldImplantTop(result),
       convergence: result.hits[0].convergence,
       strongTerms: result.hits[0].strongTerms,
+      // Which words carried the hit, and in which channel — not recoverable
+      // from the query string after the fact, and the input any later analysis
+      // of injection quality needs.
+      carriers: result.hits[0].carriers,
       scores: result.hits.map((h) => Math.round(h.score * 100) / 100),
     });
   }

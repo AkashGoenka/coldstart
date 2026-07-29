@@ -395,3 +395,182 @@ describe('kb commit — deliberate publish', () => {
     expect(res.message).toContain('not a git repository');
   });
 });
+
+/**
+ * Matcher repairs (2026-07-29). Three defects found by replaying 238 logged
+ * hook injections against the real notebook:
+ *   - wordHit was a strict \b regex, so "fires" never reached a note titled
+ *     "…capture fire";
+ *   - the convergence signal was computed and used for the implant tier but
+ *     never consulted by the suppression gate;
+ *   - the symbol lookup that produces convergence was gated on isCodeShaped —
+ *     a SPELLING test — so in a repo whose domain nouns are ordinary words it
+ *     fired on 1 of 236 queries.
+ */
+describe('matcher repairs', () => {
+  /** notesIndex stub: anchor path → declared symbol names. */
+  function symbolIndex(anchors: Record<string, string[]>) {
+    return { v: 2, anchors, renames: {}, absence: {} } as never;
+  }
+
+  it('stemming: a plural/tense query term reaches the singular authored title', async () => {
+    seedCorpus(35);
+    touch('hooks/trigger.mjs');
+    appendRecord(root, {
+      id: 'capture-fire-note', type: 'flow', op: 'put',
+      title: 'how notebook capture fire works',
+      summary: 'The trigger arms on volume and fires on descent.',
+      anchors: [{ path: 'hooks/trigger.mjs', symbols: ['armTrigger'] }],
+    } as never);
+
+    for (const q of ['why does capture fires twice', 'why did capture fired twice', 'capture firing twice']) {
+      const res = await kbSearch(root, q, { strongOnly: true, noMissLog: true, source: 'hook' });
+      expect(res.hits.length, `query: ${q}`).toBeGreaterThan(0);
+      expect(res.hits[0].note.id, `query: ${q}`).toBe('capture-fire-note');
+    }
+  });
+
+  it('stemming does not merge unrelated words', async () => {
+    seedCorpus(35);
+    touch('src/billing/charge.ts');
+    appendRecord(root, {
+      id: 'charge-note', type: 'flow', op: 'put',
+      title: 'how the charge pipeline settles',
+      summary: 'Charges settle nightly.',
+      anchors: [{ path: 'src/billing/charge.ts' }],
+    } as never);
+    // "charging" stems to the same root as "charge"; "chart" must not.
+    // The query carries a SECOND term from the note's own title ("pipeline")
+    // so this stays a test of stemming and not of HOOK_MIN_CARRIERS — one
+    // ordinary word is deliberately not enough to inject. A stemming
+    // regression is still caught: without it only "pipeline" carries, the hit
+    // falls to a single prose carrier and drops out entirely.
+    const ok = await kbSearch(root, 'the charging pipeline fails at night', { strongOnly: true, noMissLog: true, source: 'hook' });
+    expect(ok.hits[0]?.note.id).toBe('charge-note');
+    const no = await kbSearch(root, 'the chart is wrong', { strongOnly: true, noMissLog: true, source: 'hook' });
+    expect(no.hits.find((h) => h.note.id === 'charge-note')).toBeUndefined();
+  });
+
+  it('one ordinary word is a graze; two carriers inject (HOOK_MIN_CARRIERS)', async () => {
+    seedCorpus(35);
+    touch('src/billing/refund.ts');
+    appendRecord(root, {
+      id: 'refund-note', type: 'file', op: 'put',
+      title: 'how refunds settle overnight',
+      summary: 'Refunds settle in the nightly batch.',
+      anchors: [{ path: 'src/billing/refund.ts' }],
+    } as never);
+    // ONE plain-English carrier ("refunds" → the title) is a homonym far more
+    // often than a topic match — measured 5% precise on 140 labeled injections.
+    const one = await kbSearch(root, 'can you look at refunds today', { strongOnly: true, noMissLog: true, source: 'hook' });
+    expect(one.hits.find((h) => h.note.id === 'refund-note')).toBeUndefined();
+    // TWO independent carriers ("refunds" + "settle") clear the bar.
+    const two = await kbSearch(root, 'how do refunds settle', { strongOnly: true, noMissLog: true, source: 'hook' });
+    expect(two.hits[0]?.note.id).toBe('refund-note');
+    // Tool mode is unaffected — the agent chose its own terms.
+    const tool = await kbSearch(root, 'refunds', { noMissLog: true, source: 'tool' });
+    expect(tool.hits.find((h) => h.note.id === 'refund-note')).toBeDefined();
+  });
+
+  it('excludeIds suppresses a repeat without promoting anything into its slot', async () => {
+    seedCorpus(35);
+    for (const [id, p, title] of [
+      ['alpha-note', 'src/pay/alpha.ts', 'how the alpha ledger reconciles'],
+      ['beta-note', 'src/pay/beta.ts', 'how the beta ledger reconciles'],
+    ] as const) {
+      touch(p);
+      appendRecord(root, { id, type: 'file', op: 'put', title, summary: `${title}.`, anchors: [{ path: p }] } as never);
+    }
+    const q = 'how does the ledger reconciles';
+    const base = await kbSearch(root, q, { strongOnly: true, noMissLog: true, source: 'hook' });
+    expect(base.hits.length).toBeGreaterThan(1);
+
+    // Excluding the top hit must SHRINK the page, leaving the rest in order —
+    // never backfill a lower-ranked note into the freed slot.
+    const ded = await kbSearch(root, q, {
+      strongOnly: true, noMissLog: true, source: 'hook',
+      excludeIds: new Set([base.hits[0].note.id]),
+    });
+    expect(ded.hits.map((h) => h.note.id)).toEqual(base.hits.slice(1).map((h) => h.note.id));
+
+    // Everything already seen → inject nothing at all.
+    const all = await kbSearch(root, q, {
+      strongOnly: true, noMissLog: true, source: 'hook',
+      excludeIds: new Set(base.hits.map((h) => h.note.id)),
+    });
+    expect(all.hits).toHaveLength(0);
+  });
+
+  it('convergence bypasses the suppression gate', async () => {
+    // A common word (df above rareMax, so not "rare") that is nonetheless a
+    // declared symbol in the note's own anchor file. Two channels agree →
+    // it must inject rather than being suppressed as a graze.
+    seedCorpus(35);
+    touch('src/status.ts');
+    appendRecord(root, {
+      id: 'status-note', type: 'file', op: 'put',
+      title: 'keeper status',
+      summary: 'Renders keeper liveness and freshness.',
+      anchors: [{ path: 'src/status.ts', symbols: ['renderStatus'] }],
+    } as never);
+    // Decoys mention "status" in their BODY only: enough to push df out of the
+    // rare band, not enough to make them scorable hits (a plain word must
+    // whole-word-match the name channel), so rank 0 stays the real note.
+    for (let i = 0; i < 6; i++) {
+      touch(`src/decoy/other_${i}.ts`);
+      appendRecord(root, {
+        id: `decoy-${i}`, type: 'file', op: 'put',
+        title: `unrelated corner ${i}`,
+        summary: `Decoy ${i} incidentally mentions status in prose.`,
+        anchors: [{ path: `src/decoy/other_${i}.ts` }],
+      } as never);
+    }
+    // Only "status" may carry — any other rare word would inject via the
+    // rarity bypass and the test would prove nothing.
+    const q = 'can you check status';
+    const opts = { strongOnly: true, noMissLog: true, source: 'hook' as const };
+
+    // Without the index there is no convergence signal → the gate suppresses.
+    expect((await kbSearch(root, q, opts)).hits).toHaveLength(0);
+
+    // With the index, "status" is a declared symbol token in the note's own
+    // anchor file → convergence → the same query injects.
+    const withIdx = await kbSearch(root, q, {
+      ...opts, notesIndex: symbolIndex({ 'src/status.ts': ['renderStatus'] }),
+    });
+    expect(withIdx.hits.length).toBeGreaterThan(0);
+    expect(withIdx.hits[0].note.id).toBe('status-note');
+    expect(withIdx.hits[0].convergence).toBe(true);
+  });
+
+  it('convergence lookup: English words match whole tokens, not fragments', async () => {
+    seedCorpus(35);
+    touch('src/init.ts');
+    appendRecord(root, {
+      id: 'gitattributes-note', type: 'file', op: 'put',
+      title: 'init writes the gitattributes entry',
+      summary: 'Ensures the notebook diff driver is registered.',
+      anchors: [{ path: 'src/init.ts', symbols: ['ensureGitattributes'] }],
+    } as never);
+    const notesIndex = symbolIndex({ 'src/init.ts': ['ensureGitattributes'] });
+    const opts = { strongOnly: true, noMissLog: true, source: 'hook' as const, notesIndex };
+
+    // "but" is a substring of ensureGitattri(but)es — the measured luck class.
+    const luck = await kbSearch(root, 'gitattributes but not the driver', opts);
+    const hit = luck.hits.find((h) => h.note.id === 'gitattributes-note');
+    expect(hit?.carriers.some((c) => c.startsWith('but:'))).not.toBe(true);
+
+    // A whole token still converges.
+    const real = await kbSearch(root, 'where does init handle gitattributes', opts);
+    expect(real.hits[0]?.note.id).toBe('gitattributes-note');
+    expect(real.hits[0]?.convergence).toBe(true);
+  });
+
+  it('carriers record which term carried the hit and in which channel', async () => {
+    seedCorpus(35);
+    const res = await kbSearch(root, 'Widget7Loader fails to persist', {
+      strongOnly: true, noMissLog: true, source: 'hook',
+    });
+    expect(res.hits[0].carriers.some((c) => c.toLowerCase().startsWith('widget7loader:'))).toBe(true);
+  });
+});

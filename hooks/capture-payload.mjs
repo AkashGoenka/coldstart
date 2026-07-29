@@ -119,7 +119,13 @@ naming convention) is exactly what to record — ONLY if you actually observed i
 session's work. Never guess at usage or go searching for it now. Files flagged "no consumers \
 in import graph" are where an observed usage fact matters most.
 7. Fixed a bug? The cause goes in the culpable file's note; the SYMPTOM words go in \
-"aliases" — symptoms are what a future agent will search.
+"aliases" — symptoms are what a future agent will search. Aliases are SEARCH KEYS, not \
+sentences: each one 2-5 words, no filler ("after", "already", "another", "still"), because \
+every word in an alias is an independent match chance and a long alias makes the note fire \
+on prompts it has nothing to do with. Cover the vocabulary THIS FILE owns — the concept \
+nouns someone would type when they want this file, including the ones already in its name \
+and symbols. A note about alias handling that never says "aliases" cannot be found by \
+someone asking about aliases. 6-10 aliases is plenty; more surface area is not more recall.
 8. Read a note this session that proved wrong? Correct or retract it now — you are the warm \
 agent; there is no "next".
 9. Firsthand only: nothing from a subagent's report you didn't verify yourself.

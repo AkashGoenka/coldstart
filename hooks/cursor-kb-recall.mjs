@@ -29,6 +29,8 @@ import { cursorRoot } from "./cursor-input.mjs";
 // stop wrote its worklist payload to a pending file instead of blocking; it
 // rides this same next-prompt channel — capture first, then the user's request.
 import { takePendingCapture } from "./elicit-core.mjs";
+// Strip host telemetry wrappers before the query is built — see recall-query.mjs.
+import { recallQuery } from "./recall-query.mjs";
 
 // hooks/ sits beside dist/ in both the repo and the published package.
 const CLI = fileURLToPath(new URL("../dist/index.js", import.meta.url));
@@ -80,7 +82,7 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     // (the first capture is what creates it).
     const pending = takePendingCapture(sid);
 
-    const prompt = String(input.prompt || "").slice(0, MAX_QUERY_CHARS).trim();
+    const prompt = recallQuery(input.prompt, MAX_QUERY_CHARS);
 
     let page = "";
     // No notebook / no prompt → no recall search, not even a child process.

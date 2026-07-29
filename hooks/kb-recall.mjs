@@ -23,7 +23,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, appendFileSync, readFileSync, writeFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -34,12 +34,71 @@ import { fileURLToPath } from "node:url";
 // the user's request. Consumed (deleted) on delivery; stale pendings (>24h,
 // e.g. a session resumed days later) are dropped.
 import { takePendingCapture } from "./elicit-core.mjs";
+// The host wraps the user's words in editor/subagent telemetry; that text is
+// file-rich and hijacks the path-name override in kb search. Strip it BEFORE
+// truncating, or a long <ide_selection> eats the whole query budget.
+import { recallQuery } from "./recall-query.mjs";
 
 // hooks/ sits beside dist/ in both the repo and the published package.
 const CLI = fileURLToPath(new URL("../dist/index.js", import.meta.url));
 
 const MAX_QUERY_CHARS = 2000; // pasted-code prompts: the head carries the ask
 const SEARCH_TIMEOUT_MS = 4000;
+
+/**
+ * Per-session recall dedup.
+ *
+ * 61% of injections re-showed a note the SAME session had already been given
+ * (worst case 12×). That is pure tax: the title and gist are already in the
+ * agent's context, so the repeat buys nothing and pushes the page toward the
+ * host's size cap. We remember the ids shown so far and pass them to
+ * `kb search --seen`, which drops them AFTER ranking (no backfill — the page
+ * shrinks, and an all-seen page injects nothing).
+ *
+ * Reset on COMPACTION, not on a clock. After /compact the session id is
+ * unchanged but the agent's context is gone, so a previously-shown note is
+ * genuinely absent again and SHOULD be re-injectable. The transcript file
+ * shrinking is the observable signal (the same one kb-elicit uses); we store
+ * its size alongside the ids and clear the set when it drops.
+ */
+const SEEN_TTL_MS = 24 * 60 * 60 * 1000;
+const seenPath = (sid) => join(tmpdir(), `coldstart-recall-seen-${sid}.json`);
+
+function transcriptSize(p) {
+  try { return p ? statSync(p).size : 0; } catch { return 0; }
+}
+
+function readSeen(sid, tPath) {
+  if (!sid) return { ids: [], size: 0 };
+  try {
+    const st = JSON.parse(readFileSync(seenPath(sid), "utf8"));
+    if (!st || !Array.isArray(st.ids)) return { ids: [], size: 0 };
+    if (Date.now() - (st.ts || 0) > SEEN_TTL_MS) return { ids: [], size: 0 };
+    // Transcript shrank → context was compacted → forget what was shown.
+    const now = transcriptSize(tPath);
+    if (now && st.size && now < st.size) {
+      log(`compaction detected (${st.size} -> ${now} bytes): clearing ${st.ids.length} seen ids`);
+      return { ids: [], size: now };
+    }
+    return { ids: st.ids, size: st.size || 0 };
+  } catch { return { ids: [], size: 0 }; }
+}
+
+function writeSeen(sid, ids, tPath) {
+  if (!sid) return;
+  try {
+    writeFileSync(seenPath(sid), JSON.stringify({
+      ids: [...new Set(ids)].slice(-200), // bounded; a session never shows this many
+      size: transcriptSize(tPath),
+      ts: Date.now(),
+    }));
+  } catch { /* fail-open: dedup is an optimisation, never a gate */ }
+}
+
+/** Note ids on a rendered pointer page — each hit carries `→ open: …/<id>.md`. */
+function idsInPage(page) {
+  return [...page.matchAll(/→ open:\s*\S*?notes\/([\w.-]+)\.md/g)].map((m) => m[1]);
+}
 
 let LOG_FILE = join(tmpdir(), "coldstart-kb-hook.log");
 function setLogRoot(root) { if (root) LOG_FILE = join(root, ".coldstart", "kb-hook.log"); }
@@ -85,13 +144,18 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     // (the first capture is what creates it).
     const pending = takePendingCapture(sid);
 
-    const prompt = String(input.prompt || "").slice(0, MAX_QUERY_CHARS).trim();
+    const prompt = recallQuery(input.prompt, MAX_QUERY_CHARS);
+
+    const tPath = String(input.transcript_path || "");
+    const seen = readSeen(sid, tPath);
 
     let page = "";
     // No notebook / no prompt → no recall search, not even a child process.
     if (prompt && existsSync(join(root, ".coldstart", "notebook", ".raw"))) {
+      const args = [CLI, "kb", "search", "--hook", "--max", "3", "--root", root];
+      if (seen.ids.length) args.push("--seen", seen.ids.join(","));
       try {
-        page = execFileSync("node", [CLI, "kb", "search", "--hook", "--max", "3", "--root", root, prompt], {
+        page = execFileSync("node", [...args, prompt], {
           encoding: "utf8",
           timeout: SEARCH_TIMEOUT_MS,
           stdio: ["ignore", "pipe", "ignore"],
@@ -117,6 +181,10 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     // agents never used it). Trust framing: [fresh] content is reliable
     // as-is; the caution that remains is about COMPLETENESS (a note names a
     // finding, not necessarily your whole file set), not about content.
+    // Record what this page hands over BEFORE the size guards below can trim
+    // it — a note the agent was shown is seen, whichever way it was rendered.
+    if (page) writeSeen(sid, [...seen.ids, ...idsInPage(page)], tPath);
+
     let block = "";
     if (page) block =
       `The repo's notebook (notes written by past agents after real tasks here) has entries ` +

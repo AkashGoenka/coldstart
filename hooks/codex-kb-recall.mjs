@@ -27,6 +27,8 @@ import { existsSync, appendFileSync, readFileSync, writeFileSync } from "node:fs
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+// Strip host telemetry wrappers before the query is built — see recall-query.mjs.
+import { recallQuery } from "./recall-query.mjs";
 
 // hooks/ sits beside dist/ in both the repo and the published package.
 const CLI = fileURLToPath(new URL("../dist/index.js", import.meta.url));
@@ -74,7 +76,7 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     // No notebook → no tax, not even a child process.
     if (!existsSync(join(root, ".coldstart", "notebook", ".raw"))) process.exit(0);
 
-    const prompt = String(input.prompt || "").slice(0, MAX_QUERY_CHARS).trim();
+    const prompt = recallQuery(input.prompt, MAX_QUERY_CHARS);
     if (!prompt) process.exit(0);
 
     let page = "";
