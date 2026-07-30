@@ -12,8 +12,9 @@
  * scanning the code index here (C1 decoupling).
  *
  * Results carry freshness computed NOW (never trusted from write time);
- * absence notes print the keeper's re-run verdict stamp. Active+fresh
- * notes outrank stale/superseded ones as a hard tier, score within tier.
+ * absence notes print the keeper's re-run verdict stamp. Freshness is a LABEL,
+ * not a rank: only withdrawn notes (status) and notes whose subject is gone
+ * from this branch (inactive) are hard-tiered below score.
  *
  * Every zero-hit query is appended to the miss-log — the alias bet's failure
  * mode is SILENT (the agent just falls through to `find`), so the miss-log is
@@ -225,7 +226,7 @@ const HOOK_MIN_CARRIERS = 2;
  *  "arches/urls.py" yields ZERO terms; without this, naming a file is a no-op.
  *  The anchor-path squash must be ≥ this many chars to fire, so trivially short
  *  paths can't graze arbitrary prose. Boost dominates term scores so the named
- *  file leads its freshness tier. */
+ *  file leads its tier. */
 const PATH_MATCH_MIN_SQUASH = 6;
 const PATH_MATCH_BOOST = 100;
 
@@ -556,7 +557,8 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
     return { hits: [], terms, warnings };
   }
 
-  // Freshness NOW for everything scored, then hard-tier: fresh+active first.
+  // Freshness NOW for everything scored (never trusted from write time). It is
+  // LABELLED, never ranked — see the tier comment below.
   const rareById = new Map(scored.map((s) => [s.note.id, s.rare]));
   const withTier: KbSearchHit[] = scored.map(({ note, score, convergence, strongTerms, carriers }) => {
     // The keeper's rename overlay lets a note whose file was renamed resolve to
@@ -566,8 +568,27 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
     // Lessons are exempt (an absence lesson is ABOUT non-existence); any other
     // note whose anchored files are all gone is inactive on this branch.
     const inactive = note.type !== 'lesson' && anchorsAllMissing(stamped);
-    const stale = stamped.some((s) => s.state === 'changed' || s.state === 'missing');
-    const tier = inactive ? 3 : note.status !== 'active' ? 2 : stale ? 1 : 0;
+    // Tiers rank CLAIMS, not evidence age. Two conditions qualify: the note's
+    // subject is gone from this branch (inactive), or its author withdrew it
+    // (status). Anchor drift does NOT — "changed" means UNVERIFIED, not wrong,
+    // and the `[evidence changed: …]` label + the recall preamble's re-verify
+    // instruction already carry that.
+    //
+    // Staleness WAS a tier until 2026-07-30, and lexicographic order made it
+    // absolute: one moved byte in one cited file sank a note below every fresh
+    // one at any score. Measured over 249 logged prompts — the top-scoring note
+    // was buried on 50% of them (median 1.4×, max 4.3×, displaced to ranks
+    // 7-21), e.g. "why is the stop hook not firing" showed src/index.ts (3.9)
+    // while hooks/trigger.mjs (8.2) sat at rank 16. Flow notes were the
+    // systematic casualty: they anchor N files, so they go stale ~N× faster
+    // (100% of flows here vs 30% of file notes, 5.0 anchors vs 1.0) and reached
+    // a 3-slot page on 2% of queries — against ~30% by pure chance. Now 44%.
+    //
+    // Partial-`missing` is deliberately not a tier either: it is the same
+    // any-anchor binary rule one lane over, and it would re-sink exactly the
+    // multi-anchor flow notes this change frees. All-missing is `inactive`
+    // above, which is the real guard.
+    const tier = inactive ? 2 : note.status !== 'active' ? 1 : 0;
     return { note, score, tier, inactive, stamped, absence: absenceVerdict(note, opts.notesIndex), convergence, strongTerms, carriers };
   });
   // Recall (hook mode) must never inject a note whose subject doesn't exist on
@@ -650,6 +671,16 @@ export function shouldImplantTop(result: KbSearchResult): boolean {
   return h.length === 1 || h[0].score >= 1.8 * h[1].score;
 }
 
+/** Which file a note is about, when its title no longer says so.
+ *
+ *  A file note's title defaults to its anchor path (fold.ts), so historically
+ *  the path was always on the line. Once notes carry a natural-language title
+ *  — which is the only way a prompt can reach them, since prose is scored but
+ *  cannot admit a match — a fresh note would otherwise never show its subject
+ *  anywhere: the freshness stamp only names paths when they changed or moved. */
+const subjectPath = (n: FoldedNote): string =>
+  n.type === 'file' && n.anchors[0] && n.anchors[0].path !== n.title ? ` · ${n.anchors[0].path}` : '';
+
 const gistLines = (hit: KbSearchHit): string[] => {
   const n = hit.note;
   const kind = n.type === 'lesson' && n.kind ? `/${n.kind}` : '';
@@ -665,7 +696,7 @@ const gistLines = (hit: KbSearchHit): string[] => {
   // symbol inventory (what the note knows about), not prose.
   const facetGist = n.facets.length ? `facets: ${n.facets.map((f) => f.symbol).join(', ')}` : '';
   const gistSrc = (n.summary || n.body || facetGist || n.invariants[0] || '').replace(/\s+/g, ' ').trim();
-  const lines = [`- **${n.title}**  [${n.type}${kind}${status}]${fresh}`];
+  const lines = [`- **${n.title}**  [${n.type}${kind}${subjectPath(n)}${status}]${fresh}`];
   lines.push(`  → open: ${NOTES_REL}/${n.id}.md`);
   // Same preview grade as the kb search results page (user ruling 2026-07-08:
   // precise delivery may not always work — every hit carries enough preview to
@@ -721,7 +752,7 @@ export function renderResultsPage(query: string, result: KbSearchResult): string
       changed.length ? `evidence changed: ${changed.slice(0, 2).map((s) => s.path).join(', ')}${changed.length > 2 ? ` +${changed.length - 2}` : ''}` :
       moved.length ? `moved → ${moved.slice(0, 2).map((s) => s.movedTo).join(', ')}${moved.length > 2 ? ` +${moved.length - 2}` : ''}` :
       hit.stamped.every((s) => s.state === 'fresh') ? 'fresh' : 'not fully verified';
-    parts.push(`${i + 1}. ${n.title}  [${n.type}${kind} · ${fresh} · ${n.updated.slice(0, 10)}]`);
+    parts.push(`${i + 1}. ${n.title}  [${n.type}${kind}${subjectPath(n)} · ${fresh} · ${n.updated.slice(0, 10)}]`);
     parts.push(`   → open: ${NOTES_REL}/${n.id}.md`);
     const facetGist = n.facets.length ? `facets: ${n.facets.map((f) => f.symbol).join(', ')}` : '';
     let prose = (n.summary || n.body || n.invariants[0] || facetGist || '').replace(/\s+/g, ' ').trim();

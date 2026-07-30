@@ -230,21 +230,30 @@ describe('kb search', () => {
     expect(withoutKb.hits).toHaveLength(0);
   });
 
-  it('tiers: active+fresh outranks stale outranks superseded — as a hard tier', async () => {
+  // Tiers rank CLAIMS (withdrawn / subject-gone), never evidence age. A stale
+  // note that answers the question beats a fresh note that doesn't; the
+  // `[evidence changed: …]` label is what tells the agent to re-verify. Until
+  // 2026-07-30 staleness was a hard tier and this expectation was the reverse,
+  // which buried the top-scoring note on 50% of real logged prompts.
+  it('staleness LABELS but does not rank; superseded is still a hard tier', async () => {
     writeRepoFile('src/fresh.ts', 'stable\n');
     writeRepoFile('src/stale.ts', 'v1\n');
     const freshHash = hashFile(root, 'src/fresh.ts');
     const oldHash = hashFile(root, 'src/stale.ts');
     fs.writeFileSync(path.join(root, 'src/stale.ts'), 'v2 drifted\n');
 
-    appendRecord(root, { id: 'stale-note', type: 'lesson', op: 'put', kind: 'absence', title: 'shared topic alpha beta', body: 'alpha beta gamma delta', anchors: [{ path: 'src/stale.ts', hash: oldHash }] });
-    appendRecord(root, { id: 'fresh-note', type: 'lesson', op: 'put', kind: 'absence', title: 'shared topic alpha', body: 'alpha', anchors: [{ path: 'src/fresh.ts', hash: freshHash }] });
-    appendRecord(root, { id: 'dead-note', type: 'lesson', op: 'put', kind: 'absence', title: 'shared topic alpha beta gamma', body: 'alpha beta gamma' });
+    // stale-note covers every query term; fresh-note covers two. dead-note
+    // covers everything too — it may only lose on status.
+    appendRecord(root, { id: 'stale-note', type: 'lesson', op: 'put', kind: 'absence', title: 'shared alpha beta gamma', body: 'alpha beta gamma', anchors: [{ path: 'src/stale.ts', hash: oldHash }] });
+    appendRecord(root, { id: 'fresh-note', type: 'lesson', op: 'put', kind: 'absence', title: 'shared alpha', body: 'alpha', anchors: [{ path: 'src/fresh.ts', hash: freshHash }] });
+    appendRecord(root, { id: 'dead-note', type: 'lesson', op: 'put', kind: 'absence', title: 'shared alpha beta gamma', body: 'alpha beta gamma' });
     appendRecord(root, { id: 'dead-note', type: 'lesson', op: 'supersede', by: 'fresh-note' });
 
-    const { hits } = await kbSearch(root, 'shared topic alpha', { maxResults: 10 });
-    expect(hits.map((h) => h.note.id)).toEqual(['fresh-note', 'stale-note', 'dead-note']);
-    const page = renderSearchPage(root, 'shared topic alpha', { hits, terms: [], warnings: [] });
+    const { hits } = await kbSearch(root, 'shared alpha beta gamma', { maxResults: 10 });
+    expect(hits.map((h) => h.note.id)).toEqual(['stale-note', 'fresh-note', 'dead-note']);
+    expect(hits.find((h) => h.note.id === 'stale-note')!.tier).toBe(0);
+    expect(hits.find((h) => h.note.id === 'dead-note')!.tier).toBe(1);
+    const page = renderSearchPage(root, 'shared alpha beta gamma', { hits, terms: [], warnings: [] });
     expect(page).toContain('[evidence changed: src/stale.ts]');
     expect(page).toContain('superseded by: fresh-note');
   });
@@ -323,6 +332,36 @@ describe('kb write — two-phase gate', () => {
     // same path again → same id, same log (update, not duplicate)
     const again = await kbWrite(root, { type: 'file', path: 'src/kb/fold.ts', summary: 'updated' });
     expect((again as { id: string }).id).toBe((res as { id: string }).id);
+  });
+
+  // `verified` makes raw-log stamp the file's LIVE hash into the anchor, which
+  // resets freshness. Auto-stamping it on every put let a metadata-only edit
+  // re-certify a note against bytes nobody read — staleness laundered by a
+  // title fix. Knowledge (summary/facets/body) implies a read; a title does not.
+  it('a metadata-only write does NOT re-verify the anchor; a knowledge write does', async () => {
+    writeRepoFile('src/drift.ts', 'v1\n');
+    const first = await kbWrite(root, { type: 'file-single', path: 'src/drift.ts', summary: 'the original' });
+    const id = (first as { id: string }).id;
+    const rawPath = path.join(root, '.coldstart/notebook/.raw', `${id}.jsonl`);
+    const h1 = JSON.parse(fs.readFileSync(rawPath, 'utf8').trim()).anchors[0].hash;
+    expect(h1).toMatch(/^sha256:/);
+
+    fs.writeFileSync(path.join(root, 'src/drift.ts'), 'v2 drifted\n');
+
+    // metadata only — no summary, no facets: must not claim a fresh read
+    await kbWrite(root, { type: 'file', path: 'src/drift.ts', title: 'plain words for the file' });
+    const metaRec = JSON.parse(fs.readFileSync(rawPath, 'utf8').trim().split('\n').at(-1)!);
+    expect(metaRec.verified ?? []).toEqual([]);
+    expect(metaRec.anchors[0].hash).toBeUndefined();
+    const stale = await kbSearch(root, 'plain words for the file', { maxResults: 5, noMissLog: true });
+    expect(stale.hits[0].stamped[0].state).toBe('changed'); // still measured against v1
+
+    // a write that carries knowledge could only come from reading it — re-stamps
+    await kbWrite(root, { type: 'file', path: 'src/drift.ts', summary: 'now describes v2' });
+    const knowRec = JSON.parse(fs.readFileSync(rawPath, 'utf8').trim().split('\n').at(-1)!);
+    expect(knowRec.verified).toEqual(['src/drift.ts']);
+    expect(knowRec.anchors[0].hash).toMatch(/^sha256:/);
+    expect(knowRec.anchors[0].hash).not.toBe(h1);
   });
 
   it('facet flow-refs: exact title resolves to the coined id; unresolvable refs are KEPT and warned, never rejected', async () => {
