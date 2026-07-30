@@ -11,7 +11,9 @@
  *   title/summary/kind/body/scope  last-writer-wins
  *   character                      last-writer-wins (a file's character is a
  *                                  revisable judgment, hence a field not a type)
- *   aliases/invariants             union by exact text (retractable)
+ *   aliases                        union by exact text (retractable), then
+ *                                  CAPPED newest-first — see capAliases
+ *   invariants                     union by exact text (retractable)
  *   facets                         keyed by symbol: detail replaces, flows
  *                                  union, head stamped from the writing record
  *   behaviors                      keyed by concept_id: replace match, keep rest
@@ -122,7 +124,46 @@ export function fold(id: string, rawRecords: unknown[]): FoldResult {
   if (!note.title) {
     note.title = type === 'file' && note.anchors[0] ? note.anchors[0].path : id;
   }
+  note.aliases = capAliases(note.aliases);
   return { note, warnings };
+}
+
+/** Alias budget. The union above is unbounded, and that is a recall bug: a
+ *  note's alias list grows with how many times it has been written, so
+ *  per-write guidance cannot bound it. Measured on this repo 2026-07-30 —
+ *  every individual write obeyed the capture prompt's 6-10 rule (median 6
+ *  aliases / 20 words per put record), yet src/kb/search.ts's note reached 57
+ *  aliases across nine compliant writes. The cap has to live here, at the
+ *  union, or it does not exist.
+ *
+ *  Why it matters: `hookNameNorm` (search.ts) divides the name channel by its
+ *  own token count, so the channel is ZERO-SUM — every accumulated alias taxes
+ *  every other one. WORDS are the real currency, hence the word budget; the
+ *  count cap is the secondary guard against many short aliases.
+ *
+ *  Nothing is lost. The fold is a pure function of the append-only `.raw` log,
+ *  which still holds every alias ever written — widening or removing these
+ *  constants and re-rendering restores them exactly. */
+export const ALIAS_MAX = 12;
+export const ALIAS_MAX_WORDS = 40;
+/** Never trim below this, however long the individual aliases are. */
+const ALIAS_KEEP_MIN = 4;
+
+/** Keep the NEWEST aliases within budget. `applyPut` appends in fold order, so
+ *  this array is oldest-first and the tail is what the most recent writers —
+ *  the ones who saw the file in its current shape — chose as its search keys. */
+export function capAliases(aliases: string[]): string[] {
+  if (aliases.length <= ALIAS_KEEP_MIN) return aliases;
+  const kept: string[] = [];
+  let words = 0;
+  for (let i = aliases.length - 1; i >= 0; i--) {
+    const w = aliases[i].split(/\s+/).filter(Boolean).length;
+    const overBudget = kept.length >= ALIAS_MAX || words + w > ALIAS_MAX_WORDS;
+    if (overBudget && kept.length >= ALIAS_KEEP_MIN) break;
+    kept.push(aliases[i]);
+    words += w;
+  }
+  return kept.reverse();
 }
 
 function applyPut(note: FoldedNote, rec: Rec, warnings: string[]): void {

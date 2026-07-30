@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fold, stableStringify } from '../src/kb/fold.js';
+import { ALIAS_MAX, capAliases, fold, stableStringify } from '../src/kb/fold.js';
 import type { RawRecord } from '../src/kb/types.js';
 
 // Shorthand: a valid put record with overrides.
@@ -217,5 +217,35 @@ describe('kb fold — tolerant reader', () => {
   it('file note with no title falls back to its anchor path', () => {
     const note = fold('f1', [put({ id: 'f1', type: 'file', anchors: [{ path: 'src/x.ts' }], summary: 's' })]).note!;
     expect(note.title).toBe('src/x.ts');
+  });
+
+  // The union is what makes alias bloat a FOLD problem, not a writing problem:
+  // every individual write here obeys the 6-10 guidance and the note still ends
+  // up at 30. Capping anywhere else cannot work.
+  it('caps the alias union newest-first — compliant writes still accumulate', () => {
+    const writes = Array.from({ length: 5 }, (_, w) =>
+      put({ aliases: Array.from({ length: 6 }, (_, i) => `w${w}alias${i}`) }));
+    const uncapped = writes.flatMap((r) => (r as { aliases: string[] }).aliases);
+    expect(uncapped).toHaveLength(30);
+
+    const note = fold('n1', writes).note!;
+    expect(note.aliases.length).toBeLessThanOrEqual(ALIAS_MAX);
+    // Newest survive, oldest are dropped — the most recent writer saw the file
+    // in its current shape.
+    expect(note.aliases).toContain('w4alias5');
+    expect(note.aliases).not.toContain('w0alias0');
+    // Nothing is lost: the log is untouched, so a wider cap restores them.
+    expect(capAliases(uncapped)).toEqual(note.aliases);
+  });
+
+  it('the word budget binds before the count cap, but never below the floor', () => {
+    const wordy = Array.from({ length: 12 }, (_, i) => `long winded alias number ${i}`); // 5 words each
+    const kept = capAliases(wordy);
+    expect(kept.length).toBeLessThan(ALIAS_MAX);
+    expect(kept.join(' ').split(/\s+/)).toHaveLength(kept.length * 5);
+
+    // A single alias longer than the whole budget must not trim to nothing.
+    const huge = Array.from({ length: 5 }, (_, i) => `${'word '.repeat(30)}${i}`.trim());
+    expect(capAliases(huge).length).toBeGreaterThanOrEqual(4);
   });
 });
