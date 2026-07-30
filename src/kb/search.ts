@@ -671,6 +671,16 @@ export function shouldImplantTop(result: KbSearchResult): boolean {
   return h.length === 1 || h[0].score >= 1.8 * h[1].score;
 }
 
+/** Which file a note is about, when its title no longer says so.
+ *
+ *  A file note's title defaults to its anchor path (fold.ts), so historically
+ *  the path was always on the line. Once notes carry a natural-language title
+ *  — which is the only way a prompt can reach them, since prose is scored but
+ *  cannot admit a match — a fresh note would otherwise never show its subject
+ *  anywhere: the freshness stamp only names paths when they changed or moved. */
+const subjectPath = (n: FoldedNote): string =>
+  n.type === 'file' && n.anchors[0] && n.anchors[0].path !== n.title ? ` · ${n.anchors[0].path}` : '';
+
 const gistLines = (hit: KbSearchHit): string[] => {
   const n = hit.note;
   const kind = n.type === 'lesson' && n.kind ? `/${n.kind}` : '';
@@ -686,7 +696,7 @@ const gistLines = (hit: KbSearchHit): string[] => {
   // symbol inventory (what the note knows about), not prose.
   const facetGist = n.facets.length ? `facets: ${n.facets.map((f) => f.symbol).join(', ')}` : '';
   const gistSrc = (n.summary || n.body || facetGist || n.invariants[0] || '').replace(/\s+/g, ' ').trim();
-  const lines = [`- **${n.title}**  [${n.type}${kind}${status}]${fresh}`];
+  const lines = [`- **${n.title}**  [${n.type}${kind}${subjectPath(n)}${status}]${fresh}`];
   lines.push(`  → open: ${NOTES_REL}/${n.id}.md`);
   // Same preview grade as the kb search results page (user ruling 2026-07-08:
   // precise delivery may not always work — every hit carries enough preview to
@@ -742,7 +752,7 @@ export function renderResultsPage(query: string, result: KbSearchResult): string
       changed.length ? `evidence changed: ${changed.slice(0, 2).map((s) => s.path).join(', ')}${changed.length > 2 ? ` +${changed.length - 2}` : ''}` :
       moved.length ? `moved → ${moved.slice(0, 2).map((s) => s.movedTo).join(', ')}${moved.length > 2 ? ` +${moved.length - 2}` : ''}` :
       hit.stamped.every((s) => s.state === 'fresh') ? 'fresh' : 'not fully verified';
-    parts.push(`${i + 1}. ${n.title}  [${n.type}${kind} · ${fresh} · ${n.updated.slice(0, 10)}]`);
+    parts.push(`${i + 1}. ${n.title}  [${n.type}${kind}${subjectPath(n)} · ${fresh} · ${n.updated.slice(0, 10)}]`);
     parts.push(`   → open: ${NOTES_REL}/${n.id}.md`);
     const facetGist = n.facets.length ? `facets: ${n.facets.map((f) => f.symbol).join(', ')}` : '';
     let prose = (n.summary || n.body || n.invariants[0] || facetGist || '').replace(/\s+/g, ' ').trim();
