@@ -276,7 +276,16 @@ export async function kbWrite(root: string, spec: WriteSpec, opts: WriteOptions 
       ...(facets?.map((f) => f.symbol) ?? []),
     ])];
     record.anchors = [{ path, ...(symbols.length ? { symbols } : {}) }];
-    record.verified = [...new Set([path, ...(spec.verified ?? [])])];
+    // The file IS the anchor, and a write carrying KNOWLEDGE about it (summary,
+    // facets, body) could only come from having read it — that counts verified.
+    // A metadata-only touch does NOT. `verified` makes raw-log.ts stamp the
+    // file's live hash into the anchor, which resets freshness; auto-stamping on
+    // every put meant an alias or title fix silently re-certified the note
+    // against bytes nobody looked at. Caught 2026-07-30 by a 34-note title
+    // backfill that marked every one of them freshly verified. An explicit
+    // `verified` in the spec still wins — that is the agent's own claim.
+    const carriesKnowledge = !!(spec.summary?.trim() || facets?.length || spec.body?.trim());
+    record.verified = [...new Set([...(carriesKnowledge ? [path] : []), ...(spec.verified ?? [])])];
     if (character) record.character = character; // sugar form ("file-hub") lands here
   }
 

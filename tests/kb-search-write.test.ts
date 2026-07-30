@@ -334,6 +334,36 @@ describe('kb write — two-phase gate', () => {
     expect((again as { id: string }).id).toBe((res as { id: string }).id);
   });
 
+  // `verified` makes raw-log stamp the file's LIVE hash into the anchor, which
+  // resets freshness. Auto-stamping it on every put let a metadata-only edit
+  // re-certify a note against bytes nobody read — staleness laundered by a
+  // title fix. Knowledge (summary/facets/body) implies a read; a title does not.
+  it('a metadata-only write does NOT re-verify the anchor; a knowledge write does', async () => {
+    writeRepoFile('src/drift.ts', 'v1\n');
+    const first = await kbWrite(root, { type: 'file-single', path: 'src/drift.ts', summary: 'the original' });
+    const id = (first as { id: string }).id;
+    const rawPath = path.join(root, '.coldstart/notebook/.raw', `${id}.jsonl`);
+    const h1 = JSON.parse(fs.readFileSync(rawPath, 'utf8').trim()).anchors[0].hash;
+    expect(h1).toMatch(/^sha256:/);
+
+    fs.writeFileSync(path.join(root, 'src/drift.ts'), 'v2 drifted\n');
+
+    // metadata only — no summary, no facets: must not claim a fresh read
+    await kbWrite(root, { type: 'file', path: 'src/drift.ts', title: 'plain words for the file' });
+    const metaRec = JSON.parse(fs.readFileSync(rawPath, 'utf8').trim().split('\n').at(-1)!);
+    expect(metaRec.verified ?? []).toEqual([]);
+    expect(metaRec.anchors[0].hash).toBeUndefined();
+    const stale = await kbSearch(root, 'plain words for the file', { maxResults: 5, noMissLog: true });
+    expect(stale.hits[0].stamped[0].state).toBe('changed'); // still measured against v1
+
+    // a write that carries knowledge could only come from reading it — re-stamps
+    await kbWrite(root, { type: 'file', path: 'src/drift.ts', summary: 'now describes v2' });
+    const knowRec = JSON.parse(fs.readFileSync(rawPath, 'utf8').trim().split('\n').at(-1)!);
+    expect(knowRec.verified).toEqual(['src/drift.ts']);
+    expect(knowRec.anchors[0].hash).toMatch(/^sha256:/);
+    expect(knowRec.anchors[0].hash).not.toBe(h1);
+  });
+
   it('facet flow-refs: exact title resolves to the coined id; unresolvable refs are KEPT and warned, never rejected', async () => {
     writeRepoFile('src/a.py', 'def entry(): pass\n');
     const flow = await kbWrite(root, {
