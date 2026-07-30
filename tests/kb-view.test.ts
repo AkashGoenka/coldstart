@@ -94,6 +94,24 @@ describe('kb view — renderViewHtml', () => {
     expect(html).not.toContain('evil </script>');   // raw closer would break the tag
     expect(html).toContain('evil <\\/script>');       // neutralized form survives
   });
+
+  it('scopes the tab title to the repo carried in the data — never the old placeholder', () => {
+    const html = renderViewHtml(VIEW_TEMPLATE, { summary: { total: 0, repo: 'my-service' }, notes: [] });
+    expect(html).toContain('<title>Coldstart Notebook — my-service</title>');
+    expect(html).not.toContain('__TITLE__');
+    expect(html).not.toContain('arches'); // the hardcoded placeholder is gone
+  });
+
+  it('HTML-escapes the repo name in the title', () => {
+    const html = renderViewHtml(VIEW_TEMPLATE, { summary: { total: 0, repo: 'a<b>&c' }, notes: [] });
+    expect(html).toContain('<title>Coldstart Notebook — a&lt;b&gt;&amp;c</title>');
+  });
+
+  it('falls back to a bare title when no repo is present', () => {
+    const html = renderViewHtml(VIEW_TEMPLATE, { summary: { total: 0 }, notes: [] });
+    expect(html).toContain('<title>Coldstart Notebook</title>');
+    expect(html).not.toContain('__TITLE__');
+  });
 });
 
 describe('kb view — kbView side effects', () => {
@@ -106,7 +124,10 @@ describe('kb view — kbView side effects', () => {
     const out = kbView(root, VIEW_TEMPLATE, { open: false, generated: DATE });
     expect(out).toBe(path.join(notebookDir(root), 'index.html'));
     expect(fs.existsSync(out)).toBe(true);
-    expect(fs.readFileSync(out, 'utf8')).toContain('"total":1');
+    const written = fs.readFileSync(out, 'utf8');
+    expect(written).toContain('"total":1');
+    // tab title is scoped to this repo (basename of root), not a hardcoded name
+    expect(written).toContain(`<title>Coldstart Notebook — ${path.basename(root)}</title>`);
     expect(fs.readFileSync(path.join(notebookDir(root), '.gitignore'), 'utf8')).toContain('index.html');
   });
 });

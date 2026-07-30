@@ -85,10 +85,24 @@ export function buildViewData(root: string, generated: string) {
   return { summary: { total: notes.length, byType, byFreshness, repo: basename(root), generated }, notes };
 }
 
-/** Bake data into the template. `</` is neutralized so note text can't break the script tag. */
+/** Escape the three chars that matter inside an HTML text node (here, <title>). */
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** Bake data into the template. `</` is neutralized so note text can't break the
+ *  script tag; the tab title is scoped to the repo already carried in the data
+ *  (`summary.repo`, = basename(root)) so every notebook's view is named for its
+ *  own repo rather than a hardcoded placeholder. */
 export function renderViewHtml(template: string, data: unknown): string {
   const json = JSON.stringify(data).replace(/<\//g, '<\\/');
-  return template.replace('__DATA_JSON__', () => json);
+  const repo = (data as { summary?: { repo?: unknown } } | null)?.summary?.repo;
+  const title = typeof repo === 'string' && repo.trim()
+    ? `Coldstart Notebook — ${escapeHtml(repo)}`
+    : 'Coldstart Notebook';
+  return template
+    .replace('__TITLE__', () => title)
+    .replace('__DATA_JSON__', () => json);
 }
 
 /** Best-effort open in the OS default browser. Never throws. */
