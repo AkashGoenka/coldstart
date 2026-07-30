@@ -230,21 +230,30 @@ describe('kb search', () => {
     expect(withoutKb.hits).toHaveLength(0);
   });
 
-  it('tiers: active+fresh outranks stale outranks superseded — as a hard tier', async () => {
+  // Tiers rank CLAIMS (withdrawn / subject-gone), never evidence age. A stale
+  // note that answers the question beats a fresh note that doesn't; the
+  // `[evidence changed: …]` label is what tells the agent to re-verify. Until
+  // 2026-07-30 staleness was a hard tier and this expectation was the reverse,
+  // which buried the top-scoring note on 50% of real logged prompts.
+  it('staleness LABELS but does not rank; superseded is still a hard tier', async () => {
     writeRepoFile('src/fresh.ts', 'stable\n');
     writeRepoFile('src/stale.ts', 'v1\n');
     const freshHash = hashFile(root, 'src/fresh.ts');
     const oldHash = hashFile(root, 'src/stale.ts');
     fs.writeFileSync(path.join(root, 'src/stale.ts'), 'v2 drifted\n');
 
-    appendRecord(root, { id: 'stale-note', type: 'lesson', op: 'put', kind: 'absence', title: 'shared topic alpha beta', body: 'alpha beta gamma delta', anchors: [{ path: 'src/stale.ts', hash: oldHash }] });
-    appendRecord(root, { id: 'fresh-note', type: 'lesson', op: 'put', kind: 'absence', title: 'shared topic alpha', body: 'alpha', anchors: [{ path: 'src/fresh.ts', hash: freshHash }] });
-    appendRecord(root, { id: 'dead-note', type: 'lesson', op: 'put', kind: 'absence', title: 'shared topic alpha beta gamma', body: 'alpha beta gamma' });
+    // stale-note covers every query term; fresh-note covers two. dead-note
+    // covers everything too — it may only lose on status.
+    appendRecord(root, { id: 'stale-note', type: 'lesson', op: 'put', kind: 'absence', title: 'shared alpha beta gamma', body: 'alpha beta gamma', anchors: [{ path: 'src/stale.ts', hash: oldHash }] });
+    appendRecord(root, { id: 'fresh-note', type: 'lesson', op: 'put', kind: 'absence', title: 'shared alpha', body: 'alpha', anchors: [{ path: 'src/fresh.ts', hash: freshHash }] });
+    appendRecord(root, { id: 'dead-note', type: 'lesson', op: 'put', kind: 'absence', title: 'shared alpha beta gamma', body: 'alpha beta gamma' });
     appendRecord(root, { id: 'dead-note', type: 'lesson', op: 'supersede', by: 'fresh-note' });
 
-    const { hits } = await kbSearch(root, 'shared topic alpha', { maxResults: 10 });
-    expect(hits.map((h) => h.note.id)).toEqual(['fresh-note', 'stale-note', 'dead-note']);
-    const page = renderSearchPage(root, 'shared topic alpha', { hits, terms: [], warnings: [] });
+    const { hits } = await kbSearch(root, 'shared alpha beta gamma', { maxResults: 10 });
+    expect(hits.map((h) => h.note.id)).toEqual(['stale-note', 'fresh-note', 'dead-note']);
+    expect(hits.find((h) => h.note.id === 'stale-note')!.tier).toBe(0);
+    expect(hits.find((h) => h.note.id === 'dead-note')!.tier).toBe(1);
+    const page = renderSearchPage(root, 'shared alpha beta gamma', { hits, terms: [], warnings: [] });
     expect(page).toContain('[evidence changed: src/stale.ts]');
     expect(page).toContain('superseded by: fresh-note');
   });

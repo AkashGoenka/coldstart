@@ -157,7 +157,7 @@ describe('hook injection floor', () => {
 });
 
 describe('inactive projection — notes whose anchored files are absent on this branch', () => {
-  it('tool search keeps an absent-anchor note but flags it inactive (tier 3); a live one is active', async () => {
+  it('tool search keeps an absent-anchor note but flags it inactive (bottom tier); a live one is active', async () => {
     touch('src/live.py');
     appendRecord(root, {
       id: 'live-note', type: 'file', op: 'put', character: 'single',
@@ -176,7 +176,8 @@ describe('inactive projection — notes whose anchored files are absent on this 
     const live = tool.hits.find((h) => h.note.id === 'live-note');
     expect(live?.inactive).toBe(false);
     expect(gone?.inactive).toBe(true);
-    expect(gone?.tier).toBe(3);
+    // 2 since staleness stopped being a tier — inactive/superseded/active only.
+    expect(gone?.tier).toBe(2);
   });
 
   it('recall (hook mode) never injects a note whose anchored files are all absent', async () => {
