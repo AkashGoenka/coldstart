@@ -201,11 +201,20 @@ an unrelated fact into a nearby flow buries it: nobody searching for your fact w
 title.
 
 WRITE — one Bash block total: specs as heredocs, writes chained with &&.
-  {"type":"file-single","path":"src/x.py","summary":"1-3 sentences","aliases":["symptom words"]}
-  {"type":"file-hub","path":"src/y.py","facets":[{"symbol":"Fn","detail":"the non-obvious thing"}]}
-  {"type":"flow","title":"how X happens","summary":"first sentence = the product-level fact",
+  {"type":"file-single","path":"src/x.py","summary":"1-3 sentences","aliases":["symptom words"],
+   "anchors":[{"path":"src/x.py","symbols":["TheFnYouWorkedWith"]}]}
+  {"type":"file-hub","path":"src/y.py","aliases":["search words"],
+   "facets":[{"symbol":"Fn","detail":"the non-obvious thing"}]}
+  {"type":"flow","title":"how X happens","aliases":["other words for X"],
+   "summary":"first sentence = the product-level fact",
    "steps":[{"path":"src/a.py","symbols":["entry"],"role":"receives the request"}],
    "invariants":["what must hold"],"verified":["src/a.py"]}
+  "aliases" and "symbols" are what make a note FINDABLE and both go missing by \
+default: a note without aliases is reachable only by its exact title, and agents \
+search this notebook by identifier far more than by prose — those queries match \
+the anchor channel, which holds nothing but the path until you name symbols. \
+kb write prints exactly what is missing and the one-line re-put that fixes it; \
+do that in the same block rather than leaving it.
   A flow's anchors come from its "steps" — a flow written without them is a note with NO \
 anchors: kb lookup cannot reach it and it can never be freshness-stamped. Never write a flow \
 using the file-note shape (title + summary) from memory.

@@ -21,13 +21,13 @@ import { setupNotebook, wireClaudeKbHooks } from '../init.js';
 import { kbSearch, renderSearchPage, renderResultsPage, renderCompactPage, shouldImplantTop } from './search.js';
 import { loadKbNotesIndex } from './notes-index.js';
 import { kbWrite, type WriteSpec } from './write.js';
-import { writeGuideCli, flowEvidenceWarning, flowStepsWarning } from './write-guide.js';
+import { writeGuideCli, flowEvidenceWarning, flowStepsWarning, missingFieldsWarning } from './write-guide.js';
 import { noteCoverage } from './session-worklist.js';
 import { kbLookup, renderLookup } from './lookup.js';
 import { kbLint, lintSummary } from './lint.js';
 import { kbCommit } from './commit.js';
 import { stampAnchors, freshnessLine } from './freshness.js';
-import { loadAll, renderIds, initSkeleton, notebookExists, notebookDir, logMetric } from './store.js';
+import { loadAll, loadNote, renderIds, initSkeleton, notebookExists, notebookDir, logMetric } from './store.js';
 import { KB_RAW_VERSION } from './raw-log.js';
 import { kbView } from './view.js';
 import { VIEW_TEMPLATE } from './view-template.js';
@@ -289,8 +289,17 @@ async function cmdWrite(positional: string[], flags: KbFlags): Promise<number> {
 
   // Flow-evidence WARN (never a rejection): a flow whose steps the session
   // never actually read is the classic bad flow — assembled from grep hits.
-  const stepsWarn = flowStepsWarning(spec);
+  // Judged on the note as it stands after the fold, not on the spec: an update
+  // that touches only aliases omits `steps` and keeps the ones already stored.
+  const after = loadNote(flags.root, result.id).note;
+  const stepsWarn = flowStepsWarning(spec, after?.anchors.length);
   if (stepsWarn) warnings.push(stepsWarn);
+
+  // Findability fields. Reported AFTER the write, never as a rejection — the
+  // capture prompt chains writes with `&&`, so a non-zero exit would silence
+  // every note behind this one.
+  const missingWarn = missingFieldsWarning(spec, result.id);
+  if (missingWarn) warnings.push(missingWarn);
   const flowWarn = flowEvidenceWarning(spec, flags.session);
   if (flowWarn) warnings.push(flowWarn);
 
