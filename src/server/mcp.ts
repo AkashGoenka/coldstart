@@ -277,7 +277,13 @@ export function registerToolHandlers(
             params['session'] ? String(params['session']) : undefined,
           );
           if (flowWarn) warnings.push(flowWarn);
-          result = { status: 'written', op: wres.op, id: wres.id, warnings };
+          // Capture coverage — parity with `kb write --session`.
+          const { noteCoverage } = await import('../kb/session-worklist.js');
+          const coverage = noteCoverage(
+            params['session'] ? String(params['session']) : undefined,
+            spec,
+          );
+          result = { status: 'written', op: wres.op, id: wres.id, warnings, ...(coverage ? { coverage } : {}) };
         }
         break;
       }

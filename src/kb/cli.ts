@@ -22,6 +22,7 @@ import { kbSearch, renderSearchPage, renderResultsPage, renderCompactPage, shoul
 import { loadKbNotesIndex } from './notes-index.js';
 import { kbWrite, type WriteSpec } from './write.js';
 import { writeGuideCli, flowEvidenceWarning, flowStepsWarning } from './write-guide.js';
+import { noteCoverage } from './session-worklist.js';
 import { kbLookup, renderLookup } from './lookup.js';
 import { kbLint, lintSummary } from './lint.js';
 import { kbCommit } from './commit.js';
@@ -298,10 +299,15 @@ async function cmdWrite(positional: string[], flags: KbFlags): Promise<number> {
   // cover — deciding no note was warranted, where there is no write to ride on.
   if (flags.decision) recordFlowDecision(flags);
 
+  // Capture coverage — how much of this session's worklist has a note now.
+  // Printed with the write itself so under-capture is visible while the agent
+  // is still writing, instead of only in the transcript nobody reads.
+  const coverage = noteCoverage(flags.session, spec);
+
   const warned = warnings.length
     ? '\n' + warnings.map((w) => `warning: ${w}`).join('\n')
     : '';
-  out(`kb write: ${result.op} → ${result.id}${warned}`);
+  out(`kb write: ${result.op} → ${result.id}${warned}${coverage ? `\n${coverage}` : ''}`);
   return 0;
 }
 

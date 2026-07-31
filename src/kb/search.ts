@@ -597,6 +597,13 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
     // whole retrieval surface is title + scope terms — so requiring backing
     // would make every confirmed-absence note permanently unfireable, and would
     // do the same to a flow written without steps.
+    // Density, NOT breadth. Counting how many DIFFERENT aliases a query touched
+    // was measured on the same corpus and is anti-correlated with quality: a
+    // groupsHit ≥ 3 escape hatch re-admitted 8 of the 38 hits this gate drops,
+    // 7 of them junk ("one"+"arms" reaching trigger.mjs across 6 of its aliases).
+    // Alias breadth is a property of the NOTE's vocabulary volume, not of the
+    // match — the more aliases a note carries, the more groups any prose sprays
+    // across. Only clustering inside one authored string means anything.
     if (opts.strongOnly && !pathNamedIds.has(note.id) && note.anchors.length && carriers.length > 0
         && carriers.every((c) => c.endsWith(':n'))) {
       const groups = [note.title, ...note.aliases];

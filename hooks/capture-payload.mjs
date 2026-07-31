@@ -16,8 +16,42 @@
  *              (the coordinator only sees the final message — #61).
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+/**
+ * Session worklist manifest — the DENOMINATOR for capture coverage.
+ *
+ * The checklist can only ASK the agent to walk the whole worklist (rule 3a);
+ * nothing downstream could tell it that it wrote 8 notes for 30 worked files,
+ * because `kb write` sees one spec at a time and never saw the worklist. So the
+ * worklist is dropped here, at the one point every host passes through, and
+ * `kb write --session <sid>` reads it back to print "N of M".
+ *
+ * CONTRACT TWIN: src/kb/session-worklist.ts — same filename, same shape. Keyed
+ * by session id in tmpdir like the pending-capture file (elicit-core.pendingPath);
+ * never in the repo, so it cannot be committed and needs no ignore rule.
+ * Best-effort: capture must never fail because this could not be written.
+ */
+export function worklistManifestPath(sid) {
+  return join(tmpdir(), `coldstart-kb-worklist-${sid}.json`);
+}
+
+function recordWorklistManifest(sid, entries) {
+  if (!sid || !entries?.length) return;
+  try {
+    // needsNote: no note yet, or the note it has is stale. A file whose note is
+    // already fresh is NOT an outstanding item — counting it would make full
+    // coverage unreachable and the ratio meaningless.
+    const files = entries.map((e) => ({
+      path: e.path,
+      tier: e.tier,
+      needsNote: !e.notes?.length || e.notes.some((n) => n.state === "changed" || n.state === "missing"),
+    }));
+    writeFileSync(worklistManifestPath(sid), JSON.stringify({ ts: Date.now(), files, wrote: [] }));
+  } catch { /* best-effort */ }
+}
 
 /**
  * SPIKE (experimental, undocumented): a repo can replace the shipped checklist
@@ -64,6 +98,7 @@ function worklistLines(entries) {
 }
 
 export function buildCapturePayload({ root, cli, sid, entries, envelope }) {
+  recordWorklistManifest(sid, entries);
   const opening = envelope === "block"
     ? "Handle capture now, then stop."
     : envelope === "manual"
@@ -111,7 +146,9 @@ changed and what you had to understand to change it, and that is precisely the k
 cold agent lacks. The default for an edited file is a note. Walk the worklist top to bottom \
 and decide each one explicitly; do not stop at the first two or three. If you end up writing \
 notes for well under half the [edited] files, you have under-captured — say which files you \
-skipped and why, so the decision is visible instead of silent.
+skipped and why, so the decision is visible instead of silent. Each \`kb write\` prints the \
+running count ("N of M worklist files noted") and lists what is still unwritten — read that \
+line back before you finish; it is the only place your own coverage is visible to you.
 
 WORKLIST — files you actually read this session, most-worked first:
 
