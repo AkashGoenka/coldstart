@@ -21,7 +21,7 @@ import { setupNotebook, wireClaudeKbHooks } from '../init.js';
 import { kbSearch, renderSearchPage, renderResultsPage, renderCompactPage, shouldImplantTop } from './search.js';
 import { loadKbNotesIndex } from './notes-index.js';
 import { kbWrite, type WriteSpec } from './write.js';
-import { writeGuideCli, flowEvidenceWarning } from './write-guide.js';
+import { writeGuideCli, flowEvidenceWarning, flowStepsWarning } from './write-guide.js';
 import { kbLookup, renderLookup } from './lookup.js';
 import { kbLint, lintSummary } from './lint.js';
 import { kbCommit } from './commit.js';
@@ -288,6 +288,8 @@ async function cmdWrite(positional: string[], flags: KbFlags): Promise<number> {
 
   // Flow-evidence WARN (never a rejection): a flow whose steps the session
   // never actually read is the classic bad flow — assembled from grep hits.
+  const stepsWarn = flowStepsWarning(spec);
+  if (stepsWarn) warnings.push(stepsWarn);
   const flowWarn = flowEvidenceWarning(spec, flags.session);
   if (flowWarn) warnings.push(flowWarn);
 

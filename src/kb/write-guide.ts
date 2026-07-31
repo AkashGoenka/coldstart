@@ -26,7 +26,11 @@ export const WRITE_GUIDE_SHAPES = `kb write — spec shapes (JSON, one note per 
      "facets":[{"symbol":"ClassOrFn","detail":"the non-obvious thing about THIS symbol",
                 "flows":["<flow id or the flow's exact title>"]}]}
 
-  flow (product-level mechanism — see the capture checklist's gate):
+  flow (product-level mechanism — see the capture checklist's gate).
+       "steps" is REQUIRED: a flow's anchors are DERIVED from it, so a flow
+       without steps writes a note with NO anchors — unreachable by kb lookup,
+       invisible to the anchor channel, never freshness-stamped. Do not reuse
+       the file-note shape (title + summary) from memory for a flow:
     {"type":"flow","title":"how X happens","aliases":["other words for X"],
      "summary":"first sentence = the product-level fact the file notes miss",
      "steps":[{"path":"src/a.py","symbols":["entry"],"role":"receives the request"}],
@@ -94,6 +98,30 @@ export function flowEvidenceCount(spec: WriteSpec, session: string): { read: num
     if (!read.size) return null;
     return { read: paths.filter((p) => read.has(p)).length, steps: paths.length };
   } catch { return null; }
+}
+
+/** The WARN text (never a rejection) when a flow carries no `steps` at all.
+ *
+ *  A flow's anchors are DERIVED from its steps, so a stepless flow folds to a
+ *  note with zero anchors and no Steps/Invariants section — and still reports
+ *  `put → <id>` like any success. It is then unreachable by `kb lookup <path>`,
+ *  invisible to the anchor channel, and never freshness-stamped. The shape is
+ *  easy to reach by reusing the file-note spec from memory (title + summary),
+ *  which is exactly why it needs to be loud rather than silent.
+ *
+ *  Separate from flowEvidenceWarning below: this one needs no session, because
+ *  a missing `steps` array is a defect in the spec itself, not in its evidence. */
+export function flowStepsWarning(spec: WriteSpec): string | null {
+  if (!spec || (spec as { type?: string }).type !== 'flow') return null;
+  if ((spec as { op?: string }).op === 'retract') return null;
+  const steps = (spec as { steps?: unknown[] }).steps;
+  if (Array.isArray(steps) && steps.length) return null;
+  return (
+    'flow has no "steps": a flow\'s anchors come from its steps, so this note has NO anchors — ' +
+    'kb lookup cannot reach it, the anchor channel cannot match it, and it can never be ' +
+    'freshness-stamped. Re-put it with steps [{path, symbols, role}] (and "verified" for the ' +
+    'files you actually read). Run `kb write` with no spec to print the full flow shape.'
+  );
 }
 
 /** The WARN text (never a rejection) when a flow's steps lack read evidence.
