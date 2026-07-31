@@ -502,10 +502,20 @@ describe('matcher repairs', () => {
     expect(all.hits).toHaveLength(0);
   });
 
-  it('convergence bypasses the suppression gate', async () => {
-    // A common word (df above rareMax, so not "rare") that is nonetheless a
-    // declared symbol in the note's own anchor file. Two channels agree →
-    // it must inject rather than being suppressed as a graze.
+  // CONTRACT CHANGED 2026-07-31. This asserted that convergence ALONE lifts a
+  // single common word over the graze gate — the setup below deliberately
+  // pushes "status" out of the rare band with 6 body-only decoys so that
+  // convergence is the only thing left that could admit it.
+  //
+  // That is now the junk case, not the feature: `status`, `write`, `name`,
+  // `command` are declared symbols in most codebases, so an ordinary word
+  // hitting one is not evidence. In this repo's own logged corpus, 68 of 83
+  // single-carrier injections arrived this way, and hand-labelling split them
+  // perfectly on rarity — good ones rode rare terms (`descent`, `kbView`),
+  // junk rode common ones ("server returned status 403" → src/status.ts, which
+  // is this exact shape). Convergence still stands alone; it must now also be
+  // rare. Both halves are asserted below so neither can regress silently.
+  it('convergence stands alone only when the term is also rare', async () => {
     seedCorpus(35);
     touch('src/status.ts');
     appendRecord(root, {
@@ -534,14 +544,30 @@ describe('matcher repairs', () => {
     // Without the index there is no convergence signal → the gate suppresses.
     expect((await kbSearch(root, q, opts)).hits).toHaveLength(0);
 
-    // With the index, "status" is a declared symbol token in the note's own
-    // anchor file → convergence → the same query injects.
+    // WITH the index, "status" does converge — but it is common (df above
+    // rareMax, by construction above), so convergence no longer carries it
+    // alone. This is the "server returned status 403" injection, suppressed.
     const withIdx = await kbSearch(root, q, {
       ...opts, notesIndex: symbolIndex({ 'src/status.ts': ['renderStatus'] }),
     });
-    expect(withIdx.hits.length).toBeGreaterThan(0);
-    expect(withIdx.hits[0].note.id).toBe('status-note');
-    expect(withIdx.hits[0].convergence).toBe(true);
+    expect(withIdx.hits).toHaveLength(0);
+
+    // The other half of the contract: a RARE term that converges still stands
+    // alone on one carrier, which is what keeps "export function kbView" and
+    // "if we kept descent at 2" working.
+    touch('src/reconcile.ts');
+    appendRecord(root, {
+      id: 'descent-note', type: 'file', op: 'put',
+      title: 'descent detector',
+      summary: 'Fires capture on a quiet stop.',
+      anchors: [{ path: 'src/reconcile.ts', symbols: ['detectDescent'] }],
+    } as never);
+    const rareHit = await kbSearch(root, 'can you check descent', {
+      ...opts, notesIndex: symbolIndex({ 'src/reconcile.ts': ['detectDescent'] }),
+    });
+    expect(rareHit.hits.length).toBeGreaterThan(0);
+    expect(rareHit.hits[0].note.id).toBe('descent-note');
+    expect(rareHit.hits[0].convergence).toBe(true);
   });
 
   it('convergence lookup: English words match whole tokens, not fragments', async () => {

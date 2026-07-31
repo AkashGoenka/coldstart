@@ -219,6 +219,11 @@ const HOOK_CONVERGE_MIN = 4;
  */
 const HOOK_MIN_CARRIERS = 2;
 
+/** How many query terms must land inside ONE authored string (the title, or a
+ *  single alias) for a hit carried entirely by the name channel to count. See
+ *  the text-only-coincidence gate below. */
+const NAME_ONLY_MIN_DENSITY = 2;
+
 /** Path-name override: when the raw prompt literally contains a note's anchor
  *  path (case/separator-insensitive), the user named that file — surface its
  *  note regardless of term rarity. parseTerms drops `/`-glued paths (the `/`
@@ -469,6 +474,7 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
     let rare = false;
     let hardEvidence = false;
     const carriers: string[] = [];
+    const nameTerms: string[] = [];
     for (let k = 0; k < terms.length; k++) {
       const t = terms[k];
       let inName = hits(h.name, h.nameSquash, t);
@@ -513,7 +519,29 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
       if (converged) convergence = true;
       // Evidence strong enough to stand alone: an identifier the user typed, or
       // a term confirmed by the note's own anchor symbols. See HOOK_MIN_CARRIERS.
-      if (converged || isCodeShaped(t)) hardEvidence = true;
+      //
+      // Convergence must ALSO be rare. `name`, `id`, `type`, `status`, `write`
+      // are declared as symbols in most codebases, so an ordinary word matching
+      // one is not evidence — but it was setting hardEvidence, which bypasses
+      // HOOK_MIN_CARRIERS entirely and admitted the note on that one word.
+      // 68 of this repo's 83 single-carrier hits arrived that way. Hand-labelling
+      // all of them split perfectly on rarity: every good one rode a rare term
+      // (`descent`, `quiet`, `kbView`, `recall`), every junk one rode a common
+      // one (`status` on "server returned status 403", `search` on "google
+      // search console", `write` on "write multiple articles", `command`,
+      // `mcp`, `run`, `files`). Reported independently from a production
+      // notebook, where generic-symbol over-trust was one of three named junk
+      // causes. Reuses the SAME rarity the plain-word lane already applies
+      // (df ≤ rareMax) rather than inventing a second notion of common.
+      // Rarity here is note-level df, the same notion the plain-word lane uses.
+      // It does NOT catch a homonym that happens to be rare — `status` sits in
+      // two notes, so "server returned status 403" still reaches src/status.ts.
+      // That is the wrong-DOMAIN cause, which is separate and needs a different
+      // mechanism. Gating additionally on how many anchored files declare the
+      // symbol was tried and made zero difference on this corpus (309 hits /
+      // 150 pages either way), so it is not shipped on speculation.
+      if ((converged && df[k] <= rareMax) || isCodeShaped(t)) hardEvidence = true;
+      if (inName) nameTerms.push(t);
       carriers.push(`${t}:${inName ? 'n' : ''}${inAnchor ? 'a' : ''}${inBody ? 'b' : ''}${converged ? 'c' : ''}`);
       if (opts.strongOnly) {
         // Presence·idf, with the name channel divided by how many identifiers
@@ -549,6 +577,33 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
     // candidate at every rank: a hit that clears the bar is eligible to rank
     // first, whatever fell away above it.
     if (opts.strongOnly && !pathNamedIds.has(note.id) && !hardEvidence && carriers.length < HOOK_MIN_CARRIERS) continue;
+    // Text-only coincidence: every matched term landed in the AUTHORED name
+    // channel and nowhere else — no path, no body, no declared symbol. The
+    // query and the note share vocabulary and nothing more. Reported as the
+    // top junk cause in a production notebook; rare in this repo's own, where
+    // notes are mostly about the tool itself, so do NOT re-validate it here.
+    //
+    // The rule is density, not a blanket block: a plain title match IS how a
+    // note is meant to be found, and rejecting every name-only hit killed good
+    // ones outright ("why does capture fires twice" → the capture-fire note,
+    // which is name-only whenever no notesIndex is loaded). What separates a
+    // real title match from a coincidence is whether the terms CLUSTER — two
+    // query terms inside ONE authored string (the title, or a single alias)
+    // rather than one word each from two unrelated aliases. Measured on labelled
+    // production hits, that density lifted precision 0.60 → 0.71 with no recall
+    // loss; it is applied here only to the name-only population it describes.
+    //
+    // Anchored notes only. A lesson note has no anchors by construction — its
+    // whole retrieval surface is title + scope terms — so requiring backing
+    // would make every confirmed-absence note permanently unfireable, and would
+    // do the same to a flow written without steps.
+    if (opts.strongOnly && !pathNamedIds.has(note.id) && note.anchors.length && carriers.length > 0
+        && carriers.every((c) => c.endsWith(':n'))) {
+      const groups = [note.title, ...note.aliases];
+      const maxInGroup = groups.reduce(
+        (m, g) => Math.max(m, nameTerms.filter((t) => wordHit(g, t)).length), 0);
+      if (maxInGroup < NAME_ONLY_MIN_DENSITY) continue;
+    }
     scored.push({ note, score: boost, convergence, rare, strongTerms, carriers });
   }
 
