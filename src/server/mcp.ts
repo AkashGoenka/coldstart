@@ -246,7 +246,7 @@ export function registerToolHandlers(
       case 'kb_write': {
         const { kbWrite } = await import('../kb/write.js');
         const { initSkeleton } = await import('../kb/store.js');
-        const { writeGuideMcp, flowEvidenceWarning } = await import('../kb/write-guide.js');
+        const { writeGuideMcp, flowEvidenceWarning, flowStepsWarning } = await import('../kb/write-guide.js');
         const spec = params['spec'];
         if (!spec || typeof spec !== 'object' || Array.isArray(spec)) {
           // Parity with `kb write` (no spec): return the full guide, not an error.
@@ -268,13 +268,22 @@ export function registerToolHandlers(
           };
         } else {
           const warnings = [...(wres.warnings ?? [])];
+          // Stepless-flow WARN — parity with `kb write`; needs no session.
+          const stepsWarn = flowStepsWarning(spec as import('../kb/write.js').WriteSpec);
+          if (stepsWarn) warnings.push(stepsWarn);
           // Flow-evidence WARN (never a rejection) — parity with `kb write --session`.
           const flowWarn = flowEvidenceWarning(
             spec as import('../kb/write.js').WriteSpec,
             params['session'] ? String(params['session']) : undefined,
           );
           if (flowWarn) warnings.push(flowWarn);
-          result = { status: 'written', op: wres.op, id: wres.id, warnings };
+          // Capture coverage — parity with `kb write --session`.
+          const { noteCoverage } = await import('../kb/session-worklist.js');
+          const coverage = noteCoverage(
+            params['session'] ? String(params['session']) : undefined,
+            spec,
+          );
+          result = { status: 'written', op: wres.op, id: wres.id, warnings, ...(coverage ? { coverage } : {}) };
         }
         break;
       }
