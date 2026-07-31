@@ -293,6 +293,11 @@ async function cmdWrite(positional: string[], flags: KbFlags): Promise<number> {
   const flowWarn = flowEvidenceWarning(spec, flags.session);
   if (flowWarn) warnings.push(flowWarn);
 
+  // Flow decision, folded into the write so capture costs ONE call instead of
+  // two. The standalone `kb flow-decision` stays for the case this cannot
+  // cover — deciding no note was warranted, where there is no write to ride on.
+  if (flags.decision) recordFlowDecision(flags);
+
   const warned = warnings.length
     ? '\n' + warnings.map((w) => `warning: ${w}`).join('\n')
     : '';
@@ -307,19 +312,24 @@ async function cmdWrite(positional: string[], flags: KbFlags): Promise<number> {
  *  Without those two, a flow-rate change is uninterpretable — we cannot tell a prompt
  *  that suppresses flows from one agents never reach. Diagnostic instrument: remove it
  *  once the flow gate is tuned. Best-effort, never fails a capture. */
+function recordFlowDecision(flags: KbFlags): void {
+  if (!flags.decision || !['none', 'new', 'update'].includes(flags.decision)) return;
+  logMetric(flags.root, 'capture', {
+    event: 'flow-decision',
+    decision: flags.decision,
+    id: flags.id,
+    why: flags.why,
+    session: flags.session,
+  });
+}
+
 function cmdFlowDecision(flags: KbFlags): number {
   const decision = flags.decision;
   if (!decision || !['none', 'new', 'update'].includes(decision)) {
     out('usage: kb flow-decision --decision none|new|update [--id <flow id>] [--why "<one clause>"]');
     return 2;
   }
-  logMetric(flags.root, 'capture', {
-    event: 'flow-decision',
-    decision,
-    id: flags.id,
-    why: flags.why,
-    session: flags.session,
-  });
+  recordFlowDecision(flags);
   return 0;
 }
 

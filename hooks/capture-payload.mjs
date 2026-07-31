@@ -105,6 +105,13 @@ future agent would not act differently for knowing it, don't store it.
 3. The worklist below is your scope, most-worked first. Unlisted files are out — ignored \
 (.coldstartignore) or already captured. If you edited or deep-read a file this session that \
 isn't listed, you can write a note for it too.
+3a. Rules 1 and 2 are for files you barely touched — they are not licence to write one note \
+and stop. Every file marked [edited] is a file you changed with intent: you know why it \
+changed and what you had to understand to change it, and that is precisely the knowledge a \
+cold agent lacks. The default for an edited file is a note. Walk the worklist top to bottom \
+and decide each one explicitly; do not stop at the first two or three. If you end up writing \
+notes for well under half the [edited] files, you have under-captured — say which files you \
+skipped and why, so the decision is visible instead of silent.
 
 WORKLIST — files you actually read this session, most-worked first:
 
@@ -159,6 +166,12 @@ title.
 WRITE — one Bash block total: specs as heredocs, writes chained with &&.
   {"type":"file-single","path":"src/x.py","summary":"1-3 sentences","aliases":["symptom words"]}
   {"type":"file-hub","path":"src/y.py","facets":[{"symbol":"Fn","detail":"the non-obvious thing"}]}
+  {"type":"flow","title":"how X happens","summary":"first sentence = the product-level fact",
+   "steps":[{"path":"src/a.py","symbols":["entry"],"role":"receives the request"}],
+   "invariants":["what must hold"],"verified":["src/a.py"]}
+  A flow's anchors come from its "steps" — a flow written without them is a note with NO \
+anchors: kb lookup cannot reach it and it can never be freshness-stamped. Never write a flow \
+using the file-note shape (title + summary) from memory.
   file-single is the DEFAULT. A file with one purpose gets one summary even if you worked \
 with several of its symbols. file-hub is ONLY for grab-bag files that have no single purpose \
 (models.py, utils, helpers) — there, knowledge lives per symbol. Touching many symbols does \
@@ -167,9 +180,11 @@ not make a file a hub; having no one purpose does.
   node ${cli} kb write /tmp/spec1.json --root ${root} --session ${sid} --force
   Flow/lesson shapes: run \`node ${cli} kb write --root ${root}\` with no spec — it prints the full guide.
 
-FLOW DECISION — run this EVERY time, as its own command. It stands apart from the WRITE block \
-above: run it even when you decided no note was warranted and emitted no Bash block at all. It \
-records only what you decided about FLOWS (created a new one, folded into an existing one, or \
-none) so the flow gate can be measured.
-  node ${cli} kb flow-decision --decision <none|new|update> [--id <flow id>] --why "<one clause>" --root ${root} --session ${sid}${tail}`;
+FLOW DECISION — record what you decided about FLOWS (created a new one, folded into an \
+existing one, or none) so the flow gate can be measured. Ride it on your LAST kb write — it \
+is a flag, not a second command:
+  node ${cli} kb write /tmp/specN.json --root ${root} --session ${sid} --force \\
+    --decision <none|new|update> [--id <flow id>] --why "<one clause>"
+Only when you wrote NO notes at all is there no write to carry it, and then run it alone:
+  node ${cli} kb flow-decision --decision none --why "<one clause>" --root ${root} --session ${sid}${tail}`;
 }
