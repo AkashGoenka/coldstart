@@ -144,6 +144,42 @@ describe('write-time warnings use the same checks kb repair does', () => {
   });
 });
 
+describe('missingFieldsWarning judges the folded note, not the spec', () => {
+  // `op: 'put'` appends a record; the note is the fold of the log, and aliases
+  // and anchors UNION. So an update that omits a field has not dropped it —
+  // judging the record alone told every repair write it was still incomplete.
+  const id = 'src-a-ts-1234';
+  const bare = { id, type: 'file-single', path: 'src/a.ts', verified: ['src/a.ts'] } as never;
+
+  it('stays silent when the fold already carries what the spec omitted', () => {
+    expect(missingFieldsWarning(bare, id, {
+      id, type: 'file', aliases: ['the thing'],
+      anchors: [{ path: 'src/a.ts', symbols: ['doThing'] }],
+    })).toBeNull();
+  });
+
+  it('still fires when the note really lacks the field', () => {
+    const w = missingFieldsWarning(bare, id, {
+      id, type: 'file', aliases: [], anchors: [{ path: 'src/a.ts', symbols: [] }],
+    })!;
+    expect(w).toContain('"aliases"');
+    expect(w).toContain('symbols');
+  });
+
+  it('reports only the fields still missing, not every field the spec omitted', () => {
+    const w = missingFieldsWarning(bare, id, {
+      id, type: 'file', aliases: ['the thing'],
+      anchors: [{ path: 'src/a.ts', symbols: [] }],
+    })!;
+    expect(w).toContain('symbols');
+    expect(w).not.toContain('"aliases"');
+  });
+
+  it('falls back to judging the spec when no folded note is supplied', () => {
+    expect(missingFieldsWarning(bare, id)).toContain('"aliases"');
+  });
+});
+
 describe('flowStepsWarning judges the folded note, not the spec', () => {
   it('stays silent on an alias-only update that keeps its stored steps', () => {
     const spec = { type: 'flow', id: 'f', aliases: ['more words'] };

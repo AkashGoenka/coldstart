@@ -294,7 +294,9 @@ export function registerToolHandlers(
           );
           if (flowWarn) warnings.push(flowWarn);
           // Findability fields — parity with `kb write`; never a rejection.
-          const missingWarn = missingFieldsWarning(spec as import('../kb/write.js').WriteSpec, wres.id);
+          const missingWarn = missingFieldsWarning(
+            spec as import('../kb/write.js').WriteSpec, wres.id, after,
+          );
           if (missingWarn) warnings.push(missingWarn);
           // Capture coverage — parity with `kb write --session`.
           const { noteCoverage } = await import('../kb/session-worklist.js');

@@ -120,12 +120,25 @@ export function flowStepsWarning(spec: WriteSpec, after?: { steps?: unknown[] } 
  * one — a strict validator would destroy more knowledge than it saves, and the
  * note is already correct, just under-indexed. The write lands, and the agent is
  * handed the exact one-line re-put that completes it.
+ *
+ * `after` is the note AS FOLDED, and passing it is what makes this correct on an
+ * UPDATE. `op: 'put'` is not a document overwrite — it appends one record and
+ * the note is the fold of the whole log, where aliases and anchors UNION. So a
+ * spec that touches only `verified` legitimately omits `aliases`, and judging
+ * the record alone reported every such note as missing fields it already had.
+ * A field is missing only when the agent did not send it AND the folded note
+ * does not have it. Omit `after` (no folded note to hand) and this falls back to
+ * judging the spec, which is exact for a create — there, the two are the same.
  */
-export function missingFieldsWarning(spec: WriteSpec, id: string): string | null {
+export function missingFieldsWarning(
+  spec: WriteSpec, id: string, after?: unknown,
+): string | null {
   const s = spec as { op?: string; type?: string; path?: string };
   if (!s || s.op === 'retract') return null;
   const type = s.type ?? '';
-  const gaps = checksForSpec(type).filter((c) => c.missingInSpec(spec as never));
+  const gaps = checksForSpec(type).filter(
+    (c) => c.missingInSpec(spec as never) && (!after || c.missingInNote(after as never)),
+  );
   if (!gaps.length) return null;
   return (
     `note ${id} is written but under-indexed — missing:\n` +

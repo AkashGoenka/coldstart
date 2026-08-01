@@ -309,7 +309,7 @@ async function cmdWrite(positional: string[], flags: KbFlags): Promise<number> {
   // Findability fields. Reported AFTER the write, never as a rejection — the
   // capture prompt chains writes with `&&`, so a non-zero exit would silence
   // every note behind this one.
-  const missingWarn = missingFieldsWarning(spec, result.id);
+  const missingWarn = missingFieldsWarning(spec, result.id, after);
   if (missingWarn) warnings.push(missingWarn);
   const flowWarn = flowEvidenceWarning(spec, flags.session);
   if (flowWarn) warnings.push(flowWarn);
