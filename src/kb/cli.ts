@@ -21,13 +21,13 @@ import { setupNotebook, wireClaudeKbHooks } from '../init.js';
 import { kbSearch, renderSearchPage, renderResultsPage, renderCompactPage, shouldImplantTop } from './search.js';
 import { loadKbNotesIndex } from './notes-index.js';
 import { kbWrite, type WriteSpec } from './write.js';
-import { writeGuideCli, flowEvidenceWarning, flowStepsWarning } from './write-guide.js';
+import { writeGuideCli, flowEvidenceWarning, flowStepsWarning, missingFieldsWarning } from './write-guide.js';
 import { noteCoverage } from './session-worklist.js';
 import { kbLookup, renderLookup } from './lookup.js';
 import { kbLint, lintSummary } from './lint.js';
 import { kbCommit } from './commit.js';
 import { stampAnchors, freshnessLine } from './freshness.js';
-import { loadAll, renderIds, initSkeleton, notebookExists, notebookDir, logMetric } from './store.js';
+import { loadAll, loadNote, renderIds, initSkeleton, notebookExists, notebookDir, logMetric } from './store.js';
 import { KB_RAW_VERSION } from './raw-log.js';
 import { kbView } from './view.js';
 import { VIEW_TEMPLATE } from './view-template.js';
@@ -98,6 +98,7 @@ const USAGE = `usage: coldstart kb <verb>
   write <spec.json|-> save/correct a note from a JSON spec (see coldstart.md)
   status [--paths ..] notebook overview, or per-path notes+freshness (--json for hooks)
   lint                mechanical worklist (dead anchors, duplicate flows, orphans)
+  repair [--json]     worklist of notes that are written but unfindable (agent work; writes nothing)
   render [--id ID]    re-fold .raw → derived md
   view [--no-open]    generate a single-file HTML browser of the notebook and open it
   commit [-m "msg"]   deliberate publish: commit ONLY the notebook .raw to git
@@ -116,6 +117,16 @@ export async function runKb(argv: string[]): Promise<number> {
     case 'status': return cmdStatus(flags);
     case 'flow-decision': return cmdFlowDecision(flags);
     case 'lint': return cmdLint(flags);
+    // Detection runs INSIDE the command: a clean notebook prints one line and
+    // fires no agent prompt. No index is loaded — the notebook is the only
+    // input, so this works in a repo whose keeper has never started.
+    case 'repair': {
+      if (!requireNotebook(root)) return 2;
+      const { planRepairs, repairWorklist } = await import('./repair.js');
+      const report = planRepairs(root);
+      out(flags.json ? JSON.stringify(report, null, 2) : repairWorklist(report));
+      return 0;
+    }
     case 'render': {
       if (!requireNotebook(root)) return 2;
       const ids = renderIds(root, flags.id ? [flags.id] : undefined);
@@ -289,8 +300,17 @@ async function cmdWrite(positional: string[], flags: KbFlags): Promise<number> {
 
   // Flow-evidence WARN (never a rejection): a flow whose steps the session
   // never actually read is the classic bad flow — assembled from grep hits.
-  const stepsWarn = flowStepsWarning(spec);
+  // Judged on the note as it stands after the fold, not on the spec: an update
+  // that touches only aliases omits `steps` and keeps the ones already stored.
+  const after = loadNote(flags.root, result.id).note;
+  const stepsWarn = flowStepsWarning(spec, after);
   if (stepsWarn) warnings.push(stepsWarn);
+
+  // Findability fields. Reported AFTER the write, never as a rejection — the
+  // capture prompt chains writes with `&&`, so a non-zero exit would silence
+  // every note behind this one.
+  const missingWarn = missingFieldsWarning(spec, result.id, after);
+  if (missingWarn) warnings.push(missingWarn);
   const flowWarn = flowEvidenceWarning(spec, flags.session);
   if (flowWarn) warnings.push(flowWarn);
 

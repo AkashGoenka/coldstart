@@ -17,7 +17,13 @@ import {
   wireClaudeCaptureCommand,
   wireCursorCaptureCommand,
   wireCodexCaptureSkill,
+  REPAIR_COMMAND,
+  USER_COMMANDS,
+  wireClaudeCommand,
+  wireCursorCommand,
+  wireCodexSkill,
 } from '../src/init.js';
+import { repairWorklist } from '../src/kb/repair.js';
 
 // We can't easily test runInit interactively, but we can test that the
 // MCP entry structure is correct when it's generated. This is a basic
@@ -462,5 +468,68 @@ describe('/capture-notes command wiring', () => {
     expect(wireCursorCaptureCommand(tempDir)).toBe('updated');
     expect(wireCodexCaptureSkill(tempDir)).toBe('created');
     expect(wireCodexCaptureSkill(tempDir)).toBe('updated');
+  });
+});
+
+/** The repair command is the second user-invoked command, and the reason the
+ *  writers were generalised: a host that gets one and not the other is exactly
+ *  the asymmetry this repo treats as a defect. */
+describe('/repair-notes command', () => {
+  let tempDir: string;
+  beforeEach(() => { tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coldstart-repair-cmd-')); });
+  afterEach(() => { fs.rmSync(tempDir, { recursive: true, force: true }); });
+
+  const files = () => ({
+    claude: path.join(tempDir, '.claude', 'commands', `${REPAIR_COMMAND}.md`),
+    cursor: path.join(tempDir, '.cursor', 'commands', `${REPAIR_COMMAND}.md`),
+    codex: path.join(tempDir, '.agents', 'skills', REPAIR_COMMAND, 'SKILL.md'),
+  });
+
+  it('reaches all three hosts, each in that host\'s own format', () => {
+    wireClaudeCommand(tempDir, USER_COMMANDS.repair);
+    wireCursorCommand(tempDir, USER_COMMANDS.repair);
+    wireCodexSkill(tempDir, USER_COMMANDS.repair);
+    const f = files();
+
+    // Claude: `!`-expanded so the worklist lands in the prompt.
+    expect(fs.readFileSync(f.claude, 'utf8')).toContain('!`node ');
+    // Cursor: plain template — it has no `!` expansion.
+    expect(fs.readFileSync(f.cursor, 'utf8')).not.toContain('!`');
+    // Codex: skills require name + description frontmatter.
+    expect(fs.readFileSync(f.codex, 'utf8')).toContain(`name: ${REPAIR_COMMAND}`);
+
+    for (const body of Object.values(f).map((p) => fs.readFileSync(p, 'utf8'))) {
+      expect(body).toContain('kb repair');
+      expect(body).toContain('Nothing to repair here.');
+      // The host wrapper does NOT restate how to fix a note — the worklist
+      // carries its own instructions so every surface says the same thing, and
+      // a second copy here is how the two would drift apart.
+      expect(body).not.toContain('kb write');
+    }
+  });
+
+  it('leaves the how-to-fix instructions to the worklist itself', () => {
+    // What the wrapper drops has to still reach the agent, from repairWorklist.
+    expect(USER_COMMANDS.repair.instructions).not.toContain('kb write');
+    expect(repairWorklist({
+      v: 1,
+      notes: 1,
+      findings: [{
+        check: 'missing-aliases', note: 'n', type: 'file', title: 't',
+        notePath: 'notes/n.md', paths: ['src/a.ts'], detail: 'd', hint: 'h', fix: '{}',
+      }],
+    })).toContain('kb write');
+  });
+
+  it('is idempotent — a re-run updates in place', () => {
+    for (const wire of [wireClaudeCommand, wireCursorCommand, wireCodexSkill]) {
+      expect(wire(tempDir, USER_COMMANDS.repair)).toBe('created');
+      expect(wire(tempDir, USER_COMMANDS.repair)).toBe('updated');
+    }
+  });
+
+  it('bakes no repo-specific path, so the command works from any cwd', () => {
+    wireClaudeCommand(tempDir, USER_COMMANDS.repair);
+    expect(fs.readFileSync(files().claude, 'utf8')).not.toContain(tempDir);
   });
 });

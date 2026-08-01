@@ -2,11 +2,11 @@
  * capture-payload.mjs — the capture prompt (v5, finalized 2026-07-17).
  *
  * Replaces the 370-line v4 elicit prompt. Structure: purpose → decide gate →
- * worklist → per-note rules → flows → write. Decide-time rules ONLY — spec
- * shapes for the common file notes stay inline (zero-bounce path; file notes
- * are ~97% of volume), flow/lesson formats live behind `kb write` (no spec →
- * prints the guide). The arming mechanism is invisible to the agent: only its
- * consequences show (which files, their ranking, their annotations).
+ * worklist → per-note rules → flows → write. Decide-time rules ONLY — the spec
+ * shapes are rendered inline (zero-bounce path) from hooks/note-shape.mjs, the
+ * single table every kb surface derives from; the prose around them lives here.
+ * The arming mechanism is invisible to the agent: only its consequences show
+ * (which files, their ranking, their annotations).
  *
  * Envelopes:
  *   inject   — delivered on the NEXT user prompt (UserPromptSubmit channel):
@@ -19,6 +19,10 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+// The spec shapes are NOT written here any more. They come from the one table
+// the write guide, the MCP tool description and `kb repair` also render from —
+// the inlined copy is how "aliases" fell out of the flow shape unnoticed.
+import { shapesBlock } from "./note-shape.mjs";
 
 /**
  * Session worklist manifest — the DENOMINATOR for capture coverage.
@@ -201,14 +205,18 @@ an unrelated fact into a nearby flow buries it: nobody searching for your fact w
 title.
 
 WRITE — one Bash block total: specs as heredocs, writes chained with &&.
-  {"type":"file-single","path":"src/x.py","summary":"1-3 sentences","aliases":["symptom words"]}
-  {"type":"file-hub","path":"src/y.py","facets":[{"symbol":"Fn","detail":"the non-obvious thing"}]}
-  {"type":"flow","title":"how X happens","summary":"first sentence = the product-level fact",
-   "steps":[{"path":"src/a.py","symbols":["entry"],"role":"receives the request"}],
-   "invariants":["what must hold"],"verified":["src/a.py"]}
-  A flow's anchors come from its "steps" — a flow written without them is a note with NO \
-anchors: kb lookup cannot reach it and it can never be freshness-stamped. Never write a flow \
-using the file-note shape (title + summary) from memory.
+${shapesBlock({ compact: true })}
+  "aliases" and "symbols" are what make a note FINDABLE and both go missing by \
+default: a note without aliases is reachable only by its exact title, and agents \
+search this notebook by identifier far more than by prose — those queries match \
+the anchor channel, which holds nothing but the path until you name symbols. \
+kb write prints exactly what is missing and the one-line re-put that fixes it; \
+do that in the same block rather than leaving it.
+  On a flow, "verified" is what FILES the note — its anchors come from "verified" \
+(plus any explicit "anchors"), NOT from its steps. A step file left out of \
+"verified" is invisible to \`kb lookup\` on that file and is never freshness-stamped, \
+however carefully you described it. Never write a flow using the file-note shape \
+(title + summary) from memory.
   file-single is the DEFAULT. A file with one purpose gets one summary even if you worked \
 with several of its symbols. file-hub is ONLY for grab-bag files that have no single purpose \
 (models.py, utils, helpers) — there, knowledge lives per symbol. Touching many symbols does \

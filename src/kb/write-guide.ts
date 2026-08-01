@@ -7,42 +7,23 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import {
+  shapesBlock, requiredFieldsLine, checksForSpec, stepsMissingAfterWrite,
+} from '../../hooks/note-shape.mjs';
 import type { WriteSpec } from './write.js';
 
-// The capture checklist inlines only the two common file-note shapes
-// (zero-bounce path); everything else lives here so the prompt stays small
-// and this stays current.
+// The shapes are NOT written here. They come from hooks/note-shape.mjs, which
+// the capture prompt and the MCP tool description render from too — three
+// hand-kept copies is exactly how "aliases" fell out of the flow shape and how
+// the MCP description went years without ever mentioning it.
 export const WRITE_GUIDE_SHAPES = `kb write — spec shapes (JSON, one note per spec; include only fields you have):
 
-  file (single purpose — the DEFAULT for file notes):
-    {"type":"file-single","path":"src/x.py",
-     "summary":"its one purpose + how (1-3 sentences)",
-     "aliases":["symptom or search words"]}
-
-  file (hub — ONLY for grab-bag files with NO single purpose: models.py, utils,
-        helpers. One facet PER SYMBOL you worked with. Touching many symbols
-        does not make a file a hub; a single-purpose file stays file-single):
-    {"type":"file-hub","path":"src/y.py","aliases":["search words"],
-     "facets":[{"symbol":"ClassOrFn","detail":"the non-obvious thing about THIS symbol",
-                "flows":["<flow id or the flow's exact title>"]}]}
-
-  flow (product-level mechanism — see the capture checklist's gate).
-       "steps" is REQUIRED: a flow's anchors are DERIVED from it, so a flow
-       without steps writes a note with NO anchors — unreachable by kb lookup,
-       invisible to the anchor channel, never freshness-stamped. Do not reuse
-       the file-note shape (title + summary) from memory for a flow:
-    {"type":"flow","title":"how X happens","aliases":["other words for X"],
-     "summary":"first sentence = the product-level fact the file notes miss",
-     "steps":[{"path":"src/a.py","symbols":["entry"],"role":"receives the request"}],
-     "invariants":["what must hold"],"verified":["src/a.py"]}
-
-  lesson (confirmed ABSENCE only — one file/symbol facts are facets, not lessons):
-    {"type":"lesson","kind":"absence","title":"no retry logic in this repo",
-     "body":"what you looked for + that it is not there",
-     "scope":{"terms":["search","terms"]}}
+${shapesBlock()}
 
   update an existing note: same spec + its "id" (fields merge; yours win).
   retract a wrong claim:   {"op":"retract","id":"<id>","reason":"..."}
+
+${requiredFieldsLine()}
 
 Rules the writer enforces (fix any WARNING it prints, in this session):
   - paths are join keys: repo-relative, exactly as in the repo
@@ -100,27 +81,71 @@ export function flowEvidenceCount(spec: WriteSpec, session: string): { read: num
   } catch { return null; }
 }
 
-/** The WARN text (never a rejection) when a flow carries no `steps` at all.
+/** The WARN text (never a rejection) when a flow ends up with no `steps` at all.
  *
- *  A flow's anchors are DERIVED from its steps, so a stepless flow folds to a
- *  note with zero anchors and no Steps/Invariants section — and still reports
- *  `put → <id>` like any success. It is then unreachable by `kb lookup <path>`,
- *  invisible to the anchor channel, and never freshness-stamped. The shape is
- *  easy to reach by reusing the file-note spec from memory (title + summary),
- *  which is exactly why it needs to be loud rather than silent.
+ *  A stepless flow folds to a note that is a title and a paragraph — no chain to
+ *  follow into the code — and still reports `put → <id>` like any success. The
+ *  shape is easy to reach by reusing the file-note spec from memory (title +
+ *  summary), which is why it needs to be loud rather than silent.
+ *
+ *  `after` is the note as it stands AFTER the write, and it is what makes this
+ *  accurate rather than merely suspicious. The spec alone cannot tell the two
+ *  cases apart: an UPDATE that touches only aliases legitimately omits `steps`
+ *  and the fold keeps the ones already there — judging by the spec fired at
+ *  notes that were perfectly fine. Pass the folded result and the claim is
+ *  checked instead of guessed.
  *
  *  Separate from flowEvidenceWarning below: this one needs no session, because
- *  a missing `steps` array is a defect in the spec itself, not in its evidence. */
-export function flowStepsWarning(spec: WriteSpec): string | null {
-  if (!spec || (spec as { type?: string }).type !== 'flow') return null;
-  if ((spec as { op?: string }).op === 'retract') return null;
-  const steps = (spec as { steps?: unknown[] }).steps;
-  if (Array.isArray(steps) && steps.length) return null;
+ *  a missing chain is a defect in the note itself, not in its evidence. */
+export function flowStepsWarning(spec: WriteSpec, after?: { steps?: unknown[] } | null): string | null {
+  if (!stepsMissingAfterWrite(spec as never, after as never)) return null;
   return (
-    'flow has no "steps": a flow\'s anchors come from its steps, so this note has NO anchors — ' +
-    'kb lookup cannot reach it, the anchor channel cannot match it, and it can never be ' +
-    'freshness-stamped. Re-put it with steps [{path, symbols, role}] (and "verified" for the ' +
-    'files you actually read). Run `kb write` with no spec to print the full flow shape.'
+    'flow has no "steps": there is no chain to follow, so the note is a title and a paragraph. ' +
+    'Re-put it with steps [{path, symbols, role}], and list in "verified" the step files you ' +
+    'actually opened — "verified" is what FILES the note at those paths (anchors come from it, ' +
+    'NOT from the steps), and unfiled paths are invisible to `kb lookup`. Run `kb write` with ' +
+    'no spec to print the full flow shape.'
+  );
+}
+
+/**
+ * Fields a note needs to be FINDABLE, checked after the write rather than before it.
+ *
+ * The rules are not written here — they are the same NOTE_CHECKS entries that
+ * `kb repair` runs over the notebook, so the thing an agent is told at write
+ * time and the thing repair later flags it for cannot disagree.
+ *
+ * Deliberately not a rejection. The capture prompt tells the agent to chain its
+ * writes with `&&`, so a non-zero exit silences every note after the offending
+ * one — a strict validator would destroy more knowledge than it saves, and the
+ * note is already correct, just under-indexed. The write lands, and the agent is
+ * handed the exact one-line re-put that completes it.
+ *
+ * `after` is the note AS FOLDED, and passing it is what makes this correct on an
+ * UPDATE. `op: 'put'` is not a document overwrite — it appends one record and
+ * the note is the fold of the whole log, where aliases and anchors UNION. So a
+ * spec that touches only `verified` legitimately omits `aliases`, and judging
+ * the record alone reported every such note as missing fields it already had.
+ * A field is missing only when the agent did not send it AND the folded note
+ * does not have it. Omit `after` (no folded note to hand) and this falls back to
+ * judging the spec, which is exact for a create — there, the two are the same.
+ */
+export function missingFieldsWarning(
+  spec: WriteSpec, id: string, after?: unknown,
+): string | null {
+  const s = spec as { op?: string; type?: string; path?: string };
+  if (!s || s.op === 'retract') return null;
+  const type = s.type ?? '';
+  const gaps = checksForSpec(type).filter(
+    (c) => c.missingInSpec(spec as never) && (!after || c.missingInNote(after as never)),
+  );
+  if (!gaps.length) return null;
+  return (
+    `note ${id} is written but under-indexed — missing:\n` +
+    gaps.map((c) => `    - ${c.why}`).join('\n') +
+    `\n  Complete it now with one more write (fields merge, nothing is lost):\n` +
+    `    {"id":"${id}","type":"${type}"${s.path ? `,"path":"${s.path}"` : ''},` +
+    `${gaps.map((c) => c.fix({ path: s.path })).join(',')}}`
   );
 }
 

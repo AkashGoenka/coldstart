@@ -8,6 +8,7 @@ import {
   ListResourceTemplatesRequestSchema,
   ListPromptsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import { requiredFieldsLine } from '../../hooks/note-shape.mjs';
 import type { IndexContext } from '../index-manager.js';
 import { getCurrentVersion } from '../daemon-lock.js';
 import {
@@ -118,13 +119,18 @@ export const TOOL_DEFINITIONS = [
     description:
       'Save or correct a NOTEBOOK note after finishing real work here — you have the files in context, so no future agent is better placed to record what you learned. Write a file note (what a file is for), a flow note (how a task spans files), or an absence lesson (a confirmed "there is no X"). Also the tool to FIX or RETRACT a note you used that proved wrong (`op: "put"` replaces, `op: "retract"` removes).\n\n' +
       'TWO-PHASE reuse gate: a flow/lesson `spec` sent WITHOUT an `id` first searches the notebook for the same concept. If plausible matches exist, kb_write returns `{status:"candidates", candidates:[...]}` INSTEAD of writing — re-call with `into: "<id>"` to merge into an existing note, or `is_new: true` to declare a genuinely new one. This makes note identity reliable (matching, not guessing an exact title). File notes skip the gate (id derives from the path).\n\n' +
-      'The `spec` shape is documented in coldstart.md — briefly: `type` ("file"|"flow"|"lesson", or sugar "file-hub"/"file-single"), `title`, `summary`, `anchors` ([{path, symbols?}] — the addresses the note is about, which drive freshness), plus type-specific fields (file: facets/character; flow: steps; lesson: kind:"absence"/scope/body). Call with NO arguments to get the full spec guide. This tool WRITES to the repo notebook; it never commits to git — publishing notes is a human-only step (`coldstart kb commit`).',
+      'The `spec` shape: `type` ("file"|"flow"|"lesson", or sugar "file-hub"/"file-single"), `title`, `summary`, `anchors` ([{path, symbols?}] — the addresses the note is about, which drive freshness), plus type-specific fields (file: facets/character; flow: steps/verified; lesson: kind:"absence"/scope/body). Call with NO arguments to get the full spec guide.\n\n' +
+      // Rendered, not restated. This description going years without ever
+      // naming `aliases` is why notebooks driven by no-shell clients are the
+      // ones worst hit by unfindable notes.
+      `${requiredFieldsLine()}\n\n` +
+      'This tool WRITES to the repo notebook; it never commits to git — publishing notes is a human-only step (`coldstart kb commit`).',
     inputSchema: {
       type: 'object',
       properties: {
         spec: {
           type: 'object',
-          description: 'The note spec (JSON object). Fields: type, title, summary, anchors:[{path,symbols?}], and type-specific fields (facets/character for file; steps for flow; kind/scope/body for lesson). See coldstart.md. Omit `id` on a new flow/lesson to trigger the reuse gate.',
+          description: `The note spec (JSON object). Fields: type, title, summary, aliases, anchors:[{path,symbols?}], and type-specific fields (facets/character for file; steps/verified for flow; kind/scope/body for lesson). ${requiredFieldsLine()} Omit \`id\` on a new flow/lesson to trigger the reuse gate.`,
         },
         into: {
           type: 'string',
@@ -156,6 +162,14 @@ export const TOOL_DEFINITIONS = [
         },
       },
     },
+  },
+  {
+    name: 'kb_repair',
+    description:
+      'List the notebook notes that are WRITTEN BUT UNFINDABLE — missing the fields a note cannot be retrieved without (aliases, anchor symbols, a flow\'s verified paths). Notes written before those fields were required are correct but unreachable, and this is how they get found.\n\n' +
+      'Returns a worklist, never a change: repairing is your work, because every gap needs a judgement about the code (which words a reader would search for, which symbols the note is actually about, which files you can honestly claim to have read). Fix each one with kb_write, passing the note\'s `id` — fields merge, so nothing already in the note is lost.\n\n' +
+      'A clean notebook returns "Nothing to repair here." Run it when the user asks to repair, fix, or clean up the notebook.',
+    inputSchema: { type: 'object', properties: {} },
   },
 ] as const;
 
@@ -246,7 +260,7 @@ export function registerToolHandlers(
       case 'kb_write': {
         const { kbWrite } = await import('../kb/write.js');
         const { initSkeleton } = await import('../kb/store.js');
-        const { writeGuideMcp, flowEvidenceWarning, flowStepsWarning } = await import('../kb/write-guide.js');
+        const { writeGuideMcp, flowEvidenceWarning, flowStepsWarning, missingFieldsWarning } = await import('../kb/write-guide.js');
         const spec = params['spec'];
         if (!spec || typeof spec !== 'object' || Array.isArray(spec)) {
           // Parity with `kb write` (no spec): return the full guide, not an error.
@@ -269,7 +283,9 @@ export function registerToolHandlers(
         } else {
           const warnings = [...(wres.warnings ?? [])];
           // Stepless-flow WARN — parity with `kb write`; needs no session.
-          const stepsWarn = flowStepsWarning(spec as import('../kb/write.js').WriteSpec);
+          const { loadNote } = await import('../kb/store.js');
+          const after = loadNote(index.rootDir, wres.id).note;
+          const stepsWarn = flowStepsWarning(spec as import('../kb/write.js').WriteSpec, after);
           if (stepsWarn) warnings.push(stepsWarn);
           // Flow-evidence WARN (never a rejection) — parity with `kb write --session`.
           const flowWarn = flowEvidenceWarning(
@@ -277,6 +293,11 @@ export function registerToolHandlers(
             params['session'] ? String(params['session']) : undefined,
           );
           if (flowWarn) warnings.push(flowWarn);
+          // Findability fields — parity with `kb write`; never a rejection.
+          const missingWarn = missingFieldsWarning(
+            spec as import('../kb/write.js').WriteSpec, wres.id, after,
+          );
+          if (missingWarn) warnings.push(missingWarn);
           // Capture coverage — parity with `kb write --session`.
           const { noteCoverage } = await import('../kb/session-worklist.js');
           const coverage = noteCoverage(
@@ -288,6 +309,14 @@ export function registerToolHandlers(
         break;
       }
 
+      // Parity with `coldstart kb repair`: same detection, same worklist text,
+      // so the instructions are not something one wrapper happens to say.
+      case 'kb_repair': {
+        const { planRepairs, repairWorklist } = await import('../kb/repair.js');
+        const report = planRepairs(index.rootDir);
+        result = { __rawText: repairWorklist(report) };
+        break;
+      }
       case 'kb_status': {
         const { loadAll } = await import('../kb/store.js');
         const { stampAnchors } = await import('../kb/freshness.js');
@@ -343,7 +372,7 @@ export function registerToolHandlers(
 // Registry-installed users never run `coldstart init`, so they get the tools with
 // no hooks: no automatic capture, no recall. Nothing else tells them.
 export const SERVER_INSTRUCTIONS = [
-  'coldstart answers "which files are relevant to this task?" from a static index (`find`, `gs`) and keeps a durable NOTEBOOK of notes past agents wrote about this repo (`kb_search`, `kb_lookup`, `kb_write`, `kb_status`). Try `kb_search` before `find` when the task may have been worked on here before.',
+  'coldstart answers "which files are relevant to this task?" from a static index (`find`, `gs`) and keeps a durable NOTEBOOK of notes past agents wrote about this repo (`kb_search`, `kb_lookup`, `kb_write`, `kb_status`, `kb_repair`). Try `kb_search` before `find` when the task may have been worked on here before.',
   '',
   'SETUP: the hooks that capture notes automatically at the end of a task, and surface matching notes when a prompt arrives, are NOT installed by this MCP server. If the user asks why notes are never captured or recalled, tell them to run `coldstart init` once in the repo root (install: `npm i -g @cstart/coldstart`); it wires those hooks for Claude Code, Cursor, or Codex. Every tool here works without it — only the automatic capture and recall are missing.',
 ].join('\n');
