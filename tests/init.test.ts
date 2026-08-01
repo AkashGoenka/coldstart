@@ -23,6 +23,7 @@ import {
   wireCursorCommand,
   wireCodexSkill,
 } from '../src/init.js';
+import { repairWorklist } from '../src/kb/repair.js';
 
 // We can't easily test runInit interactively, but we can test that the
 // MCP entry structure is correct when it's generated. This is a basic
@@ -499,10 +500,25 @@ describe('/repair-notes command', () => {
 
     for (const body of Object.values(f).map((p) => fs.readFileSync(p, 'utf8'))) {
       expect(body).toContain('kb repair');
-      // Fixing is the agent's job, said on every surface.
-      expect(body).toContain('kb write');
       expect(body).toContain('Nothing to repair here.');
+      // The host wrapper does NOT restate how to fix a note — the worklist
+      // carries its own instructions so every surface says the same thing, and
+      // a second copy here is how the two would drift apart.
+      expect(body).not.toContain('kb write');
     }
+  });
+
+  it('leaves the how-to-fix instructions to the worklist itself', () => {
+    // What the wrapper drops has to still reach the agent, from repairWorklist.
+    expect(USER_COMMANDS.repair.instructions).not.toContain('kb write');
+    expect(repairWorklist({
+      v: 1,
+      notes: 1,
+      findings: [{
+        check: 'missing-aliases', note: 'n', type: 'file', title: 't',
+        notePath: 'notes/n.md', paths: ['src/a.ts'], detail: 'd', hint: 'h', fix: '{}',
+      }],
+    })).toContain('kb write');
   });
 
   it('is idempotent — a re-run updates in place', () => {

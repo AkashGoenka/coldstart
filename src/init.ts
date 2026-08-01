@@ -656,13 +656,13 @@ export const USER_COMMANDS: Record<'capture' | 'repair', UserCommand> = {
       'Repair coldstart notebook notes that are missing the fields which make them findable '
       + '(aliases, anchor symbols, a flow\'s verified paths). Use when the user asks to repair, '
       + 'fix, or clean up the notebook, or when notes are not turning up in search.',
+    // Deliberately thin: the worklist carries its own instructions, so that the
+    // CLI, the MCP tool and all three hosts say the same thing. Repeating them
+    // here is how they drift.
     instructions:
-      'It prints a worklist and changes nothing. Work through every note it lists: open the note '
-      + 'and the repo files it names, decide what actually belongs there, and write it with '
-      + '`kb write` using the note\'s "id" (fields merge — nothing already in the note is lost). '
-      + 'Never invent an alias from the title, and never add a path to "verified" unless you '
-      + 'opened it. If a finding is genuinely not worth fixing, skip it and say why. '
-      + 'If it prints "Nothing to repair here.", stop — there is no work.',
+      'It prints a worklist and changes nothing. Follow the instructions it prints, and work '
+      + 'through every note it lists. If it prints "Nothing to repair here.", stop — there is '
+      + 'no work.',
   },
 };
 

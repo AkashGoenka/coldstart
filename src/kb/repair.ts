@@ -115,21 +115,18 @@ export function repairWorklist(report: RepairReport): string {
     `kb repair — ${report.findings.length} gap${report.findings.length === 1 ? '' : 's'} across `
     + `${noteIds.size} of ${report.notes} note${report.notes === 1 ? '' : 's'}.`,
     '',
-    'These notes are CORRECT but unfindable: they are missing the fields that make a note '
-    + 'retrievable. Nothing here is auto-fixable — each gap needs a judgement about the code, '
-    + 'which is why it is your work and not the tool\'s.',
+    'Below is a list of notes that do not match the expected note shape. They are historical '
+    + 'notes, written before the shape was frozen — correct, but unfindable.',
     '',
-    'For each note: open its file (and the repo files it names) and decide what belongs there, '
-    + 'then write it with the SAME `kb write` you use for any note — a repair is an ordinary '
-    + 'update spec carrying the note\'s "id", and fields merge, so nothing already in the note '
-    + 'is lost. The `fix:` line under each finding is that spec with the id filled in; replace '
-    + 'the placeholder values with real ones. Never invent an alias from the title, and never '
-    + 'add a path to "verified" unless you actually opened it — a wrong repair is worse than '
-    + 'the gap.',
+    'Fix them with `kb write`. For each note: open the note file and the codebase files it '
+    + 'names, read that code properly, then update the note so a future agent can find it. The '
+    + '`fix:` line under each finding is the spec to send — it already carries the note\'s "id", '
+    + 'and fields merge, so nothing already in the note is lost; replace the placeholder values '
+    + 'with real ones.',
     '',
-    'Work through every note below. If a finding is genuinely not worth fixing (a config file '
-    + 'that declares no symbols, a flow that only mentions a file in passing), skip it and say '
-    + 'so — do not write a note to silence the check.',
+    'Never invent an alias from the title, and never add a path to "verified" unless you opened '
+    + 'it. Skip a finding that genuinely is not worth fixing (a config file that declares no '
+    + 'symbols) and say why.',
   ];
 
   for (const [check, list] of byCheck) {
