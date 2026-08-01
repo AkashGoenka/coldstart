@@ -17,6 +17,11 @@ import {
   wireClaudeCaptureCommand,
   wireCursorCaptureCommand,
   wireCodexCaptureSkill,
+  REPAIR_COMMAND,
+  USER_COMMANDS,
+  wireClaudeCommand,
+  wireCursorCommand,
+  wireCodexSkill,
 } from '../src/init.js';
 
 // We can't easily test runInit interactively, but we can test that the
@@ -462,5 +467,53 @@ describe('/capture-notes command wiring', () => {
     expect(wireCursorCaptureCommand(tempDir)).toBe('updated');
     expect(wireCodexCaptureSkill(tempDir)).toBe('created');
     expect(wireCodexCaptureSkill(tempDir)).toBe('updated');
+  });
+});
+
+/** The repair command is the second user-invoked command, and the reason the
+ *  writers were generalised: a host that gets one and not the other is exactly
+ *  the asymmetry this repo treats as a defect. */
+describe('/repair-notes command', () => {
+  let tempDir: string;
+  beforeEach(() => { tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coldstart-repair-cmd-')); });
+  afterEach(() => { fs.rmSync(tempDir, { recursive: true, force: true }); });
+
+  const files = () => ({
+    claude: path.join(tempDir, '.claude', 'commands', `${REPAIR_COMMAND}.md`),
+    cursor: path.join(tempDir, '.cursor', 'commands', `${REPAIR_COMMAND}.md`),
+    codex: path.join(tempDir, '.agents', 'skills', REPAIR_COMMAND, 'SKILL.md'),
+  });
+
+  it('reaches all three hosts, each in that host\'s own format', () => {
+    wireClaudeCommand(tempDir, USER_COMMANDS.repair);
+    wireCursorCommand(tempDir, USER_COMMANDS.repair);
+    wireCodexSkill(tempDir, USER_COMMANDS.repair);
+    const f = files();
+
+    // Claude: `!`-expanded so the worklist lands in the prompt.
+    expect(fs.readFileSync(f.claude, 'utf8')).toContain('!`node ');
+    // Cursor: plain template — it has no `!` expansion.
+    expect(fs.readFileSync(f.cursor, 'utf8')).not.toContain('!`');
+    // Codex: skills require name + description frontmatter.
+    expect(fs.readFileSync(f.codex, 'utf8')).toContain(`name: ${REPAIR_COMMAND}`);
+
+    for (const body of Object.values(f).map((p) => fs.readFileSync(p, 'utf8'))) {
+      expect(body).toContain('kb repair');
+      // Fixing is the agent's job, said on every surface.
+      expect(body).toContain('kb write');
+      expect(body).toContain('Nothing to repair here.');
+    }
+  });
+
+  it('is idempotent — a re-run updates in place', () => {
+    for (const wire of [wireClaudeCommand, wireCursorCommand, wireCodexSkill]) {
+      expect(wire(tempDir, USER_COMMANDS.repair)).toBe('created');
+      expect(wire(tempDir, USER_COMMANDS.repair)).toBe('updated');
+    }
+  });
+
+  it('bakes no repo-specific path, so the command works from any cwd', () => {
+    wireClaudeCommand(tempDir, USER_COMMANDS.repair);
+    expect(fs.readFileSync(files().claude, 'utf8')).not.toContain(tempDir);
   });
 });

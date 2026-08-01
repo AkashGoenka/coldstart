@@ -38,7 +38,7 @@
       },
       "interfaces": ["cli", "mcp"],
       "primaryInterface": "cli",
-      "tools": ["find", "gs", "kb_search", "kb_lookup", "kb_write", "kb_status"],
+      "tools": ["find", "gs", "kb_search", "kb_lookup", "kb_write", "kb_status", "kb_repair"],
       "requiresApiKey": false,
       "requiresNetwork": false
     }

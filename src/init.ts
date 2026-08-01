@@ -608,77 +608,122 @@ ${coldstartMd(mode)}`;
  *  The install path is absolute and tracks npm updates (see installRoot). */
 export const CAPTURE_COMMAND = 'capture-notes';
 
-function captureInvocation(): string {
-  return `node ${path.join(resolveHooksDir(), 'kb-elicit.mjs')} --manual`;
+/** The user-invoked repair command (`/repair-notes`).
+ *
+ *  Notes written before the required-field shape was frozen are missing fields
+ *  their writer was never asked for — correct, but unreachable. `kb repair`
+ *  finds them and prints a worklist; the agent does the fixing, because every
+ *  gap needs a judgement about the code. Detection runs inside the command, so
+ *  a clean notebook produces one line and no work. */
+export const REPAIR_COMMAND = 'repair-notes';
+
+/** Every user-invoked command is the same three files with different text.
+ *  Keeping them in one table is what stops a host from quietly having only some
+ *  of them — `unwire` sweeps the same list. */
+export interface UserCommand {
+  name: string;
+  /** The shell command each host's wrapper runs. */
+  invocation: () => string;
+  /** One line for the Claude front-matter and the init output. */
+  description: string;
+  /** Codex skills need a longer, trigger-oriented description. */
+  skillDescription: string;
+  /** What the agent should do with the output. */
+  instructions: string;
 }
 
-const CAPTURE_INSTRUCTIONS = `Follow the notebook-capture checklist it prints, exactly as you \
-would for an automatic capture: decide what (if anything) is worth writing, and never write a note \
-for a file that is not on the worklist. If nothing about the present code is worth recording, write \
-nothing and say so.`;
+export const USER_COMMANDS: Record<'capture' | 'repair', UserCommand> = {
+  capture: {
+    name: CAPTURE_COMMAND,
+    invocation: () => `node ${path.join(resolveHooksDir(), 'kb-elicit.mjs')} --manual`,
+    description: 'Capture notebook notes for the work done so far',
+    skillDescription:
+      'Capture coldstart notebook notes for the work done so far in this session. Use when the '
+      + 'user asks to capture notes, save what was learned, or write up findings before moving on.',
+    instructions:
+      'Follow the notebook-capture checklist it prints, exactly as you would for an automatic '
+      + 'capture: decide what (if anything) is worth writing, and never write a note for a file '
+      + 'that is not on the worklist. If nothing about the present code is worth recording, write '
+      + 'nothing and say so.',
+  },
+  repair: {
+    name: REPAIR_COMMAND,
+    // The CLI, not a hook: repair reads the notebook and nothing else, so it
+    // needs no session and no index. `--root .` keeps it repo-agnostic.
+    invocation: () => `node ${path.join(installRoot(), 'dist', 'index.js')} kb repair --root .`,
+    description: 'Repair notebook notes that are written but unfindable',
+    skillDescription:
+      'Repair coldstart notebook notes that are missing the fields which make them findable '
+      + '(aliases, anchor symbols, a flow\'s verified paths). Use when the user asks to repair, '
+      + 'fix, or clean up the notebook, or when notes are not turning up in search.',
+    instructions:
+      'It prints a worklist and changes nothing. Work through every note it lists: open the note '
+      + 'and the repo files it names, decide what actually belongs there, and write it with '
+      + '`kb write` using the note\'s "id" (fields merge — nothing already in the note is lost). '
+      + 'Never invent an alias from the title, and never add a path to "verified" unless you '
+      + 'opened it. If a finding is genuinely not worth fixing, skip it and say why. '
+      + 'If it prints "Nothing to repair here.", stop — there is no work.',
+  },
+};
 
-/** Claude Code: `.claude/commands/capture-notes.md` → `/capture-notes`.
- *  Claude expands a leading `!` at submit time, so the checklist is injected
+/** Claude Code: `.claude/commands/<name>.md` → `/<name>`.
+ *  Claude expands a leading `!` at submit time, so the output is injected
  *  straight into the prompt and the agent acts on it in the same turn. */
-export function wireClaudeCaptureCommand(cwd: string): 'created' | 'updated' {
-  const dir = path.join(cwd, '.claude', 'commands');
-  const filePath = path.join(dir, `${CAPTURE_COMMAND}.md`);
-  const existed = fs.existsSync(filePath);
-  const body = `---
-description: Capture notebook notes for the work done so far
+export function wireClaudeCommand(cwd: string, cmd: UserCommand): 'created' | 'updated' {
+  return writeOwnedFile(path.join(cwd, '.claude', 'commands', `${cmd.name}.md`), `---
+description: ${cmd.description}
 allowed-tools: Bash(node:*)
 ---
 
-!\`${captureInvocation()}\`
+!\`${cmd.invocation()}\`
 
-${CAPTURE_INSTRUCTIONS}
-`;
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(filePath, body);
-  return existed ? 'updated' : 'created';
+${cmd.instructions}
+`);
 }
 
-/** Cursor: `.cursor/commands/capture-notes.md` → `/capture-notes`.
+/** Cursor: `.cursor/commands/<name>.md` → `/<name>`.
  *  Cursor commands are plain prompt templates with no `!` expansion, so the
  *  body asks the agent to run the command itself. */
-export function wireCursorCaptureCommand(cwd: string): 'created' | 'updated' {
-  const dir = path.join(cwd, '.cursor', 'commands');
-  const filePath = path.join(dir, `${CAPTURE_COMMAND}.md`);
-  const existed = fs.existsSync(filePath);
-  const body = `Run this in the terminal:
+export function wireCursorCommand(cwd: string, cmd: UserCommand): 'created' | 'updated' {
+  return writeOwnedFile(path.join(cwd, '.cursor', 'commands', `${cmd.name}.md`), `Run this in the terminal:
 
-\`${captureInvocation()}\`
+\`${cmd.invocation()}\`
 
-${CAPTURE_INSTRUCTIONS}
-`;
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(filePath, body);
-  return existed ? 'updated' : 'created';
+${cmd.instructions}
+`);
 }
 
-/** Codex: `.agents/skills/capture-notes/SKILL.md` → `$capture-notes`.
+/** Codex: `.agents/skills/<name>/SKILL.md` → `$<name>`.
  *  Codex custom prompts are global (`~/.codex/prompts`) AND deprecated, so they
  *  can't carry a repo-scoped command. Skills are the supported path and ARE
  *  repo-scoped — Codex walks `.agents/skills` from the cwd up to the repo root. */
-export function wireCodexCaptureSkill(cwd: string): 'created' | 'updated' {
-  const dir = path.join(cwd, '.agents', 'skills', CAPTURE_COMMAND);
-  const filePath = path.join(dir, 'SKILL.md');
-  const existed = fs.existsSync(filePath);
-  const body = `---
-name: ${CAPTURE_COMMAND}
-description: Capture coldstart notebook notes for the work done so far in this session. Use when the user asks to capture notes, save what was learned, or write up findings before moving on.
+export function wireCodexSkill(cwd: string, cmd: UserCommand): 'created' | 'updated' {
+  return writeOwnedFile(path.join(cwd, '.agents', 'skills', cmd.name, 'SKILL.md'), `---
+name: ${cmd.name}
+description: ${cmd.skillDescription}
 ---
 
 Run this in the terminal:
 
-\`${captureInvocation()}\`
+\`${cmd.invocation()}\`
 
-${CAPTURE_INSTRUCTIONS}
-`;
-  fs.mkdirSync(dir, { recursive: true });
+${cmd.instructions}
+`);
+}
+
+/** These files are coldstart-owned end to end, so a re-run overwrites rather
+ *  than merges — that is how guidance edits reach an already-inited repo. */
+function writeOwnedFile(filePath: string, body: string): 'created' | 'updated' {
+  const existed = fs.existsSync(filePath);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, body);
   return existed ? 'updated' : 'created';
 }
+
+// Back-compat wrappers — the capture command predates the table above.
+export const wireClaudeCaptureCommand = (cwd: string) => wireClaudeCommand(cwd, USER_COMMANDS.capture);
+export const wireCursorCaptureCommand = (cwd: string) => wireCursorCommand(cwd, USER_COMMANDS.capture);
+export const wireCodexCaptureSkill = (cwd: string) => wireCodexSkill(cwd, USER_COMMANDS.capture);
 
 export const AGENTS_START = '<!-- coldstart:start -->';
 export const AGENTS_END = '<!-- coldstart:end -->';
@@ -839,7 +884,8 @@ function setupClaude(cwd: string, exp: Experience): void {
   out(typeof kb === 'object'
     ? `  settings.json — notebook hooks NOT wired: ${kb.error}`
     : `  settings.json — ${kb} notebook recall + capture hooks (UserPromptSubmit + Stop/SubagentStop)`);
-  out(`  commands/     — ${wireClaudeCaptureCommand(cwd)} /${CAPTURE_COMMAND} (capture notes on demand)`);
+  out(`  commands/     — ${wireClaudeCommand(cwd, USER_COMMANDS.capture)} /${CAPTURE_COMMAND} (capture notes on demand)`);
+  out(`  commands/     — ${wireClaudeCommand(cwd, USER_COMMANDS.repair)} /${REPAIR_COMMAND} (fix notes that can't be found)`);
 }
 
 function setupCodex(cwd: string, exp: Experience): void {
@@ -852,7 +898,8 @@ function setupCodex(cwd: string, exp: Experience): void {
   out(typeof hooks === 'object'
     ? `  hooks.json    — Codex hooks NOT wired: ${hooks.error}`
     : `  hooks.json    — ${hooks} Codex navigation + notebook hooks`);
-  out(`  .agents/skills — ${wireCodexCaptureSkill(cwd)} $${CAPTURE_COMMAND} skill (capture notes on demand)`);
+  out(`  .agents/skills — ${wireCodexSkill(cwd, USER_COMMANDS.capture)} $${CAPTURE_COMMAND} skill (capture notes on demand)`);
+  out(`  .agents/skills — ${wireCodexSkill(cwd, USER_COMMANDS.repair)} $${REPAIR_COMMAND} skill (fix notes that can't be found)`);
   if (typeof hooks !== 'object') {
     out('');
     out('  ⚠ Codex won\'t run these hooks until you trust them — untrusted hooks');
@@ -878,7 +925,8 @@ function setupCursor(cwd: string, exp: Experience): void {
   out(typeof hooks === 'object'
     ? `  hooks.json    — Cursor hooks NOT wired: ${hooks.error}`
     : `  hooks.json    — ${hooks} Cursor navigation + notebook hooks`);
-  out(`  commands/     — ${wireCursorCaptureCommand(cwd)} /${CAPTURE_COMMAND} (capture notes on demand)`);
+  out(`  commands/     — ${wireCursorCommand(cwd, USER_COMMANDS.capture)} /${CAPTURE_COMMAND} (capture notes on demand)`);
+  out(`  commands/     — ${wireCursorCommand(cwd, USER_COMMANDS.repair)} /${REPAIR_COMMAND} (fix notes that can't be found)`);
 }
 
 function setupOther(cwd: string, exp: Experience): void {

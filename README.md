@@ -108,7 +108,7 @@ coldstart kb status / lint / render / init / migrate
 - **Concurrent sessions are safe.** Multiple agents can write at once: per-note append-only logs, exclusive creation for new note ids (a same-moment duplicate becomes two visible notes, never a silent merge), lossless merging for shared file notes, and atomic renders (a reader never sees a half-written note).
 - **Corrections happen in-session.** If an agent finds a note wrong while the evidence is in its context, the guidance tells it to fix or retract the note right then — no better-placed future agent exists.
 
-**Setup:** the notebook comes with `coldstart init` — no separate step. It creates the notebook skeleton, sets union-merge for the logs, and (on Claude Code, Codex and Cursor) wires the two hooks — capture at session end, recall at prompt time. (`coldstart kb init` still exists as an alias if you want to (re-)wire just the notebook.) Other hosts can drive the notebook without the hooks: via the full `kb` CLI, or — for no-shell clients — the `kb_search` / `kb_lookup` / `kb_write` / `kb_status` MCP tools.
+**Setup:** the notebook comes with `coldstart init` — no separate step. It creates the notebook skeleton, sets union-merge for the logs, and (on Claude Code, Codex and Cursor) wires the two hooks — capture at session end, recall at prompt time. (`coldstart kb init` still exists as an alias if you want to (re-)wire just the notebook.) Other hosts can drive the notebook without the hooks: via the full `kb` CLI, or — for no-shell clients — the `kb_search` / `kb_lookup` / `kb_write` / `kb_status` / `kb_repair` MCP tools.
 
 **Language-agnostic.** The notebook's freshness machinery is content-hash based, so it works on any codebase — including languages the navigation index doesn't parse. Where the index does parse, notes additionally get symbol-level freshness.
 
@@ -171,7 +171,7 @@ coldstart find auth; coldstart find 'session cookie'; coldstart gs src/auth/serv
 coldstart ships as one binary with two front doors:
 
 - **CLI (primary)** — `coldstart find …` / `coldstart gs …` / `coldstart kb …`. For any shell-capable agent (Claude Code, Cursor, terminal use). This is the fast path.
-- **MCP (for no-shell clients)** — the `find` and `gs` tools, plus the notebook as `kb_search` / `kb_lookup` / `kb_write` / `kb_status`, all byte-identical to the CLI. For clients like Claude Desktop that have no shell. (`kb commit` stays CLI/human-only — publishing notes to git is never an agent action.)
+- **MCP (for no-shell clients)** — the `find` and `gs` tools, plus the notebook as `kb_search` / `kb_lookup` / `kb_write` / `kb_status` / `kb_repair`, all byte-identical to the CLI. For clients like Claude Desktop that have no shell. (`kb commit` stays CLI/human-only — publishing notes to git is never an agent action.)
 
 Same engine, same index, same results. Pick whichever your agent can reach.
 
