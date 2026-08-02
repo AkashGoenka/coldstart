@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.12] - 2026-08-02
+
+### Added
+- **`kb repair-aliases`: a separate, paginated worklist for reconciling `identityAliases`.** A
+  note's `identityAliases` are meant to stay true forever, but a note rewritten several times can
+  carry words that were really symptom vocabulary for an earlier write — a different problem from
+  `kb repair`'s `missing-identity-aliases` check, which only catches notes with *no* aliases at
+  all. The new command surfaces every active file/flow note's current (capped) aliases alongside
+  what's hidden past the render cap, 10 notes at a time, so an agent can retract a stale alias
+  without blindly resurfacing an older one the cap was hiding. It changes nothing itself —
+  reconciling is always an agent judgment call through the ordinary `kb write` path. Wired as the
+  `kb repair-aliases` CLI verb, the `kb_repair_aliases` MCP tool, and `/repair-aliases` on Claude
+  Code, Cursor, and Codex, through the same command table `/capture-notes` and `/repair-notes`
+  already use. (`src/kb/alias-repair.ts`, #121)
+- **Anchor symbols now backfill automatically as notes are written.** Single-purpose file notes
+  missing `anchors[].symbols` get them filled in mechanically from the code index, capped at 15 and
+  never overriding a symbol an agent already curated. This already ran from `kb repair` and
+  `coldstart init`; it's now also fired by the keeper itself after every notebook write, so a fresh
+  note gets its symbols within one debounce cycle with no manual repair step. A streak counter caps
+  it at 3 consecutive auto-fixing passes as a loop guard. (`src/kb/repair.ts`, `src/index-manager.ts`, #121)
+
+### Changed
+- **A note's `aliases` field is now two fields: `identityAliases` and `incidentAliases`.**
+  `identityAliases` keep the old union-forever, capped-at-12 behavior — the file/flow's stable
+  name and role. `incidentAliases` are new: symptom words tied to *this* write's summary,
+  **replaced wholesale** (not unioned) the next time the summary changes, so bug-hunt vocabulary
+  from an old, fixed issue doesn't pile up forever. Retracting an alias works the same for either
+  field. (`src/kb/fold.ts`, `src/kb/types.ts`, `hooks/note-shape.mjs`, #121)
+
+### Fixed
+- **Notes written before the alias split would have silently lost alias search on upgrade.** Older
+  `.raw` logs use the flat `aliases` key the fold no longer read once the split landed — a real,
+  live-data regression caught before shipping (49 of this repo's own notes used the old shape). A
+  backward-compat fold rule now folds a bare `aliases` into `identityAliases`, matching its old
+  union-forever behavior, so every existing notebook stays searchable across the upgrade with no
+  migration step. (`src/kb/fold.ts`, #121)
+
 ## [2.2.8] - 2026-07-25
 
 ### Fixed
