@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.13] - 2026-08-02
+
+### Fixed
+- **`kb repair-aliases` reappeared with the same notes on every run — it had no way to record "already
+  reviewed, still accurate."** Unlike `kb repair`'s mechanical checks, which naturally clear once a note
+  is fixed, "these aliases are still true" is a judgment call that left no trace, so a note stayed on the
+  worklist forever even after being confirmed correct. Fixed with an explicit `aliasesVerifiedAtEdit`
+  stamp, set only when a `kb write` carries `aliasesVerified:true` — never implied by an ordinary edit,
+  so an unrelated write can't silently mark aliases as reviewed. A note drops off the worklist once
+  nothing has changed since its stamp, and reappears the moment a later write touches its aliases again.
+  (`src/kb/fold.ts`, `src/kb/alias-repair.ts`, #123)
+- **The naive version of that fix would have broken pagination.** The eligible-notes list shrinks as
+  notes get marked reviewed, so continuing to advance `--offset` by the page size — the documented way
+  to page through a truncated worklist — would silently skip whatever slid into that position on the next
+  call. Fixed by changing the resume contract instead of the slicing: mark a batch verified, then re-run
+  with **no offset** — reviewed notes are simply gone from the list, so a fresh call from the top is
+  always "what's still outstanding." `offset`/`nextOffset` still work for read-only browsing, just aren't
+  the resume mechanism anymore. Regression-tested (15 notes / page size 10: mark page 1 verified, re-call
+  at offset 0, confirm the other 5 with no skip or repeat). (#123)
+
 ## [2.2.12] - 2026-08-02
 
 ### Added
