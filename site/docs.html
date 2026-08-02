@@ -331,12 +331,13 @@
 
     <section id="kb-maint" class="doc-sec">
       <div class="cmd">
-        <div class="name warm"><span class="c">coldstart kb status / lint / repair / render</span> <span class="badge">notebook</span></div>
+        <div class="name warm"><span class="c">coldstart kb status / lint / repair / repair-aliases / render</span> <span class="badge">notebook</span></div>
       </div>
       <div class="flags">
         <div class="flag-row"><span class="fk">kb status</span><span class="fv">Notebook health: note counts and per-note freshness at a glance.</span></div>
         <div class="flag-row"><span class="fk">kb lint</span><span class="fv">Check the notebook for structural problems (broken anchors, malformed notes).</span></div>
         <div class="flag-row"><span class="fk">kb repair</span><span class="fv">List the notes that are written but <em>unfindable</em> — missing the fields a note can't be retrieved without (search aliases, anchor symbols, a flow's verified paths). Notes written before those fields were required are correct but unreachable. It prints a worklist and changes nothing: your agent opens each note and the code it names and completes it with an ordinary <code>kb write</code>, because every gap needs a judgement about the code. Nothing to fix → <code>Nothing to repair here.</code> Also available as <code>/repair-notes</code>.</span></div>
+        <div class="flag-row"><span class="fk">kb repair-aliases</span><span class="fv">A different worklist: notes whose <code>identityAliases</code> exist but may no longer describe the file/flow (stale or really symptom words from an earlier write) — not notes missing aliases entirely, that's <code>kb repair</code> above. Shows each note's current aliases alongside what's hidden past the render cap, 10 notes per page, and changes nothing itself. Also available as <code>/repair-aliases</code>.</span></div>
         <div class="flag-row"><span class="fk">kb render</span><span class="fv">Regenerate the derived Markdown notes from the <code>.raw</code> logs.</span></div>
         <div class="flag-row"><span class="fk">kb init</span><span class="fv">Notebook-only setup — skeleton + hooks. Redundant if you ran <code>coldstart init</code>, which already does this.</span></div>
         <div class="flag-row"><span class="fk">kb migrate</span><span class="fv">Upgrade an older notebook's on-disk format.</span></div>
@@ -405,7 +406,7 @@
       <div class="flags">
         <div class="flag-row"><span class="fk">find · gs</span><span class="fv">The two navigation operations.</span></div>
         <div class="flag-row"><span class="fk">kb_search · kb_lookup</span><span class="fv">Read the notebook.</span></div>
-        <div class="flag-row"><span class="fk">kb_write · kb_status · kb_repair</span><span class="fv">Write to and inspect the notebook — the MCP server is a writer for <code>kb_write</code>. <code>kb_repair</code> lists notes that are written but unfindable.</span></div>
+        <div class="flag-row"><span class="fk">kb_write · kb_status · kb_repair · kb_repair_aliases</span><span class="fv">Write to and inspect the notebook — the MCP server is a writer for <code>kb_write</code>. <code>kb_repair</code> lists notes that are written but unfindable; <code>kb_repair_aliases</code> lists notes whose aliases exist but may no longer be true.</span></div>
       </div>
       <div class="callout"><span class="ct">Not exposed</span><code>kb commit</code> and <code>kb view</code> stay CLI/human-only — publishing to git and opening a browser are never agent actions.</div>
     </section>
