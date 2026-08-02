@@ -175,12 +175,12 @@ export const TOOL_DEFINITIONS = [
     name: 'kb_repair_aliases',
     description:
       'List file/flow notes whose identityAliases may no longer describe them — a DIFFERENT problem from kb_repair: that one finds notes with NO aliases at all, this one is for aliases that exist but have gone stale (a note rewritten several times can carry words that were really symptoms of an earlier write, not stable facts). Paginated 10 notes at a time.\n\n' +
-      'Each entry shows the current (capped) identityAliases AND the full historical union hidden past the render cap — read both before retracting anything, because dropping a visible alias can resurface an older hidden one on the next fold. Re-read the note\'s code, then reconcile via kb_write (retract stale entries, re-put the rest) — never mechanically, every judgement needs the current code.\n\n' +
-      'Returns "No file/flow notes to reconcile." when done. If the response includes `more`, call again with `offset` set to `more.nextOffset` for the next batch.',
+      'Each entry shows the current (capped) identityAliases AND the full historical union hidden past the render cap — read both before retracting anything, because dropping a visible alias can resurface an older hidden one on the next fold. Re-read the note\'s code, then reconcile via kb_write (retract stale entries, re-put the rest) — never mechanically, every judgement needs the current code. End every note\'s kb_write with `aliasesVerified:true` on it, even when nothing changed — that is what stops it reappearing; without it the same note resurfaces on your next call.\n\n' +
+      'Returns "No file/flow notes to reconcile." when done. Once a batch is marked aliasesVerified, call again with NO offset (or offset 0) — verified notes drop out of the list on their own. Do not increment offset yourself across a reconciling pass: the list shrinks as notes get marked, so a fixed offset (including a stale `more.nextOffset`) silently skips whatever shifted into that position. `offset`/`more.nextOffset` still work for browsing the list WITHOUT marking anything — just not as a way to advance while reconciling.',
     inputSchema: {
       type: 'object',
       properties: {
-        offset: { type: 'number', description: 'Pagination offset (0-based). Use `more.nextOffset` from the previous response to continue.' },
+        offset: { type: 'number', description: 'Pagination offset (0-based). For browsing only — do NOT increment this across calls once you start marking notes aliasesVerified, since the eligible list shrinks as you go. Leave at 0 (or omit) and just call again; reviewed notes fall out automatically.' },
         limit: { type: 'number', description: 'Notes per page. Defaults to 10.' },
       },
     },

@@ -688,10 +688,11 @@ export const USER_COMMANDS: Record<'capture' | 'repair' | 'repairAliases', UserC
     // its own instructions and pagination pointer, so CLI/MCP/all three hosts
     // say the same thing.
     instructions:
-      'It prints a PAGINATED worklist (10 notes at a time) and changes nothing. Follow the '
-      + 'instructions it prints for each note, then if it says more notes remain, re-run the same '
-      + 'command with the `--offset` it gives you and continue until none remain. If it prints "No '
-      + 'file/flow notes to reconcile.", stop.',
+      'It prints a PAGINATED worklist (10 notes at a time) — each note you review must end with a '
+      + '`kb write` carrying `aliasesVerified:true` on it, even when you kept every alias unchanged, '
+      + 'or it reappears next run. Once a batch is marked, re-run the exact same command again (no '
+      + '`--offset`) — reviewed notes drop out on their own, so it keeps surfacing whatever is still '
+      + 'outstanding. Stop when it prints "No file/flow notes to reconcile."',
   },
 };
 

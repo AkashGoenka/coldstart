@@ -130,12 +130,51 @@ describe('aliasRepairWorklist', () => {
     expect(text).toContain('kb write');
   });
 
-  it('tells the agent how to fetch the next batch when truncated', async () => {
+  it('tells the agent to mark the batch verified and re-run with no offset, when truncated', async () => {
     for (let i = 0; i < 11; i++) {
       await kbWrite(root, { type: 'file-single', path: `src/f${i}.ts`, summary: 's', identityAliases: ['a'] } as never, { force: true });
     }
     const text = aliasRepairWorklist(planAliasRepair(root, 0, 10));
-    expect(text).toContain('--offset 10');
+    expect(text).toContain('aliasesVerified:true');
+    expect(text).toContain('NO --offset');
     expect(text).toContain('1 more note');
+  });
+
+  it('a note marked aliasesVerified with nothing else changed does not resurface', async () => {
+    await kbWrite(root, { type: 'file-single', path: 'src/a.ts', summary: 's', identityAliases: ['a'] } as never, { force: true });
+    const id = planAliasRepair(root).entries[0].note;
+    expect(planAliasRepair(root).total).toBe(1);
+    await kbWrite(root, { id, type: 'file', path: 'src/a.ts', aliasesVerified: true } as never, { force: true });
+    expect(planAliasRepair(root).total).toBe(0);
+    expect(aliasRepairWorklist(planAliasRepair(root))).toBe('No file/flow notes to reconcile.');
+  });
+
+  it('a later unrelated write to identityAliases makes a verified note reappear', async () => {
+    await kbWrite(root, { type: 'file-single', path: 'src/a.ts', summary: 's', identityAliases: ['a'] } as never, { force: true });
+    const id = planAliasRepair(root).entries[0].note;
+    await kbWrite(root, { id, type: 'file', path: 'src/a.ts', aliasesVerified: true } as never, { force: true });
+    expect(planAliasRepair(root).total).toBe(0);
+    await kbWrite(root, { id, type: 'file', path: 'src/a.ts', identityAliases: ['b'] } as never, { force: true });
+    expect(planAliasRepair(root).total).toBe(1);
+  });
+
+  it('marking a batch verified does not skip notes on the next default-offset call — the pagination bug', async () => {
+    // 15 notes, page size 10: mark ALL of page 1 verified, then re-call with
+    // the SAME (default) offset — every one of the 5 that were originally at
+    // positions 10-14 must still show up, not just the ones that happen to
+    // land at the new front after the first 10 drop out.
+    for (let i = 0; i < 15; i++) {
+      await kbWrite(root, { type: 'file-single', path: `src/g${i}.ts`, summary: 's', identityAliases: ['a'] } as never, { force: true });
+    }
+    const page1 = planAliasRepair(root, 0, 10);
+    expect(page1.entries).toHaveLength(10);
+    const page1Ids = new Set(page1.entries.map((e) => e.note));
+    for (const e of page1.entries) {
+      await kbWrite(root, { id: e.note, type: 'file', path: e.paths[0], aliasesVerified: true } as never, { force: true });
+    }
+    const page2 = planAliasRepair(root, 0, 10); // no offset increment — the fix
+    expect(page2.total).toBe(5);
+    expect(page2.entries).toHaveLength(5);
+    for (const e of page2.entries) expect(page1Ids.has(e.note)).toBe(false); // none re-shown, none skipped
   });
 });

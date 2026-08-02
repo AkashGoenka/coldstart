@@ -39,6 +39,7 @@ export function renderNote(note: FoldedNote): string {
   if (note.supersededBy) fm.push(`superseded_by: ${note.supersededBy}`);
   fm.push(`updated: ${note.updated}`);
   fm.push(`edits: ${note.edits}`);
+  if (note.aliasesVerifiedAtEdit !== undefined) fm.push(`aliasesVerifiedAtEdit: ${note.aliasesVerifiedAtEdit}`);
   // Tolerant reader: unknown record fields survive into the frontmatter.
   for (const [k, v] of Object.entries(note.extra)) {
     if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k)) fm.push(`${k}: ${JSON.stringify(v)}`);
