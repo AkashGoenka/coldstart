@@ -168,15 +168,21 @@ naming convention) is exactly what to record — ONLY if you actually observed i
 session's work. Never guess at usage or go searching for it now. Files flagged "no consumers \
 in import graph" are where an observed usage fact matters most.
 7. Fixed a bug? The cause goes in the culpable file's note; the SYMPTOM words go in \
-"aliases" — symptoms are what a future agent will search. Aliases are SEARCH KEYS, not \
-sentences: each one 2-5 words, no filler ("after", "already", "another", "still"), because \
-every word in an alias is an independent match chance and a long alias makes the note fire \
-on prompts it has nothing to do with. Cover the vocabulary THIS FILE owns — the concept \
-nouns someone would type when they want this file, including the ones already in its name \
-and symbols. A note about alias handling that never says "aliases" cannot be found by \
-someone asking about aliases. 6-10 aliases is plenty; more surface area is not more recall.
+"incidentAliases" — symptoms are what a future agent will search FOR THIS BUG. incidentAliases \
+are REPLACED, not unioned, the next time this note's summary is rewritten — describe only the \
+symptom in front of you, don't carry old ones forward, and don't worry about them piling up. \
+Stable words that don't change across writes — the file's name, role, the concept nouns \
+someone would type for it regardless of which bug brought them here — go in "identityAliases" \
+instead; those DO accumulate across writes, so only add ones not already there. Aliases of \
+either kind are SEARCH KEYS, not sentences: each one 2-5 words, no filler ("after", "already", \
+"another", "still"), because every word is an independent match chance and a long alias makes \
+the note fire on prompts it has nothing to do with. 6-10 aliases total (both fields combined) \
+is plenty; more surface area is not more recall.
 8. Read a note this session that proved wrong? Correct or retract it now — you are the warm \
-agent; there is no "next".
+agent; there is no "next". This includes "identityAliases": if one describes something that's \
+no longer true (a renamed role, a dropped responsibility), retract it — identityAliases union \
+forever and nothing else will clean it up. (incidentAliases don't need this — they're replaced \
+automatically whenever you rewrite the summary, rule 7.)
 9. Firsthand only: nothing from a subagent's report you didn't verify yourself.
 10. "verified" lists only files you opened this session. Never one you didn't.
 11. Never copy secret VALUES (env contents, tokens, keys) into a note — notes are committed \
@@ -206,8 +212,8 @@ title.
 
 WRITE — one Bash block total: specs as heredocs, writes chained with &&.
 ${shapesBlock({ compact: true })}
-  "aliases" and "symbols" are what make a note FINDABLE and both go missing by \
-default: a note without aliases is reachable only by its exact title, and agents \
+  "identityAliases" and "symbols" are what make a note FINDABLE and both go missing by \
+default: a note without identityAliases is reachable only by its exact title, and agents \
 search this notebook by identifier far more than by prose — those queries match \
 the anchor channel, which holds nothing but the path until you name symbols. \
 kb write prints exactly what is missing and the one-line re-put that fixes it; \

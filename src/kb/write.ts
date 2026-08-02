@@ -35,7 +35,8 @@ export interface WriteSpec {
   /** File notes: the file the note is about (id + sole anchor derive from it). */
   path?: string;
   title?: string;
-  aliases?: string[];
+  identityAliases?: string[];
+  incidentAliases?: string[];
   anchors?: { path: string; symbols?: string[] }[];
   verified?: string[];
   summary?: string;
@@ -148,7 +149,9 @@ export async function kbWrite(root: string, spec: WriteSpec, opts: WriteOptions 
           };
         }
       } else {
-        const queryWords = [spec.title, ...(spec.aliases ?? []), spec.summary ?? ''].join(' ');
+        const queryWords = [
+          spec.title, ...(spec.identityAliases ?? []), ...(spec.incidentAliases ?? []), spec.summary ?? '',
+        ].join(' ');
         const { hits } = await kbSearch(root, queryWords, { maxResults: 5, noMissLog: true });
         // Same-type only: a lesson about a flow's file always word-overlaps that
         // flow, but they are never the same concept — cross-type candidates would

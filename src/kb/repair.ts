@@ -1,16 +1,31 @@
 /**
  * `kb repair` — find the notes that are written but cannot be found, and hand
- * them to an agent as a worklist. It NEVER writes.
+ * them to an agent as a worklist.
  *
- * WHY IT DOES NOT FIX ANYTHING ITSELF: every gap it detects needs a judgement
- * only a warm agent can make. Aliases are the words a future reader would type —
+ * WHY MOST OF IT DOES NOT FIX ANYTHING ITSELF: most gaps need a judgement only
+ * a warm agent can make. Aliases are the words a future reader would type —
  * nothing on disk knows them, and deriving them from the title produces the
- * bloat that made recall worse in the first place. Anchor symbols must be the
- * ones the note is ABOUT, not every symbol the file declares. And `verified` is
- * a claim — "I opened this file" — so auto-filing a flow at its step paths would
- * make the note assert freshness against bytes nobody read. A first pass at this
- * command DID fill symbols mechanically; its dry run proposed anchoring notes to
- * `root`, `out` and `opts`. That is the whole argument.
+ * bloat that made recall worse in the first place. And `verified` is a claim —
+ * "I opened this file" — so auto-filing a flow at its step paths would make the
+ * note assert freshness against bytes nobody read.
+ *
+ * THE ONE MECHANICAL EXCEPTION (`mechanicalSymbolRepair`, 2026-08-02): anchor
+ * symbols on a SINGLE-character file note. A first pass at this command DID
+ * fill symbols mechanically for every file note; its dry run proposed anchoring
+ * notes to `root`, `out` and `opts` — noise, not signal, and the whole reason
+ * this file's fixes stopped there. That heuristic is not this one: this reads
+ * `index.files.get(path).symbols` via the kb-notes-index sidecar — the SAME
+ * curated top-level-declaration list `gs`/`find` already surface successfully
+ * everywhere else in the product, not a raw AST/local-variable scan. It is
+ * still scoped narrowly on purpose: `character: 'hub'` notes are EXCLUDED
+ * (their symbols are curated per-facet by design — a hub is exactly the file
+ * shape most likely to have many declared symbols and least likely to want all
+ * of them dumped in, which is the shape of file the root/out/opts failure would
+ * most plausibly repeat on). An anchor that already has ANY symbols is never
+ * touched — this only fills emptiness, never overrides agent curation. A path
+ * the sidecar has no data for (unsupported language, or genuinely symbol-less —
+ * css/config/markdown) is left as a `file-no-symbols` finding, agent work same
+ * as before.
  *
  * WHY IT EXISTS AT ALL: notes written before the shape was frozen are missing
  * fields their writer was never asked for. The MCP kb_write description never
@@ -25,6 +40,57 @@
 import { relative } from 'node:path';
 import { NOTE_CHECKS, REPAIR_CONTRACT_VERSION } from '../../hooks/note-shape.mjs';
 import { loadAll, notePath } from './store.js';
+import { loadKbNotesIndex, type KbNotesIndex } from './notes-index.js';
+import { kbWrite } from './write.js';
+
+/** Mirrors the alias-surface-area caution (fold.ts's ALIAS_MAX): a file
+ *  declaring far more than this is probably hub-shaped even if mislabeled
+ *  "single" — dumping all of it would dilute the anchor channel the same way
+ *  an uncapped alias union did. Cap, don't refuse; the rest stays reachable via
+ *  `gs` even if not anchored on the note. */
+export const SYMBOL_BACKFILL_CAP = 15;
+
+export interface MechanicalRepairResult {
+  fixed: { note: string; path: string; symbols: string[] }[];
+}
+
+/**
+ * Backfill anchors[].symbols on single-character file notes from the
+ * kb-notes-index sidecar — the one check in this file that WRITES, because
+ * unlike aliases/verified this data is already fully derived, not judged. See
+ * the file header for why this is safe where the earlier mechanical pass
+ * wasn't, and why hub notes stay excluded.
+ *
+ * Degrades gracefully with no sidecar (keeper never started this repo) —
+ * `planRepairs` still works without it, just without this mechanical pass;
+ * those notes fall through to the ordinary `file-no-symbols` agent finding.
+ *
+ * `preloadedSidecar`: the keeper's auto-trigger (index-manager.ts, fired right
+ * after it rebuilds+saves this exact sidecar) already has it in memory — this
+ * skips the redundant disk read/parse for that caller. CLI/MCP callers omit it
+ * and read from disk as before.
+ */
+export async function mechanicalSymbolRepair(
+  root: string, baseCacheDir?: string, preloadedSidecar?: KbNotesIndex,
+): Promise<MechanicalRepairResult> {
+  const fixed: MechanicalRepairResult['fixed'] = [];
+  const sidecar = preloadedSidecar ?? loadKbNotesIndex(root, baseCacheDir);
+  if (!sidecar) return { fixed };
+
+  const { notes } = loadAll(root);
+  for (const n of notes) {
+    if (n.status !== 'active' || n.type !== 'file' || n.character === 'hub') continue;
+    for (const a of n.anchors) {
+      if ((a.symbols ?? []).filter(Boolean).length) continue; // never override existing curation
+      const declared = (sidecar.anchors[a.path] ?? []).filter(Boolean);
+      if (!declared.length) continue; // unsupported language or genuinely symbol-less — agent's call
+      const symbols = declared.slice(0, SYMBOL_BACKFILL_CAP);
+      const res = await kbWrite(root, { type: 'file', path: a.path, anchors: [{ path: a.path, symbols }] });
+      if (res.status === 'written') fixed.push({ note: n.id, path: a.path, symbols });
+    }
+  }
+  return { fixed };
+}
 
 export interface RepairFinding {
   /** Stable id consumers filter on. Never removed once shipped — a retired

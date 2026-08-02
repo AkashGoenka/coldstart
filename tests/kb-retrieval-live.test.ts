@@ -39,7 +39,7 @@ function seedCorpus(n: number): void {
     appendRecord(root, {
       id: `area-${i}-note`, type: 'flow', op: 'put',
       title: `how subsystem ${i} handles Widget${i}Loader requests`,
-      aliases: [`widget ${i} loader`],
+      identityAliases: [`widget ${i} loader`],
       summary: `Subsystem ${i} routes through Widget${i}Loader before persisting.`,
       anchors: [{ path: `src/sub${i}/loader.py`, symbols: [`Widget${i}Loader`] }],
     } as never);
@@ -281,7 +281,7 @@ describe('rename overlay — a note follows a byte-exact move instead of going i
 
 describe('find Note: line summaries', () => {
   const base: FoldedNote = {
-    id: 'x', type: 'file', title: 'src/models.py', aliases: [], anchors: [], status: 'active',
+    id: 'x', type: 'file', title: 'src/models.py', identityAliases: [], incidentAliases: [], anchors: [], status: 'active',
     updated: '2026-07-06T00:00:00Z', edits: 1, facets: [], steps: [], invariants: [],
     behaviors: [], features: [],
   } as unknown as FoldedNote;

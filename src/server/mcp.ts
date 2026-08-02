@@ -130,7 +130,7 @@ export const TOOL_DEFINITIONS = [
       properties: {
         spec: {
           type: 'object',
-          description: `The note spec (JSON object). Fields: type, title, summary, aliases, anchors:[{path,symbols?}], and type-specific fields (facets/character for file; steps/verified for flow; kind/scope/body for lesson). ${requiredFieldsLine()} Omit \`id\` on a new flow/lesson to trigger the reuse gate.`,
+          description: `The note spec (JSON object). Fields: type, title, summary, identityAliases (stable — unions forever), incidentAliases (this write's symptom words — replaced by the next write that changes summary/body, omit if this write isn't about an incident), anchors:[{path,symbols?}], and type-specific fields (facets/character for file; steps/verified for flow; kind/scope/body for lesson). ${requiredFieldsLine()} Omit \`id\` on a new flow/lesson to trigger the reuse gate.`,
         },
         into: {
           type: 'string',
@@ -166,10 +166,24 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'kb_repair',
     description:
-      'List the notebook notes that are WRITTEN BUT UNFINDABLE — missing the fields a note cannot be retrieved without (aliases, anchor symbols, a flow\'s verified paths). Notes written before those fields were required are correct but unreachable, and this is how they get found.\n\n' +
+      'List the notebook notes that are WRITTEN BUT UNFINDABLE — missing the fields a note cannot be retrieved without (identityAliases, anchor symbols, a flow\'s verified paths). Notes written before those fields were required are correct but unreachable, and this is how they get found.\n\n' +
       'Returns a worklist, never a change: repairing is your work, because every gap needs a judgement about the code (which words a reader would search for, which symbols the note is actually about, which files you can honestly claim to have read). Fix each one with kb_write, passing the note\'s `id` — fields merge, so nothing already in the note is lost.\n\n' +
       'A clean notebook returns "Nothing to repair here." Run it when the user asks to repair, fix, or clean up the notebook.',
     inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'kb_repair_aliases',
+    description:
+      'List file/flow notes whose identityAliases may no longer describe them — a DIFFERENT problem from kb_repair: that one finds notes with NO aliases at all, this one is for aliases that exist but have gone stale (a note rewritten several times can carry words that were really symptoms of an earlier write, not stable facts). Paginated 10 notes at a time.\n\n' +
+      'Each entry shows the current (capped) identityAliases AND the full historical union hidden past the render cap — read both before retracting anything, because dropping a visible alias can resurface an older hidden one on the next fold. Re-read the note\'s code, then reconcile via kb_write (retract stale entries, re-put the rest) — never mechanically, every judgement needs the current code.\n\n' +
+      'Returns "No file/flow notes to reconcile." when done. If the response includes `more`, call again with `offset` set to `more.nextOffset` for the next batch.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        offset: { type: 'number', description: 'Pagination offset (0-based). Use `more.nextOffset` from the previous response to continue.' },
+        limit: { type: 'number', description: 'Notes per page. Defaults to 10.' },
+      },
+    },
   },
 ] as const;
 
@@ -309,12 +323,29 @@ export function registerToolHandlers(
         break;
       }
 
-      // Parity with `coldstart kb repair`: same detection, same worklist text,
-      // so the instructions are not something one wrapper happens to say.
+      // Parity with `coldstart kb repair`: same detection, same worklist text
+      // (and the same mechanical symbol backfill run first), so the
+      // instructions are not something one wrapper happens to say.
       case 'kb_repair': {
-        const { planRepairs, repairWorklist } = await import('../kb/repair.js');
+        const { planRepairs, repairWorklist, mechanicalSymbolRepair } = await import('../kb/repair.js');
+        const mechanical = await mechanicalSymbolRepair(index.rootDir);
         const report = planRepairs(index.rootDir);
-        result = { __rawText: repairWorklist(report) };
+        const prefix = mechanical.fixed.length
+          ? `kb repair: mechanically backfilled anchor symbols (from the code index — no judgement `
+            + `needed) on ${mechanical.fixed.length} note${mechanical.fixed.length === 1 ? '' : 's'}:\n`
+            + mechanical.fixed.map((f) => `  - ${f.note} (${f.path}): ${f.symbols.join(', ')}`).join('\n') + '\n\n'
+          : '';
+        result = { __rawText: prefix + repairWorklist(report) };
+        break;
+      }
+      // Parity with `coldstart kb repair-aliases`: same worklist text and
+      // pagination shape, so all surfaces say the same thing.
+      case 'kb_repair_aliases': {
+        const { planAliasRepair, aliasRepairWorklist } = await import('../kb/alias-repair.js');
+        const offset = Number(params['offset']) || 0;
+        const limit = Number(params['limit']) || 10;
+        const page = planAliasRepair(index.rootDir, offset, limit);
+        result = { __rawText: aliasRepairWorklist(page) };
         break;
       }
       case 'kb_status': {
@@ -372,7 +403,7 @@ export function registerToolHandlers(
 // Registry-installed users never run `coldstart init`, so they get the tools with
 // no hooks: no automatic capture, no recall. Nothing else tells them.
 export const SERVER_INSTRUCTIONS = [
-  'coldstart answers "which files are relevant to this task?" from a static index (`find`, `gs`) and keeps a durable NOTEBOOK of notes past agents wrote about this repo (`kb_search`, `kb_lookup`, `kb_write`, `kb_status`, `kb_repair`). Try `kb_search` before `find` when the task may have been worked on here before.',
+  'coldstart answers "which files are relevant to this task?" from a static index (`find`, `gs`) and keeps a durable NOTEBOOK of notes past agents wrote about this repo (`kb_search`, `kb_lookup`, `kb_write`, `kb_status`, `kb_repair`, `kb_repair_aliases`). Try `kb_search` before `find` when the task may have been worked on here before.',
   '',
   'SETUP: the hooks that capture notes automatically at the end of a task, and surface matching notes when a prompt arrives, are NOT installed by this MCP server. If the user asks why notes are never captured or recalled, tell them to run `coldstart init` once in the repo root (install: `npm i -g @cstart/coldstart`); it wires those hooks for Claude Code, Cursor, or Codex. Every tool here works without it — only the automatic capture and recall are missing.',
 ].join('\n');

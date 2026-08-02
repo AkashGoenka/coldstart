@@ -127,7 +127,7 @@ interface Haystacks {
 }
 
 function haystacksFor(note: FoldedNote): Haystacks {
-  const name = [note.title, ...note.aliases].join(' ');
+  const name = [note.title, ...note.identityAliases, ...note.incidentAliases].join(' ');
   // Facet symbols are addresses — they sit in the anchor channel with the
   // other (path, symbol) vocabulary; facet details are prose (body).
   const anchor = [
@@ -606,7 +606,7 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
     // across. Only clustering inside one authored string means anything.
     if (opts.strongOnly && !pathNamedIds.has(note.id) && note.anchors.length && carriers.length > 0
         && carriers.every((c) => c.endsWith(':n'))) {
-      const groups = [note.title, ...note.aliases];
+      const groups = [note.title, ...note.identityAliases, ...note.incidentAliases];
       const maxInGroup = groups.reduce(
         (m, g) => Math.max(m, nameTerms.filter((t) => wordHit(g, t)).length), 0);
       if (maxInGroup < NAME_ONLY_MIN_DENSITY) continue;
@@ -864,7 +864,8 @@ export function renderSearchPage(root: string, query: string, result: KbSearchRe
     parts.push(`## ${n.title}  [${n.type}${kind} · ${n.status}]`);
     parts.push(`id: ${n.id} · updated ${n.updated.slice(0, 10)}`);
     if (n.status === 'superseded' && n.supersededBy) parts.push(`superseded by: ${n.supersededBy}`);
-    if (n.aliases.length) parts.push(`aka: ${n.aliases.join(' · ')}`);
+    const allAliases = [...n.identityAliases, ...n.incidentAliases];
+    if (allAliases.length) parts.push(`aka: ${allAliases.join(' · ')}`);
     for (const s of hit.stamped) parts.push(freshnessLine(s));
     if (hit.inactive) parts.push('[inactive — every anchored file is absent on this branch]');
     if (hit.absence) parts.push(hit.absence);

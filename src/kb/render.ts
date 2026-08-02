@@ -23,7 +23,13 @@ export function renderNote(note: FoldedNote): string {
   if (note.character) fm.push(`character: ${note.character}`);
   if (note.kind) fm.push(`kind: ${note.kind}`);
   fm.push(`title: ${yamlStr(note.title)}`);
-  if (note.aliases.length) fm.push(`aliases: [${note.aliases.map(yamlStr).join(', ')}]`);
+  // `aliases` (combined) is the Obsidian-conformant key ecosystem tooling reads;
+  // the split fields are coldstart's own machine contract (never re-parsed back
+  // — render is never load-bearing for retrieval, see file header).
+  const allAliases = [...note.identityAliases, ...note.incidentAliases];
+  if (allAliases.length) fm.push(`aliases: [${allAliases.map(yamlStr).join(', ')}]`);
+  if (note.identityAliases.length) fm.push(`identityAliases: [${note.identityAliases.map(yamlStr).join(', ')}]`);
+  if (note.incidentAliases.length) fm.push(`incidentAliases: [${note.incidentAliases.map(yamlStr).join(', ')}]`);
   if (note.anchors.length) {
     fm.push('anchors:');
     for (const a of note.anchors) fm.push(`  - ${JSON.stringify(a)}`);

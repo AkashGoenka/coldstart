@@ -89,6 +89,7 @@ coldstart kb lookup src/models.py Tile    # everything known at one exact addres
 coldstart kb write spec.json              # the write gate (two-phase dedup)
 coldstart kb commit                       # publish notes to git, nothing else rides along
 coldstart kb view                         # open a single-file HTML browser of the notebook
+coldstart kb repair                       # worklist of notes that are written but unfindable
 coldstart kb status / lint / render / init / migrate
 ```
 

@@ -123,8 +123,9 @@ export function flowStepsWarning(spec: WriteSpec, after?: { steps?: unknown[] } 
  *
  * `after` is the note AS FOLDED, and passing it is what makes this correct on an
  * UPDATE. `op: 'put'` is not a document overwrite — it appends one record and
- * the note is the fold of the whole log, where aliases and anchors UNION. So a
- * spec that touches only `verified` legitimately omits `aliases`, and judging
+ * the note is the fold of the whole log, where identityAliases and anchors
+ * UNION (incidentAliases don't — see fold.ts). So a spec that touches only
+ * `verified` legitimately omits `identityAliases`, and judging
  * the record alone reported every such note as missing fields it already had.
  * A field is missing only when the agent did not send it AND the folded note
  * does not have it. Omit `after` (no folded note to hand) and this falls back to

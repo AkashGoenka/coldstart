@@ -47,7 +47,7 @@ function toClientNote(root: string, note: FoldedNote) {
     type: note.type,
     character: note.character ?? null,
     title: note.title,
-    aliases: note.aliases ?? [],
+    aliases: [...(note.identityAliases ?? []), ...(note.incidentAliases ?? [])],
     status: note.status,
     updated: note.updated ?? '',
     edits: note.edits ?? 0,
