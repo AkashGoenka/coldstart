@@ -5,7 +5,7 @@ import { join, dirname, basename } from 'node:path';
 import type { CodebaseIndex } from './types.js';
 import { startWatcher } from './watcher.js';
 import { renderIds, notebookExists, notebookDir } from './kb/store.js';
-import { buildKbNotesIndex, saveKbNotesIndex } from './kb/notes-index.js';
+import { buildKbNotesIndex, saveKbNotesIndex, type KbNotesIndex } from './kb/notes-index.js';
 import { kbView } from './kb/view.js';
 import { VIEW_TEMPLATE } from './kb/view-template.js';
 import { patchIndex } from './indexer/patch.js';
@@ -142,6 +142,7 @@ export class IndexManager {
       const kb = await buildKbNotesIndex(this.activeIndex, this.activeIndex.rootDir);
       await saveKbNotesIndex(this.activeIndex.rootDir, kb, this.cacheDir);
       this.log(`[coldstart] KB notes index refreshed (${Object.keys(kb.anchors).length} anchors, ${Object.keys(kb.absence).length} absence stamps, ${Object.keys(kb.renames).length} renames)`);
+      await this.autoMechanicalSymbolRepair(kb);
       this.regenerateKbViewIfPresent();
     } catch (err) {
       this.log(`[coldstart] KB notes index refresh failed: ${err}`);
@@ -151,6 +152,38 @@ export class IndexManager {
         this.kbRefreshQueued = false;
         void this.refreshKbNotesIndex();
       }
+    }
+  }
+
+  /**
+   * Auto-backfill new single-file notes' anchor symbols right after the
+   * sidecar they depend on is rebuilt, so an agent's `kb write` gets its
+   * symbols filled within this same debounce cycle instead of waiting for the
+   * next `kb repair`/`init`. Passes the just-built `kb` in memory — no
+   * redundant disk read of the file this process just wrote.
+   *
+   * Self-triggering by construction: a fix appends to a note's `.raw`, which
+   * re-fires the watcher, which re-enters this refresh. That should converge
+   * in one extra no-op pass (the anchor now has symbols, nothing left to fix),
+   * but MAX_AUTO_REPAIR_STREAK is a hard backstop in case it doesn't — a pass
+   * that fixes nothing resets the streak, so the common (idle) case never
+   * pays this cost at all.
+   */
+  private mechanicalRepairStreak = 0;
+  private static readonly MAX_AUTO_REPAIR_STREAK = 3;
+  private async autoMechanicalSymbolRepair(kb: KbNotesIndex): Promise<void> {
+    if (this.mechanicalRepairStreak >= IndexManager.MAX_AUTO_REPAIR_STREAK) return;
+    try {
+      const { mechanicalSymbolRepair } = await import('./kb/repair.js');
+      const { fixed } = await mechanicalSymbolRepair(this.activeIndex.rootDir, this.cacheDir, kb);
+      if (fixed.length) {
+        this.mechanicalRepairStreak++;
+        this.log(`[coldstart] auto-backfilled anchor symbols on ${fixed.length} note(s) (streak ${this.mechanicalRepairStreak}/${IndexManager.MAX_AUTO_REPAIR_STREAK})`);
+      } else {
+        this.mechanicalRepairStreak = 0;
+      }
+    } catch (err) {
+      this.log(`[coldstart] auto symbol repair failed: ${err}`);
     }
   }
 

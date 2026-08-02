@@ -7,3 +7,4 @@ scripts/probe-output/
 
 # Internal design/research docs — kept locally, not tracked
 docs/
+.coldstart/

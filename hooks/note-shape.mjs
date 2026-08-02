@@ -44,7 +44,8 @@ export const SPEC_SHAPES = [
     example: `
       {"type":"file-single","path":"src/x.py",
        "summary":"its one purpose + how (1-3 sentences)",
-       "aliases":["symptom or search words"],
+       "identityAliases":["stable name/role words — this file's fixed vocabulary"],
+       "incidentAliases":["symptom words for what THIS write's summary describes"],
        "anchors":[{"path":"src/x.py","symbols":["TheFnYouWorkedWith"]}]}`,
     /** Prose the full (guide) rendering adds; the compact rendering drops it. */
     note: `
@@ -52,7 +53,14 @@ export const SPEC_SHAPES = [
       search kb with identifiers far more than with prose, and those land in the
       anchor channel — which holds nothing but the path unless you fill it. Name
       the symbols you actually worked with; omit only for a file that declares
-      none (config, css, markdown).`,
+      none (config, css, markdown).
+
+      "identityAliases" vs "incidentAliases": identity is what stays true no
+      matter how many times this note gets rewritten — the file's name, its
+      role, terms that don't change. Incident is the symptom vocabulary for
+      THIS write's summary specifically — it is REPLACED, not added to, the
+      next time you rewrite the summary, so don't worry about it accumulating.
+      Leave incidentAliases out if this write isn't describing a bug/symptom.`,
   },
   {
     spec: 'file-hub',
@@ -63,7 +71,7 @@ export const SPEC_SHAPES = [
         symbols does not make a file a hub; a single-purpose file stays
         file-single):`,
     example: `
-      {"type":"file-hub","path":"src/y.py","aliases":["search words"],
+      {"type":"file-hub","path":"src/y.py","identityAliases":["stable search words"],
        "facets":[{"symbol":"ClassOrFn","detail":"the non-obvious thing about THIS symbol",
                   "flows":["<flow id or the flow's exact title>"]}]}`,
     note: '',
@@ -73,8 +81,9 @@ export const SPEC_SHAPES = [
     noteType: 'flow',
     headline: 'flow (product-level mechanism — see the capture checklist\'s gate):',
     example: `
-      {"type":"flow","title":"how X happens","aliases":["other words for X"],
+      {"type":"flow","title":"how X happens","identityAliases":["other stable words for X"],
        "summary":"first sentence = the product-level fact the file notes miss",
+       "incidentAliases":["symptom words for what THIS summary describes, if any"],
        "steps":[{"path":"src/a.py","symbols":["entry"],"role":"receives the request"}],
        "invariants":["what must hold"],"verified":["src/a.py"]}`,
     note: `
@@ -107,25 +116,43 @@ export const SPEC_SHAPES = [
 // has to be made in both, in the same edit, in view of each other.
 // ---------------------------------------------------------------------------
 
-/** A folded note as `kb repair` sees it (subset of KbNote used by the checks). */
-const noteAliases = (n) => (n.aliases ?? []).filter(Boolean);
+/** A folded note as `kb repair` sees it (subset of KbNote used by the checks).
+ *  No check runs against incidentAliases — omitting it is a legitimate write
+ *  (not every write describes an incident), so there is nothing to repair. */
+const noteIdentityAliases = (n) => (n.identityAliases ?? []).filter(Boolean);
 
 export const NOTE_CHECKS = [
   {
+    // RETIRED 2026-08-02 (shape split into identityAliases/incidentAliases —
+    // see 'missing-identity-aliases' below). Predicate permanently false per
+    // this file's own rule: never delete a shipped check id, `kb repair --json`
+    // consumers filter by it.
     check: 'missing-aliases',
     field: 'aliases',
+    noteTypes: [],
+    specTypes: [],
+    why: '',
+    repairHint: '',
+    fix: () => '',
+    missingInSpec: () => false,
+    missingInNote: () => false,
+  },
+  {
+    check: 'missing-identity-aliases',
+    field: 'identityAliases',
     /** Folded note types this applies to. */
     noteTypes: ['file', 'flow'],
     /** Spec types this applies to at write time. */
     specTypes: ['file', 'file-single', 'file-hub', 'flow'],
-    why: '"aliases" — the words someone would SEARCH for this; without them the note is reachable only by its exact title',
+    why: '"identityAliases" — the stable words someone would SEARCH for this; without them the note is reachable only by its exact title',
     /** What the agent has to do about it, in `kb repair`'s worklist. */
     repairHint:
-      'Open the note and name 2-6 phrases someone would type when they hit this — SYMPTOMS and '
-      + 'the words in the code (identifiers, error strings), not restatements of the title.',
-    fix: () => '"aliases":["2-5 word search keys"]',
-    missingInSpec: (s) => !(Array.isArray(s.aliases) && s.aliases.filter(Boolean).length),
-    missingInNote: (n) => !noteAliases(n).length,
+      'Open the note and name 2-6 stable phrases someone would type to reach it — the file/flow\'s '
+      + 'name, role, and the words in the code (identifiers), not symptoms tied to one write and not '
+      + 'restatements of the title. Symptom words belong in "incidentAliases" instead.',
+    fix: () => '"identityAliases":["2-5 word stable search keys"]',
+    missingInSpec: (s) => !(Array.isArray(s.identityAliases) && s.identityAliases.filter(Boolean).length),
+    missingInNote: (n) => !noteIdentityAliases(n).length,
   },
   {
     // `kb write` REJECTS an absence lesson with no scope.terms, so this can only
@@ -282,6 +309,8 @@ export function requiredFieldsLine() {
     return `${s.spec}: ${fields.join(' + ')}`;
   });
   return `REQUIRED for the note to be findable at all — ${byType.join('; ')}. `
-    + `A note missing these is written but unreachable: aliases are the only search surface besides `
-    + `the exact title, and anchor symbols are the only channel that answers a query typed as an identifier.`;
+    + `A note missing these is written but unreachable: identityAliases are the only STABLE search `
+    + `surface besides the exact title (incidentAliases are optional — symptom words for a write that `
+    + `describes one, replaced by the next such write, never required), and anchor symbols are the only `
+    + `channel that answers a query typed as an identifier.`;
 }

@@ -475,7 +475,7 @@ export function buildNoteMap(root: string, lterms: string[]): Map<string, { note
     // is about the models.py file note even though its title is just the
     // path — without them, any flow sharing one query word steals the slot
     // from the note that holds the answer.
-    const name = foldSep([note.title, ...note.aliases,
+    const name = foldSep([note.title, ...note.identityAliases, ...note.incidentAliases,
       ...(note.type === 'file' ? note.facets.map((f) => f.symbol) : [])].join(' ').toLowerCase());
     const hits = lterms.filter((t) => name.includes(foldSep(t))).length;
     for (const a of note.anchors) {
@@ -533,7 +533,8 @@ export function noteLine(root: string, rel: string, entry: { note: FoldedNote; r
     else if (prose && note.character === 'single') { gist = prose; summary = true; }
     else if (prose) { gist = firstSentence(prose, 220); summary = true; }
     else if (note.facets.length) gist = clamp(`facets: ${note.facets.map((f) => f.symbol).join(', ')}`, 150);
-    else if (note.aliases.length) gist = clamp(note.aliases[0], 120);
+    else if (note.identityAliases.length) gist = clamp(note.identityAliases[0], 120);
+    else if (note.incidentAliases.length) gist = clamp(note.incidentAliases[0], 120);
     else return { line: '', summary: false }; // nothing beyond the path — silence over noise
   } else {
     gist = `${note.kind ?? 'lesson'}: ${clamp(note.title, 130)}`;

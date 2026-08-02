@@ -58,6 +58,9 @@ interface KbFlags {
   why?: string;
   /** --seen a,b,c — note ids already injected this session (hook dedup). */
   seen?: string[];
+  /** repair-aliases pagination. */
+  offset?: number;
+  limit?: number;
 }
 
 function parseKbArgs(argv: string[]): { positional: string[]; flags: KbFlags } {
@@ -83,6 +86,8 @@ function parseKbArgs(argv: string[]): { positional: string[]; flags: KbFlags } {
       case '-m': case '--message': flags.message = argv[++i]; break;
       case '--decision': flags.decision = argv[++i]; break;
       case '--why': flags.why = argv[++i]; break;
+      case '--offset': flags.offset = Number(argv[++i]) || 0; break;
+      case '--limit': flags.limit = Number(argv[++i]) || undefined; break;
       default:
         if (a.startsWith('--')) err(`[coldstart kb] unknown flag: ${a}`);
         else positional.push(a);
@@ -99,6 +104,8 @@ const USAGE = `usage: coldstart kb <verb>
   status [--paths ..] notebook overview, or per-path notes+freshness (--json for hooks)
   lint                mechanical worklist (dead anchors, duplicate flows, orphans)
   repair [--json]     worklist of notes that are written but unfindable (agent work; writes nothing)
+  repair-aliases [--offset N] [--limit 10] [--json]
+                      paginated identityAliases reconciliation worklist (agent work; writes nothing)
   render [--id ID]    re-fold .raw → derived md
   view [--no-open]    generate a single-file HTML browser of the notebook and open it
   commit [-m "msg"]   deliberate publish: commit ONLY the notebook .raw to git
@@ -118,13 +125,39 @@ export async function runKb(argv: string[]): Promise<number> {
     case 'flow-decision': return cmdFlowDecision(flags);
     case 'lint': return cmdLint(flags);
     // Detection runs INSIDE the command: a clean notebook prints one line and
-    // fires no agent prompt. No index is loaded — the notebook is the only
-    // input, so this works in a repo whose keeper has never started.
+    // fires no agent prompt. planRepairs itself loads no index — the notebook
+    // is the only input, so detection works in a repo whose keeper has never
+    // started. mechanicalSymbolRepair (run first, so its fixes are reflected in
+    // the report below) DOES write, but only the one derivable field — see
+    // repair.ts's header for why that's not the same as fixing everything.
     case 'repair': {
       if (!requireNotebook(root)) return 2;
-      const { planRepairs, repairWorklist } = await import('./repair.js');
+      const { planRepairs, repairWorklist, mechanicalSymbolRepair } = await import('./repair.js');
+      const mechanical = await mechanicalSymbolRepair(root);
       const report = planRepairs(root);
-      out(flags.json ? JSON.stringify(report, null, 2) : repairWorklist(report));
+      if (flags.json) {
+        out(JSON.stringify({ ...report, mechanicallyFixed: mechanical.fixed }, null, 2));
+      } else {
+        const lines: string[] = [];
+        if (mechanical.fixed.length) {
+          lines.push(
+            `kb repair: mechanically backfilled anchor symbols (from the code index — no judgement `
+            + `needed) on ${mechanical.fixed.length} note${mechanical.fixed.length === 1 ? '' : 's'}:`,
+          );
+          for (const f of mechanical.fixed) lines.push(`  - ${f.note} (${f.path}): ${f.symbols.join(', ')}`);
+          lines.push('');
+        }
+        lines.push(repairWorklist(report));
+        out(lines.join('\n'));
+      }
+      return 0;
+    }
+    case 'repair-aliases': {
+      if (!requireNotebook(root)) return 2;
+      const { planAliasRepair, aliasRepairWorklist } = await import('./alias-repair.js');
+      const page = planAliasRepair(root, flags.offset ?? 0, flags.limit ?? 10);
+      if (flags.json) out(JSON.stringify(page, null, 2));
+      else out(aliasRepairWorklist(page));
       return 0;
     }
     case 'render': {

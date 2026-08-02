@@ -79,7 +79,11 @@ export interface RetractTarget {
 export interface RecordPayload {
   // ---- op: "put" payload ----
   title?: string;
-  aliases?: string[];
+  /** Stable — the file/flow's name, role, terms that don't change across writes. Unioned forever. */
+  identityAliases?: string[];
+  /** Symptom words tied to THIS write's summary/body. Replaced wholesale by the
+   *  next write that also carries a summary/body change — see fold.ts. */
+  incidentAliases?: string[];
   anchors?: Anchor[];
   /** Paths the agent re-inspected this session; the tool hashes exactly these. */
   verified?: string[];
@@ -130,7 +134,8 @@ export interface FoldedNote {
   id: string;
   type: NoteType;
   title: string;
-  aliases: string[];
+  identityAliases: string[];
+  incidentAliases: string[];
   anchors: Anchor[];
   status: NoteStatus;
   supersededBy?: string;

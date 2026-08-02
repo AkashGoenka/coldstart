@@ -676,7 +676,7 @@ Navigation
   index               build/refresh the index for this repo
 
 Notebook
-  kb <sub>            search | lookup | write | commit | status | lint | render | view | init
+  kb <sub>            search | lookup | write | commit | status | lint | repair | render | view | init
 
 Lifecycle
   init                wire coldstart into this repo (asks experience + client)

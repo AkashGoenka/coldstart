@@ -617,6 +617,17 @@ export const CAPTURE_COMMAND = 'capture-notes';
  *  a clean notebook produces one line and no work. */
 export const REPAIR_COMMAND = 'repair-notes';
 
+/** The user-invoked alias-reconciliation command (`/repair-aliases`).
+ *
+ *  A different problem from REPAIR_COMMAND: that one finds notes with NO
+ *  identityAliases at all (a missing-field gap, fixed at ordinary write time).
+ *  This one is for aliases that EXIST but no longer describe the file/flow —
+ *  a note rewritten several times can carry identity-shaped words that were
+ *  really symptom words for an earlier write. Needs the same code-reading
+ *  judgement `kb repair` never automates, so it stays a worklist, never a
+ *  write, same as REPAIR_COMMAND. Paginated — see `kb repair-aliases`. */
+export const REPAIR_ALIASES_COMMAND = 'repair-aliases';
+
 /** Every user-invoked command is the same three files with different text.
  *  Keeping them in one table is what stops a host from quietly having only some
  *  of them — `unwire` sweeps the same list. */
@@ -632,7 +643,7 @@ export interface UserCommand {
   instructions: string;
 }
 
-export const USER_COMMANDS: Record<'capture' | 'repair', UserCommand> = {
+export const USER_COMMANDS: Record<'capture' | 'repair' | 'repairAliases', UserCommand> = {
   capture: {
     name: CAPTURE_COMMAND,
     invocation: () => `node ${path.join(resolveHooksDir(), 'kb-elicit.mjs')} --manual`,
@@ -654,7 +665,7 @@ export const USER_COMMANDS: Record<'capture' | 'repair', UserCommand> = {
     description: 'Repair notebook notes that are written but unfindable',
     skillDescription:
       'Repair coldstart notebook notes that are missing the fields which make them findable '
-      + '(aliases, anchor symbols, a flow\'s verified paths). Use when the user asks to repair, '
+      + '(identityAliases, anchor symbols, a flow\'s verified paths). Use when the user asks to repair, '
       + 'fix, or clean up the notebook, or when notes are not turning up in search.',
     // Deliberately thin: the worklist carries its own instructions, so that the
     // CLI, the MCP tool and all three hosts say the same thing. Repeating them
@@ -663,6 +674,24 @@ export const USER_COMMANDS: Record<'capture' | 'repair', UserCommand> = {
       'It prints a worklist and changes nothing. Follow the instructions it prints, and work '
       + 'through every note it lists. If it prints "Nothing to repair here.", stop — there is '
       + 'no work.',
+  },
+  repairAliases: {
+    name: REPAIR_ALIASES_COMMAND,
+    invocation: () => `node ${path.join(installRoot(), 'dist', 'index.js')} kb repair-aliases --root .`,
+    description: 'Reconcile identityAliases that no longer describe the file/flow',
+    skillDescription:
+      'Reconcile coldstart notebook identityAliases against the current code — catches aliases that '
+      + 'were accurate when written but are now stale or were really symptom words for an earlier '
+      + 'write. Use when the user asks to clean up, audit, or reconcile notebook aliases; not for '
+      + 'notes missing aliases entirely (that\'s /repair-notes).',
+    // Deliberately thin, same reasoning as `repair` above: the worklist carries
+    // its own instructions and pagination pointer, so CLI/MCP/all three hosts
+    // say the same thing.
+    instructions:
+      'It prints a PAGINATED worklist (10 notes at a time) and changes nothing. Follow the '
+      + 'instructions it prints for each note, then if it says more notes remain, re-run the same '
+      + 'command with the `--offset` it gives you and continue until none remain. If it prints "No '
+      + 'file/flow notes to reconcile.", stop.',
   },
 };
 
@@ -886,6 +915,7 @@ function setupClaude(cwd: string, exp: Experience): void {
     : `  settings.json — ${kb} notebook recall + capture hooks (UserPromptSubmit + Stop/SubagentStop)`);
   out(`  commands/     — ${wireClaudeCommand(cwd, USER_COMMANDS.capture)} /${CAPTURE_COMMAND} (capture notes on demand)`);
   out(`  commands/     — ${wireClaudeCommand(cwd, USER_COMMANDS.repair)} /${REPAIR_COMMAND} (fix notes that can't be found)`);
+  out(`  commands/     — ${wireClaudeCommand(cwd, USER_COMMANDS.repairAliases)} /${REPAIR_ALIASES_COMMAND} (reconcile stale aliases)`);
 }
 
 function setupCodex(cwd: string, exp: Experience): void {
@@ -900,6 +930,7 @@ function setupCodex(cwd: string, exp: Experience): void {
     : `  hooks.json    — ${hooks} Codex navigation + notebook hooks`);
   out(`  .agents/skills — ${wireCodexSkill(cwd, USER_COMMANDS.capture)} $${CAPTURE_COMMAND} skill (capture notes on demand)`);
   out(`  .agents/skills — ${wireCodexSkill(cwd, USER_COMMANDS.repair)} $${REPAIR_COMMAND} skill (fix notes that can't be found)`);
+  out(`  .agents/skills — ${wireCodexSkill(cwd, USER_COMMANDS.repairAliases)} $${REPAIR_ALIASES_COMMAND} skill (reconcile stale aliases)`);
   if (typeof hooks !== 'object') {
     out('');
     out('  ⚠ Codex won\'t run these hooks until you trust them — untrusted hooks');
@@ -927,6 +958,7 @@ function setupCursor(cwd: string, exp: Experience): void {
     : `  hooks.json    — ${hooks} Cursor navigation + notebook hooks`);
   out(`  commands/     — ${wireCursorCommand(cwd, USER_COMMANDS.capture)} /${CAPTURE_COMMAND} (capture notes on demand)`);
   out(`  commands/     — ${wireCursorCommand(cwd, USER_COMMANDS.repair)} /${REPAIR_COMMAND} (fix notes that can't be found)`);
+  out(`  commands/     — ${wireCursorCommand(cwd, USER_COMMANDS.repairAliases)} /${REPAIR_ALIASES_COMMAND} (reconcile stale aliases)`);
 }
 
 function setupOther(cwd: string, exp: Experience): void {
@@ -1053,6 +1085,16 @@ export async function runInit(): Promise<void> {
   const waited = await waitForKeeperCache(cwd, undefined, 180_000, (m) => out(m));
   if (waited === 'ready') {
     out('Index ready.');
+    // Existing notebook (a re-init / upgrade), now that the sidecar the backfill
+    // reads is guaranteed built. Fresh notebooks have nothing to fix (no-op).
+    // Same mechanism `kb repair` runs — see repair.ts for why this is safe to
+    // do without agent judgment (single-character notes only, never overrides
+    // existing symbols).
+    const { mechanicalSymbolRepair } = await import('./kb/repair.js');
+    const backfilled = await mechanicalSymbolRepair(cwd);
+    if (backfilled.fixed.length) {
+      out(`Backfilled anchor symbols on ${backfilled.fixed.length} existing note${backfilled.fixed.length === 1 ? '' : 's'} from the code index.`);
+    }
   } else if (waited === 'no-keeper') {
     out('Could not start the background indexer — your first lookup will build it instead.');
   } else {

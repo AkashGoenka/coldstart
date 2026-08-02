@@ -8,7 +8,7 @@ import type { FoldedNote } from '../src/kb/types.js';
 
 function baseNote(over: Partial<FoldedNote>): FoldedNote {
   return {
-    id: 'n1', type: 'lesson', title: 'Title', aliases: [], anchors: [],
+    id: 'n1', type: 'lesson', title: 'Title', identityAliases: [], incidentAliases: [], anchors: [],
     status: 'active', updated: '2026-07-02T10:00:00.000Z', edits: 1,
     facets: [], behaviors: [], features: [], steps: [], invariants: [], extra: {},
     ...over,
@@ -21,7 +21,7 @@ describe('kb render — golden shapes', () => {
       id: 'graph-restore-drops-functions',
       kind: 'absence',
       title: 'Version restore silently drops function assignments',
-      aliases: ['functions disappear after graph restore'],
+      identityAliases: ['functions disappear after graph restore'],
       anchors: [{ path: 'arches/app/models/graph.py', symbols: ['restore_state'], hash: 'sha256:ab12cd34ef56' }],
       body: 'restore never re-creates functions_x_graphs — see [[graph-publication-flow]].',
       scope: { terms: ['functions_x_graphs restore'], globs: ['arches/**'] },

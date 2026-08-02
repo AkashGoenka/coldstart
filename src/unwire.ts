@@ -29,6 +29,7 @@ import {
   isCursorHookEntry,
   CAPTURE_COMMAND,
   REPAIR_COMMAND,
+  REPAIR_ALIASES_COMMAND,
   stripCodexColdstartTable,
 } from './init.js';
 
@@ -274,6 +275,8 @@ export async function runUnwire(): Promise<void> {
     path.join(cwd, '.claude', 'commands', `${CAPTURE_COMMAND}.md`)))} /${CAPTURE_COMMAND} command`);
   out(`    commands/     — ${label(removeFile(
     path.join(cwd, '.claude', 'commands', `${REPAIR_COMMAND}.md`)))} /${REPAIR_COMMAND} command`);
+  out(`    commands/     — ${label(removeFile(
+    path.join(cwd, '.claude', 'commands', `${REPAIR_ALIASES_COMMAND}.md`)))} /${REPAIR_ALIASES_COMMAND} command`);
 
   // Codex
   out('  Codex');
@@ -285,6 +288,8 @@ export async function runUnwire(): Promise<void> {
     path.join(cwd, '.agents', 'skills', CAPTURE_COMMAND, 'SKILL.md')))} $${CAPTURE_COMMAND} skill`);
   out(`    .agents/skills — ${label(removeFile(
     path.join(cwd, '.agents', 'skills', REPAIR_COMMAND, 'SKILL.md')))} $${REPAIR_COMMAND} skill`);
+  out(`    .agents/skills — ${label(removeFile(
+    path.join(cwd, '.agents', 'skills', REPAIR_ALIASES_COMMAND, 'SKILL.md')))} $${REPAIR_ALIASES_COMMAND} skill`);
 
   // Cursor
   out('  Cursor');
@@ -296,6 +301,8 @@ export async function runUnwire(): Promise<void> {
     path.join(cwd, '.cursor', 'commands', `${CAPTURE_COMMAND}.md`)))} /${CAPTURE_COMMAND} command`);
   out(`    commands/     — ${label(removeFile(
     path.join(cwd, '.cursor', 'commands', `${REPAIR_COMMAND}.md`)))} /${REPAIR_COMMAND} command`);
+  out(`    commands/     — ${label(removeFile(
+    path.join(cwd, '.cursor', 'commands', `${REPAIR_ALIASES_COMMAND}.md`)))} /${REPAIR_ALIASES_COMMAND} command`);
 
   // Notebook
   out('  Notebook');
@@ -317,6 +324,7 @@ export async function runUnwire(): Promise<void> {
   rmEmptyDirs(
     path.join(cwd, '.agents', 'skills', CAPTURE_COMMAND),
     path.join(cwd, '.agents', 'skills', REPAIR_COMMAND),
+    path.join(cwd, '.agents', 'skills', REPAIR_ALIASES_COMMAND),
     path.join(cwd, '.agents', 'skills'),
     path.join(cwd, '.agents'),
     path.join(cwd, '.cursor', 'rules'),
