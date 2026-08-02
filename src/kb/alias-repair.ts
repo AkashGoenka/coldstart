@@ -19,6 +19,22 @@
  *
  * Paginated (default 10/page): a full-notebook pass over every file/flow note
  * would otherwise dump the whole notebook's alias history in one response.
+ *
+ * STOPS RESURFACING A NOTE ONCE IT'S BEEN REVIEWED: a note stays eligible
+ * until a `kb write` on it carries `aliasesVerified:true` (fold.ts stamps
+ * `aliasesVerifiedAtEdit = edits` at that record); it drops out of `eligible`
+ * below as soon as nothing has changed since. This is why pagination here is
+ * NOT "increment --offset by limit each call" the way a stable list would be:
+ * `eligible` shrinks out from under a fixed offset as notes get marked
+ * verified, so re-running with the previous `nextOffset` would silently skip
+ * whatever just shifted into that position. The sanctioned resume is: mark
+ * this batch's notes verified, then re-run with the SAME (default 0) offset —
+ * verified notes are simply gone from `eligible`, so a fresh slice from the
+ * top is always "whatever's still outstanding," no position-tracking needed.
+ * `offset`/`nextOffset` still work exactly as documented for anyone who wants
+ * to browse without marking anything (they just won't self-advance safely
+ * across a marking pass), so the parameter stays, but `aliasRepairWorklist`'s
+ * own prose never recommends incrementing it.
  */
 import { relative } from 'node:path';
 import type { NoteType } from './types.js';
@@ -66,6 +82,11 @@ export function planAliasRepair(root: string, offset = 0, limit = 10): AliasRepa
   const { notes } = loadAll(root);
   const eligible = notes
     .filter((n) => n.status === 'active' && (n.type === 'file' || n.type === 'flow'))
+    // Already reconciled and untouched since: drop it. `aliasesVerifiedAtEdit`
+    // is only ever set by an explicit `aliasesVerified:true` write (never
+    // implied by an ordinary put), so this can't hide a note whose aliases
+    // genuinely changed without anyone confirming them.
+    .filter((n) => n.aliasesVerifiedAtEdit === undefined || n.aliasesVerifiedAtEdit < n.edits)
     .sort((a, b) => a.id.localeCompare(b.id));
 
   const page = eligible.slice(Math.max(0, offset), Math.max(0, offset) + Math.max(1, limit));
@@ -101,12 +122,15 @@ export function aliasRepairWorklist(page: AliasRepairPage): string {
 
   const shown = page.entries.length ? `${page.offset + 1}-${page.offset + page.entries.length}` : '0';
   const parts: string[] = [
-    `kb repair-aliases — reconciling identityAliases, notes ${shown} of ${page.total}.`,
+    `kb repair-aliases — reconciling identityAliases, notes ${shown} of ${page.total} still outstanding.`,
     '',
     'For each note below: re-read the code at its files, then judge which identityAliases are still '
     + 'true (keep), which are now stale or symptom-shaped for an earlier write (retract), and whether '
     + 'a "hidden past cap" alias should come back into view. Chain the retracts + one re-put in a single '
-    + '`kb write` block with `&&` per note — this is a bulk pass, batch it rather than one call per alias.',
+    + '`kb write` block with `&&` per note — this is a bulk pass, batch it rather than one call per alias. '
+    + 'End that same chain with `{"id":"<note id>","aliasesVerified":true}` even when you kept every alias '
+    + 'as-is — that is what marks the note reviewed so it stops appearing here; without it, this exact note '
+    + 'reappears on your next run even though nothing was wrong with it.',
     '',
     'Never retract an alias without reading the current code first. incidentAliases are shown for '
     + 'context only — this pass does not touch them; they are replaced automatically the next time the '
@@ -126,8 +150,11 @@ export function aliasRepairWorklist(page: AliasRepairPage): string {
   if (page.more) {
     parts.push(
       '',
-      `${page.more.remaining} more note${page.more.remaining === 1 ? '' : 's'} not shown — re-run with `
-      + `--offset ${page.more.nextOffset} for the next batch.`,
+      `${page.more.remaining} more note${page.more.remaining === 1 ? '' : 's'} not shown. Mark this batch's `
+      + 'notes aliasesVerified:true first, then just re-run `kb repair-aliases` again with NO --offset — '
+      + 'verified notes drop out on their own, so the same command always surfaces whatever is still '
+      + 'outstanding next. (Advancing --offset yourself is unsafe once you start marking notes: the list '
+      + 'shrinks as you go, so a fixed offset silently skips whatever shifted into that position.)',
     );
   }
   return parts.join('\n');

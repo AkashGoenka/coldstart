@@ -141,6 +141,12 @@ export interface FoldedNote {
   supersededBy?: string;
   updated: string; // max ts folded
   edits: number; // count of applied records
+  /** `edits` at the moment a `kb write` last carried `aliasesVerified:true` —
+   *  i.e. an agent explicitly confirmed identityAliases against the current
+   *  code (whether or not it changed any). `edits > aliasesVerifiedAtEdit`
+   *  means something has landed since — `kb repair-aliases` uses this to stop
+   *  resurfacing a note nothing has touched since it was last reconciled. */
+  aliasesVerifiedAtEdit?: number;
 
   summary?: string;
   character?: FileCharacter;

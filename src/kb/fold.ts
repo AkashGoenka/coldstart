@@ -50,6 +50,10 @@ const PUT_KEYS = new Set([
   // it lands in identityAliases, not in `extra` (which would double-render it).
   'title', 'aliases', 'identityAliases', 'incidentAliases', 'anchors', 'verified', 'summary', 'character', 'facets',
   'behaviors', 'features', 'steps', 'invariants', 'kind', 'body', 'scope',
+  // 'aliasesVerified' is a transient signal, not stored content — handled in
+  // the main fold loop (needs the post-increment edit count), recognized here
+  // only so it isn't dumped into `extra`.
+  'aliasesVerified',
 ]);
 const OP_KEYS = new Set(['target', 'by']);
 const NOTE_TYPES = new Set<string>(['file', 'flow', 'lesson']);
@@ -138,6 +142,12 @@ export function fold(id: string, rawRecords: unknown[], opts: FoldOptions = {}):
       note.supersededBy = rec.by;
     }
     note.edits++;
+    // Stamped AFTER the increment, so it reads as "verified as of this edit" —
+    // an agent explicitly confirmed identityAliases against the current code
+    // in THIS record, whether or not it changed anything. Only a put can set
+    // it; any later record (put, retract, or supersede) pushes edits past it
+    // again with no extra bookkeeping, which is what makes the note reappear.
+    if (op === 'put' && rec.aliasesVerified === true) note.aliasesVerifiedAtEdit = note.edits;
     if (ts > note.updated) note.updated = ts;
   }
 
