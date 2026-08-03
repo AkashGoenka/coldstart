@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.14] - 2026-08-03
+
+### Fixed
+- **The keeper's automatic anchor-symbol backfill wrote to the wrong note, then disabled itself.** A file
+  note picks up a secondary anchor for every path it lists in `verified`, but those anchors are
+  unfillable by construction: `kb write` overwrites a file record's anchors with a single entry at
+  `spec.path` ("the file IS the anchor"). Backfilling one under *its* own path therefore addressed a
+  different note entirely — the intended anchor stayed empty, so the pass re-fired on every watcher
+  cycle, and after three passes the keeper's streak cap tripped and turned auto-backfill off for the
+  rest of its lifetime. Now only the anchor whose path derives the note's id is filled; secondary
+  anchors are left alone. Verified against a live keeper: fires once, converges on the next pass, no
+  extra note created. (`src/kb/repair.ts`, `src/index-manager.ts`)
+- **That machine write also un-reviewed a note's aliases.** It advanced `edits` past
+  `aliasesVerifiedAtEdit`, so a note reconciled through `kb repair-aliases` in 2.2.13 resurfaced on the
+  next run as though a human judgement had gone stale. The backfill now carries the stamp forward — but
+  only when the note was already verified as of its current edit, never asserted fresh.
+  (`src/kb/repair.ts`)
+- Tripping the keeper's auto-repair streak cap now logs once instead of failing silent. A capped streak
+  never runs again (so it can never reset), which is the safe direction, but was previously invisible.
+  (`src/index-manager.ts`)
+- `scripts/replay-recall-gates.mjs` contained a literal NUL byte used as a composite-key separator, so
+  git treated the whole script as binary — no diffs, no blame. Now written as a `\u0000` escape.
+
 ## [2.2.13] - 2026-08-02
 
 ### Fixed

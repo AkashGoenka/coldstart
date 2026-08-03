@@ -25,7 +25,8 @@
  * touched — this only fills emptiness, never overrides agent curation. A path
  * the sidecar has no data for (unsupported language, or genuinely symbol-less —
  * css/config/markdown) is left as a `file-no-symbols` finding, agent work same
- * as before.
+ * as before. Only the note's OWN anchor is fillable at all — see
+ * mechanicalSymbolRepair for why a secondary anchor cannot be written.
  *
  * WHY IT EXISTS AT ALL: notes written before the shape was frozen are missing
  * fields their writer was never asked for. The MCP kb_write description never
@@ -40,6 +41,7 @@
 import { relative } from 'node:path';
 import { NOTE_CHECKS, REPAIR_CONTRACT_VERSION } from '../../hooks/note-shape.mjs';
 import { loadAll, notePath } from './store.js';
+import { fileNoteId } from './ids.js';
 import { loadKbNotesIndex, type KbNotesIndex } from './notes-index.js';
 import { kbWrite } from './write.js';
 
@@ -80,14 +82,32 @@ export async function mechanicalSymbolRepair(
   const { notes } = loadAll(root);
   for (const n of notes) {
     if (n.status !== 'active' || n.type !== 'file' || n.character === 'hub') continue;
-    for (const a of n.anchors) {
-      if ((a.symbols ?? []).filter(Boolean).length) continue; // never override existing curation
-      const declared = (sidecar.anchors[a.path] ?? []).filter(Boolean);
-      if (!declared.length) continue; // unsupported language or genuinely symbol-less — agent's call
-      const symbols = declared.slice(0, SYMBOL_BACKFILL_CAP);
-      const res = await kbWrite(root, { type: 'file', path: a.path, anchors: [{ path: a.path, symbols }] });
-      if (res.status === 'written') fixed.push({ note: n.id, path: a.path, symbols });
-    }
+
+    // ONLY the note's own anchor — the one whose path derives this note's id.
+    // A file note can carry secondary anchors (raw-log.ts stamps one for every
+    // `verified` path), but they are unfillable by construction: kbWrite
+    // overwrites a file record's anchors with a single entry at `spec.path`
+    // (write.ts, "the file IS the anchor"), so re-putting a secondary anchor
+    // under ITS own path just sends the record to a different note — the
+    // intended anchor stays empty and this pass re-fires forever, eventually
+    // tripping the keeper's streak cap and disabling itself.
+    const own = n.anchors.find((a) => fileNoteId(a.path) === n.id);
+    if (!own) continue;
+    if ((own.symbols ?? []).filter(Boolean).length) continue; // never override existing curation
+    const declared = (sidecar.anchors[own.path] ?? []).filter(Boolean);
+    if (!declared.length) continue; // unsupported language or genuinely symbol-less — agent's call
+    const symbols = declared.slice(0, SYMBOL_BACKFILL_CAP);
+
+    const res = await kbWrite(root, {
+      type: 'file', path: own.path, anchors: [{ path: own.path, symbols }],
+      // This write provably does not touch aliases, so it must not un-review
+      // them: without carrying the stamp forward, `edits` advances past
+      // `aliasesVerifiedAtEdit` and the note resurfaces in `kb repair-aliases`
+      // as if a human judgement had gone stale. Only ever carried when the note
+      // was ALREADY verified as of its current edit — never asserted fresh.
+      ...(n.aliasesVerifiedAtEdit === n.edits ? { aliasesVerified: true } : {}),
+    });
+    if (res.status === 'written') fixed.push({ note: n.id, path: own.path, symbols });
   }
   return { fixed };
 }

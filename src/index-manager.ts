@@ -168,11 +168,25 @@ export class IndexManager {
    * but MAX_AUTO_REPAIR_STREAK is a hard backstop in case it doesn't — a pass
    * that fixes nothing resets the streak, so the common (idle) case never
    * pays this cost at all.
+   *
+   * Tripping the backstop DISABLES this for the keeper's remaining lifetime
+   * (a capped streak never runs again, so it can never reset), which is the
+   * safe direction but is invisible unless it says so — hence the one-time
+   * log line. If it ever appears, something is un-fixable and re-firing every
+   * cycle; `kb repair` from the CLI still works and will show what.
    */
   private mechanicalRepairStreak = 0;
   private static readonly MAX_AUTO_REPAIR_STREAK = 3;
   private async autoMechanicalSymbolRepair(kb: KbNotesIndex): Promise<void> {
-    if (this.mechanicalRepairStreak >= IndexManager.MAX_AUTO_REPAIR_STREAK) return;
+    if (this.mechanicalRepairStreak >= IndexManager.MAX_AUTO_REPAIR_STREAK) {
+      if (this.mechanicalRepairStreak === IndexManager.MAX_AUTO_REPAIR_STREAK) {
+        this.mechanicalRepairStreak++; // log once, then stay quiet
+        this.log('[coldstart] auto symbol repair disabled for this keeper — '
+          + `${IndexManager.MAX_AUTO_REPAIR_STREAK} consecutive passes each fixed something, `
+          + 'which means a note is not converging. Run `coldstart kb repair` to see it.');
+      }
+      return;
+    }
     try {
       const { mechanicalSymbolRepair } = await import('./kb/repair.js');
       const { fixed } = await mechanicalSymbolRepair(this.activeIndex.rootDir, this.cacheDir, kb);
