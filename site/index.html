@@ -4,8 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>coldstart — codebase memory &amp; navigation for AI coding agents</title>
-<meta name="description" content="coldstart gives a coding agent a notebook it writes itself, plus a fast static index to find the right file without wasted reads. No embeddings, no API key — it runs on the model you already pay for." />
-<meta name="keywords" content="AI coding agent, codebase navigation, code search, agent memory, notebook, Claude Code, Codex, Cursor, MCP, no embeddings, ripgrep, tree-sitter" />
+<meta name="description" content="coldstart gives a coding agent persistent, self-maintaining memory of your codebase — a notebook it writes itself, plus a fast static index to find the right file without wasted reads. No embeddings, no API key — it runs on the model you already pay for." />
+<meta name="keywords" content="AI coding agent, codebase navigation, code search, agent memory, persistent memory, codebase memory, session memory, notebook, Claude Code, Codex, Cursor, MCP, no embeddings, ripgrep, tree-sitter" />
 <meta name="author" content="Akash Goenka" />
 <meta name="robots" content="index, follow, max-image-preview:large" />
 <meta name="theme-color" content="#070a11" />
@@ -17,7 +17,7 @@
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="coldstart" />
 <meta property="og:title" content="coldstart — codebase memory & navigation for AI coding agents" />
-<meta property="og:description" content="A notebook the agent writes itself, plus a fast index to find the right file without wasted reads. No embeddings, no API key — it runs on the model you already pay for." />
+<meta property="og:description" content="Persistent, self-maintaining memory for coding agents — a notebook the agent writes itself, plus a fast index to find the right file without wasted reads. No embeddings, no API key — it runs on the model you already pay for." />
 <meta property="og:url" content="https://akashgoenka.github.io/coldstart/" />
 <meta property="og:image" content="https://akashgoenka.github.io/coldstart/og.png" />
 <meta property="og:image:width" content="1200" />
@@ -27,7 +27,7 @@
 <!-- Twitter -->
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="coldstart — codebase memory & navigation for AI coding agents" />
-<meta name="twitter:description" content="A notebook the agent writes itself, plus a fast index to find the right file without wasted reads. No embeddings, no API key." />
+<meta name="twitter:description" content="Persistent, self-maintaining memory for coding agents — a notebook the agent writes itself, plus a fast index to find the right file without wasted reads. No embeddings, no API key." />
 <meta name="twitter:image" content="https://akashgoenka.github.io/coldstart/og.png" />
 
 <link rel="stylesheet" href="styles.css" />
@@ -39,8 +39,8 @@
   "name": "coldstart",
   "applicationCategory": "DeveloperApplication",
   "operatingSystem": "Node.js 18+",
-  "description": "Codebase navigation and a self-maintaining notebook for AI coding agents. A fast static index over paths, symbols, exports, and the import/call graph, plus durable agent-written notes kept honest by the index. No embeddings, no API key.",
-  "keywords": "codebase search, code search, codebase navigation, AI coding agent, agent memory, code context, Claude Code, Codex, Cursor, MCP server, code index, tree-sitter, ripgrep, notebook for agents, no embeddings",
+  "description": "Persistent, self-maintaining memory and codebase navigation for AI coding agents. A fast static index over paths, symbols, exports, and the import/call graph, plus durable agent-written notes kept honest by the index. No embeddings, no API key.",
+  "keywords": "codebase search, code search, codebase navigation, AI coding agent, agent memory, persistent memory, session memory, codebase memory, code context, Claude Code, Codex, Cursor, MCP server, code index, tree-sitter, ripgrep, notebook for agents, no embeddings",
   "url": "https://akashgoenka.github.io/coldstart/",
   "downloadUrl": "https://www.npmjs.com/package/@cstart/coldstart",
   "codeRepository": "https://github.com/AkashGoenka/coldstart",
@@ -140,7 +140,7 @@
     <div>
       <div class="eyebrow">Memory + navigation for coding agents</div>
       <h1 class="title">Your agent relearns your codebase from <span class="cold">scratch</span> — every <span class="warm">session</span>.</h1>
-      <p class="hero-sub">coldstart gives a coding agent a <b>notebook it writes itself</b>, so what one session figures out, the next already knows — plus a fast index to <b>find the right file without three wrong reads</b>. No embeddings, no API key: it runs on the model you already pay for.</p>
+      <p class="hero-sub">coldstart gives a coding agent <b>persistent memory of your codebase</b> — a notebook it writes itself, so what one session figures out, the next already knows — plus a fast index to <b>find the right file without three wrong reads</b>. No embeddings, no API key: it runs on the model you already pay for.</p>
       <div class="cta">
         <a class="btn btn-primary" href="#install">Install →</a>
         <a class="btn btn-ghost" href="blog.html">Read the blog</a>
