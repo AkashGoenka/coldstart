@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.15] - 2026-08-03
+
+### Fixed
+- **Notebook capture writes could silently under-write notes.** The capture checklist + write
+  contract was delivered one-shot, so a long session's compaction could scroll it away before the
+  agent got to writing, leaving it to re-derive the note shape from memory. Chained `kb write a &&
+  kb write b && ...` calls also weren't atomic despite looking like they should be: one malformed
+  spec's non-zero exit silently killed every note queued behind it. And the documented `retract`
+  form — `{"op":"retract","id":"<id>","target":{"kind":"note"}}` — always errored, because the
+  validator demanded an undocumented `type` (and, for file notes, `path`) that callers didn't have.
+  (#127, closes #128)
+
+### Added
+- **Batch write** (`src/kb/write-batch.ts`), shared by CLI `kb write <array.json>` and MCP
+  `kb_write` `specs`: author every note as one JSON array, written in a single call. Malformed
+  notes are now reported together instead of atomically failing the whole chain; a single object
+  still works as a batch of one.
+- **Durable capture worklist** (`src/kb/durable-worklist.ts` + `hooks/capture-payload.mjs`): the
+  whole capture payload is now written to `.coldstart/notebook/.worklist.md` (backed by a
+  structured `.worklist.json`), so the agent can re-`Read` it after the one-shot delivery scrolls
+  out of context. Replaces the tmpdir "N of M" manifest, which only credited brand-new creates.
+- `op:"retract"` now infers `type` from the target note and drops the file-note `path`
+  requirement, so the documented retract form actually works.
+
 ## [2.2.14] - 2026-08-03
 
 ### Fixed
