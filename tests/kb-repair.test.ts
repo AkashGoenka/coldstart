@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { NOTE_CHECKS } from '../hooks/note-shape.mjs';
 import { planRepairs, repairWorklist, mechanicalSymbolRepair, SYMBOL_BACKFILL_CAP } from '../src/kb/repair.js';
+import { planAliasRepair } from '../src/kb/alias-repair.js';
 import { kbWrite } from '../src/kb/write.js';
 import { initSkeleton, notebookDir } from '../src/kb/store.js';
 import { saveKbNotesIndex } from '../src/kb/notes-index.js';
@@ -220,6 +221,41 @@ describe('mechanicalSymbolRepair — the one mechanical exception', () => {
     // no seedSidecar call — cacheDir has nothing in it.
     const res = await mechanicalSymbolRepair(root, cacheDir);
     expect(res.fixed).toEqual([]);
+  });
+
+  it('leaves a SECONDARY anchor alone instead of writing it onto another note', async () => {
+    // A file note picks up a secondary anchor for every `verified` path. Those
+    // are unfillable — kbWrite overwrites a file record's anchors with one entry
+    // at spec.path — so filling one under ITS own path sends the record to a
+    // different note, leaves the real anchor empty, and re-fires every pass
+    // (which is what trips the keeper's streak cap and disables the feature).
+    await kbWrite(root, {
+      type: 'file-single', path: 'src/a.ts', summary: 's', verified: ['src/a.ts', 'hooks/side.mjs'],
+    } as never, { force: true });
+    const noteId = readdirSync(join(notebookDir(root), '.raw'))[0];
+    await seedSidecar({ 'src/a.ts': ['doThing'], 'hooks/side.mjs': ['sideEffect'] });
+
+    const res = await mechanicalSymbolRepair(root, cacheDir);
+    expect(res.fixed.map((f) => f.path)).toEqual(['src/a.ts']); // own anchor only
+    expect(readdirSync(join(notebookDir(root), '.raw'))).toEqual([noteId]); // nothing conjured elsewhere
+    // Converges: the second pass finds nothing, so the keeper's streak resets
+    // rather than climbing to the cap it never comes back from.
+    expect(await mechanicalSymbolRepair(root, cacheDir)).toEqual({ fixed: [] });
+  });
+
+  it('does not un-review a note whose aliases were already verified at this edit', async () => {
+    // The backfill provably does not touch aliases; if it let `edits` advance
+    // past `aliasesVerifiedAtEdit`, the note would resurface in kb repair-aliases
+    // as though a human judgement had gone stale.
+    const w = await kbWrite(root, {
+      type: 'file-single', path: 'src/a.ts', summary: 's', identityAliases: ['the a file'],
+      aliasesVerified: true,
+    } as never, { force: true });
+    expect(w.status).toBe('written');
+    await seedSidecar({ 'src/a.ts': ['doThing'] });
+
+    expect((await mechanicalSymbolRepair(root, cacheDir)).fixed).toHaveLength(1);
+    expect(planAliasRepair(root).entries.map((e) => e.note)).toEqual([]);
   });
 
   it('caps at SYMBOL_BACKFILL_CAP — a file this size is probably hub-shaped even if mislabeled', async () => {
