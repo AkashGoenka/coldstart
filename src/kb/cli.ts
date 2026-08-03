@@ -20,14 +20,14 @@ import { ensureKeeper } from '../keeper.js';
 import { setupNotebook, wireClaudeKbHooks } from '../init.js';
 import { kbSearch, renderSearchPage, renderResultsPage, renderCompactPage, shouldImplantTop } from './search.js';
 import { loadKbNotesIndex } from './notes-index.js';
-import { kbWrite, type WriteSpec } from './write.js';
-import { writeGuideCli, flowEvidenceWarning, flowStepsWarning, missingFieldsWarning } from './write-guide.js';
-import { noteCoverage } from './session-worklist.js';
+import type { WriteSpec } from './write.js';
+import { writeGuideCli } from './write-guide.js';
+import { kbWriteBatch } from './write-batch.js';
 import { kbLookup, renderLookup } from './lookup.js';
 import { kbLint, lintSummary } from './lint.js';
 import { kbCommit } from './commit.js';
 import { stampAnchors, freshnessLine } from './freshness.js';
-import { loadAll, loadNote, renderIds, initSkeleton, notebookExists, notebookDir, logMetric } from './store.js';
+import { loadAll, renderIds, initSkeleton, notebookExists, notebookDir, logMetric } from './store.js';
 import { KB_RAW_VERSION } from './raw-log.js';
 import { kbView } from './view.js';
 import { VIEW_TEMPLATE } from './view-template.js';
@@ -305,63 +305,72 @@ async function cmdWrite(positional: string[], flags: KbFlags): Promise<number> {
     err(`[coldstart kb] cannot read spec: ${e instanceof Error ? e.message : e}`);
     return 1;
   }
-  let spec: WriteSpec;
+  let parsed: unknown;
   try {
-    spec = JSON.parse(raw);
+    parsed = JSON.parse(raw);
   } catch (e) {
     err(`[coldstart kb] spec is not valid JSON: ${e instanceof Error ? e.message : e}`);
     return 1;
   }
+  // A JSON array = a batch (the capture path — all notes in one call). A single
+  // object stays a batch of one, so the output/exit below is byte-compatible
+  // with the pre-batch behavior.
+  const isBatch = Array.isArray(parsed);
+  const specs = (isBatch ? parsed : [parsed]) as WriteSpec[];
+  if (!specs.length) { err('[coldstart kb] spec array is empty — nothing to write'); return 1; }
 
   initSkeleton(flags.root); // first write creates the notebook
-  const result = await kbWrite(flags.root, spec, { into: flags.into, isNew: flags.isNew, force: flags.force, session: flags.session });
-
-  if (result.status === 'error') { err(`[coldstart kb] ${result.message}`); return 1; }
-  if (result.status === 'candidates') {
-    const lines = [
-      'kb write: possible existing notes for this concept —',
-      ...result.candidates.map((c) => `  --into ${c.id}   [${c.type}] ${c.title}${c.summary ? ` — ${c.summary}` : ''}`),
-      '',
-      result.message,
-    ];
-    out(lines.join('\n'));
-    return 3;
-  }
-  // Path warnings ride on STDOUT — the writing agent must see and fix them
-  // now (a typo'd path is a silently dangling link forever after).
-  const warnings = [...(result.warnings ?? [])];
-
-  // Flow-evidence WARN (never a rejection): a flow whose steps the session
-  // never actually read is the classic bad flow — assembled from grep hits.
-  // Judged on the note as it stands after the fold, not on the spec: an update
-  // that touches only aliases omits `steps` and keeps the ones already stored.
-  const after = loadNote(flags.root, result.id).note;
-  const stepsWarn = flowStepsWarning(spec, after);
-  if (stepsWarn) warnings.push(stepsWarn);
-
-  // Findability fields. Reported AFTER the write, never as a rejection — the
-  // capture prompt chains writes with `&&`, so a non-zero exit would silence
-  // every note behind this one.
-  const missingWarn = missingFieldsWarning(spec, result.id, after);
-  if (missingWarn) warnings.push(missingWarn);
-  const flowWarn = flowEvidenceWarning(spec, flags.session);
-  if (flowWarn) warnings.push(flowWarn);
+  const batch = await kbWriteBatch(flags.root, specs, {
+    into: flags.into, isNew: flags.isNew, force: flags.force, session: flags.session,
+  });
 
   // Flow decision, folded into the write so capture costs ONE call instead of
   // two. The standalone `kb flow-decision` stays for the case this cannot
   // cover — deciding no note was warranted, where there is no write to ride on.
   if (flags.decision) recordFlowDecision(flags);
 
-  // Capture coverage — how much of this session's worklist has a note now.
-  // Printed with the write itself so under-capture is visible while the agent
-  // is still writing, instead of only in the transcript nobody reads.
-  const coverage = noteCoverage(flags.session, spec);
+  if (!isBatch) {
+    const o = batch.outcomes[0];
+    if (o.status === 'error') { err(`[coldstart kb] ${o.message}`); return 1; }
+    if (o.status === 'candidates') {
+      out([
+        'kb write: possible existing notes for this concept —',
+        ...(o.candidates ?? []).map((c) => `  --into ${c.id}   [${c.type}] ${c.title}${c.summary ? ` — ${c.summary}` : ''}`),
+        '',
+        o.message ?? '',
+      ].join('\n'));
+      return 3;
+    }
+    // Warnings ride on STDOUT — the writing agent must see and fix them now (a
+    // typo'd path is a silently dangling link forever after).
+    const warned = o.warnings?.length ? '\n' + o.warnings.map((w) => `warning: ${w}`).join('\n') : '';
+    out(`kb write: ${o.op} → ${o.id}${warned}${batch.coverage ? `\n${batch.coverage}` : ''}`);
+    return 0;
+  }
 
-  const warned = warnings.length
-    ? '\n' + warnings.map((w) => `warning: ${w}`).join('\n')
-    : '';
-  out(`kb write: ${result.op} → ${result.id}${warned}${coverage ? `\n${coverage}` : ''}`);
-  return 0;
+  // Batch: one block per note, then the aggregated coverage line. Errors are
+  // reported alongside successes — a malformed note never hides the good ones.
+  const lines: string[] = [
+    `kb write: ${batch.written} written · ${batch.errors} error(s) · ${batch.candidates} need a reuse decision`,
+  ];
+  for (const o of batch.outcomes) {
+    if (o.status === 'written') {
+      lines.push(`  ✓ ${o.op} → ${o.id}  (${o.label})`);
+      for (const w of o.warnings ?? []) lines.push(`      warning: ${w}`);
+    } else if (o.status === 'candidates') {
+      lines.push(`  ? ${o.label} — possible existing notes:`);
+      for (const c of o.candidates ?? []) lines.push(`      --into ${c.id}   [${c.type}] ${c.title}`);
+      if (o.message) lines.push(`      ${o.message}`);
+    } else {
+      lines.push(`  ✗ ${o.label} — ${o.message}`);
+    }
+  }
+  if (batch.coverage) { lines.push(''); lines.push(batch.coverage); }
+  out(lines.join('\n'));
+
+  if (batch.written) return 0;
+  if (batch.errors) return 1;
+  return 3; // only reuse-gate candidates, nothing written or errored
 }
 
 /** Record the capture's flow decision — the one capture outcome writes cannot show.

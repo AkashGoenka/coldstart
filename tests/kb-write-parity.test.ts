@@ -31,9 +31,12 @@ describe('kb write guide parity', () => {
   it('CLI and MCP guides share the exact shapes text; only the howto differs', () => {
     expect(writeGuideCli()).toContain(WRITE_GUIDE_SHAPES);
     expect(writeGuideMcp()).toContain(WRITE_GUIDE_SHAPES);
-    expect(writeGuideCli()).toContain('heredoc');
-    expect(writeGuideMcp()).toContain('call kb_write again');
-    expect(writeGuideMcp()).not.toContain('heredoc');
+    // Both teach the batch (array) path; only the howto differs — CLI shells out
+    // to a heredoc'd file, MCP passes `specs` inline.
+    expect(writeGuideCli()).toContain('JSON array');
+    expect(writeGuideCli()).toContain('/tmp/notes.json');
+    expect(writeGuideMcp()).toContain('specs');
+    expect(writeGuideMcp()).not.toContain('/tmp/notes.json');
   });
 });
 

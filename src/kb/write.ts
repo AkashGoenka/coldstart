@@ -94,6 +94,14 @@ export async function kbWrite(root: string, spec: WriteSpec, opts: WriteOptions 
     character = sugared;
     type = 'file';
   }
+  // A retract/supersede targets an EXISTING note by id; its type is a property
+  // of that note, not something the caller should have to restate. Requiring it
+  // (and, for file notes, `path`) is exactly why the documented retract form —
+  // {op:"retract", id, target:{kind:"note"}} — kept failing. Infer it here.
+  if (!type && op !== 'put' && spec.id) {
+    const { note: tgt } = loadNote(root, spec.id);
+    if (tgt) type = tgt.type;
+  }
   if (!type || !NOTE_TYPES.has(type)) return err('spec needs a `type`: "file" (one real file — or shorthand "file-hub"/"file-single"), "flow" (a cross-file story), or "lesson" (a confirmed absence — "there is no X in this repo", with the search terms that proved it)');
   if (character !== undefined && !CHARACTERS.has(character)) return err('`character` must be "hub" (no single purpose — knowledge lives as symbol-keyed facets) or "single" (one purpose, one summary)');
   if (character !== undefined && type !== 'file') return err('`character` belongs to file notes');
@@ -126,7 +134,7 @@ export async function kbWrite(root: string, spec: WriteSpec, opts: WriteOptions 
     }
   }
 
-  if (type === 'file') {
+  if (type === 'file' && op === 'put') {
     if (!spec.path) return err('a file note needs `path` — the file it is about');
     const derived = fileNoteId(spec.path);
     if (id && id !== derived) return err(`file-note ids are derived from the path (${derived}) — omit \`id\``);

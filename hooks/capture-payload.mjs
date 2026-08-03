@@ -16,8 +16,7 @@
  *              (the coordinator only sees the final message — #61).
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 // The spec shapes are NOT written here any more. They come from the one table
 // the write guide, the MCP tool description and `kb repair` also render from —
@@ -25,25 +24,36 @@ import { join } from "node:path";
 import { shapesBlock } from "./note-shape.mjs";
 
 /**
- * Session worklist manifest — the DENOMINATOR for capture coverage.
+ * Durable capture worklist — the checklist the agent can re-Read at any point.
  *
- * The checklist can only ASK the agent to walk the whole worklist (rule 3a);
- * nothing downstream could tell it that it wrote 8 notes for 30 worked files,
- * because `kb write` sees one spec at a time and never saw the worklist. So the
- * worklist is dropped here, at the one point every host passes through, and
- * `kb write --session <sid>` reads it back to print "N of M".
+ * The old design dropped the worklist in tmpdir (keyed by session id) and let
+ * `kb write --session` print a running "N of M". Two failures: the manifest was
+ * scratch that no agent ever read directly, and the whole capture PAYLOAD (this
+ * checklist + the write contract) was delivered one-shot and lost to compaction
+ * — the agent had to re-derive the note shape from memory 80 tool-calls later.
  *
- * CONTRACT TWIN: src/kb/session-worklist.ts — same filename, same shape. Keyed
- * by session id in tmpdir like the pending-capture file (elicit-core.pendingPath);
- * never in the repo, so it cannot be committed and needs no ignore rule.
- * Best-effort: capture must never fail because this could not be written.
+ * So the pair now lives in the repo notebook, keyed by root, and holds BOTH:
+ *   .worklist.json  structured scope (the coverage source of truth)
+ *   .worklist.md    the full rendered payload — worklist + write contract
+ * The agent re-Reads the .md whenever this scrolls away; `kb write` credits and
+ * trims/clears the pair (src/kb/durable-worklist.ts) so a stale snapshot never
+ * lingers, and the next capture fire regenerates it against live freshness.
+ *
+ * CONTRACT TWIN: src/kb/durable-worklist.ts — keep the paths and the .json shape
+ * (ts, sid, files:[{path,tier,needsNote}], wrote:[]) in step. Both gitignored
+ * (src/kb/store.ts initSkeleton). One active worklist per repo (concurrent
+ * sessions last-write-wins, an accepted edge). Best-effort: capture must never
+ * fail because these could not be written.
  */
-export function worklistManifestPath(sid) {
-  return join(tmpdir(), `coldstart-kb-worklist-${sid}.json`);
+export function worklistJsonPath(root) {
+  return join(root, ".coldstart", "notebook", ".worklist.json");
+}
+export function worklistMdPath(root) {
+  return join(root, ".coldstart", "notebook", ".worklist.md");
 }
 
-function recordWorklistManifest(sid, entries) {
-  if (!sid || !entries?.length) return;
+function writeDurableWorklist(root, sid, entries, mdBody) {
+  if (!root || !entries?.length) return;
   try {
     // needsNote: no note yet, or the note it has is stale. A file whose note is
     // already fresh is NOT an outstanding item — counting it would make full
@@ -53,7 +63,9 @@ function recordWorklistManifest(sid, entries) {
       tier: e.tier,
       needsNote: !e.notes?.length || e.notes.some((n) => n.state === "changed" || n.state === "missing"),
     }));
-    writeFileSync(worklistManifestPath(sid), JSON.stringify({ ts: Date.now(), files, wrote: [] }));
+    mkdirSync(join(root, ".coldstart", "notebook"), { recursive: true });
+    writeFileSync(worklistJsonPath(root), JSON.stringify({ ts: Date.now(), sid, files, wrote: [] }));
+    writeFileSync(worklistMdPath(root), mdBody);
   } catch { /* best-effort */ }
 }
 
@@ -101,8 +113,15 @@ function worklistLines(entries) {
   return lines.join("\n");
 }
 
-export function buildCapturePayload({ root, cli, sid, entries, envelope }) {
-  recordWorklistManifest(sid, entries);
+export function buildCapturePayload(args) {
+  const payload = renderCapturePayload(args);
+  // Persist the WHOLE payload durably so the agent can re-Read it later, and the
+  // structured scope for `kb write` coverage. Best-effort; never blocks capture.
+  writeDurableWorklist(args.root, args.sid, args.entries, payload);
+  return payload;
+}
+
+function renderCapturePayload({ root, cli, sid, entries, envelope }) {
   const opening = envelope === "block"
     ? "Handle capture now, then stop."
     : envelope === "manual"
@@ -150,9 +169,10 @@ changed and what you had to understand to change it, and that is precisely the k
 cold agent lacks. The default for an edited file is a note. Walk the worklist top to bottom \
 and decide each one explicitly; do not stop at the first two or three. If you end up writing \
 notes for well under half the [edited] files, you have under-captured — say which files you \
-skipped and why, so the decision is visible instead of silent. Each \`kb write\` prints the \
-running count ("N of M worklist files noted") and lists what is still unwritten — read that \
-line back before you finish; it is the only place your own coverage is visible to you.
+skipped and why, so the decision is visible instead of silent. This whole checklist (worklist \
++ the write contract below) is saved at \`.coldstart/notebook/.worklist.md\` — re-Read that file \
+any time this session if this scrolls out of context. Your \`kb write\` call ends with a coverage \
+line naming any worked file still without a note; read it back before you finish.
 
 WORKLIST — files you actually read this session, most-worked first:
 
@@ -210,7 +230,11 @@ missing fact is a NEW flow, even in the same subsystem, even across the same fil
 an unrelated fact into a nearby flow buries it: nobody searching for your fact will find that \
 title.
 
-WRITE — one Bash block total: specs as heredocs, writes chained with &&.
+WRITE — ONE call: put EVERY note as an object in a JSON array and write the array \
+in a single \`kb write\`. Order flows before the file notes that reference them. Malformed \
+notes are reported together (a bad note never silences a good one), and the call ends with \
+the coverage line. Forming an array is fewer tokens than chaining, not more — same JSON, \
+without the per-note heredoc and && glue.
 ${shapesBlock({ compact: true })}
   "identityAliases" and "symbols" are what make a note FINDABLE and both go missing by \
 default: a note without identityAliases is reachable only by its exact title, and agents \
@@ -227,14 +251,18 @@ however carefully you described it. Never write a flow using the file-note shape
 with several of its symbols. file-hub is ONLY for grab-bag files that have no single purpose \
 (models.py, utils, helpers) — there, knowledge lives per symbol. Touching many symbols does \
 not make a file a hub; having no one purpose does.
-  Update = the same spec plus "id":"<id from the worklist>".
-  node ${cli} kb write /tmp/spec1.json --root ${root} --session ${sid} --force
-  Flow/lesson shapes: run \`node ${cli} kb write --root ${root}\` with no spec — it prints the full guide.
+  Update = the same spec plus "id":"<id from the worklist>". Retract a note you \
+found wrong: {"op":"retract","id":"<id>","target":{"kind":"note"}} (as one array element).
+  cat > /tmp/notes.json <<'JSON'
+  [ {…note 1…}, {…note 2…} ]
+JSON
+  node ${cli} kb write /tmp/notes.json --root ${root} --session ${sid} --force
+  Full shapes: run \`node ${cli} kb write --root ${root}\` with no spec — it prints the guide.
 
 FLOW DECISION — record what you decided about FLOWS (created a new one, folded into an \
-existing one, or none) so the flow gate can be measured. Ride it on your LAST kb write — it \
+existing one, or none) so the flow gate can be measured. Ride it on the SAME batch write — it \
 is a flag, not a second command:
-  node ${cli} kb write /tmp/specN.json --root ${root} --session ${sid} --force \\
+  node ${cli} kb write /tmp/notes.json --root ${root} --session ${sid} --force \\
     --decision <none|new|update> [--id <flow id>] --why "<one clause>"
 Only when you wrote NO notes at all is there no write to carry it, and then run it alone:
   node ${cli} kb flow-decision --decision none --why "<one clause>" --root ${root} --session ${sid}${tail}`;

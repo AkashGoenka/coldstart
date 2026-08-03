@@ -227,7 +227,7 @@
       <p style="margin-top:22px"><b>Language-agnostic.</b> The freshness machinery is content-hash based, so the notebook works on any codebase — including languages the navigation index doesn't parse. Where the index does parse, notes additionally get symbol-level freshness.</p>
 
       <h4 class="subhead">When capture happens</h4>
-      <p>Capture is <b>trigger-timed</b>, not every-turn. The hook keeps per-file evidence of what the session actually read or edited (search hits and passing path mentions never count), scores the uncaptured backlog, and asks for notes at natural boundaries — when a burst of work settles, or the moment a commit lands (manual commits included). Most turns end silently. The ask itself is <b>non-blocking</b>: it arrives with your next prompt as a short worklist of the files the session genuinely worked with, each annotated with its existing note's state — never a wall of instructions after every answer.</p>
+      <p>Capture is <b>trigger-timed</b>, not every-turn. The hook keeps per-file evidence of what the session actually read or edited (search hits and passing path mentions never count), scores the uncaptured backlog, and asks for notes at natural boundaries — when a burst of work settles, or the moment a commit lands (manual commits included). Most turns end silently. The ask itself is <b>non-blocking</b>: it arrives with your next prompt as a short worklist of the files the session genuinely worked with, each annotated with its existing note's state — never a wall of instructions after every answer. That worklist (and the write contract that goes with it) is also written durably to <code>.coldstart/notebook/.worklist.md</code>, so a long session can re-read it after the one-shot delivery scrolls away; it trims itself as notes are written and regenerates on the next capture, so a missed file simply reappears rather than being lost.</p>
       <p style="margin-top:12px">Files whose notes are already fresh don't re-trigger capture, so a warmed-up repo asks less over time. The flip side: a brand-new notebook starts empty and <b>warms with use</b> — the first few real tasks seed the file notes, and "how X works" flow notes appear as sessions actually need those answers. Don't judge recall on day one.</p>
 
       <h4 class="subhead"><code>/capture-notes</code> — capture on demand</h4>
@@ -290,12 +290,14 @@
     <section id="kb-write" class="doc-sec">
       <div class="cmd">
         <div class="name warm"><span class="c">coldstart kb write</span> <span class="badge">notebook · the gate</span></div>
-        <div class="sig">coldstart kb write &lt;spec.json | -&gt; [--into &lt;id&gt; | --new]</div>
+        <div class="sig">coldstart kb write &lt;spec.json | array.json | -&gt; [--into &lt;id&gt; | --new]</div>
         <div class="desc">The write gate. A two-phase, dedup-first path: the note's concept is checked against existing notes before anything is written.</div>
       </div>
       <ul class="tight">
-        <li>First call <b>exits 3</b> with candidate matches. Resolve it with <code>--into &lt;id&gt;</code> (merge into an existing note) or <code>--new</code> (declare it genuinely new).</li>
+        <li><b>Batch is the capture path.</b> The spec file may be a JSON <b>array</b> of notes, written in one call: well-formed notes land, malformed ones are reported <em>together</em> (a bad note never silences a good one), and the call ends with a coverage line naming any worked file still without a note. A single object still works for a one-off.</li>
+        <li>A single new flow/lesson <b>exits 3</b> with candidate matches. Resolve it with <code>--into &lt;id&gt;</code> (merge into an existing note) or <code>--new</code> (declare it genuinely new).</li>
         <li>Reads a spec file, or <code>-</code> to stream the spec from stdin.</li>
+        <li>Correct a note that proved wrong in the same session: <code>{"op":"retract","id":"&lt;id&gt;","target":{"kind":"note"}}</code> removes it (or <code>target:{kind:"anchor"|"alias"|…, key:"…"}</code> removes one part) — no need to restate the note's type or path.</li>
         <li>Freshly-coined ids are created exclusively — a same-moment duplicate becomes two visible notes, never a silent merge.</li>
       </ul>
       <div class="callout warm"><span class="ct">Agent-facing</span>This is the command the capture hook drives at the end of a session. You rarely type it by hand.</div>
