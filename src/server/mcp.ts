@@ -117,7 +117,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'kb_write',
     description:
-      'Save or correct a NOTEBOOK note after finishing real work here — you have the files in context, so no future agent is better placed to record what you learned. Write a file note (what a file is for), a flow note (how a task spans files), or an absence lesson (a confirmed "there is no X"). Also the tool to FIX or RETRACT a note you used that proved wrong (`op: "put"` replaces, `op: "retract"` removes).\n\n' +
+      'Save or correct NOTEBOOK notes after finishing real work here — you have the files in context, so no future agent is better placed to record what you learned. Write a file note (what a file is for), a flow note (how a task spans files), or an absence lesson (a confirmed "there is no X"). Pass `specs` (an ARRAY of specs) to write ALL your notes in ONE call — malformed notes are reported together instead of one hiding the rest, and the result ends with a coverage line naming any worked files still without a note; pass `spec` (a single object) for a one-off. Also the tool to FIX or RETRACT a note you used that proved wrong: `op: "put"` replaces; `op: "retract"` with `target: {kind: "note"}` removes the whole note (or `target: {kind: "anchor"|"alias"|"facet"|"invariant"|"behavior"|"feature", key: "<value>"}` removes one part).\n\n' +
       'TWO-PHASE reuse gate: a flow/lesson `spec` sent WITHOUT an `id` first searches the notebook for the same concept. If plausible matches exist, kb_write returns `{status:"candidates", candidates:[...]}` INSTEAD of writing — re-call with `into: "<id>"` to merge into an existing note, or `is_new: true` to declare a genuinely new one. This makes note identity reliable (matching, not guessing an exact title). File notes skip the gate (id derives from the path).\n\n' +
       'The `spec` shape: `type` ("file"|"flow"|"lesson", or sugar "file-hub"/"file-single"), `title`, `summary`, `anchors` ([{path, symbols?}] — the addresses the note is about, which drive freshness), plus type-specific fields (file: facets/character; flow: steps/verified; lesson: kind:"absence"/scope/body). Call with NO arguments to get the full spec guide.\n\n' +
       // Rendered, not restated. This description going years without ever
@@ -130,7 +130,12 @@ export const TOOL_DEFINITIONS = [
       properties: {
         spec: {
           type: 'object',
-          description: `The note spec (JSON object). Fields: type, title, summary, identityAliases (stable — unions forever), incidentAliases (this write's symptom words — replaced by the next write that changes summary/body, omit if this write isn't about an incident), anchors:[{path,symbols?}], and type-specific fields (facets/character for file; steps/verified for flow; kind/scope/body for lesson). ${requiredFieldsLine()} Omit \`id\` on a new flow/lesson to trigger the reuse gate.`,
+          description: `A single note spec (JSON object). Fields: type, title, summary, identityAliases (stable — unions forever), incidentAliases (this write's symptom words — replaced by the next write that changes summary/body, omit if this write isn't about an incident), anchors:[{path,symbols?}], and type-specific fields (facets/character for file; steps/verified for flow; kind/scope/body for lesson). ${requiredFieldsLine()} Omit \`id\` on a new flow/lesson to trigger the reuse gate. Use \`specs\` instead to write several notes at once.`,
+        },
+        specs: {
+          type: 'array',
+          items: { type: 'object' },
+          description: 'The capture path: an ARRAY of note specs (each the same shape as `spec`), written in ONE call. Order flows before the file notes that reference them. Well-formed notes are written; malformed ones are reported together (not atomic — a bad note never silences a good one); the result ends with a coverage line naming any worked file still without a note. Prefer this over many single-`spec` calls.',
         },
         into: {
           type: 'string',
@@ -272,53 +277,52 @@ export function registerToolHandlers(
       }
 
       case 'kb_write': {
-        const { kbWrite } = await import('../kb/write.js');
         const { initSkeleton } = await import('../kb/store.js');
-        const { writeGuideMcp, flowEvidenceWarning, flowStepsWarning, missingFieldsWarning } = await import('../kb/write-guide.js');
-        const spec = params['spec'];
-        if (!spec || typeof spec !== 'object' || Array.isArray(spec)) {
-          // Parity with `kb write` (no spec): return the full guide, not an error.
+        const { writeGuideMcp } = await import('../kb/write-guide.js');
+        const { kbWriteBatch } = await import('../kb/write-batch.js');
+        // `specs` (array) is the capture path — all notes in one call, errors
+        // reported together, coverage finalized once. `spec` (object) stays a
+        // batch of one for a single/manual write. Neither → the full guide.
+        const rawSpecs = params['specs'] ?? params['spec'];
+        const isBatch = Array.isArray(rawSpecs);
+        if (rawSpecs === undefined || rawSpecs === null
+          || (!isBatch && (typeof rawSpecs !== 'object'))) {
           result = { __rawText: writeGuideMcp() };
           break;
         }
+        const specs = (isBatch ? rawSpecs : [rawSpecs]) as import('../kb/write.js').WriteSpec[];
+        if (!specs.length) { result = { __rawText: writeGuideMcp() }; break; }
         initSkeleton(index.rootDir); // first write creates the notebook
-        const wres = await kbWrite(index.rootDir, spec as import('../kb/write.js').WriteSpec, {
+        const batch = await kbWriteBatch(index.rootDir, specs, {
           into: params['into'] ? String(params['into']) : undefined,
           isNew: Boolean(params['is_new']),
+          session: params['session'] ? String(params['session']) : undefined,
         });
-        if (wres.status === 'error') {
-          result = { error: wres.message };
-        } else if (wres.status === 'candidates') {
-          result = {
-            status: 'candidates',
-            candidates: wres.candidates,
-            message: `${wres.message} Re-call kb_write with the same spec plus \`into: "<id>"\` to merge into one of these, or \`is_new: true\` to create a new note.`,
-          };
+        if (!isBatch) {
+          // Single-spec result stays shape-compatible with the pre-batch tool.
+          const o = batch.outcomes[0];
+          if (o.status === 'error') result = { error: o.message };
+          else if (o.status === 'candidates') {
+            result = {
+              status: 'candidates',
+              candidates: o.candidates,
+              message: `${o.message} Re-call kb_write with the same spec plus \`into: "<id>"\` to merge into one of these, or \`is_new: true\` to create a new note.`,
+            };
+          } else {
+            result = {
+              status: 'written', op: o.op, id: o.id, warnings: o.warnings ?? [],
+              ...(batch.coverage ? { coverage: batch.coverage } : {}),
+            };
+          }
         } else {
-          const warnings = [...(wres.warnings ?? [])];
-          // Stepless-flow WARN — parity with `kb write`; needs no session.
-          const { loadNote } = await import('../kb/store.js');
-          const after = loadNote(index.rootDir, wres.id).note;
-          const stepsWarn = flowStepsWarning(spec as import('../kb/write.js').WriteSpec, after);
-          if (stepsWarn) warnings.push(stepsWarn);
-          // Flow-evidence WARN (never a rejection) — parity with `kb write --session`.
-          const flowWarn = flowEvidenceWarning(
-            spec as import('../kb/write.js').WriteSpec,
-            params['session'] ? String(params['session']) : undefined,
-          );
-          if (flowWarn) warnings.push(flowWarn);
-          // Findability fields — parity with `kb write`; never a rejection.
-          const missingWarn = missingFieldsWarning(
-            spec as import('../kb/write.js').WriteSpec, wres.id, after,
-          );
-          if (missingWarn) warnings.push(missingWarn);
-          // Capture coverage — parity with `kb write --session`.
-          const { noteCoverage } = await import('../kb/session-worklist.js');
-          const coverage = noteCoverage(
-            params['session'] ? String(params['session']) : undefined,
-            spec,
-          );
-          result = { status: 'written', op: wres.op, id: wres.id, warnings, ...(coverage ? { coverage } : {}) };
+          result = {
+            status: 'batch',
+            written: batch.written,
+            errors: batch.errors,
+            candidates: batch.candidates,
+            results: batch.outcomes,
+            ...(batch.coverage ? { coverage: batch.coverage } : {}),
+          };
         }
         break;
       }

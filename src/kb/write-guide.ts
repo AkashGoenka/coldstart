@@ -21,7 +21,9 @@ export const WRITE_GUIDE_SHAPES = `kb write — spec shapes (JSON, one note per 
 ${shapesBlock()}
 
   update an existing note: same spec + its "id" (fields merge; yours win).
-  retract a wrong claim:   {"op":"retract","id":"<id>","reason":"..."}
+  retract a wrong claim:   {"op":"retract","id":"<id>","target":{"kind":"note"}}
+                           (retract a PART of a note, not the whole thing:
+                            {"op":"retract","id":"<id>","target":{"kind":"anchor|alias|facet|invariant|behavior|feature","key":"<the exact value>"}})
 
 ${requiredFieldsLine()}
 
@@ -34,19 +36,25 @@ Rules the writer enforces (fix any WARNING it prints, in this session):
 export function writeGuideCli(): string {
   return `${WRITE_GUIDE_SHAPES}
 
-How to run (one Bash block total — author specs as heredocs, chain with &&):
-  cat > /tmp/spec1.json <<'SPEC'
-  { ... }
+How to run (ONE Bash block, ONE call — author every note as a JSON array):
+  cat > /tmp/notes.json <<'SPEC'
+  [ { ...note 1... }, { ...note 2... } ]
 SPEC
-  node <cli> kb write /tmp/spec1.json --root <root> --session <sid> --force
-Flows before the file notes that reference them.`;
+  node <cli> kb write /tmp/notes.json --root <root> --session <sid> --force
+A single object still works for a one-off. Order the array flows-first so the
+file notes that reference them can resolve. The whole array is written in one
+pass: well-formed notes land, malformed ones are reported together, and the
+final coverage line lists any worked files still without a note.`;
 }
 
 export function writeGuideMcp(): string {
   return `${WRITE_GUIDE_SHAPES}
 
-How to run: call kb_write again with \`spec\` set to one of these shapes.
-Flows before the file notes that reference them.`;
+How to run: call kb_write once with \`specs\` set to an ARRAY of these shapes
+(or \`spec\` for a single one). Order flows before the file notes that reference
+them. The whole array is written in one call — well-formed notes land, malformed
+ones come back reported together, and the result lists any worked files still
+without a note.`;
 }
 
 // Capture markers are per-host (Claude / Cursor / Codex elicit hooks) but all
@@ -159,6 +167,6 @@ export function flowEvidenceWarning(spec: WriteSpec, session: string | undefined
   return (
     `flow evidence: only ${ev.read} of ${ev.steps} step files were actually read this session — ` +
     `a flow assembled from search hits is the classic bad flow. Keep it only if you truly ` +
-    `verified the chain; otherwise retract it now (op "retract").`
+    `verified the chain; otherwise retract it now ({"op":"retract","id":"<id>","target":{"kind":"note"}}).`
   );
 }

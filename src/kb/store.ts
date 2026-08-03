@@ -44,8 +44,20 @@ export function initSkeleton(root: string): void {
   mkdirSync(metricsDir(root), { recursive: true });
   const okf = join(notebookDir(root), 'okf.yaml');
   if (!existsSync(okf)) writeFileSync(okf, 'okf_version: "0.1"\ncoldstart_kb: 1\n');
+  // Derived/scratch that must never be committed. `.worklist.{md,json}` are the
+  // durable capture worklist (hooks/capture-payload.mjs writes them; they are
+  // per-session scratch, not a record). Append any missing line so EXISTING
+  // installs pick up new entries, not just fresh notebooks.
   const gi = join(notebookDir(root), '.gitignore');
-  if (!existsSync(gi)) writeFileSync(gi, 'notes/\n.metrics/\n');
+  const wanted = ['notes/', '.metrics/', '.worklist.md', '.worklist.json'];
+  let current = '';
+  try { current = readFileSync(gi, 'utf8'); } catch { /* absent — create below */ }
+  const have = new Set(current.split('\n').map((l) => l.trim()).filter(Boolean));
+  const missing = wanted.filter((w) => !have.has(w));
+  if (missing.length) {
+    const base = current && !current.endsWith('\n') ? `${current}\n` : current;
+    writeFileSync(gi, base + missing.join('\n') + '\n');
+  }
 }
 
 export interface LoadResult {
