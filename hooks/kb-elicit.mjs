@@ -203,7 +203,9 @@ if (process.argv.includes("--manual")) {
       process.exit(0);
     }
     const entries = worklistEntries(CLI, root, files, state.files, log);
-    const payload = buildCapturePayload({ root, cli: CLI, sid, entries, envelope: "manual" });
+    // Manual capture self-discovers the MAIN marker only (freshestMarkerUnderRoot
+    // matches `-main.json`), so its worklist is the main agent's.
+    const payload = buildCapturePayload({ root, cli: CLI, sid, aid: "main", entries, envelope: "manual" });
     // Mark ONLY the files actually LISTED (the worklist caps its display to
     // MAX_WORKLIST) captured — any overflow stays uncaptured so it rolls into
     // the next capture rather than being marked done but never shown. Re-read
@@ -345,7 +347,7 @@ if (process.argv.includes("--manual")) {
       writeFileSync(marker, JSON.stringify(state));
       if (!fresh.length) { log(`FAST-EXIT subagent no-new-files session=${sid} agent=${aid}`); process.exit(0); }
       const entries = worklistEntries(CLI, root, fresh, Object.fromEntries(fresh.map((rel) => [rel, delta.get(rel)])), log);
-      const payload = buildCapturePayload({ root, cli: CLI, sid, entries, envelope: "subagent" });
+      const payload = buildCapturePayload({ root, cli: CLI, sid, aid, entries, envelope: "subagent" });
       logCaptureEvent(root, { event: "fire", reason: "subagent", session: sid, agent: aid, files: fresh.length });
       log(`FIRE subagent session=${sid} agent=${aid} files=${fresh.length}`);
       process.stdout.write(JSON.stringify({ decision: "block", reason: payload }));
@@ -381,11 +383,11 @@ if (process.argv.includes("--manual")) {
     log(`FIRE ${decision.fire} mode=${decision.mode} session=${sid} score=${decision.score} files=${decision.files.length}`);
 
     if (decision.mode === "block") {
-      const payload = buildCapturePayload({ root, cli: CLI, sid, entries, envelope: "block" });
+      const payload = buildCapturePayload({ root, cli: CLI, sid, aid, entries, envelope: "block" });
       process.stdout.write(JSON.stringify({ decision: "block", reason: payload }));
     } else {
       // Non-blocking: kb-recall delivers this with the user's next prompt.
-      const payload = buildCapturePayload({ root, cli: CLI, sid, entries, envelope: "inject" });
+      const payload = buildCapturePayload({ root, cli: CLI, sid, aid, entries, envelope: "inject" });
       writePendingCapture(sid, decision.fire, payload);
     }
   } catch (e) {

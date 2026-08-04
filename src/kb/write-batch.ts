@@ -84,7 +84,7 @@ export async function kbWriteBatch(root: string, specs: WriteSpec[], opts: Write
     outcomes.push(await writeOne(root, specs[i], opts, i));
   }
   const writtenFilePaths = outcomes.flatMap((o) => (o.status === 'written' ? specPaths(specs[o.index]) : []));
-  const coverage = finalizeBatchCoverage(root, writtenFilePaths);
+  const coverage = finalizeBatchCoverage(root, writtenFilePaths, opts.session, opts.agent);
   return {
     outcomes,
     written: outcomes.filter((o) => o.status === 'written').length,

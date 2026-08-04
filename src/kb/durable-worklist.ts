@@ -4,9 +4,24 @@
  * The capture hook (hooks/capture-payload.mjs) drops the session's worklist as a
  * DURABLE pair in the repo notebook — unlike the old tmpdir manifest, which was
  * a one-shot blob lost to compaction:
- *   .coldstart/notebook/.worklist.json   structured scope (source of truth)
- *   .coldstart/notebook/.worklist.md     the prose checklist the agent re-Reads
+ *   .coldstart/notebook/.worklist-<sid>.json   structured scope (source of truth)
+ *   .coldstart/notebook/.worklist-<sid>.md      the prose checklist the agent re-Reads
  * Both are gitignored (src/kb/store.ts initSkeleton).
+ *
+ * SESSION+AGENT-SCOPED: the pair is keyed by the SAME identity as the tmpdir
+ * evidence marker, `<sid>-<aid>` (main agent is aid="main"; each subagent gets
+ * its own aid) — NOT one shared file per repo, and NOT by sid alone. A subagent
+ * shares its parent's session id, so sid-only keying would make a subagent's
+ * capture clobber the main agent's worklist and its `kb write` clear the main
+ * agent's coverage. Each agent stream therefore reads and writes ONLY its own
+ * worklist. `kb write --session <sid> --agent <aid>` finalizes against
+ * `.worklist-<sid>-<aid>.json` (aid defaults to "main"). A write with NO session
+ * touches no worklist at all (returns null): the capture payload always prints
+ * `--session`/`--agent`, so a session-less write is by definition outside capture
+ * — and picking "the freshest worklist" to mutate would let a stray hand write
+ * clear or downgrade another agent's active checklist. `--session` stays the bare
+ * sid so the flow-evidence check (write-guide.flowEvidenceCount, which unions
+ * markers across a session's agents) is unaffected.
  *
  * This module is the reader/trimmer. After a `kb write` batch it credits the
  * file notes just written, reports which worked files still lack a note (a flow
@@ -16,26 +31,62 @@
  * re-diffs against live note freshness and rewrites the pair, so a file missed
  * in one pass reappears next time.
  *
- * CONTRACT TWIN: hooks/capture-payload.mjs writes this pair — keep the paths and
- * the .json shape (ts, files:[{path,tier,needsNote}], wrote:[]) in step.
- * Everything here is best-effort: a missing/malformed worklist prints nothing
- * and never fails a write.
+ * CONTRACT TWIN: hooks/capture-payload.mjs writes this pair — keep the paths
+ * (`<sid>-<aid>` keyed, with the legacy unkeyed fallback) and the .json shape
+ * (ts, sid, aid, files:[{path,tier,needsNote}], wrote:[]) in step. Everything here
+ * is best-effort: a missing/malformed worklist prints nothing and never fails a write.
  */
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { notebookDir } from './raw-log.js';
 
 interface WorklistFile { path: string; tier: string; needsNote: boolean }
-interface Worklist { ts: number; sid?: string; files: WorklistFile[]; wrote: string[] }
+interface Worklist { ts: number; sid?: string; aid?: string; files: WorklistFile[]; wrote: string[] }
 
 const LIST_MAX = 8;
 
-export function worklistJsonPath(root: string): string { return join(notebookDir(root), '.worklist.json'); }
-export function worklistMdPath(root: string): string { return join(notebookDir(root), '.worklist.md'); }
+/** Filesystem-safe slug — mirrors the sanitize kb-elicit.mjs applies to
+ *  session_id / agent_id, so a `--session`/`--agent` value from any surface keys
+ *  the same file the hook wrote. */
+function slug(s?: string): string {
+  return String(s ?? '').replace(/[^A-Za-z0-9_-]/g, '');
+}
 
-function load(root: string): Worklist | null {
+/** The worklist key = the tmpdir marker identity, `<sid>-<aid>` (aid defaults to
+ *  "main"). Empty only when no session id is known at all. */
+function agentKey(sid?: string, aid?: string): string {
+  const s = slug(sid);
+  return s ? `${s}-${slug(aid) || 'main'}` : '';
+}
+
+export function worklistJsonPath(root: string, sid?: string, aid?: string): string {
+  const k = agentKey(sid, aid);
+  return join(notebookDir(root), k ? `.worklist-${k}.json` : '.worklist.json');
+}
+export function worklistMdPath(root: string, sid?: string, aid?: string): string {
+  const k = agentKey(sid, aid);
+  return join(notebookDir(root), k ? `.worklist-${k}.md` : '.worklist.md');
+}
+
+/**
+ * Resolve the worklist JSON file this write should finalize against.
+ *   - `--session <sid> [--agent <aid>]` → that agent's own file (the capture
+ *     path). aid defaults to "main", so a plain `--session` finalizes the main
+ *     agent's worklist, never a subagent's.
+ *   - NO session → null. A session-less write is outside capture (the payload
+ *     always carries `--session`/`--agent`); mutating "the freshest worklist"
+ *     would let a stray hand write clear or downgrade an active checklist.
+ * Returns null when there is nothing to finalize against.
+ */
+function resolveJsonPath(root: string, sid?: string, aid?: string): string | null {
+  if (!slug(sid)) return null;
+  const p = worklistJsonPath(root, sid, aid);
+  return existsSync(p) ? p : null;
+}
+
+function load(jsonPath: string): Worklist | null {
   try {
-    const w = JSON.parse(readFileSync(worklistJsonPath(root), 'utf8')) as Worklist;
+    const w = JSON.parse(readFileSync(jsonPath, 'utf8')) as Worklist;
     if (!Array.isArray(w?.files)) return null;
     w.wrote = Array.isArray(w.wrote) ? w.wrote : [];
     return w;
@@ -44,8 +95,8 @@ function load(root: string): Worklist | null {
   }
 }
 
-function clearWorklist(root: string): void {
-  for (const p of [worklistJsonPath(root), worklistMdPath(root)]) {
+function clearWorklist(jsonPath: string): void {
+  for (const p of [jsonPath, jsonPath.replace(/\.json$/, '.md')]) {
     try { if (existsSync(p)) unlinkSync(p); } catch { /* best-effort */ }
   }
 }
@@ -61,16 +112,20 @@ export function specPaths(spec: unknown): string[] {
 }
 
 /**
- * Finalize a whole write batch against the durable worklist: credit every file
- * note written, report coverage, then clear (all captured) or trim (some left)
- * the pair. `writtenPaths` = the file-note paths this batch actually wrote.
+ * Finalize a whole write batch against THIS AGENT's durable worklist: credit
+ * every file note written, report coverage, then clear (all captured) or trim
+ * (some left) the pair. `writtenPaths` = the file-note paths this batch actually
+ * wrote; `sid`+`aid` select the agent's own worklist (see resolveJsonPath) so a
+ * subagent never trims the main agent's list.
  * Returns the coverage line to print, or null when there is no worklist to
  * compare against (a manual write outside capture, or a session that never
  * armed). Called ONCE per `kb write` invocation — the batch is the one place
  * the whole worklist is visible at once.
  */
-export function finalizeBatchCoverage(root: string, writtenPaths: string[]): string | null {
-  const w = load(root);
+export function finalizeBatchCoverage(root: string, writtenPaths: string[], sid?: string, aid?: string): string | null {
+  const jsonPath = resolveJsonPath(root, sid, aid);
+  if (!jsonPath) return null;
+  const w = load(jsonPath);
   if (!w) return null;
   for (const p of writtenPaths) if (!w.wrote.includes(p)) w.wrote.push(p);
 
@@ -80,8 +135,8 @@ export function finalizeBatchCoverage(root: string, writtenPaths: string[]): str
   const left = outstanding.filter((f) => !wrote.has(f.path));
   const already = w.files.length - outstanding.length;
 
-  if (!left.length) clearWorklist(root);
-  else trim(root, w, left);
+  if (!left.length) clearWorklist(jsonPath);
+  else trim(jsonPath, w, left);
 
   if (!outstanding.length) return null;
   const lines = [
@@ -99,9 +154,9 @@ export function finalizeBatchCoverage(root: string, writtenPaths: string[]): str
 /** Rewrite the pair down to what is still outstanding, so a re-Read mid-session
  *  shows only the remaining work (and never a frozen full snapshot). The next
  *  capture fire regenerates the full checklist + contract if work remains. */
-function trim(root: string, w: Worklist, left: WorklistFile[]): void {
+function trim(jsonPath: string, w: Worklist, left: WorklistFile[]): void {
   try {
-    writeFileSync(worklistJsonPath(root), JSON.stringify({ ...w, files: left, wrote: [] }));
+    writeFileSync(jsonPath, JSON.stringify({ ...w, files: left, wrote: [] }));
     const md = [
       '# Capture worklist — still outstanding',
       '',
@@ -112,7 +167,7 @@ function trim(root: string, w: Worklist, left: WorklistFile[]): void {
       'Note shapes + how to write a batch in one call: run `kb write` with no spec for the full guide.',
       '',
     ].join('\n');
-    writeFileSync(worklistMdPath(root), md);
+    writeFileSync(jsonPath.replace(/\.json$/, '.md'), md);
   } catch {
     /* best-effort */
   }

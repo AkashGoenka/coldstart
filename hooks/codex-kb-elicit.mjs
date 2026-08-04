@@ -140,7 +140,7 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
 
     const entries = worklistEntries(CLI, root, fresh, state.files, log);
     const payload = buildCapturePayload({
-      root, cli: CLI, sid, entries,
+      root, cli: CLI, sid, aid, entries,
       envelope: isSubagent ? "subagent" : "block",
     });
     logCaptureEvent(root, {

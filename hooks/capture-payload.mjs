@@ -16,7 +16,7 @@
  *              (the coordinator only sees the final message — #61).
  */
 
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 // The spec shapes are NOT written here any more. They come from the one table
 // the write guide, the MCP tool description and `kb repair` also render from —
@@ -32,27 +32,62 @@ import { shapesBlock } from "./note-shape.mjs";
  * checklist + the write contract) was delivered one-shot and lost to compaction
  * — the agent had to re-derive the note shape from memory 80 tool-calls later.
  *
- * So the pair now lives in the repo notebook, keyed by root, and holds BOTH:
- *   .worklist.json  structured scope (the coverage source of truth)
- *   .worklist.md    the full rendered payload — worklist + write contract
+ * So the pair now lives in the repo notebook and holds BOTH:
+ *   .worklist-<sid>-<aid>.json  structured scope (the coverage source of truth)
+ *   .worklist-<sid>-<aid>.md    the full rendered payload — worklist + write contract
  * The agent re-Reads the .md whenever this scrolls away; `kb write` credits and
  * trims/clears the pair (src/kb/durable-worklist.ts) so a stale snapshot never
  * lingers, and the next capture fire regenerates it against live freshness.
  *
+ * KEYED BY <sid>-<aid>, the SAME identity as the tmpdir evidence marker — NOT by
+ * root, and NOT by sid alone. A subagent shares its parent's session id, so a
+ * sid-only (or root-only) key would let a subagent's capture clobber the main
+ * agent's worklist. Each agent stream owns its own pair; the printed `kb write`
+ * carries `--session <sid> --agent <aid>` so finalize trims the right one.
+ *
  * CONTRACT TWIN: src/kb/durable-worklist.ts — keep the paths and the .json shape
- * (ts, sid, files:[{path,tier,needsNote}], wrote:[]) in step. Both gitignored
- * (src/kb/store.ts initSkeleton). One active worklist per repo (concurrent
- * sessions last-write-wins, an accepted edge). Best-effort: capture must never
- * fail because these could not be written.
+ * (ts, sid, aid, files:[{path,tier,needsNote}], wrote:[]) in step. Both gitignored
+ * (src/kb/store.ts initSkeleton). Best-effort: capture must never fail because
+ * these could not be written.
  */
-export function worklistJsonPath(root) {
-  return join(root, ".coldstart", "notebook", ".worklist.json");
+export function worklistJsonPath(root, sid, aid) {
+  const k = worklistKey(sid, aid);
+  return join(root, ".coldstart", "notebook", k ? `.worklist-${k}.json` : ".worklist.json");
 }
-export function worklistMdPath(root) {
-  return join(root, ".coldstart", "notebook", ".worklist.md");
+export function worklistMdPath(root, sid, aid) {
+  const k = worklistKey(sid, aid);
+  return join(root, ".coldstart", "notebook", k ? `.worklist-${k}.md` : ".worklist.md");
+}
+function worklistKey(sid, aid) {
+  const s = String(sid ?? "").replace(/[^A-Za-z0-9_-]/g, "");
+  return s ? `${s}-${String(aid ?? "").replace(/[^A-Za-z0-9_-]/g, "") || "main"}` : "";
 }
 
-function writeDurableWorklist(root, sid, entries, mdBody) {
+// Abandoned sessions' worklist pairs would otherwise accrue forever (a session
+// that fires once then never captures again leaves its pair behind). Prune any
+// sibling worklist file whose json is older than this on each fire — long enough
+// that a still-live session is never touched, short enough to stay tidy.
+const STALE_WORKLIST_MS = 3 * 24 * 60 * 60 * 1000;
+function pruneStaleWorklists(dir, keepKey) {
+  try {
+    for (const n of readdirSync(dir)) {
+      const m = /^\.worklist-([A-Za-z0-9_-]+)\.json$/.exec(n);
+      if (!m || m[1] === keepKey) continue;
+      // Age by the json's own ts; fall back to file mtime when ts is absent or
+      // unreadable, NEVER to 0 — a ts-less-but-recent file must not read as 1970
+      // and get deleted out from under a live session.
+      let ts = 0;
+      try { ts = JSON.parse(readFileSync(join(dir, n), "utf8"))?.ts || statMtime(join(dir, n)); } catch { ts = statMtime(join(dir, n)); }
+      if (Date.now() - ts < STALE_WORKLIST_MS) continue;
+      for (const p of [join(dir, n), join(dir, n.replace(/\.json$/, ".md"))]) {
+        try { unlinkSync(p); } catch { /* best-effort */ }
+      }
+    }
+  } catch { /* best-effort */ }
+}
+function statMtime(p) { try { return statSync(p).mtimeMs; } catch { return 0; } }
+
+function writeDurableWorklist(root, sid, aid, entries, mdBody) {
   if (!root || !entries?.length) return;
   try {
     // needsNote: no note yet, or the note it has is stale. A file whose note is
@@ -63,16 +98,18 @@ function writeDurableWorklist(root, sid, entries, mdBody) {
       tier: e.tier,
       needsNote: !e.notes?.length || e.notes.some((n) => n.state === "changed" || n.state === "missing"),
     }));
-    mkdirSync(join(root, ".coldstart", "notebook"), { recursive: true });
-    writeFileSync(worklistJsonPath(root), JSON.stringify({ ts: Date.now(), sid, files, wrote: [] }));
-    writeFileSync(worklistMdPath(root), mdBody);
+    const dir = join(root, ".coldstart", "notebook");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(worklistJsonPath(root, sid, aid), JSON.stringify({ ts: Date.now(), sid, aid: aid || "main", files, wrote: [] }));
+    writeFileSync(worklistMdPath(root, sid, aid), mdBody);
+    pruneStaleWorklists(dir, worklistKey(sid, aid));
   } catch { /* best-effort */ }
 }
 
 /**
  * SPIKE (experimental, undocumented): a repo can replace the shipped checklist
  * with its own `.coldstart/checklist.md`. Placeholders {{WORKLIST}}, {{CLI}},
- * {{ROOT}}, {{SID}} are substituted. The worklist is LOAD-BEARING (it is the
+ * {{ROOT}}, {{SID}}, {{AID}} are substituted. The worklist is LOAD-BEARING (it is the
  * scope rule) — an override that omits {{WORKLIST}} gets it appended anyway.
  * Trigger mechanics stay in code; only the prompt text is overridable. Merge
  * semantics when the shipped default evolves = none (the override wins
@@ -117,11 +154,12 @@ export function buildCapturePayload(args) {
   const payload = renderCapturePayload(args);
   // Persist the WHOLE payload durably so the agent can re-Read it later, and the
   // structured scope for `kb write` coverage. Best-effort; never blocks capture.
-  writeDurableWorklist(args.root, args.sid, args.entries, payload);
+  writeDurableWorklist(args.root, args.sid, args.aid, args.entries, payload);
   return payload;
 }
 
-function renderCapturePayload({ root, cli, sid, entries, envelope }) {
+function renderCapturePayload({ root, cli, sid, aid, entries, envelope }) {
+  aid = String(aid ?? "main").replace(/[^A-Za-z0-9_-]/g, "") || "main";
   const opening = envelope === "block"
     ? "Handle capture now, then stop."
     : envelope === "manual"
@@ -141,7 +179,8 @@ for it — your findings, not the notebook decision.`
     let body = override
       .replaceAll("{{CLI}}", String(cli))
       .replaceAll("{{ROOT}}", String(root))
-      .replaceAll("{{SID}}", String(sid));
+      .replaceAll("{{SID}}", String(sid))
+      .replaceAll("{{AID}}", String(aid));
     body = body.includes("{{WORKLIST}}")
       ? body.replaceAll("{{WORKLIST}}", worklist)
       : `${body.trimEnd()}\n\nWORKLIST — files you actually read this session, most-worked first \
@@ -170,9 +209,9 @@ cold agent lacks. The default for an edited file is a note. Walk the worklist to
 and decide each one explicitly; do not stop at the first two or three. If you end up writing \
 notes for well under half the [edited] files, you have under-captured — say which files you \
 skipped and why, so the decision is visible instead of silent. This whole checklist (worklist \
-+ the write contract below) is saved at \`.coldstart/notebook/.worklist.md\` — re-Read that file \
-any time this session if this scrolls out of context. Your \`kb write\` call ends with a coverage \
-line naming any worked file still without a note; read it back before you finish.
++ the write contract below) is saved at \`.coldstart/notebook/.worklist-${sid}-${aid}.md\` — re-Read \
+that file any time this session if this scrolls out of context. Your \`kb write\` call ends with a \
+coverage line naming any worked file still without a note; read it back before you finish.
 
 WORKLIST — files you actually read this session, most-worked first:
 
@@ -256,13 +295,14 @@ found wrong: {"op":"retract","id":"<id>","target":{"kind":"note"}} (as one array
   cat > /tmp/notes.json <<'JSON'
   [ {…note 1…}, {…note 2…} ]
 JSON
-  node ${cli} kb write /tmp/notes.json --root ${root} --session ${sid} --force
+  node ${cli} kb write /tmp/notes.json --root ${root} --session ${sid} --agent ${aid} --force
   Full shapes: run \`node ${cli} kb write --root ${root}\` with no spec — it prints the guide.
+  (Keep --session/--agent exactly as written — they point coverage at THIS agent's worklist.)
 
 FLOW DECISION — record what you decided about FLOWS (created a new one, folded into an \
 existing one, or none) so the flow gate can be measured. Ride it on the SAME batch write — it \
 is a flag, not a second command:
-  node ${cli} kb write /tmp/notes.json --root ${root} --session ${sid} --force \\
+  node ${cli} kb write /tmp/notes.json --root ${root} --session ${sid} --agent ${aid} --force \\
     --decision <none|new|update> [--id <flow id>] --why "<one clause>"
 Only when you wrote NO notes at all is there no write to carry it, and then run it alone:
   node ${cli} kb flow-decision --decision none --why "<one clause>" --root ${root} --session ${sid}${tail}`;

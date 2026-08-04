@@ -52,6 +52,7 @@ interface KbFlags {
   id?: string;
   paths?: string[];
   session?: string;
+  agent?: string;
   message?: string;
   noOpen: boolean;
   decision?: string;
@@ -83,6 +84,7 @@ function parseKbArgs(argv: string[]): { positional: string[]; flags: KbFlags } {
       case '--id': flags.id = argv[++i]; break;
       case '--paths': flags.paths = String(argv[++i] ?? '').split(',').map((s) => s.trim()).filter(Boolean); break;
       case '--session': flags.session = argv[++i]; break;
+      case '--agent': flags.agent = argv[++i]; break;
       case '-m': case '--message': flags.message = argv[++i]; break;
       case '--decision': flags.decision = argv[++i]; break;
       case '--why': flags.why = argv[++i]; break;
@@ -321,7 +323,7 @@ async function cmdWrite(positional: string[], flags: KbFlags): Promise<number> {
 
   initSkeleton(flags.root); // first write creates the notebook
   const batch = await kbWriteBatch(flags.root, specs, {
-    into: flags.into, isNew: flags.isNew, force: flags.force, session: flags.session,
+    into: flags.into, isNew: flags.isNew, force: flags.force, session: flags.session, agent: flags.agent,
   });
 
   // Flow decision, folded into the write so capture costs ONE call instead of
