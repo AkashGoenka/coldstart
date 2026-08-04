@@ -633,8 +633,11 @@ export const REPAIR_ALIASES_COMMAND = 'repair-aliases';
  *  of them — `unwire` sweeps the same list. */
 export interface UserCommand {
   name: string;
-  /** The shell command each host's wrapper runs. */
-  invocation: () => string;
+  /** The shell command each host's wrapper runs. `sessionExpr`, when the host
+   *  can supply the invoking session id (Claude's `${CLAUDE_SESSION_ID}`), is
+   *  passed to `/capture-notes` so it targets THAT session's worklist instead of
+   *  guessing the freshest marker. Commands that take no session ignore it. */
+  invocation: (sessionExpr?: string) => string;
   /** One line for the Claude front-matter and the init output. */
   description: string;
   /** Codex skills need a longer, trigger-oriented description. */
@@ -646,7 +649,12 @@ export interface UserCommand {
 export const USER_COMMANDS: Record<'capture' | 'repair' | 'repairAliases', UserCommand> = {
   capture: {
     name: CAPTURE_COMMAND,
-    invocation: () => `node ${path.join(resolveHooksDir(), 'kb-elicit.mjs')} --manual`,
+    // `--session` points capture at the invoking session's worklist. It is
+    // REQUIRED — without it the hook refuses rather than guess a session
+    // (kb-elicit.mjs --manual); Claude supplies it via ${CLAUDE_SESSION_ID}.
+    invocation: (sessionExpr) =>
+      `node ${path.join(resolveHooksDir(), 'kb-elicit.mjs')} --manual`
+      + (sessionExpr ? ` --session "${sessionExpr}"` : ''),
     description: 'Capture notebook notes for the work done so far',
     skillDescription:
       'Capture coldstart notebook notes for the work done so far in this session. Use when the '
@@ -700,12 +708,15 @@ export const USER_COMMANDS: Record<'capture' | 'repair' | 'repairAliases', UserC
  *  Claude expands a leading `!` at submit time, so the output is injected
  *  straight into the prompt and the agent acts on it in the same turn. */
 export function wireClaudeCommand(cwd: string, cmd: UserCommand): 'created' | 'updated' {
+  // Claude substitutes ${CLAUDE_SESSION_ID} in the command markdown before the
+  // leading `!` runs the bash, so capture targets the session the user typed
+  // /capture-notes in. Other commands ignore the arg.
   return writeOwnedFile(path.join(cwd, '.claude', 'commands', `${cmd.name}.md`), `---
 description: ${cmd.description}
 allowed-tools: Bash(node:*)
 ---
 
-!\`${cmd.invocation()}\`
+!\`${cmd.invocation('${CLAUDE_SESSION_ID}')}\`
 
 ${cmd.instructions}
 `);

@@ -435,14 +435,18 @@ describe('/capture-notes command wiring', () => {
     expect(body).toContain('allowed-tools: Bash(node:*)');
     // `!` expansion runs it at submit time so the payload lands in the prompt.
     expect(body).toContain('!`node ');
-    expect(body).toContain('kb-elicit.mjs --manual`');
+    // Claude passes the invoking session id so capture targets THIS session's
+    // worklist, not the freshest marker in a concurrent-session repo.
+    expect(body).toContain('kb-elicit.mjs --manual --session "${CLAUDE_SESSION_ID}"`');
   });
 
   it('writes a Cursor command that asks the agent to run it (no ! expansion)', () => {
     expect(wireCursorCaptureCommand(tempDir)).toBe('created');
     const body = fs.readFileSync(cursorCmd(), 'utf8');
     expect(body).not.toContain('!`');
+    // No verified session var for Cursor → plain --manual (freshest-marker fallback).
     expect(body).toContain('kb-elicit.mjs --manual');
+    expect(body).not.toContain('CLAUDE_SESSION_ID');
   });
 
   it('writes a Codex SKILL.md with the required name/description frontmatter', () => {

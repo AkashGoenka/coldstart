@@ -144,41 +144,48 @@ function argValue(name) {
   const i = process.argv.indexOf(name);
   return i >= 0 ? process.argv[i + 1] : undefined;
 }
-function markerMtime(p) { try { return statSync(p).mtimeMs; } catch { return 0; } }
-function freshestMarkerUnderRoot(root) {
-  let names;
-  try { names = readdirSync(tmpdir()); } catch { return null; }
-  const markers = names
-    .filter((n) => /^coldstart-kb-.+-main\.json$/.test(n))
-    .map((n) => ({ n, p: join(tmpdir(), n), mtime: 0 }))
-    .map((m) => ({ ...m, mtime: markerMtime(m.p) }))
-    .sort((a, b) => b.mtime - a.mtime);
-  for (const m of markers) {
-    let state;
-    try { state = JSON.parse(readFileSync(m.p, "utf8")); } catch { continue; }
-    const files = state && state.files ? Object.keys(state.files) : [];
-    if (!files.length) continue;
-    // Belongs to THIS repo iff a recorded file still resolves under root.
-    if (files.some((rel) => existsSync(join(root, rel)))) {
-      return { sid: m.n.slice("coldstart-kb-".length, -"-main.json".length), state, path: m.p };
-    }
-  }
-  return null;
+// The main-agent evidence marker for the KNOWN invoking session. Manual capture
+// is scoped to the session it runs in — NEVER guessed from "the freshest marker
+// under root", because with two sessions open in one repo that guess captures the
+// wrong session's work, which is worse than not capturing. The host names the
+// session (Claude passes ${CLAUDE_SESSION_ID}); we resolve THAT session's marker
+// or nothing. Returns null when the sid is empty or its marker is absent/foreign.
+function markerForSession(root, sid) {
+  if (!sid) return null;
+  const p = join(tmpdir(), `coldstart-kb-${sid}-main.json`);
+  let state;
+  try { state = JSON.parse(readFileSync(p, "utf8")); } catch { return null; }
+  const files = state && state.files ? Object.keys(state.files) : [];
+  if (!files.length || !files.some((rel) => existsSync(join(root, rel)))) return null;
+  return { sid, state, path: p };
 }
 if (process.argv.includes("--manual")) {
   try {
     const rootArg = argValue("--root");
     const root = rootArg ? resolve(rootArg) : process.cwd();
     setLogRoot(root);
-    const found = freshestMarkerUnderRoot(root);
-    if (!found) {
+    // Scope capture to the invoking session — no freshest-marker fallback.
+    const sidArg = String(argValue("--session") || "").replace(/[^A-Za-z0-9_-]/g, "");
+    if (!sidArg) {
       process.stdout.write(
-        "No notebook-capture evidence for this repo yet — it accrues as you read and edit files.\n" +
-        "Do a turn or two of real work here, then run /capture-notes again.\n",
+        "Manual capture needs the id of the session it runs in, and none was passed.\n" +
+        "Run /capture-notes through the command `coldstart init` wires — it passes the session id\n" +
+        "automatically (on Claude Code, ${CLAUDE_SESSION_ID}). Guessing the session would risk\n" +
+        "writing up a different session's work.\n",
       );
-      log(`MANUAL no-marker root=${root}`);
+      log(`MANUAL no-session root=${root}`);
       process.exit(0);
     }
+    const found = markerForSession(root, sidArg);
+    if (!found) {
+      process.stdout.write(
+        "No notebook-capture evidence for THIS session in this repo yet — it accrues as you read\n" +
+        "and edit files. Do a turn or two of real work here, then run /capture-notes again.\n",
+      );
+      log(`MANUAL no-marker-for-session sid=${sidArg} root=${root}`);
+      process.exit(0);
+    }
+    log(`MANUAL session sid=${found.sid} root=${root}`);
     const { sid, state, path: markerPath } = found;
     // A manual /capture-notes is an EXPLICIT request to write up THIS session's
     // work, so its scope is everything worked on — not merely what an automatic
@@ -203,8 +210,8 @@ if (process.argv.includes("--manual")) {
       process.exit(0);
     }
     const entries = worklistEntries(CLI, root, files, state.files, log);
-    // Manual capture self-discovers the MAIN marker only (freshestMarkerUnderRoot
-    // matches `-main.json`), so its worklist is the main agent's.
+    // Manual capture resolves the invoking session's MAIN marker (markerForSession
+    // targets `-main.json`), so its worklist is the main agent's.
     const payload = buildCapturePayload({ root, cli: CLI, sid, aid: "main", entries, envelope: "manual" });
     // Mark ONLY the files actually LISTED (the worklist caps its display to
     // MAX_WORKLIST) captured — any overflow stays uncaptured so it rolls into
