@@ -226,11 +226,11 @@ ul.tight li b { color: var(--ink); }
 
 /* =========================================================
    BLOG / ESSAYS  —  a reading surface, not a product surface.
-   Light by default (long-form prose), dark when the OS asks.
-   Scoped to body.essay-page so index.html + docs.html stay dark.
-   To make the blog permanently dark: move the tokens inside the
-   prefers-color-scheme block up into body.essay-page and delete
-   the light set. Nothing else needs to change.
+   Pinned DARK to match index.html + docs.html: the whole site is one
+   dark surface, so the blog no longer flips to light on a light-OS
+   preference (which read as an inconsistency against the dark landing).
+   To restore OS-adaptive light/dark here, split these tokens back into a
+   light default + an `@media (prefers-color-scheme: dark)` override.
    ========================================================= */
 body.essay-page {
   --nav-wrap: 1080px;
@@ -244,43 +244,22 @@ body.essay-page {
      different left edges. Every child of .essay-article shares this. */
   --measure: 740px;
 
-  --bg: #fcfcfb;
-  --surface: #f4f3f0;
-  --surface-2: #f8f7f5;
-  --ink: #14171c;           /* headings */
-  --prose: #2a2f38;         /* body copy — 14.5:1, NOT the grey used for meta */
-  --muted: #5f6875;         /* metadata, captions, secondary only */
-  --faint: #8b93a0;
-  --line: #e4e2dd;
-  --line-soft: #eeece8;
-  --frost: #12708f;
-  --frost-bright: #0d5a74;
-  --ember: #a8571a;
-  --ember-bright: #8c4813;
-  --term-border: #232a3a;
-  --sel: rgba(18,112,143,.16);
-  color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  body.essay-page {
-    --bg: #0b0e14;          /* lifted off pure black — easier for sustained reading */
-    --surface: #141a24;
-    --surface-2: #10151d;
-    --ink: #eef3fb;
-    --prose: #c9d3e2;       /* 12.8:1 — was #8b9ab2 at 6.9:1 */
-    --muted: #8b9ab2;
-    --faint: #6b7789;
-    --line: #1e2735;
-    --line-soft: #182029;
-    --frost: #4fbfe0;
-    --frost-bright: #6fd3ef;
-    --ember: #ef9448;
-    --ember-bright: #ffb267;
-    --term-border: #1e2735;
-    --sel: rgba(79,191,224,.20);
-    color-scheme: dark;
-  }
+  --bg: #0b0e14;          /* lifted off pure black — easier for sustained reading */
+  --surface: #141a24;
+  --surface-2: #10151d;
+  --ink: #eef3fb;
+  --prose: #c9d3e2;       /* 12.8:1 — was #8b9ab2 at 6.9:1 */
+  --muted: #8b9ab2;
+  --faint: #6b7789;
+  --line: #1e2735;
+  --line-soft: #182029;
+  --frost: #4fbfe0;
+  --frost-bright: #6fd3ef;
+  --ember: #ef9448;
+  --ember-bright: #ffb267;
+  --term-border: #1e2735;
+  --sel: rgba(79,191,224,.20);
+  color-scheme: dark;
 }
 
 body.essay-page ::selection { background: var(--sel); }
