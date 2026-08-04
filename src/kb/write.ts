@@ -77,6 +77,10 @@ export interface WriteOptions {
   force?: boolean;
   /** Session id for the capture-rate metric. */
   session?: string;
+  /** Agent id (main | subagent id) selecting THIS agent's durable worklist for
+   *  batch-coverage finalization. Defaults to "main". A subagent shares its
+   *  parent's session id, so this is what keeps it off the main agent's list. */
+  agent?: string;
 }
 
 export async function kbWrite(root: string, spec: WriteSpec, opts: WriteOptions = {}): Promise<WriteResult> {

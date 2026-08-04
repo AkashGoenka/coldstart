@@ -149,6 +149,10 @@ export const TOOL_DEFINITIONS = [
           type: 'string',
           description: 'Optional session id (given in a capture prompt). Enables the flow-evidence check: a flow whose step files this session never actually read gets a warning.',
         },
+        agent: {
+          type: 'string',
+          description: 'Optional agent id (given in a capture prompt, alongside session). Selects THIS agent stream\'s durable worklist for the coverage line so a subagent does not clear the main agent\'s list. Defaults to "main".',
+        },
       },
       required: [],
     },
@@ -297,6 +301,7 @@ export function registerToolHandlers(
           into: params['into'] ? String(params['into']) : undefined,
           isNew: Boolean(params['is_new']),
           session: params['session'] ? String(params['session']) : undefined,
+          agent: params['agent'] ? String(params['agent']) : undefined,
         });
         if (!isBatch) {
           // Single-spec result stays shape-compatible with the pre-batch tool.

@@ -303,9 +303,10 @@ describe('kb-elicit SubagentStop (one-shot, still blocking)', () => {
 
 /**
  * `--manual` (#84): the /capture-notes command fires the SAME capture flow on
- * demand, bypassing only the trigger score gate. No hook stdin — the session is
- * self-discovered as the freshest marker whose recorded files resolve under
- * --root, which is also what keeps other repos' markers from being picked up.
+ * demand, bypassing only the trigger score gate. The host names the invoking
+ * session (`--session`, from Claude's ${CLAUDE_SESSION_ID}); capture resolves
+ * THAT session's marker under --root and refuses rather than guess when no
+ * session is named — a guess would risk writing up a different session's work.
  */
 describe('kb-elicit --manual (on-demand capture)', () => {
   const markerPath = (): string => path.join(os.tmpdir(), `coldstart-kb-${sid}-main.json`);
@@ -321,7 +322,15 @@ describe('kb-elicit --manual (on-demand capture)', () => {
   }
 
   const manual = (): string =>
-    execFileSync('node', [HOOK, '--manual', '--root', root], { encoding: 'utf8', timeout: 30000 });
+    execFileSync('node', [HOOK, '--manual', '--root', root, '--session', sid], { encoding: 'utf8', timeout: 30000 });
+
+  it('refuses to guess a session when none is passed', () => {
+    seed(['src/a.ts']);
+    writeMarker({ 'src/a.ts': { edits: 2 } });
+    const out = execFileSync('node', [HOOK, '--manual', '--root', root], { encoding: 'utf8', timeout: 30000 });
+    expect(out).toContain('needs the id of the session');
+    expect(out).not.toContain('WORKLIST');
+  });
 
   it('fires the full checklist for uncaptured files, below the arm threshold', () => {
     seed(['src/a.ts', 'src/b.ts']);

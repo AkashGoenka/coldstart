@@ -29,8 +29,10 @@ function writeRepoFile(rel: string, content: string): void {
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   fs.writeFileSync(abs, content);
 }
+const SID = 'sess1';
+const AID = 'main';
 function seedWorklist(files: { path: string; tier: string; needsNote: boolean }[]): void {
-  fs.writeFileSync(worklistJsonPath(root), JSON.stringify({ ts: Date.now(), files, wrote: [] }));
+  fs.writeFileSync(worklistJsonPath(root, SID, AID), JSON.stringify({ ts: Date.now(), sid: SID, aid: AID, files, wrote: [] }));
 }
 
 describe('kbWriteBatch', () => {
@@ -57,7 +59,7 @@ describe('kbWriteBatch', () => {
     ]);
     const res = await kbWriteBatch(root, [
       { type: 'file-single', path: 'src/a.ts', summary: 'a', anchors: [{ path: 'src/a.ts', symbols: ['A'] }] },
-    ], { force: true });
+    ], { force: true, session: SID, agent: AID });
     expect(res.coverage).toContain('1 of 2 worklist files noted');
     expect(res.coverage).toContain('src/b.ts [edited]');
   });

@@ -50,7 +50,7 @@
     <a class="brand" href="index.html"><svg class="mark s2" width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><use href="#flake" class="fl"/><circle class="fl" cx="16" cy="16" r="6" fill="none"/><circle class="core" cx="16" cy="16" r="3" fill="url(#core)"/></svg>coldstart <span class="tag">docs</span></a>
     <span class="nav-spacer"></span>
     <div class="nav-links">
-      <a href="index.html">Home</a>
+      <a href="docs.html">Docs</a>
       <a href="blog.html">Blog</a>
       <a href="index.html#notebook">Notebook</a>
       <a href="https://github.com/AkashGoenka/coldstart">GitHub</a>
@@ -227,7 +227,7 @@
       <p style="margin-top:22px"><b>Language-agnostic.</b> The freshness machinery is content-hash based, so the notebook works on any codebase — including languages the navigation index doesn't parse. Where the index does parse, notes additionally get symbol-level freshness.</p>
 
       <h4 class="subhead">When capture happens</h4>
-      <p>Capture is <b>trigger-timed</b>, not every-turn. The hook keeps per-file evidence of what the session actually read or edited (search hits and passing path mentions never count), scores the uncaptured backlog, and asks for notes at natural boundaries — when a burst of work settles, or the moment a commit lands (manual commits included). Most turns end silently. The ask itself is <b>non-blocking</b>: it arrives with your next prompt as a short worklist of the files the session genuinely worked with, each annotated with its existing note's state — never a wall of instructions after every answer. That worklist (and the write contract that goes with it) is also written durably to <code>.coldstart/notebook/.worklist.md</code>, so a long session can re-read it after the one-shot delivery scrolls away; it trims itself as notes are written and regenerates on the next capture, so a missed file simply reappears rather than being lost.</p>
+      <p>Capture is <b>trigger-timed</b>, not every-turn. The hook keeps per-file evidence of what the session actually read or edited (search hits and passing path mentions never count), scores the uncaptured backlog, and asks for notes at natural boundaries — when a burst of work settles, or the moment a commit lands (manual commits included). Most turns end silently. The ask itself is <b>non-blocking</b>: it arrives with your next prompt as a short worklist of the files the session genuinely worked with, each annotated with its existing note's state — never a wall of instructions after every answer. That worklist (and the write contract that goes with it) is also written durably to <code>.coldstart/notebook/.worklist-&lt;session&gt;-&lt;agent&gt;.md</code>, so a long session can re-read it after the one-shot delivery scrolls away; it trims itself as notes are written and regenerates on the next capture, so a missed file simply reappears rather than being lost. The file is keyed per agent stream — the main agent and each subagent it spawns share one session id but get their own worklist, so a subagent's capture never overwrites the main agent's list.</p>
       <p style="margin-top:12px">Files whose notes are already fresh don't re-trigger capture, so a warmed-up repo asks less over time. The flip side: a brand-new notebook starts empty and <b>warms with use</b> — the first few real tasks seed the file notes, and "how X works" flow notes appear as sessions actually need those answers. Don't judge recall on day one.</p>
 
       <h4 class="subhead"><code>/capture-notes</code> — capture on demand</h4>

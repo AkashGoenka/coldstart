@@ -152,7 +152,7 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
       writeFileSync(marker, JSON.stringify(state));
       if (!fresh.length) { log(`FAST-EXIT subagent no-new-files session=${sid} agent=${aid}`); process.exit(0); }
       const entries = worklistEntries(CLI, root, fresh, Object.fromEntries(fresh.map((rel) => [rel, delta.get(rel)])), log);
-      const payload = buildCapturePayload({ root, cli: CLI, sid, entries, envelope: "subagent" });
+      const payload = buildCapturePayload({ root, cli: CLI, sid, aid, entries, envelope: "subagent" });
       logCaptureEvent(root, { event: "fire", reason: "subagent", session: sid, agent: aid, files: fresh.length, host: "cursor" });
       log(`FIRE subagent session=${sid} agent=${aid} files=${fresh.length}`);
       process.stdout.write(JSON.stringify({ followup_message: payload }));
@@ -188,11 +188,11 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     log(`FIRE ${decision.fire} mode=${decision.mode} session=${sid} score=${decision.score} files=${decision.files.length}`);
 
     if (decision.mode === "block") {
-      const payload = buildCapturePayload({ root, cli: CLI, sid, entries, envelope: "block" });
+      const payload = buildCapturePayload({ root, cli: CLI, sid, aid, entries, envelope: "block" });
       process.stdout.write(JSON.stringify({ followup_message: payload }));
     } else {
       // Non-blocking: cursor-kb-recall delivers this with the user's next prompt.
-      const payload = buildCapturePayload({ root, cli: CLI, sid, entries, envelope: "inject" });
+      const payload = buildCapturePayload({ root, cli: CLI, sid, aid, entries, envelope: "inject" });
       writePendingCapture(sid, decision.fire, payload);
     }
   } catch (e) {
