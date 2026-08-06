@@ -48,10 +48,15 @@ export function initSkeleton(root: string): void {
   // durable capture worklist, keyed per agent stream `<sid>-<aid>`
   // (hooks/capture-payload.mjs writes them; they are per-session scratch, not a
   // record). The bare `.worklist.{md,json}` entries stay for the legacy unkeyed
-  // fallback. Append any missing line so EXISTING installs pick up new entries,
-  // not just fresh notebooks.
+  // fallback. `.capture-instructions.md` is the permanent (non-per-session)
+  // shipped-instructions file the worklist pair now points at instead of
+  // duplicating — still generated/local, not committed. Append any missing line
+  // so EXISTING installs pick up new entries, not just fresh notebooks.
   const gi = join(notebookDir(root), '.gitignore');
-  const wanted = ['notes/', '.metrics/', '.worklist.md', '.worklist.json', '.worklist-*.md', '.worklist-*.json'];
+  const wanted = [
+    'notes/', '.metrics/', '.worklist.md', '.worklist.json', '.worklist-*.md', '.worklist-*.json',
+    '.capture-instructions.md',
+  ];
   let current = '';
   try { current = readFileSync(gi, 'utf8'); } catch { /* absent — create below */ }
   const have = new Set(current.split('\n').map((l) => l.trim()).filter(Boolean));

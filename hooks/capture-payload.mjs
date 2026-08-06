@@ -34,10 +34,21 @@ import { shapesBlock } from "./note-shape.mjs";
  *
  * So the pair now lives in the repo notebook and holds BOTH:
  *   .worklist-<sid>-<aid>.json  structured scope (the coverage source of truth)
- *   .worklist-<sid>-<aid>.md    the full rendered payload — worklist + write contract
+ *   .worklist-<sid>-<aid>.md    today's worklist + a pointer (see below)
  * The agent re-Reads the .md whenever this scrolls away; `kb write` credits and
  * trims/clears the pair (src/kb/durable-worklist.ts) so a stale snapshot never
  * lingers, and the next capture fire regenerates it against live freshness.
+ *
+ * The .md used to hold the FULL rendered payload — the ~150 lines of static
+ * DECIDE-FIRST/per-note/FLOWS/WRITE rules, byte-identical every session,
+ * duplicated onto disk every single fire. Since 2026-08-06 that static text
+ * lives once in a PERMANENT file, `.capture-instructions.md` (also gitignored,
+ * but never deleted/regenerated per fire — only rewritten if its version tag is
+ * stale, see INSTRUCTIONS_VERSION below); the per-session .md now holds only
+ * the worklist + a pointer to it. The payload delivered to the agent THIS turn
+ * (buildCapturePayload's return value) is unaffected — it still inlines the
+ * full instructions text so nothing changes for the current fire, only what's
+ * persisted for a later re-Read.
  *
  * KEYED BY <sid>-<aid>, the SAME identity as the tmpdir evidence marker — NOT by
  * root, and NOT by sid alone. A subagent shares its parent's session id, so a
@@ -87,7 +98,27 @@ function pruneStaleWorklists(dir, keepKey) {
 }
 function statMtime(p) { try { return statSync(p).mtimeMs; } catch { return 0; } }
 
-function writeDurableWorklist(root, sid, aid, entries, mdBody) {
+/**
+ * The .md half of the durable pair used to hold the FULL rendered payload
+ * (instructions + worklist) — meaning the ~150-line static instructions were
+ * duplicated onto disk once per session, every session, forever. Since
+ * 2026-08-06 that static text lives once in the permanent
+ * .capture-instructions.md (below); the per-session .md only needs to point at
+ * it plus carry the part that's actually per-session, the worklist.
+ */
+function renderDurableMd(sid, aid, entries) {
+  return `**Notebook capture point.** Full instructions: \`.coldstart/notebook/.capture-instructions.md\` \
+(stable — re-Read it once; it does not change per session). This file holds only today's worklist.
+
+WORKLIST — files you actually read this session, most-worked first:
+
+${worklistLines(entries)}
+
+Write command: node <cli> kb write /tmp/notes.json --root <root> --session ${sid} --agent ${aid} --force
+`;
+}
+
+function writeDurableWorklist(root, sid, aid, entries) {
   if (!root || !entries?.length) return;
   try {
     // needsNote: no note yet, or the note it has is stale. A file whose note is
@@ -101,7 +132,7 @@ function writeDurableWorklist(root, sid, aid, entries, mdBody) {
     const dir = join(root, ".coldstart", "notebook");
     mkdirSync(dir, { recursive: true });
     writeFileSync(worklistJsonPath(root, sid, aid), JSON.stringify({ ts: Date.now(), sid, aid: aid || "main", files, wrote: [] }));
-    writeFileSync(worklistMdPath(root, sid, aid), mdBody);
+    writeFileSync(worklistMdPath(root, sid, aid), renderDurableMd(sid, aid || "main", entries));
     pruneStaleWorklists(dir, worklistKey(sid, aid));
   } catch { /* best-effort */ }
 }
@@ -123,74 +154,31 @@ function loadChecklistOverride(root) {
 }
 
 /**
- * worklist entry: { path, tier, retouches, notes: [{id, type, state}], noConsumers }
- *   tier: "edited ×N" | "read" | "skimmed"
+ * The shipped instructions (DECIDE-FIRST rules, per-note rules, FLOWS, WRITE
+ * mechanics) are identical every fire, every session — only the worklist and a
+ * handful of interpolated values change. Since 2026-08-06 this static text is
+ * generated ONCE into a permanent file (`.capture-instructions.md`, gitignored
+ * like the rest of the durable-worklist pair, but never deleted/regenerated per
+ * fire) instead of being duplicated onto disk in every session's .md — same
+ * placeholder mechanism as the user-authored checklist override above, so both
+ * paths share one substitution pass in renderCapturePayload.
+ *
+ * VERSIONED so an upgrade that changes the shipped text self-heals an existing
+ * repo's stale copy instead of silently drifting; bump when the template below
+ * changes.
  */
-function worklistLines(entries) {
-  const lines = [];
-  for (const e of entries) {
-    const ann = [];
-    ann.push(`[${e.tier}]`);
-    if (!e.notes?.length) {
-      ann.push("no note yet");
-    } else {
-      for (const n of e.notes) {
-        if (n.state === "fresh") {
-          ann.push(`note ${n.id} (fresh) → update ONLY if this session taught something the note lacks (.coldstart/notebook/notes/${n.id}.md)`);
-        } else if (n.state === "changed" || n.state === "missing") {
-          ann.push(`note ${n.id} (STALE) → fix or re-stamp; list the path in "verified" (.coldstart/notebook/notes/${n.id}.md)`);
-        } else {
-          ann.push(`note ${n.id} → read it first, update by its "id" (.coldstart/notebook/notes/${n.id}.md)`);
-        }
-      }
-    }
-    if (e.noConsumers) ann.push("no consumers in import graph");
-    lines.push(`- ${e.path}   ${ann.join(" · ")}`);
-  }
-  return lines.join("\n");
+const INSTRUCTIONS_VERSION = 1;
+const INSTRUCTIONS_VERSION_TAG = `<!-- coldstart:capture-instructions:v${INSTRUCTIONS_VERSION} -->`;
+
+function captureInstructionsPath(root) {
+  return join(root, ".coldstart", "notebook", ".capture-instructions.md");
 }
 
-export function buildCapturePayload(args) {
-  const payload = renderCapturePayload(args);
-  // Persist the WHOLE payload durably so the agent can re-Read it later, and the
-  // structured scope for `kb write` coverage. Best-effort; never blocks capture.
-  writeDurableWorklist(args.root, args.sid, args.aid, args.entries, payload);
-  return payload;
-}
-
-function renderCapturePayload({ root, cli, sid, aid, entries, envelope }) {
-  aid = String(aid ?? "main").replace(/[^A-Za-z0-9_-]/g, "") || "main";
-  const opening = envelope === "block"
-    ? "Handle capture now, then stop."
-    : envelope === "manual"
-    ? "You invoked this capture yourself (/capture-notes) — handle it now, then carry on."
-    : "Handle capture first, then continue with the user's request.";
-
-  const tail = envelope === "subagent"
-    ? `\nOnce you have handled the notebook — whether you wrote notes or decided none were \
-needed — remember you were spawned as a subagent. The coordinator that spawned you receives \
-ONLY your final message, so your last message must repeat, in full, the result you produced \
-for it — your findings, not the notebook decision.`
-    : "";
-
-  const override = loadChecklistOverride(root);
-  if (override) {
-    const worklist = worklistLines(entries);
-    let body = override
-      .replaceAll("{{CLI}}", String(cli))
-      .replaceAll("{{ROOT}}", String(root))
-      .replaceAll("{{SID}}", String(sid))
-      .replaceAll("{{AID}}", String(aid));
-    body = body.includes("{{WORKLIST}}")
-      ? body.replaceAll("{{WORKLIST}}", worklist)
-      : `${body.trimEnd()}\n\nWORKLIST — files you actually read this session, most-worked first \
-(your scope; if you edited or deep-read a file that isn't listed, you can note it too):\n\n${worklist}`;
-    return `**Notebook capture point.** ${opening}\n\n${body.trimEnd()}${tail}`;
-  }
-
-  return `**Notebook capture point.** You have completed work and gathered knowledge as part \
-of it — knowledge a future agent could use. This repo keeps that knowledge in a notebook: \
-notes are searched and served to future cold agents when their task matches. ${opening}
+function shippedInstructionsTemplate() {
+  return `${INSTRUCTIONS_VERSION_TAG}
+You have completed work and gathered knowledge as part of it — knowledge a future agent \
+could use. This repo keeps that knowledge in a notebook: notes are searched and served to \
+future cold agents when their task matches.
 
 DECIDE FIRST — as the agent who worked on this task, you know its exact intent:
 1. So you, not any rule, are best suited to judge whether this work was about the code in \
@@ -208,14 +196,15 @@ changed and what you had to understand to change it, and that is precisely the k
 cold agent lacks. The default for an edited file is a note. Walk the worklist top to bottom \
 and decide each one explicitly; do not stop at the first two or three. If you end up writing \
 notes for well under half the [edited] files, you have under-captured — say which files you \
-skipped and why, so the decision is visible instead of silent. This whole checklist (worklist \
-+ the write contract below) is saved at \`.coldstart/notebook/.worklist-${sid}-${aid}.md\` — re-Read \
-that file any time this session if this scrolls out of context. Your \`kb write\` call ends with a \
-coverage line naming any worked file still without a note; read it back before you finish.
+skipped and why, so the decision is visible instead of silent. These instructions are \
+permanent at \`.coldstart/notebook/.capture-instructions.md\`; today's worklist is at \
+\`.coldstart/notebook/.worklist-{{SID}}-{{AID}}.md\` — re-Read whichever scrolls out of context \
+this session. Your \`kb write\` call ends with a coverage line naming any worked file still \
+without a note; read it back before you finish.
 
 WORKLIST — files you actually read this session, most-worked first:
 
-${worklistLines(entries)}
+{{WORKLIST}}
 
 FOR EACH NOTE:
 4. Say only what you verified in THIS file, this session. A confident whole-file claim from \
@@ -295,15 +284,102 @@ found wrong: {"op":"retract","id":"<id>","target":{"kind":"note"}} (as one array
   cat > /tmp/notes.json <<'JSON'
   [ {…note 1…}, {…note 2…} ]
 JSON
-  node ${cli} kb write /tmp/notes.json --root ${root} --session ${sid} --agent ${aid} --force
-  Full shapes: run \`node ${cli} kb write --root ${root}\` with no spec — it prints the guide.
+  node {{CLI}} kb write /tmp/notes.json --root {{ROOT}} --session {{SID}} --agent {{AID}} --force
+  Full shapes: run \`node {{CLI}} kb write --root {{ROOT}}\` with no spec — it prints the guide.
   (Keep --session/--agent exactly as written — they point coverage at THIS agent's worklist.)
 
 FLOW DECISION — record what you decided about FLOWS (created a new one, folded into an \
 existing one, or none) so the flow gate can be measured. Ride it on the SAME batch write — it \
 is a flag, not a second command:
-  node ${cli} kb write /tmp/notes.json --root ${root} --session ${sid} --agent ${aid} --force \\
+  node {{CLI}} kb write /tmp/notes.json --root {{ROOT}} --session {{SID}} --agent {{AID}} --force \\
     --decision <none|new|update> [--id <flow id>] --why "<one clause>"
 Only when you wrote NO notes at all is there no write to carry it, and then run it alone:
-  node ${cli} kb flow-decision --decision none --why "<one clause>" --root ${root} --session ${sid}${tail}`;
+  node {{CLI}} kb flow-decision --decision none --why "<one clause>" --root {{ROOT}} --session {{SID}}`;
+}
+
+/** Ensure the permanent instructions file exists and is current; return its
+ *  body (without the version-tag line). Best-effort — a write failure still
+ *  returns the shipped text so THIS fire's payload is unaffected; only the
+ *  on-disk persistence for later re-Reads is at risk. */
+function ensureCaptureInstructions(root) {
+  const p = captureInstructionsPath(root);
+  try {
+    const existing = readFileSync(p, "utf8");
+    if (existing.startsWith(INSTRUCTIONS_VERSION_TAG)) {
+      return existing.slice(existing.indexOf("\n") + 1);
+    }
+  } catch { /* missing — write below */ }
+  const text = shippedInstructionsTemplate();
+  try {
+    mkdirSync(join(root, ".coldstart", "notebook"), { recursive: true });
+    writeFileSync(p, text);
+  } catch { /* best-effort; still usable in-memory this fire */ }
+  return text.slice(text.indexOf("\n") + 1);
+}
+
+/**
+ * worklist entry: { path, tier, retouches, notes: [{id, type, state}], noConsumers }
+ *   tier: "edited ×N" | "read" | "skimmed"
+ */
+function worklistLines(entries) {
+  const lines = [];
+  for (const e of entries) {
+    const ann = [];
+    ann.push(`[${e.tier}]`);
+    if (!e.notes?.length) {
+      ann.push("no note yet");
+    } else {
+      for (const n of e.notes) {
+        if (n.state === "fresh") {
+          ann.push(`note ${n.id} (fresh) → update ONLY if this session taught something the note lacks (.coldstart/notebook/notes/${n.id}.md)`);
+        } else if (n.state === "changed" || n.state === "missing") {
+          ann.push(`note ${n.id} (STALE) → fix or re-stamp; list the path in "verified" (.coldstart/notebook/notes/${n.id}.md)`);
+        } else {
+          ann.push(`note ${n.id} → read it first, update by its "id" (.coldstart/notebook/notes/${n.id}.md)`);
+        }
+      }
+    }
+    if (e.noConsumers) ann.push("no consumers in import graph");
+    lines.push(`- ${e.path}   ${ann.join(" · ")}`);
+  }
+  return lines.join("\n");
+}
+
+export function buildCapturePayload(args) {
+  const payload = renderCapturePayload(args);
+  // Persist the structured scope (+ a small pointer .md — the static
+  // instructions live in the permanent .capture-instructions.md, not
+  // duplicated per session) so the agent can re-Read it later and `kb write`
+  // has coverage to check against. Best-effort; never blocks capture.
+  writeDurableWorklist(args.root, args.sid, args.aid, args.entries);
+  return payload;
+}
+
+function renderCapturePayload({ root, cli, sid, aid, entries, envelope }) {
+  aid = String(aid ?? "main").replace(/[^A-Za-z0-9_-]/g, "") || "main";
+  const opening = envelope === "block"
+    ? "Handle capture now, then stop."
+    : envelope === "manual"
+    ? "You invoked this capture yourself (/capture-notes) — handle it now, then carry on."
+    : "Handle capture first, then continue with the user's request.";
+
+  const tail = envelope === "subagent"
+    ? `\nOnce you have handled the notebook — whether you wrote notes or decided none were \
+needed — remember you were spawned as a subagent. The coordinator that spawned you receives \
+ONLY your final message, so your last message must repeat, in full, the result you produced \
+for it — your findings, not the notebook decision.`
+    : "";
+
+  const worklist = worklistLines(entries);
+  const source = loadChecklistOverride(root) ?? ensureCaptureInstructions(root);
+  let body = source
+    .replaceAll("{{CLI}}", String(cli))
+    .replaceAll("{{ROOT}}", String(root))
+    .replaceAll("{{SID}}", String(sid))
+    .replaceAll("{{AID}}", String(aid));
+  body = body.includes("{{WORKLIST}}")
+    ? body.replaceAll("{{WORKLIST}}", worklist)
+    : `${body.trimEnd()}\n\nWORKLIST — files you actually read this session, most-worked first \
+(your scope; if you edited or deep-read a file that isn't listed, you can note it too):\n\n${worklist}`;
+  return `**Notebook capture point.** ${opening}\n\n${body.trimEnd()}${tail}`;
 }
