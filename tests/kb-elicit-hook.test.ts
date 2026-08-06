@@ -304,9 +304,11 @@ describe('kb-elicit SubagentStop (one-shot, still blocking)', () => {
 /**
  * `--manual` (#84): the /capture-notes command fires the SAME capture flow on
  * demand, bypassing only the trigger score gate. The host names the invoking
- * session (`--session`, from Claude's ${CLAUDE_SESSION_ID}); capture resolves
- * THAT session's marker under --root and refuses rather than guess when no
- * session is named — a guess would risk writing up a different session's work.
+ * session (`--session`, from Claude's ${CLAUDE_SESSION_ID}) when it can; capture
+ * resolves THAT session's marker under --root. Hosts with no session-id variable
+ * on their command surface (Cursor, Codex, #132 follow-up) pass none — capture
+ * falls back to the sole main-agent marker under root when exactly one exists,
+ * and refuses only when 2+ sessions make it ambiguous, never guessing wrong.
  */
 describe('kb-elicit --manual (on-demand capture)', () => {
   const markerPath = (): string => path.join(os.tmpdir(), `coldstart-kb-${sid}-main.json`);
@@ -324,12 +326,38 @@ describe('kb-elicit --manual (on-demand capture)', () => {
   const manual = (): string =>
     execFileSync('node', [HOOK, '--manual', '--root', root, '--session', sid], { encoding: 'utf8', timeout: 30000 });
 
-  it('refuses to guess a session when none is passed', () => {
+  const worklistPath = (): string => path.join(root, '.coldstart', 'notebook', `.worklist-${sid}-main.json`);
+  /** Simulate a REAL prior fire's durable worklist artifact (buildCapturePayload
+   *  always writes one) — tests that hand-seed `captured: true` without going
+   *  through a real fire need this so "worklist still exists" reflects reality. */
+  function seedWorklist(files: string[]): void {
+    fs.mkdirSync(path.dirname(worklistPath()), { recursive: true });
+    fs.writeFileSync(worklistPath(), JSON.stringify({ ts: Date.now(), sid, aid: 'main', files: files.map((p) => ({ path: p, tier: 'read', needsNote: true })), wrote: [] }));
+  }
+
+  it('falls back to the sole marker under root when no session is passed (Cursor/Codex have none)', () => {
     seed(['src/a.ts']);
     writeMarker({ 'src/a.ts': { edits: 2 } });
     const out = execFileSync('node', [HOOK, '--manual', '--root', root], { encoding: 'utf8', timeout: 30000 });
-    expect(out).toContain('needs the id of the session');
-    expect(out).not.toContain('WORKLIST');
+    expect(out).toContain('WORKLIST');
+    expect(out).toContain('src/a.ts');
+  });
+
+  it('refuses to guess when two sessions both have evidence under root', () => {
+    seed(['src/a.ts', 'src/b.ts']);
+    writeMarker({ 'src/a.ts': { edits: 2 } });
+    const otherSid = `${sid}-other`;
+    fs.writeFileSync(path.join(os.tmpdir(), `coldstart-kb-${otherSid}-main.json`), JSON.stringify({
+      v: 2, stop: 1, activeStops: 1, quietRun: 0, armed: false, fires: 0, lineCount: 1, head: '',
+      files: { 'src/b.ts': { reads: 1, edits: 0, gs: 0, firstStop: 1, lastStop: 1, lastEditActive: 1, retouches: 0, captured: false, fresh: false } },
+    }));
+    try {
+      const out = execFileSync('node', [HOOK, '--manual', '--root', root], { encoding: 'utf8', timeout: 30000 });
+      expect(out).toContain('Multiple sessions');
+      expect(out).not.toContain('WORKLIST');
+    } finally {
+      fs.rmSync(path.join(os.tmpdir(), `coldstart-kb-${otherSid}-main.json`), { force: true });
+    }
   });
 
   it('fires the full checklist for uncaptured files, below the arm threshold', () => {
@@ -347,12 +375,27 @@ describe('kb-elicit --manual (on-demand capture)', () => {
 
   it('says nothing-new when every worked file is a read-only already-captured file', () => {
     seed(['src/a.ts']);
-    // Read-only + already offered → re-listing on demand is just noise.
+    // Read-only + already offered, and its worklist is still live → re-listing
+    // on demand is just noise.
     writeMarker({ 'src/a.ts': { reads: 3, captured: true } });
+    seedWorklist(['src/a.ts']);
 
     const out = manual();
     expect(out).toContain('already captured');
     expect(out).not.toContain('WORKLIST');
+  });
+
+  it('recovers a captured read-only file whose durable worklist artifact is gone (hand-deleted or a failed write)', () => {
+    seed(['src/a.ts']);
+    // Captured by a past fire, but NO worklist file exists for this session —
+    // the only live copy of that checklist is gone, so this is the sole path
+    // back to it. (Reported 2026-08-06: deleting .worklist-*.json/.md by hand
+    // left the files it named uncoverable forever.)
+    writeMarker({ 'src/a.ts': { reads: 3, captured: true } });
+
+    const out = manual();
+    expect(out).toContain('WORKLIST');
+    expect(out).toContain('src/a.ts');
   });
 
   it('re-lists EDITED files even when a prior automatic fire marked them captured (Bug 1)', () => {
@@ -365,6 +408,7 @@ describe('kb-elicit --manual (on-demand capture)', () => {
       'src/helper.ts': { edits: 1, captured: true },
       'src/read.ts': { reads: 2, captured: true },
     });
+    seedWorklist(['src/fix.ts', 'src/helper.ts', 'src/read.ts']);
 
     const out = manual();
     expect(out).toContain('WORKLIST');

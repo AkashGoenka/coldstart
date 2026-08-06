@@ -36,7 +36,7 @@ import { existsSync, writeFileSync, appendFileSync, readFileSync, readdirSync, s
 import { extractEvidence, segmentStats } from "./evidence.mjs";
 import { initialState, step } from "./trigger.mjs";
 import { loadIgnore } from "./ignore.mjs";
-import { buildCapturePayload } from "./capture-payload.mjs";
+import { buildCapturePayload, worklistJsonPath } from "./capture-payload.mjs";
 import {
   worklistEntries, freshNotedSet, gitHead, logCaptureEvent, writePendingCapture, MAX_WORKLIST,
 } from "./elicit-core.mjs";
@@ -129,10 +129,12 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
 
 // --- Manual capture (`--manual --root <dir>`) --------------------------------
 // The `/capture-notes` command runs this to fire capture ON DEMAND, bypassing
-// the trigger score gate. There is no hook stdin, so we self-discover the
-// session: the freshest marker in tmpdir whose recorded (relative) files still
-// resolve under <root> is this repo's active session. We then emit the SAME
-// capture payload an automatic fire would, built from accumulated evidence.
+// the trigger score gate. There is no hook stdin, so there is no session id to
+// trust by default. When the host names it (Claude passes `--session
+// ${CLAUDE_SESSION_ID}`), that session's marker is resolved exactly, never
+// guessed among several. Hosts with no session-id variable on their command
+// surface (Cursor, Codex) pass none; soleMarkerUnderRoot below covers the
+// common single-session case for them without ever guessing wrong.
 //
 // It marks the files it LISTED as captured (and nothing else). Without that, a
 // manual capture left every file uncaptured, so the next automatic fire re-asked
@@ -144,12 +146,8 @@ function argValue(name) {
   const i = process.argv.indexOf(name);
   return i >= 0 ? process.argv[i + 1] : undefined;
 }
-// The main-agent evidence marker for the KNOWN invoking session. Manual capture
-// is scoped to the session it runs in — NEVER guessed from "the freshest marker
-// under root", because with two sessions open in one repo that guess captures the
-// wrong session's work, which is worse than not capturing. The host names the
-// session (Claude passes ${CLAUDE_SESSION_ID}); we resolve THAT session's marker
-// or nothing. Returns null when the sid is empty or its marker is absent/foreign.
+// The main-agent evidence marker for a KNOWN session id. Returns null when the
+// sid is empty or its marker is absent/foreign (files don't resolve under root).
 function markerForSession(root, sid) {
   if (!sid) return null;
   const p = join(tmpdir(), `coldstart-kb-${sid}-main.json`);
@@ -159,24 +157,57 @@ function markerForSession(root, sid) {
   if (!files.length || !files.some((rel) => existsSync(join(root, rel)))) return null;
   return { sid, state, path: p };
 }
+// Hosts with no verified session-id variable on their command surface (Cursor,
+// Codex — their commands are plain prompt templates the agent itself runs, with
+// no `!`-style substitution to carry a session id into the invocation) can't name
+// a session at all. Guessing among several is the wrong-session risk `--session`
+// exists to avoid, but when exactly ONE main-agent marker under this root exists
+// there is nothing to disambiguate — restore that single-session case instead of
+// refusing outright. `-main.json` only: subagent markers never own a worklist.
+function soleMarkerUnderRoot(root) {
+  const re = /^coldstart-kb-(.+)-main\.json$/;
+  let entries;
+  try { entries = readdirSync(tmpdir()); } catch { return { marker: null, ambiguous: false }; }
+  const candidates = [];
+  for (const name of entries) {
+    const m = re.exec(name);
+    if (!m) continue;
+    const found = markerForSession(root, m[1]);
+    if (found) candidates.push(found);
+  }
+  if (candidates.length === 1) return { marker: candidates[0], ambiguous: false };
+  if (candidates.length > 1) return { marker: null, ambiguous: true };
+  return { marker: null, ambiguous: false };
+}
 if (process.argv.includes("--manual")) {
   try {
     const rootArg = argValue("--root");
     const root = rootArg ? resolve(rootArg) : process.cwd();
     setLogRoot(root);
-    // Scope capture to the invoking session — no freshest-marker fallback.
     const sidArg = String(argValue("--session") || "").replace(/[^A-Za-z0-9_-]/g, "");
+    let found = sidArg ? markerForSession(root, sidArg) : null;
     if (!sidArg) {
+      const sole = soleMarkerUnderRoot(root);
+      if (sole.ambiguous) {
+        process.stdout.write(
+          "Multiple sessions have notebook-capture evidence in this repo, and this host can't tell\n" +
+          "/capture-notes which one you mean — pass --session <id> if your host exposes one, or close\n" +
+          "the other sessions working here so only one remains.\n",
+        );
+        log(`MANUAL ambiguous-no-session root=${root}`);
+        process.exit(0);
+      }
+      found = sole.marker;
+      if (found) log(`MANUAL sole-marker-fallback sid=${found.sid} root=${root}`);
+    }
+    if (!sidArg && !found) {
       process.stdout.write(
-        "Manual capture needs the id of the session it runs in, and none was passed.\n" +
-        "Run /capture-notes through the command `coldstart init` wires — it passes the session id\n" +
-        "automatically (on Claude Code, ${CLAUDE_SESSION_ID}). Guessing the session would risk\n" +
-        "writing up a different session's work.\n",
+        "No notebook-capture evidence for this repo yet — it accrues as you read and edit files.\n" +
+        "Do a turn or two of real work here, then run /capture-notes again.\n",
       );
       log(`MANUAL no-session root=${root}`);
       process.exit(0);
     }
-    const found = markerForSession(root, sidArg);
     if (!found) {
       process.stdout.write(
         "No notebook-capture evidence for THIS session in this repo yet — it accrues as you read\n" +
@@ -196,10 +227,17 @@ if (process.argv.includes("--manual")) {
     // note unwritten and a now-stale note unfixed (the Bug-1 report). So:
     // include every edited file regardless of the flag, and drop only READ-ONLY
     // files that were already offered (re-listing those on demand is just
-    // noise). Rank most-worked first (edits → retouches → reads) so new/edited
-    // files lead; the per-file annotations flag when a fresh note needs nothing.
+    // noise) AND whose worklist is still live. A captured read-only file whose
+    // durable worklist pair is gone (write failure, or hand-deleted since) has
+    // no live checklist anywhere naming it — re-including it here is the only
+    // way it is ever offered again, and it can't double-nag since there is
+    // nothing else currently showing it. Rank most-worked first (edits →
+    // retouches → reads) so new/edited files lead; the per-file annotations
+    // flag when a fresh note needs nothing.
+    const worklistLost = !existsSync(worklistJsonPath(root, sid, "main"));
+    if (worklistLost) log(`MANUAL worklist-artifact-missing session=${sid} — recovering captured read-only files too`);
     const files = Object.entries(state.files)
-      .filter(([, f]) => (f.reads + f.edits + f.gs) > 0 && (f.edits > 0 || !f.captured))
+      .filter(([, f]) => (f.reads + f.edits + f.gs) > 0 && (f.edits > 0 || !f.captured || worklistLost))
       .sort((a, b) => (b[1].edits - a[1].edits)
         || ((b[1].retouches || 0) - (a[1].retouches || 0))
         || (b[1].reads - a[1].reads))

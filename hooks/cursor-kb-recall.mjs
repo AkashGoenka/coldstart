@@ -16,6 +16,17 @@
  *     injection channel used here. If a future Cursor build stops honoring it,
  *     recall silently no-ops (fail-open) — nav + capture are unaffected.
  *
+ * MANUAL CAPTURE ON-DEMAND (2026-08-06): Cursor's `/capture-notes` command has
+ * no `!`-expansion (unlike Claude), so it can't pass its own real session id to
+ * `kb-elicit.mjs --manual` the way Claude does — the command body used to just
+ * ask the agent to run the command itself, blind to which session it's in. But
+ * THIS hook receives a real `input.session_id` on every prompt. So: when the
+ * submitted prompt IS the capture command (its body carries a stable sentinel,
+ * CAPTURE_SENTINEL), run `--manual --session <real sid>` right here and inject
+ * its output the same way a pending automatic fire is injected — deterministic,
+ * no LLM has to type a correct `--session <id>`. The command body keeps "run
+ * this in the terminal" as a fallback for when this hook is disabled/fails.
+ *
  * Self-contained + fail-open: ANY error → exit 0, no stdout → nothing injected.
  */
 
@@ -31,6 +42,7 @@ import { cursorRoot } from "./cursor-input.mjs";
 import { takePendingCapture } from "./elicit-core.mjs";
 // Strip host telemetry wrappers before the query is built — see recall-query.mjs.
 import { recallQuery } from "./recall-query.mjs";
+import { CAPTURE_SENTINEL } from "./capture-sentinel.mjs";
 // Per-session dedup shared with the other recall hooks — see recall-seen.mjs.
 // Hosts with no transcript path never reset; dedup still holds for the session.
 import { readSeen, writeSeen, idsInPage, seenArgs } from "./recall-seen.mjs";
@@ -83,7 +95,28 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     // A pending capture (non-blocking fire at a previous stop) is delivered
     // regardless of recall hits — it must not depend on the notebook existing
     // (the first capture is what creates it).
-    const pending = takePendingCapture(sid);
+    let pending = takePendingCapture(sid);
+
+    // The submitted prompt IS /capture-notes (its command body carries this
+    // sentinel) → run the on-demand capture ourselves with the real session id
+    // this hook already has, instead of leaving the agent to guess one. See
+    // the file header and hooks/capture-sentinel.mjs.
+    if (sid && String(input.prompt || "").includes(CAPTURE_SENTINEL)) {
+      try {
+        const elicit = fileURLToPath(new URL("./kb-elicit.mjs", import.meta.url));
+        const manual = execFileSync("node", [elicit, "--manual", "--session", sid, "--root", root], {
+          encoding: "utf8",
+          timeout: 8000,
+          stdio: ["ignore", "pipe", "ignore"],
+        });
+        if (manual.trim()) {
+          pending = pending ? `${manual.trim()}\n\n---\n\n${pending}` : manual.trim();
+          log(`MANUAL-INJECT session=${sid} bytes=${manual.length}`);
+        }
+      } catch (e) {
+        log(`manual-capture-inject failed: ${String(e).split("\n")[0]}`);
+      }
+    }
 
     const prompt = recallQuery(input.prompt, MAX_QUERY_CHARS);
 

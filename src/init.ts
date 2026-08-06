@@ -35,6 +35,7 @@ import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { ensureKeeper, waitForKeeperCache } from './keeper.js';
 import { initSkeleton, logMetric } from './kb/store.js';
+import { CAPTURE_SENTINEL } from '../hooks/capture-sentinel.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 
@@ -644,6 +645,12 @@ export interface UserCommand {
   skillDescription: string;
   /** What the agent should do with the output. */
   instructions: string;
+  /** Cursor/Codex only: this command's own pre-prompt recall hook recognizes
+   *  CAPTURE_SENTINEL in the submitted prompt and runs the invocation itself
+   *  with the real session id (which the command body has no way to pass in) —
+   *  see cursor-kb-recall.mjs / codex-kb-recall.mjs. Commands that need no
+   *  session (repair, repairAliases) leave this unset. */
+  hookInjected?: boolean;
 }
 
 export const USER_COMMANDS: Record<'capture' | 'repair' | 'repairAliases', UserCommand> = {
@@ -664,6 +671,7 @@ export const USER_COMMANDS: Record<'capture' | 'repair' | 'repairAliases', UserC
       + 'capture: decide what (if anything) is worth writing, and never write a note for a file '
       + 'that is not on the worklist. If nothing about the present code is worth recording, write '
       + 'nothing and say so.',
+    hookInjected: true,
   },
   repair: {
     name: REPAIR_COMMAND,
@@ -724,14 +732,30 @@ ${cmd.instructions}
 
 /** Cursor: `.cursor/commands/<name>.md` → `/<name>`.
  *  Cursor commands are plain prompt templates with no `!` expansion, so the
- *  body asks the agent to run the command itself. */
+ *  body asks the agent to run the command itself — except `hookInjected`
+ *  commands, where cursor-kb-recall.mjs recognizes CAPTURE_SENTINEL in this
+ *  same submitted prompt and already ran the invocation with the real session
+ *  id by the time the agent sees it; the terminal instruction is the fallback
+ *  for when that hook is disabled or fails. */
 export function wireCursorCommand(cwd: string, cmd: UserCommand): 'created' | 'updated' {
-  return writeOwnedFile(path.join(cwd, '.cursor', 'commands', `${cmd.name}.md`), `Run this in the terminal:
+  const body = cmd.hookInjected
+    ? `${CAPTURE_SENTINEL}
+If a block starting "**Notebook capture point.**" was just injected above into this prompt, that \
+IS this command — follow it now, do not also run the terminal command below.
+
+Otherwise (the capture hook is disabled or didn't fire this time), run this in the terminal:
 
 \`${cmd.invocation()}\`
 
 ${cmd.instructions}
-`);
+`
+    : `Run this in the terminal:
+
+\`${cmd.invocation()}\`
+
+${cmd.instructions}
+`;
+  return writeOwnedFile(path.join(cwd, '.cursor', 'commands', `${cmd.name}.md`), body);
 }
 
 /** Codex: `.agents/skills/<name>/SKILL.md` → `$<name>`.
@@ -739,7 +763,23 @@ ${cmd.instructions}
  *  can't carry a repo-scoped command. Skills are the supported path and ARE
  *  repo-scoped — Codex walks `.agents/skills` from the cwd up to the repo root. */
 export function wireCodexSkill(cwd: string, cmd: UserCommand): 'created' | 'updated' {
-  return writeOwnedFile(path.join(cwd, '.agents', 'skills', cmd.name, 'SKILL.md'), `---
+  const body = cmd.hookInjected
+    ? `---
+name: ${cmd.name}
+description: ${cmd.skillDescription}
+---
+
+${CAPTURE_SENTINEL}
+If a block starting "**Notebook capture point.**" was just injected above into this prompt, that \
+IS this command — follow it now, do not also run the terminal command below.
+
+Otherwise (the capture hook is disabled or didn't fire this time), run this in the terminal:
+
+\`${cmd.invocation()}\`
+
+${cmd.instructions}
+`
+    : `---
 name: ${cmd.name}
 description: ${cmd.skillDescription}
 ---
@@ -749,7 +789,8 @@ Run this in the terminal:
 \`${cmd.invocation()}\`
 
 ${cmd.instructions}
-`);
+`;
+  return writeOwnedFile(path.join(cwd, '.agents', 'skills', cmd.name, 'SKILL.md'), body);
 }
 
 /** These files are coldstart-owned end to end, so a re-run overwrites rather

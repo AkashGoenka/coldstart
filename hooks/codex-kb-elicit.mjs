@@ -105,7 +105,11 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     const ignore = loadIgnore(root);
     // Session-cumulative v2 state: which files were already offered, and how
     // far into the rollout the last Stop read (a resumed thread appends).
-    const marker = join(tmpdir(), `coldstart-codex-kb-${sid}-${aid}.json`);
+    // Unified marker namespace (2026-08-06): manual /capture-notes always ran
+    // the SHARED kb-elicit.mjs --manual, which reads coldstart-kb-<sid>-<aid>.json
+    // — a per-host prefix here meant it could never see this host's own
+    // automatic evidence. One prefix for all three hosts fixes that outright.
+    const marker = join(tmpdir(), `coldstart-kb-${sid}-${aid}.json`);
     let state = null;
     try {
       const parsed = JSON.parse(readFileSync(marker, "utf8"));
