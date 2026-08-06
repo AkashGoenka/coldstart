@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.16] - 2026-08-06
+
+### Fixed
+- **Durable capture worklist was keyed by session alone, so a subagent's capture could clobber the
+  main agent's checklist.** A subagent shares its parent's session id; `kb write`/capture now key
+  the worklist by `<session>-<agent>` instead, with `--agent` (default `main`) added alongside
+  `--session`. A session-less `kb write` now touches no worklist rather than guessing "the
+  freshest" one and downgrading an unrelated agent's coverage. (#133)
+- **Cursor/Codex `/capture-notes` couldn't see their own hosts' automatic capture evidence.**
+  Their automatic Stop hooks wrote to host-prefixed tmp markers (`coldstart-cursor-kb-*`,
+  `coldstart-codex-kb-*`) while manual capture read the shared `coldstart-kb-*` marker. All three
+  hosts now write/read the same marker prefix. Cursor/Codex `/capture-notes` also gained real
+  session scoping via a `CAPTURE_SENTINEL` their recall hooks detect and resolve to the invoking
+  session, instead of falling back to a refuse-or-guess message. A captured read-only file whose
+  worklist artifact went missing is now recovered by manual capture instead of staying lost. (#134)
+
+### Changed
+- **Capture payload split into a permanent instructions file + a small per-session worklist.** The
+  ~150-line static DECIDE-FIRST/per-note/FLOWS/WRITE instructions, previously duplicated byte-for-
+  byte into every session's `.worklist-<sid>-<aid>.md`, now render once into a gitignored
+  `.coldstart/notebook/.capture-instructions.md` (version-tagged so a template edit self-heals a
+  stale copy). The per-session file shrank from ~10KB to a ~400-byte worklist + pointer; delivered
+  content is unchanged. (#135)
+
 ## [2.2.15] - 2026-08-03
 
 ### Fixed
