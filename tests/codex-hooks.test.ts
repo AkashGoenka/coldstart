@@ -9,6 +9,7 @@ import nudge from '../hooks/codex-nudge-handler.mjs';
 // @ts-expect-error plain-JS hook module, no types
 import preguard from '../hooks/codex-preguard-handler.mjs';
 import { appendRecord } from '../src/kb/raw-log.js';
+import { CAPTURE_SENTINEL } from '../hooks/capture-sentinel.mjs';
 
 const ELICIT = fileURLToPath(new URL('../hooks/codex-kb-elicit.mjs', import.meta.url));
 const RECALL = fileURLToPath(new URL('../hooks/codex-kb-recall.mjs', import.meta.url));
@@ -116,5 +117,34 @@ describe('Codex notebook recall', () => {
     });
     expect(output).toContain('additionalContext');
     expect(JSON.parse(fs.readFileSync(stateFile(), 'utf8')).seen_find).toBe(true);
+  });
+
+  it('a /capture-notes prompt (CAPTURE_SENTINEL) runs on-demand capture itself under the UNIFIED marker Codex\'s own Stop hook wrote', () => {
+    // Codex's own Stop hook accumulates evidence under coldstart-kb-<sid>-main.json
+    // (shared with Claude/Cursor as of 2026-08-06 — a Codex-only prefix here is
+    // exactly the bug this test guards: manual capture always ran the SHARED
+    // kb-elicit.mjs --manual, which could never see a Codex-prefixed marker).
+    fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'src/app.py'), 'def restoreGraph(): pass\n');
+    run(ELICIT, {
+      session_id: sid, turn_id: `main-${process.pid}-${seq}`, cwd: root,
+      transcript_path: rollout('main-rollout.jsonl'), hook_event_name: 'Stop',
+      stop_hook_active: false,
+    });
+
+    // The prompt IS /capture-notes: its skill body carries the sentinel.
+    const output = run(RECALL, {
+      session_id: sid, turn_id: 'capture-turn', cwd: root,
+      hook_event_name: 'UserPromptSubmit',
+      prompt: `${CAPTURE_SENTINEL}\nRun this in the terminal: ...`,
+    });
+    const parsed = JSON.parse(output);
+    const injected = parsed.hookSpecificOutput?.additionalContext ?? '';
+    // The automatic Stop above already fired+offered src/app.py (Codex fires
+    // every Stop with evidence, no arm threshold) — proving the marker was
+    // FOUND at all (not the pre-fix "No notebook-capture evidence" message)
+    // is the point: that string only appears when the unified marker resolves.
+    expect(injected).not.toContain('No notebook-capture evidence');
+    expect(injected.length).toBeGreaterThan(0);
   });
 });

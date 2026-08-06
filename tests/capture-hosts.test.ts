@@ -177,7 +177,7 @@ describe('cursor-kb-elicit v5 trigger', () => {
     fs.writeFileSync(transcript, '');
     const out = cursorStop(transcript, cursorTurn([{ name: 'Read', input: { path: path.join(root, 'src/x.py') } }]), { loopCount: 1 });
     expect(out.trim()).toBe('');
-    expect(fs.existsSync(path.join(os.tmpdir(), `coldstart-cursor-kb-${sid}-main.json`))).toBe(false);
+    expect(fs.existsSync(path.join(os.tmpdir(), `coldstart-kb-${sid}-main.json`))).toBe(false);
   });
 
   it('subagentStop block-fires via followup_message with the restate-deliverable tail', () => {

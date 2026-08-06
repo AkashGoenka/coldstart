@@ -9,6 +9,12 @@ import type { WriteSpec } from '../src/kb/write.js';
  * MCP ↔ CLI parity for the kb write surface (2026-07-17): both no-spec guides
  * are the SAME shapes text (only the howto differs), and the flow-evidence
  * WARN reads capture markers from every host's elicit hook.
+ *
+ * 2026-08-06: all three hosts write ONE shared marker prefix now (previously
+ * per-host, which meant manual /capture-notes — always the shared
+ * kb-elicit.mjs --manual — could never see Cursor's/Codex's own automatic
+ * evidence). The "every host" framing below is now about content parity
+ * (any host's marker satisfies the check), not separate namespaces.
  */
 
 const cleanup: string[] = [];
@@ -40,14 +46,12 @@ describe('kb write guide parity', () => {
   });
 });
 
-describe('flowEvidenceWarning reads every host\'s markers', () => {
+describe('flowEvidenceWarning reads the shared marker regardless of which host wrote it', () => {
   it.each([
-    ['claude', 'coldstart-kb-'],
-    ['cursor', 'coldstart-cursor-kb-'],
-    ['codex', 'coldstart-codex-kb-'],
-  ])('%s marker satisfies the evidence check', (_host, prefix) => {
+    ['claude'], ['cursor'], ['codex'],
+  ])('%s marker satisfies the evidence check', (_host) => {
     const sid = `parity-${_host}-${process.pid}`;
-    marker(prefix, sid, { 'src/a.py': { reads: 1 }, 'src/b.py': { edits: 1 } });
+    marker('coldstart-kb-', sid, { 'src/a.py': { reads: 1 }, 'src/b.py': { edits: 1 } });
     expect(flowEvidenceWarning(flow(['src/a.py', 'src/b.py']), sid)).toBeNull(); // 2 read steps: fine
     expect(flowEvidenceWarning(flow(['src/a.py', 'src/ghost.py', 'src/ghost2.py']), sid))
       .toContain('only 1 of 3');

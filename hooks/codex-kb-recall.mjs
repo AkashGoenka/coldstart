@@ -18,6 +18,17 @@
  * arriving via PRs are a prompt-injection surface; the framing line is the
  * cheap mitigation.
  *
+ * MANUAL CAPTURE ON-DEMAND (2026-08-06): Codex's `/capture-notes` skill has no
+ * way to pass its own real session id into `kb-elicit.mjs --manual` the way
+ * Claude's `!`-expansion does — the skill body used to just ask the agent to
+ * run the command itself, blind to which session it's in. But THIS hook
+ * receives a real `input.session_id` on every prompt. So: when the submitted
+ * prompt IS the capture skill (its body carries a stable sentinel,
+ * CAPTURE_SENTINEL), run `--manual --session <real sid>` right here and inject
+ * its output — deterministic, no LLM has to type a correct `--session <id>`.
+ * The skill body keeps "run this in the terminal" as a fallback for when this
+ * hook is disabled or fails. See hooks/capture-sentinel.mjs.
+ *
  * Self-contained + fail-open: ANY error → exit 0 with no stdout → nothing
  * injected, the prompt proceeds untouched.
  */
@@ -29,6 +40,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 // Strip host telemetry wrappers before the query is built — see recall-query.mjs.
 import { recallQuery } from "./recall-query.mjs";
+import { CAPTURE_SENTINEL } from "./capture-sentinel.mjs";
 // Per-session dedup shared with the other recall hooks — see recall-seen.mjs.
 // Hosts with no transcript path never reset; dedup still holds for the session.
 import { readSeen, writeSeen, idsInPage, seenArgs } from "./recall-seen.mjs";
@@ -78,11 +90,43 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
 
     const sid = String(input.session_id || "").replace(/[^\w-]/g, "");
 
-    // No notebook → no tax, not even a child process.
-    if (!existsSync(join(root, ".coldstart", "notebook", ".raw"))) process.exit(0);
+    // The submitted prompt IS /capture-notes (its skill body carries this
+    // sentinel) → run the on-demand capture ourselves with the real session id
+    // this hook already has, instead of leaving the agent to guess one.
+    let manual = "";
+    if (sid && String(input.prompt || "").includes(CAPTURE_SENTINEL)) {
+      try {
+        const elicit = fileURLToPath(new URL("./kb-elicit.mjs", import.meta.url));
+        manual = execFileSync("node", [elicit, "--manual", "--session", sid, "--root", root], {
+          encoding: "utf8",
+          timeout: 8000,
+          stdio: ["ignore", "pipe", "ignore"],
+        }).trim();
+        if (manual) log(`MANUAL-INJECT session=${sid} bytes=${manual.length}`);
+      } catch (e) {
+        log(`manual-capture-inject failed: ${String(e).split("\n")[0]}`);
+      }
+    }
+
+    // Below this point, every early exit falls back to delivering the manual
+    // capture alone (if we have one) instead of exiting silently — a recall
+    // miss must never swallow an explicit /capture-notes.
+    const deliverManualOnlyAndExit = (why) => {
+      if (!manual) process.exit(0);
+      log(`INJECT bytes=${manual.length} (manual only, ${why})`);
+      process.stdout.write(JSON.stringify({
+        hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: manual },
+      }));
+      process.exit(0);
+    };
+
+    // No notebook → no recall tax, not even a child process (the manual
+    // capture above is independent of the notebook existing — it's what
+    // creates the first note).
+    if (!existsSync(join(root, ".coldstart", "notebook", ".raw"))) deliverManualOnlyAndExit("no notebook yet");
 
     const prompt = recallQuery(input.prompt, MAX_QUERY_CHARS);
-    if (!prompt) process.exit(0);
+    if (!prompt) deliverManualOnlyAndExit("empty query");
 
     // Ephemeral Codex runs expose no rollout path; readSeen then never resets,
     // which is the safe direction — dedup simply holds for the whole session.
@@ -99,12 +143,12 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
       });
     } catch (e) {
       log(`search failed/timed out: ${String(e).split("\n")[0]}`);
-      process.exit(0);
+      deliverManualOnlyAndExit("search failed");
     }
 
     if (!page.trim() || page.startsWith("No notebook notes match") || page.startsWith("No notebook in")) {
       log(`no hits (promptChars=${prompt.length})`);
-      process.exit(0);
+      deliverManualOnlyAndExit("no recall hits");
     }
 
     // Record what this page hands over before the size guards can trim it — a
@@ -139,6 +183,11 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     // host (and mostly ignored). Gist pages are ~1KB, implant pages ~3-5KB;
     // never exceed 8.5KB.
     if (block.length > 8500) block = block.slice(0, 8500) + "\n…(truncated)";
+
+    // An explicit /capture-notes rides FIRST — it's what the user asked for
+    // this turn. If the combination would spill past the host's payload cap,
+    // recall yields — the capture checklist must arrive whole.
+    if (manual) block = manual.length + block.length > 9500 ? manual : `${manual}\n\n---\n\n${block}`;
 
     // Arm the PostToolUse nudge detectors (nudge-handler.mjs gates its spiral
     // detectors on seen_find so it never nags sessions that don't use coldstart).

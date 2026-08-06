@@ -57,10 +57,12 @@ ones come back reported together, and the result lists any worked files still
 without a note.`;
 }
 
-// Capture markers are per-host (Claude / Cursor / Codex elicit hooks) but all
-// share the v2 evidence-record state shape; the flow-evidence check reads
-// whichever host produced this session's marker.
-const MARKER_PREFIXES = ['coldstart-kb-', 'coldstart-cursor-kb-', 'coldstart-codex-kb-'];
+// All three hosts' elicit hooks (Claude / Cursor / Codex) share one marker
+// namespace as of 2026-08-06 (previously per-host prefixes, which meant manual
+// /capture-notes — always the shared kb-elicit.mjs --manual — could never see
+// Cursor's or Codex's own automatic evidence). Kept as an array since callers
+// below treat it as a set of prefixes to scan.
+const MARKER_PREFIXES = ['coldstart-kb-'];
 
 /** Flow-evidence check: how many of the spec's step files did THIS session
  *  actually content-read? Reads the capture markers (v2 evidence records)

@@ -9,6 +9,7 @@ import nudge from '../hooks/cursor-nudge-handler.mjs';
 // @ts-expect-error plain-JS hook module, no types
 import preguard from '../hooks/cursor-preguard-handler.mjs';
 import { appendRecord } from '../src/kb/raw-log.js';
+import { CAPTURE_SENTINEL } from '../hooks/capture-sentinel.mjs';
 
 const ELICIT = fileURLToPath(new URL('../hooks/cursor-kb-elicit.mjs', import.meta.url));
 const RECALL = fileURLToPath(new URL('../hooks/cursor-kb-recall.mjs', import.meta.url));
@@ -28,9 +29,11 @@ beforeEach(() => {
 afterEach(() => {
   fs.rmSync(root, { recursive: true, force: true });
   fs.rmSync(stateFile(), { force: true });
-  // per-turn capture markers this test may have written
+  // per-turn capture markers this test may have written (state marker now
+  // shares the unified coldstart-kb- prefix; the per-turn dedupe marker stays
+  // cursor-specific — see cursor-kb-elicit.mjs)
   for (const f of fs.readdirSync(os.tmpdir())) {
-    if (f.startsWith('coldstart-cursor-kb-') && f.includes(String(process.pid))) {
+    if ((f.startsWith('coldstart-kb-') || f.startsWith('coldstart-cursor-kb-turn-')) && f.includes(String(process.pid))) {
       fs.rmSync(path.join(os.tmpdir(), f), { force: true });
     }
   }
@@ -99,7 +102,7 @@ describe('Cursor transcript capture', () => {
     });
     expect(output.trim()).toBe(''); // v5: no first-stop fire — evidence recorded, stop allowed
     const marker = JSON.parse(
-      fs.readFileSync(path.join(os.tmpdir(), `coldstart-cursor-kb-${sid}-main.json`), 'utf8'));
+      fs.readFileSync(path.join(os.tmpdir(), `coldstart-kb-${sid}-main.json`), 'utf8'));
     expect(marker.files['src/app.py'].reads).toBe(1);  // turn 2 Read
     expect(marker.files['src/old.py'].reads).toBe(1);  // turn 1 Read — unprocessed evidence counts
     expect(marker.files['src/helper.py']).toBeUndefined(); // Shell grep = mention, filtered
@@ -155,5 +158,35 @@ describe('Cursor notebook recall', () => {
     });
     expect(output).toContain('additional_context');
     expect(JSON.parse(fs.readFileSync(stateFile(), 'utf8')).seen_find).toBe(true);
+  });
+
+  it('a /capture-notes prompt (CAPTURE_SENTINEL) runs on-demand capture itself, with the real session id — no terminal round-trip needed', () => {
+    // Cursor's own Stop hook accumulates evidence under the UNIFIED marker
+    // (coldstart-kb-<sid>-main.json, shared with Claude/Codex as of 2026-08-06
+    // — a Cursor-only prefix here is exactly the bug this test guards: manual
+    // capture always ran the SHARED kb-elicit.mjs --manual, which could never
+    // see evidence filed under a host-specific prefix).
+    fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'src/widget.py'), 'def widget(): pass\n');
+    const convo = path.join(root, 'conv.jsonl');
+    fs.writeFileSync(convo, [
+      JSON.stringify({ role: 'assistant', message: { content: [
+        { type: 'tool_use', name: 'Read', input: { path: path.join(root, 'src/widget.py') } },
+      ] } }),
+      JSON.stringify({ type: 'turn_ended', status: 'success' }),
+    ].join('\n') + '\n');
+    run(ELICIT, {
+      session_id: sid, generation_id: gen(), loop_count: 0, workspace_roots: [root],
+      transcript_path: convo, hook_event_name: 'stop',
+    });
+
+    // The prompt IS /capture-notes: its command body carries the sentinel.
+    const output = run(RECALL, {
+      session_id: sid, workspace_roots: [root], hook_event_name: 'beforeSubmitPrompt',
+      prompt: `${CAPTURE_SENTINEL}\nRun this in the terminal: ...`,
+    });
+    const parsed = JSON.parse(output);
+    expect(parsed.additional_context).toContain('**Notebook capture point.**');
+    expect(parsed.additional_context).toContain('src/widget.py');
   });
 });
