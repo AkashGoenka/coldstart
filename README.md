@@ -17,9 +17,9 @@
 </p>
 
 <p>
-  <a href="https://akashgoenka.github.io/coldstart/"><b>Website</b></a> &nbsp;·&nbsp;
-  <a href="https://akashgoenka.github.io/coldstart/docs.html"><b>Docs</b></a> &nbsp;·&nbsp;
-  <a href="https://akashgoenka.github.io/coldstart/blog.html"><b>Blog</b></a> &nbsp;·&nbsp;
+  <a href="https://coldstartmcp.dev/"><b>Website</b></a> &nbsp;·&nbsp;
+  <a href="https://coldstartmcp.dev/docs"><b>Docs</b></a> &nbsp;·&nbsp;
+  <a href="https://coldstartmcp.dev/blog"><b>Blog</b></a> &nbsp;·&nbsp;
   <a href="./PHILOSOPHY.md"><b>Philosophy</b></a> &nbsp;·&nbsp;
   <a href="https://www.npmjs.com/package/@cstart/coldstart"><b>npm</b></a>
 </p>
@@ -280,19 +280,19 @@ See [PHILOSOPHY.md](./PHILOSOPHY.md) for why coldstart computes no semantics of 
 Longer pieces on the problems behind this tool — what agent sessions actually cost, and what
 happened to the design when the measurements disagreed with the plan.
 
-- [Where the tokens go in an agent session](https://akashgoenka.github.io/coldstart/blog/where-the-tokens-go.html)
+- [Where the tokens go in an agent session](https://coldstartmcp.dev/blog/where-the-tokens-go)
   — session cost is roughly turns × resident context, and output is a rounding error. How to
   decompose your own transcripts instead of trusting anyone's published numbers.
-- [An index cannot answer the same question twice](https://akashgoenka.github.io/coldstart/blog/an-index-cannot-answer-twice.html)
+- [An index cannot answer the same question twice](https://coldstartmcp.dev/blog/an-index-cannot-answer-twice)
   — a code graph makes each hop cheaper without reducing how many hops you take, and ranking by
   in-degree makes leaf files structurally unrankable.
-- [The tool the agent doesn't call](https://akashgoenka.github.io/coldstart/blog/the-tool-the-agent-doesnt-call.html)
+- [The tool the agent doesn't call](https://coldstartmcp.dev/blog/the-tool-the-agent-doesnt-call)
   — availability, documentation, and an explicit instruction still don't add up to adoption.
   Including the times our own agents bypassed our own command.
-- [From four tools to two](https://akashgoenka.github.io/coldstart/blog/from-four-tools-to-two.html)
+- [From four tools to two](https://coldstartmcp.dev/blog/from-four-tools-to-two)
   — which tools got deleted, which capability genuinely went with them, and why the surface
   stayed small afterwards.
-- [Notes about code should be written by whoever read the code](https://akashgoenka.github.io/coldstart/blog/notes-should-be-written-by-whoever-read-the-code.html)
+- [Notes about code should be written by whoever read the code](https://coldstartmcp.dev/blog/notes-should-be-written-by-whoever-read-the-code)
   — why the notebook captures in-session rather than summarizing transcripts later.
 
 ## License

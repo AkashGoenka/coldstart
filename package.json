@@ -1,6 +1,6 @@
 {
   "name": "@cstart/coldstart",
-  "version": "2.2.16",
+  "version": "2.2.17",
   "mcpName": "io.github.AkashGoenka/coldstart",
   "publishConfig": {
     "access": "public"
@@ -40,7 +40,7 @@
   ],
   "license": "MIT",
   "author": "Akash Goenka (https://github.com/AkashGoenka)",
-  "homepage": "https://akashgoenka.github.io/coldstart/",
+  "homepage": "https://coldstartmcp.dev/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/AkashGoenka/coldstart.git"

@@ -1,0 +1,66 @@
+---
+interface Props {
+  title: string;
+  description: string;
+  keywords: string;
+  canonicalPath: string; // e.g. "/", "/docs/", "/blog/", "/blog/slug/"
+  ogType?: string;
+  ogTitle?: string;
+  ogDescription?: string;
+  twitterTitle?: string;
+  twitterDescription?: string;
+  themeColor?: string;
+}
+const {
+  title,
+  description,
+  keywords,
+  canonicalPath,
+  ogType = 'website',
+  ogTitle = title,
+  ogDescription = description,
+  twitterTitle = ogTitle,
+  twitterDescription = ogDescription,
+  themeColor = '#070a11',
+} = Astro.props;
+
+const site = 'https://coldstartmcp.dev';
+const canonical = `${site}${canonicalPath}`;
+const ogImage = `${site}/og.png`;
+---
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>{title}</title>
+<meta name="description" content={description} />
+<meta name="keywords" content={keywords} />
+<meta name="author" content="Akash Goenka" />
+<meta name="robots" content="index, follow, max-image-preview:large" />
+<meta name="theme-color" content={themeColor} />
+<link rel="canonical" href={canonical} />
+<link rel="icon" type="image/svg+xml" href="/logo.svg" />
+<link rel="apple-touch-icon" href="/logo.svg" />
+
+<meta property="og:type" content={ogType} />
+<meta property="og:site_name" content="coldstart" />
+<meta property="og:title" content={ogTitle} />
+<meta property="og:description" content={ogDescription} />
+<meta property="og:url" content={canonical} />
+<meta property="og:image" content={ogImage} />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="coldstart — codebase memory and navigation for AI coding agents" />
+
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content={twitterTitle} />
+<meta name="twitter:description" content={twitterDescription} />
+<meta name="twitter:image" content={ogImage} />
+
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-D1Q44HNQ8H"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){window.dataLayer.push(arguments);}
+  // @ts-ignore
+  gtag('js', new Date());
+  // @ts-ignore
+  gtag('config', 'G-D1Q44HNQ8H');
+</script>

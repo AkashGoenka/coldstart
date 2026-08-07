@@ -1,0 +1,6 @@
+/* Preflight is intentionally OFF (astro.config.mjs applyBaseStyles:false) —
+   landing.css / docs.css already carry a tuned reset + design system.
+   Utilities/components stay available for new work (interactive demo, etc.)
+   without Tailwind fighting the existing hand-tuned styles. */
+@tailwind components;
+@tailwind utilities;

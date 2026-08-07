@@ -37,6 +37,6 @@ Assume technical competence. Do not write like a launch post.
 
 ## Publishing
 
-The canonical home is this site: `https://akashgoenka.github.io/coldstart/`.
+The canonical home is this site: `https://coldstartmcp.dev/`.
 
 Blog can later be adapted for DEV, LinkedIn, GitHub Discussions, and relevant Reddit answers, but the source essay should live here first.
