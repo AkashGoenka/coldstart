@@ -1,0 +1,96 @@
+---
+import '../styles/tailwind.css';
+import '../styles/docs.css';
+import Head from './Head.astro';
+import SvgDefs from '../components/SvgDefs.astro';
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+import { getCollection } from 'astro:content';
+
+interface Props {
+  slug: string;
+  title: string;
+  description: string;
+  keywords: string;
+  kicker: string;
+  ogDescription: string;
+  publishDate: Date;
+  readingTime: string;
+  lead: string;
+  next?: string;
+  wordCount?: number;
+}
+const { slug, title, description, keywords, kicker, ogDescription, publishDate, readingTime, lead, next, wordCount } = Astro.props;
+
+const dateStr = publishDate.toISOString().slice(0, 10);
+const dateHuman = publishDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+const site = 'https://coldstartmcp.dev';
+const url = `${site}/blog/${slug}/`;
+
+let nextPost: { slug: string; title: string } | null = null;
+if (next) {
+  const all = await getCollection('blog');
+  const match = all.find((p) => p.slug === next);
+  if (match) nextPost = { slug: match.slug, title: match.data.title };
+}
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BlogPosting',
+  headline: title,
+  description,
+  url,
+  mainEntityOfPage: url,
+  image: `${site}/og.png`,
+  datePublished: dateStr,
+  dateModified: dateStr,
+  ...(wordCount ? { wordCount } : {}),
+  author: { '@type': 'Person', name: 'Akash Goenka' },
+  publisher: { '@type': 'Person', name: 'Akash Goenka' },
+  isPartOf: { '@type': 'Blog', name: 'coldstart blog', url: `${site}/blog/` },
+};
+---
+<html lang="en">
+<head>
+  <Head
+    title={`${title} - coldstart`}
+    description={description}
+    keywords={keywords}
+    canonicalPath={`/blog/${slug}/`}
+    ogType="article"
+    ogDescription={ogDescription}
+    twitterDescription={ogDescription}
+    themeColor="#0b0e14"
+  />
+  <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+</head>
+<body class="docs-page essay-page">
+<SvgDefs />
+<Nav variant="blog" />
+<article class="essay-wrap essay-article">
+  <a class="back-link" href="/blog/">← All posts</a>
+  <header class="essay-hero">
+    <div class="kicker">{kicker}</div>
+    <h1>{title}</h1>
+    <p class="lead-p">{lead}</p>
+    <div class="article-meta">
+      <span>Akash Goenka</span>
+      <span class="sep">·</span>
+      <time datetime={dateStr}>{dateHuman}</time>
+      <span class="sep">·</span>
+      <span>{readingTime} read</span>
+    </div>
+  </header>
+
+  <slot />
+
+  <div class="essay-end">
+    <span class="el">{next ? 'Next' : 'Start here'}</span>
+    {nextPost && <a class="next" href={`/blog/${nextPost.slug}/`}>{nextPost.title}</a>}
+    <p class="note">coldstart is open source. <a href="https://github.com/AkashGoenka/coldstart">Source on GitHub</a> · <a href="/docs/">Docs</a></p>
+  </div>
+</article>
+<hr class="thread" />
+<Footer variant="sub" />
+</body>
+</html>

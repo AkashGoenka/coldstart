@@ -1,0 +1,68 @@
+---
+import { getCollection } from 'astro:content';
+import Head from '../../layouts/Head.astro';
+import SvgDefs from '../../components/SvgDefs.astro';
+import Nav from '../../components/Nav.astro';
+import Footer from '../../components/Footer.astro';
+import '../../styles/tailwind.css';
+import '../../styles/docs.css';
+
+const posts = (await getCollection('blog')).sort(
+  (a, b) => b.data.publishDate.valueOf() - a.data.publishDate.valueOf()
+);
+
+const site = 'https://coldstartmcp.dev';
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Blog',
+  name: 'coldstart blog',
+  description: 'Engineering notes on AI coding agents, repeated repository orientation, and codebase notes.',
+  url: `${site}/blog/`,
+  author: { '@type': 'Person', name: 'Akash Goenka' },
+  blogPost: posts.map((p) => ({
+    '@type': 'BlogPosting',
+    headline: p.data.title,
+    url: `${site}/blog/${p.slug}/`,
+    datePublished: p.data.publishDate.toISOString().slice(0, 10),
+    author: { '@type': 'Person', name: 'Akash Goenka' },
+  })),
+};
+---
+<html lang="en">
+<head>
+  <Head
+    title="coldstart blog - engineering writing on AI coding agents"
+    description="The coldstart blog: engineering notes on AI coding agents, repeated repository orientation, codebase notes, and why durable context is harder than generic memory."
+    keywords="AI coding agents, codebase memory, repository orientation, coding agent notes, Claude Code, Codex, Cursor, coldstart blog"
+    canonicalPath="/blog/"
+    ogDescription="Engineering notes about repeated repository orientation, codebase notes, and durable context for AI coding agents."
+    themeColor="#0b0e14"
+  />
+  <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+</head>
+<body class="docs-page essay-page">
+<SvgDefs />
+<Nav variant="blog" />
+
+<main class="essay-wrap">
+  <section class="essay-hero">
+    <div class="kicker">Blog</div>
+    <h1>Notes on agents, codebases, and the work before the work.</h1>
+    <p class="lead-p">Problem-first engineering writing about why agents keep starting cold, why notes are different from documentation, and why some context should be captured only after real work.</p>
+  </section>
+
+  <section class="essay-list" aria-label="Blog">
+    {posts.map((post) => (
+      <a class="essay-card" href={`/blog/${post.slug}/`}>
+        <span class="essay-meta">{post.data.kicker} <span class="sep">·</span> <time datetime={post.data.publishDate.toISOString().slice(0,10)}>{post.data.publishDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</time> <span class="sep">·</span> <span class="rt">{post.data.readingTime}</span></span>
+        <h2>{post.data.title}</h2>
+        <p>{post.data.description}</p>
+      </a>
+    ))}
+  </section>
+</main>
+
+<hr class="thread" />
+<Footer variant="sub" />
+</body>
+</html>
