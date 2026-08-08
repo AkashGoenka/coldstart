@@ -81,7 +81,14 @@ nav {
 .nav-burger { display: none; flex: none; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 8px; background: transparent; cursor: pointer; padding: 0; align-items: center; justify-content: center; flex-direction: column; }
 .nav-burger span { display: block; width: 15px; height: 1.5px; background: var(--ink); border-radius: 2px; }
 .nav-burger span + span { margin-top: 3px; }
-.nav-mobile { display: none; flex-direction: column; gap: 2px; padding: 10px 24px 16px; border-top: 1px solid var(--line); }
+.nav-mobile {
+  display: none; flex-direction: column; gap: 2px; padding: 10px 24px 16px;
+  position: fixed; top: 60px; left: 0; right: 0; z-index: 29;
+  max-height: calc(100vh - 60px); overflow-y: auto;
+  background: color-mix(in srgb, var(--bg) 96%, transparent);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--line);
+}
 .nav-mobile.open { display: flex; }
 .nav-mobile a { font-family: var(--mono); font-size: 14.5px; color: var(--muted); text-decoration: none; padding: 10px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
 .nav-mobile a:last-child { border-bottom: 0; }

@@ -422,7 +422,10 @@ import '../styles/backdrop.css';
       links.forEach(function (a) { a.classList.remove('active'); });
       if (top && byId[top]) {
         byId[top].classList.add('active');
-        byId[top].scrollIntoView({ block: 'nearest' });
+        var sideEl = byId[top].closest('.side');
+        if (sideEl && sideEl.scrollHeight > sideEl.clientHeight) {
+          byId[top].scrollIntoView({ block: 'nearest' });
+        }
       }
     }, { rootMargin: '-70px 0px -70% 0px', threshold: 0 });
     document.querySelectorAll('.doc-sec').forEach(function (s) { obs.observe(s); });
