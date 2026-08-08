@@ -3,6 +3,7 @@ interface Props { variant?: 'home' | 'docs' | 'blog' }
 const { variant = 'docs' } = Astro.props;
 const installHref = variant === 'home' ? '#install' : '/#install';
 ---
+<div class="progress" id="prog"></div>
 <nav>
   <div class="nav-in">
     <a class="brand" href="/">
@@ -29,8 +30,18 @@ const installHref = variant === 'home' ? '#install' : '/#install';
     <a class="nav-cta" href={installHref}>Install →</a>
   </div>
 </nav>
-{variant !== 'home' && <hr class="thread" />}
 <script>
+(function(){
+  var prog = document.getElementById('prog');
+  function onScroll(){
+    var h = document.documentElement;
+    var max = h.scrollHeight - h.clientHeight;
+    var pct = max > 0 ? (h.scrollTop || document.body.scrollTop) / max : 0;
+    if (prog) prog.style.width = (pct * 100).toFixed(2) + '%';
+  }
+  window.addEventListener('scroll', onScroll, {passive:true});
+  onScroll();
+})();
 (function(){
   var btn = document.getElementById('nav-burger');
   var menu = document.getElementById('nav-mobile');

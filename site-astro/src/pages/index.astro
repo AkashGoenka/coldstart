@@ -5,6 +5,7 @@ import Nav from '../components/Nav.astro';
 import Footer from '../components/Footer.astro';
 import '../styles/tailwind.css';
 import '../styles/landing.css';
+import '../styles/backdrop.css';
 
 const softwareAppJsonLd = {
   '@context': 'https://schema.org',
@@ -87,7 +88,6 @@ const faqJsonLd = {
 </head>
 <body>
 
-<div class="progress" id="prog"></div>
 <SvgDefs />
 <Nav variant="home" />
 
@@ -237,7 +237,7 @@ const faqJsonLd = {
 
     <div class="keynote cool rise">
       <span class="kk">Measured, not promised</span>
-      <p><b>−64% tokens on Arches</b> (Python/Django), <b>−31% on JMRI</b> (Java) — head-to-head against a no-tool baseline on real applications, recall equal or better in both. <a href="/blog/what-the-numbers-actually-say/">How we measured it →</a></p>
+      <p><b>−64% tokens on Arches</b> (Python/Django), <b>−31% on JMRI</b> (Java) — head-to-head against a no-tool baseline on real applications, recall equal or better in both. <a href="/blog/why-most-token-savings-tools-lie/">How we measured it →</a></p>
     </div>
   </div>
 </section>
@@ -287,15 +287,6 @@ const faqJsonLd = {
 <script>
 (function(){
   var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var prog = document.getElementById('prog');
-  function onScroll(){
-    var h = document.documentElement;
-    var max = h.scrollHeight - h.clientHeight;
-    var pct = max > 0 ? (h.scrollTop || document.body.scrollTop) / max : 0;
-    if (prog) prog.style.width = (pct * 100).toFixed(2) + '%';
-  }
-  window.addEventListener('scroll', onScroll, {passive:true});
-  onScroll();
   var rises = Array.prototype.slice.call(document.querySelectorAll('.rise'));
   var stamp = document.getElementById('stamp');
   if (reduce || !('IntersectionObserver' in window)){

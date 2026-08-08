@@ -5,10 +5,10 @@ lead: "The obvious answer to which files matter here is a vector index and a sim
 keywords: "embeddings for code search, semantic code search, AI coding agent architecture, no LLM calls, code index without embeddings"
 kicker: "Architecture"
 ogDescription: "Embeddings buy you fuzzy conceptual matches. They also buy you a store that goes stale and a ranking that isn't stable turn to turn. Most navigation questions don't need either."
-publishDate: 2026-08-09
+publishDate: 2026-08-08
 readingTime: "6 min"
 tags: ["architecture", "embeddings", "search"]
-next: "what-the-numbers-actually-say"
+next: "why-most-token-savings-tools-lie"
 ---
 
 Embeddings are good at one specific thing: finding the file that talks about your concept without using your words. Ask for "auth" and get back a file called `session_token_validator.py` that never mentions the word auth anywhere in it. That's a real capability and coldstart doesn't have it. I could have built it in and chose not to, and it's worth being honest about why.
@@ -20,6 +20,43 @@ A vector index costs you more than the embedding call itself. It costs you a sec
 The sync problem is not exotic. A file gets renamed, moved, or rewritten, and its embedding is now describing something that no longer exists that way, until the index is rebuilt for that file. Rebuilding on every save is expensive at the frequency a coding agent edits files, so in practice most systems batch it, which means there's a window, sometimes a long one, where the index is answering questions about a version of the code that's gone.
 
 The determinism problem is quieter but I think it matters more for a tool an agent calls dozens of times per session. Cosine similarity over an embedding space doesn't give you a stable ranking as the corpus grows. Add ten files to a repo and a query that used to surface the right file at rank one can drift to rank four, with nothing about the query or the target file having changed. An agent that got the right answer yesterday can get a worse one today for reasons that have nothing to do with today's question. That's a hard thing to trust, and a harder thing to debug when it goes wrong, because there's no way to point at a specific line of reasoning and say that's where it went wrong.
+
+<figure class="wide essay-fig ">
+<div class="fig-plot">
+<svg viewBox="0 0 920 360" role="img" aria-labelledby="r7t r7d">
+<title id="r7t">Rank of the right file as the repo grows</title>
+<desc id="r7d">Two lines against the same query over time. Declared identity stays flat at rank one. Embedding similarity zigzags between rank one and rank four as unrelated files are added elsewhere in the repo, with nothing about the query itself changing.</desc>
+<defs>
+<filter id="r7" x="-6%" y="-6%" width="112%" height="112%">
+<feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="19" result="n"/>
+<feDisplacementMap in="SourceGraphic" in2="n" scale="2.6" xChannelSelector="R" yChannelSelector="G"/>
+</filter>
+</defs>
+<g filter="url(#r7)">
+<path class="f-pen" d="M70 20 L100 20"/>
+<path class="f-mark" d="M470 20 L500 20"/>
+<path class="f-axis" d="M90 300 L860 300"/>
+<path class="f-axis" d="M90 60 L90 300"/>
+<path class="f-tick" d="M90 160 L860 160"/>
+<path class="f-tick" d="M90 220 L860 220"/>
+<path class="f-tick" d="M90 280 L860 280"/>
+<path class="f-pen" d="M100 100 L820 100"/>
+<path class="f-mark" d="M100 100 L200 100 L260 180 L340 140 L420 240 L500 160 L580 260 L660 180 L740 220 L820 150"/>
+<circle class="f-pin" cx="420" cy="240" r="6"/>
+<circle class="f-pin" cx="580" cy="260" r="6"/>
+</g>
+<text class="f-key" x="110" y="25" text-anchor="start">declared identity — same file, same rank, always</text>
+<text class="f-key" x="510" y="25" text-anchor="start">embedding similarity — drifts as the corpus grows</text>
+<text class="f-lab" x="80" y="105" text-anchor="end">1</text>
+<text class="f-lab" x="80" y="165" text-anchor="end">2</text>
+<text class="f-lab" x="80" y="225" text-anchor="end">3</text>
+<text class="f-lab" x="80" y="285" text-anchor="end">4+</text>
+<text class="f-lab" x="90" y="332" text-anchor="start">files added to the repo →</text>
+<text class="f-note" x="420" y="270" text-anchor="middle">nothing about the query changed</text>
+</svg>
+</div>
+<figcaption>Declared identity answers the same query with the same file at the same rank, every time. Cosine similarity over an embedding has no such guarantee — adding unrelated files anywhere in the repo can push yesterday's rank-one result to rank four, with nothing about the query having changed.</figcaption>
+</figure>
 
 ## What coldstart uses instead
 

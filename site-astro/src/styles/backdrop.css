@@ -1,0 +1,20 @@
+/* ============================================================
+   Shared page backdrop — the fading dot grid.
+   landing.css and docs.css are independent, hand-synced stylesheets
+   (see notebook note "site-astro has two independent stylesheets
+   that must be hand-kept in sync"). This file exists so a page-wide
+   visual like the backdrop has ONE definition instead of two drifting
+   copies — every page shell imports it directly, alongside whichever
+   of landing.css/docs.css it uses for everything else.
+   ============================================================ */
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  pointer-events:none;
+  background-image:radial-gradient(rgba(255,255,255,.09) 1px,transparent 1.5px);
+  background-size:30px 30px;
+  -webkit-mask-image:radial-gradient(65% 55% at 50% 0%,#000,transparent 72%);
+  mask-image:radial-gradient(65% 55% at 50% 0%,#000,transparent 72%);
+}

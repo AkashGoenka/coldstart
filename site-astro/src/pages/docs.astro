@@ -5,6 +5,7 @@ import Nav from '../components/Nav.astro';
 import Footer from '../components/Footer.astro';
 import '../styles/tailwind.css';
 import '../styles/docs.css';
+import '../styles/backdrop.css';
 ---
 <html lang="en">
 <head>
@@ -27,6 +28,10 @@ import '../styles/docs.css';
 
 <div class="docs">
   <aside class="side">
+    <button class="side-toggle" id="sideToggle" type="button" aria-expanded="false" aria-controls="sideList">
+      <span class="chev" aria-hidden="true">&rsaquo;</span> Menu
+    </button>
+    <div class="side-list" id="sideList">
     <div class="side-group">
       <div class="gh">Getting started</div>
       <a href="#overview">Overview</a>
@@ -56,6 +61,7 @@ import '../styles/docs.css';
       <a href="#mcp">MCP tools</a>
       <a href="#semantics">Bring your own semantics</a>
       <a href="#languages">Supported languages</a>
+    </div>
     </div>
   </aside>
 
@@ -393,7 +399,7 @@ import '../styles/docs.css';
 </div>
 
 <hr class="thread" />
-<Footer variant="sub" />
+<Footer variant="docs" />
 
 <script>
   (function () {
@@ -414,9 +420,28 @@ import '../styles/docs.css';
         if (y < topY) { topY = y; top = id; }
       });
       links.forEach(function (a) { a.classList.remove('active'); });
-      if (top && byId[top]) byId[top].classList.add('active');
+      if (top && byId[top]) {
+        byId[top].classList.add('active');
+        byId[top].scrollIntoView({ block: 'nearest' });
+      }
     }, { rootMargin: '-70px 0px -70% 0px', threshold: 0 });
     document.querySelectorAll('.doc-sec').forEach(function (s) { obs.observe(s); });
+  })();
+
+  (function () {
+    var toggle = document.getElementById('sideToggle');
+    var list = document.getElementById('sideList');
+    if (!toggle || !list) return;
+    toggle.addEventListener('click', function () {
+      var open = list.classList.toggle('open');
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    list.querySelectorAll('a').forEach(function (a) {
+      a.addEventListener('click', function () {
+        list.classList.remove('open');
+        toggle.setAttribute('aria-expanded', 'false');
+      });
+    });
   })();
 </script>
 </body>
