@@ -1,19 +1,18 @@
 ---
 interface Props { variant?: 'home' | 'docs' | 'blog' }
 const { variant = 'docs' } = Astro.props;
-const tag = variant === 'docs' ? 'docs' : variant === 'blog' ? 'blog' : null;
 const installHref = variant === 'home' ? '#install' : '/#install';
 ---
 <nav>
   <div class="nav-in">
     <a class="brand" href="/">
       <svg class="mark s2" width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><use href="#flake" class="fl"/><circle class="fl" cx="16" cy="16" r="6" fill="none"/><circle class="core" cx="16" cy="16" r="3" fill="url(#core)"/></svg>
-      coldstart {tag && <span class="tag">{tag}</span>}
+      coldstart
     </a>
     <span class="nav-spacer"></span>
     <div class="nav-links">
-      <a href="/docs/">Docs</a>
-      <a href="/blog/">Blog</a>
+      <a href="/docs/" class={variant === 'docs' ? 'active' : ''}>Docs</a>
+      <a href="/blog/" class={variant === 'blog' ? 'active' : ''}>Blog</a>
       <a href="https://github.com/AkashGoenka/coldstart">GitHub</a>
       <a href="https://www.npmjs.com/package/@cstart/coldstart">npm</a>
     </div>
@@ -23,8 +22,8 @@ const installHref = variant === 'home' ? '#install' : '/#install';
     </button>
   </div>
   <div class="nav-mobile" id="nav-mobile">
-    <a href="/docs/">Docs</a>
-    <a href="/blog/">Blog</a>
+    <a href="/docs/" class={variant === 'docs' ? 'active' : ''}>Docs</a>
+    <a href="/blog/" class={variant === 'blog' ? 'active' : ''}>Blog</a>
     <a href="https://github.com/AkashGoenka/coldstart">GitHub</a>
     <a href="https://www.npmjs.com/package/@cstart/coldstart">npm</a>
     <a class="nav-cta" href={installHref}>Install →</a>
