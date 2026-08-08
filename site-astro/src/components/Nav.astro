@@ -46,13 +46,14 @@ const installHref = variant === 'home' ? '#install' : '/#install';
   var btn = document.getElementById('nav-burger');
   var menu = document.getElementById('nav-mobile');
   if (!btn || !menu) return;
-  btn.addEventListener('click', function(){
-    var open = menu.classList.toggle('open');
+  function setOpen(open){
+    menu.classList.toggle('open', open);
     btn.setAttribute('aria-expanded', open ? 'true' : 'false');
     btn.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
-  });
+  }
+  btn.addEventListener('click', function(){ setOpen(!menu.classList.contains('open')); });
   menu.querySelectorAll('a').forEach(function(a){
-    a.addEventListener('click', function(){ menu.classList.remove('open'); btn.setAttribute('aria-expanded','false'); btn.setAttribute('aria-label','Open menu'); });
+    a.addEventListener('click', function(){ setOpen(false); });
   });
 })();
 </script>
