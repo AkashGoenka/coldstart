@@ -23,62 +23,51 @@ const softwareAppJsonLd = {
   offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
 };
 
+const faqs = [
+  {
+    q: 'Does coldstart use embeddings?',
+    a: 'No. coldstart is a fast static index over file paths, symbol names, exports, and the import/call graph, plus a ripgrep-backed reference scan. There is no vector database and no semantic embedding step — results are ranked from concrete lexical and structural evidence, so the index is small, instant to query, and never goes stale against your code.',
+  },
+  {
+    q: 'Do I need an API key or a paid model?',
+    a: 'No API key. coldstart calls no external service and runs fully offline. It adds a navigation and memory layer for whatever coding agent you already use, so it runs on the model you already pay for rather than billing any tokens of its own.',
+  },
+  {
+    q: 'Does coldstart work with Claude Code, Cursor, and Codex?',
+    a: 'Yes. Running `coldstart init` wires Claude Code, Cursor, and Codex with the right guidance plus navigation and notebook hooks. Shell-capable agents use the CLI (`coldstart find` / `coldstart gs`); no-shell clients like Claude Desktop use the identical operations exposed as MCP tools.',
+  },
+  {
+    q: 'What languages does coldstart parse?',
+    a: 'coldstart parses TypeScript, JavaScript, JSX, TSX, Java, Ruby, Python, Go, Rust, C#, PHP, Kotlin, and C++ via vendored Tree-sitter (WebAssembly) grammars, plus Vue, Svelte, and Astro script blocks and YAML, TOML, XML, and GraphQL. Because the grammars are WASM, a plain `npm install` works with no native build step.',
+  },
+  {
+    q: 'What is the coldstart notebook?',
+    a: 'The notebook is a durable set of notes the agent writes itself while it works, so what one session figures out about your codebase the next session already knows. Notes are anchored to real files and symbols and kept honest by the index, so they are flagged when the code they describe changes.',
+  },
+];
+
 const faqJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'FAQPage',
-  mainEntity: [
-    {
-      '@type': 'Question',
-      name: 'Does coldstart use embeddings?',
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: 'No. coldstart is a fast static index over file paths, symbol names, exports, and the import/call graph, plus a ripgrep-backed reference scan. There is no vector database and no semantic embedding step — results are ranked from concrete lexical and structural evidence, so the index is small, instant to query, and never goes stale against your code.',
-      },
+  mainEntity: faqs.map(faq => ({
+    '@type': 'Question',
+    name: faq.q,
+    acceptedAnswer: {
+      '@type': 'Answer',
+      text: faq.a.replace(/`/g, ''),
     },
-    {
-      '@type': 'Question',
-      name: 'Do I need an API key or a paid model?',
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: 'No API key. coldstart calls no external service and runs fully offline. It adds a navigation and memory layer for whatever coding agent you already use, so it runs on the model you already pay for rather than billing any tokens of its own.',
-      },
-    },
-    {
-      '@type': 'Question',
-      name: 'Does coldstart work with Claude Code, Cursor, and Codex?',
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: 'Yes. Running `coldstart init` wires Claude Code, Cursor, and Codex with the right guidance plus navigation and notebook hooks. Shell-capable agents use the CLI (`coldstart find` / `coldstart gs`); no-shell clients like Claude Desktop use the identical operations exposed as MCP tools.',
-      },
-    },
-    {
-      '@type': 'Question',
-      name: 'What languages does coldstart parse?',
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: 'coldstart parses TypeScript, JavaScript, JSX, TSX, Java, Ruby, Python, Go, Rust, C#, PHP, Kotlin, and C++ via vendored Tree-sitter (WebAssembly) grammars, plus Vue, Svelte, and Astro script blocks and YAML, TOML, XML, and GraphQL. Because the grammars are WASM, a plain `npm install` works with no native build step.',
-      },
-    },
-    {
-      '@type': 'Question',
-      name: 'What is the coldstart notebook?',
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: 'The notebook is a durable set of notes the agent writes itself while it works, so what one session figures out about your codebase the next session already knows. Notes are anchored to real files and symbols and kept honest by the index, so they are flagged when the code they describe changes.',
-      },
-    },
-  ],
+  })),
 };
 ---
 <html lang="en">
 <head>
   <Head
-    title="coldstart — persistent codebase memory for AI coding agents"
-    description="coldstart gives a coding agent persistent, self-maintaining memory of your codebase — a notebook it writes itself, plus a fast static index to find the right file without wasted reads. No embeddings, no API key — it runs on the model you already pay for."
+    title="Codebase Memory for AI Coding Agents | coldstart"
+    description="coldstart is codebase memory for AI coding agents — a notebook the agent writes itself, so what one session figures out the next already knows, plus a fast static index to find the right file without wasted reads. No embeddings, no API key — it runs on the model you already pay for."
     keywords="AI coding agent, codebase navigation, code search, agent memory, persistent memory, codebase memory, session memory, notebook, Claude Code, Codex, Cursor, MCP, no embeddings, ripgrep, tree-sitter"
     canonicalPath="/"
-    ogDescription="Persistent, self-maintaining memory for coding agents — a notebook the agent writes itself, plus a fast index to find the right file without wasted reads. No embeddings, no API key — it runs on the model you already pay for."
-    twitterDescription="Persistent, self-maintaining memory for coding agents — a notebook the agent writes itself, plus a fast index to find the right file without wasted reads. No embeddings, no API key."
+    ogDescription="Codebase memory for AI coding agents — a notebook the agent writes itself, plus a fast index to find the right file without wasted reads. No embeddings, no API key — it runs on the model you already pay for."
+    twitterDescription="Codebase memory for AI coding agents — a notebook the agent writes itself, plus a fast index to find the right file without wasted reads. No embeddings, no API key."
   />
   <script type="application/ld+json" set:html={JSON.stringify(softwareAppJsonLd)} />
   <script type="application/ld+json" set:html={JSON.stringify(faqJsonLd)} />
@@ -94,7 +83,7 @@ const faqJsonLd = {
 <!-- ===================== HERO ===================== -->
 <header class="hero">
   <div class="wrap hero-in">
-    <div class="kicker">Memory and navigation for coding agents</div>
+    <div class="kicker">Codebase memory — what your agents learned, kept for the next session</div>
     <h1 class="title">Your agent relearns your codebase from <span class="cold">scratch</span> — every session.</h1>
     <p class="hero-sub">coldstart gives it <b>persistent memory of your codebase</b> — a notebook it writes itself, so what one session figures out, the next already knows — plus an exact index to <b>find the right file without three wrong reads</b>. No embeddings, no API key: it runs on the model you already pay for.</p>
     <div class="cta">
@@ -249,6 +238,26 @@ const faqJsonLd = {
       <div class="eyebrow">Bring your own semantics</div>
       <h2>No embeddings. On purpose.</h2>
       <p class="lead">Every consumer is already a frontier model — the best semantic reasoner available. coldstart keeps what's cheap to keep exact — names, imports, calls — and leaves meaning to the reasoner holding the task. No vector store to go stale, no API key, no second bill.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== FAQ ===================== -->
+<section id="faq" class="faq">
+  <div class="wrap">
+    <div class="rise faq-head">
+      <div class="eyebrow">Common questions</div>
+      <h2>Before you install.</h2>
+    </div>
+    <div class="faq-list rise">
+      {faqs.map((item) => (
+        <details class="faq-item">
+          <summary class="faq-q">{item.q}</summary>
+          <p class="faq-a">
+            {item.a.split('`').map((part, i) => (i % 2 ? <code>{part}</code> : part))}
+          </p>
+        </details>
+      ))}
     </div>
   </div>
 </section>
