@@ -1,6 +1,6 @@
 # coldstart
 
-> Codebase navigation and a codebase notebook for AI agents. A fast static index answers "which files are relevant to this task?" in milliseconds with checkable evidence instead of a similarity score. A durable, agent-written notebook remembers what a past session figured out about the codebase, kept honest by content-hash freshness checks. No embeddings, no model to run, no service to babysit — the consuming agent is the semantic layer.
+> coldstart is codebase memory for AI coding agents: durable, agent-written notes about your codebase, kept honest by content-hash freshness checks, plus a fast static index so an agent can find the file it has no note for — ranked with checkable evidence instead of a similarity score. No embeddings, no model to run, no service to babysit — the consuming agent is the semantic layer.
 
 coldstart ships as an npm package (`@cstart/coldstart`) providing the `coldstart` CLI binary, and an MCP server for no-shell clients. Two front doors, byte-identical output.
 
