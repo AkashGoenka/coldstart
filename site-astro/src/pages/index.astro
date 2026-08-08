@@ -72,7 +72,7 @@ const faqJsonLd = {
 <html lang="en">
 <head>
   <Head
-    title="coldstart — codebase memory &amp; navigation for AI coding agents"
+    title="coldstart — persistent codebase memory for AI coding agents"
     description="coldstart gives a coding agent persistent, self-maintaining memory of your codebase — a notebook it writes itself, plus a fast static index to find the right file without wasted reads. No embeddings, no API key — it runs on the model you already pay for."
     keywords="AI coding agent, codebase navigation, code search, agent memory, persistent memory, codebase memory, session memory, notebook, Claude Code, Codex, Cursor, MCP, no embeddings, ripgrep, tree-sitter"
     canonicalPath="/"
@@ -83,7 +83,7 @@ const faqJsonLd = {
   <script type="application/ld+json" set:html={JSON.stringify(faqJsonLd)} />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
 </head>
 <body>
 
@@ -93,42 +93,25 @@ const faqJsonLd = {
 
 <!-- ===================== HERO ===================== -->
 <header class="hero">
-  <div class="wrap hero-grid">
-    <div>
-      <div class="eyebrow">Memory + navigation for coding agents</div>
-      <h1 class="title">Your agent relearns your codebase from <span class="cold">scratch</span> — every session.</h1>
-      <p class="hero-sub">coldstart gives a coding agent <b>persistent memory of your codebase</b> — a notebook it writes itself, so what one session figures out, the next already knows — plus a fast index to <b>find the right file without three wrong reads</b>. No embeddings, no API key: it runs on the model you already pay for.</p>
-      <div class="cta">
-        <a class="btn btn-primary" href="#install">Install →</a>
-        <a class="btn btn-ghost" href="/blog/">Read the blog</a>
-        <span class="hero-note">MIT · Node 18+ · runs offline</span>
-      </div>
+  <div class="wrap hero-in">
+    <div class="kicker">Memory and navigation for coding agents</div>
+    <h1 class="title">Your agent relearns your codebase from <span class="cold">scratch</span> — every session.</h1>
+    <p class="hero-sub">coldstart gives it <b>persistent memory of your codebase</b> — a notebook it writes itself, so what one session figures out, the next already knows — plus an exact index to <b>find the right file without three wrong reads</b>. No embeddings, no API key: it runs on the model you already pay for.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="#install">Install →</a>
+      <a class="btn btn-ghost" href="/blog/">Read the blog</a>
     </div>
-    <div class="term type" role="img" aria-label="Terminal: coldstart find returns ranked, evidence-backed files with a past agent's note, then gs shows one file's symbols and callers">
-      <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="term-title">agent — coldstart</span></div>
-      <div class="term-body">
-<span class="l" style="animation-delay:.05s"><span class="p-prompt">$</span> <span class="p-cmd">coldstart find</span> auth session cookie</span>
-<span class="gap"></span>
-<span class="l" style="animation-delay:.5s"><span class="p-frost">src/auth/service.ts</span>  <span class="p-hit">3/3</span> <span class="p-dim">defines</span> auth, session, cookie</span>
-<span class="l" style="animation-delay:.7s">  <span class="p-ember">note</span> <span class="p-dim">[fresh]</span> signs &amp; verifies session cookies · login/logout entry</span>
-<span class="l" style="animation-delay:.9s"><span class="p-frost">src/middleware/session.ts</span>  <span class="p-hit">2/3</span> <span class="p-dim">imports</span> session, cookie</span>
-<span class="l" style="animation-delay:1.1s"><span class="p-frost">src/routes/login.ts</span>  <span class="p-hit">2/3</span> <span class="p-dim">defines</span> auth · <span class="p-dim">imports</span> session</span>
-<span class="gap"></span>
-<span class="l" style="animation-delay:1.5s"><span class="p-prompt">$</span> <span class="p-cmd">coldstart gs</span> src/auth/service.ts</span>
-<span class="l" style="animation-delay:1.7s"><span class="p-dim">symbols</span>  signCookie <span class="p-dim">L12</span> · verify <span class="p-dim">L34</span> · rotate <span class="p-dim">L61</span></span>
-<span class="l" style="animation-delay:1.9s"><span class="p-dim">callers</span>  verify ← <span class="p-file">middleware/session.ts</span>, <span class="p-file">routes/login.ts</span></span>
-<span class="l" style="animation-delay:2.1s"><span class="p-dim">imported by</span>  4 files <span class="p-frost">→ read only the body you need</span><span class="cursor"></span></span>
-      </div>
-    </div>
+    <div class="cmdline"><span class="p">$</span> <span class="c">coldstart init</span></div>
+    <p class="meta-line">MIT · Node 18+ · runs offline · no embeddings, no API key</p>
   </div>
 </header>
 
 <!-- ===================== NOTEBOOK (the lead value) ===================== -->
 <section id="notebook" class="nb">
   <div class="wrap">
-    <div class="rise">
+    <div class="rise nb-intro">
       <div class="eyebrow warm">The notebook</div>
-      <h2>The second time a question comes up,<br>the answer is <span class="warm">already written down.</span></h2>
+      <h2>The second time a question comes up, the answer is <span class="warm">already written down.</span></h2>
       <p class="lead">An agent writes down what it learns while it works. The next one gets it for free, checked against the code so a stale note never passes as fact.</p>
     </div>
 
@@ -138,7 +121,22 @@ const faqJsonLd = {
         <li><b>Kept honest by a content hash</b> — the background keeper flags it the moment the code moves.</li>
         <li><b>Injected automatically</b> when a prompt matches, before the agent starts searching.</li>
       </ol>
-      <div class="card">
+
+      <div class="nb-exhibit">
+        <div class="nb-exhibit-label">What step three actually injects</div>
+        <div class="card" id="noteCard">
+        <div class="stamp-wrap" id="stamp">
+          <svg viewBox="0 0 120 120">
+            <g filter="url(#rough)" fill="none" stroke="#a86a35" stroke-width="2.4">
+              <circle cx="60" cy="60" r="46"/>
+              <circle cx="60" cy="60" r="38"/>
+            </g>
+            <g filter="url(#rough)" fill="#a86a35">
+              <text x="60" y="55" text-anchor="middle" font-family="JetBrains Mono" font-size="15" font-weight="700" letter-spacing="1">FRESH</text>
+              <text x="60" y="72" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5">HASH VERIFIED</text>
+            </g>
+          </svg>
+        </div>
         <div class="card-top">
           <div class="kick"><span class="pill-t">File note</span><span class="pill fresh"><span class="d"></span>fresh</span></div>
           <div class="card-title">src/models.py · Tile</div>
@@ -152,6 +150,7 @@ const faqJsonLd = {
               <span class="anc fresh"><span class="d"></span>src/models.py <span class="sym">· save</span></span>
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>
@@ -171,6 +170,38 @@ const faqJsonLd = {
       <h2>Memory compounds over time.<br>Navigation pays off on the first lookup.</h2>
       <p class="lead">No embeddings — just paths, symbols, and the import/call graph, patched in the background as you type. Two cheap lookups instead of three wrong reads.</p>
     </div>
+    <div class="flow-figure rise">
+      <svg class="flow-svg" viewBox="0 0 900 190" role="img" aria-labelledby="flowTitle">
+        <title id="flowTitle">Grepping around a codebase wanders through wrong files before landing; find then gs goes straight there.</title>
+        <g filter="url(#rough)" fill="none" stroke="#5d6b83" stroke-width="1.8" stroke-linecap="round">
+          <path d="M60 100 C 110 40, 150 150, 200 70 S 300 40, 330 110"/>
+        </g>
+        <g fill="#5d6b83">
+          <circle cx="60" cy="100" r="4"/>
+          <circle cx="152" cy="130" r="4"/>
+          <circle cx="200" cy="70" r="4"/>
+          <circle cx="278" cy="52" r="4"/>
+        </g>
+        <g filter="url(#rough)" stroke="#5d6b83" stroke-width="1.6" stroke-linecap="round">
+          <path d="M147 125 L157 135 M157 125 L147 135"/>
+          <path d="M195 65 L205 75 M205 65 L195 75"/>
+          <path d="M273 47 L283 57 M283 47 L273 57"/>
+        </g>
+        <rect filter="url(#rough)" x="322" y="100" width="18" height="18" rx="2" fill="none" stroke="#8b9ab2" stroke-width="1.8"/>
+        <line x1="430" y1="24" x2="430" y2="166" stroke="#1a2536" stroke-width="1" stroke-dasharray="3 5"/>
+        <g filter="url(#rough)" fill="none" stroke="#4fbfe0" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M510 130 L 660 55 L 810 100"/>
+        </g>
+        <circle cx="510" cy="130" r="4.5" fill="#4fbfe0"/>
+        <circle cx="660" cy="55" r="4.5" fill="#4fbfe0"/>
+        <rect filter="url(#rough)" x="801" y="91" width="18" height="18" rx="2" fill="#4fbfe0" stroke="#4fbfe0" stroke-width="2"/>
+      </svg>
+      <div class="flow-cap">
+        <span class="before">grep, then guess — three files before the right one</span>
+        <span class="after">find, then gs — straight to it</span>
+      </div>
+    </div>
+
     <div class="ops rise">
       <div class="op">
         <div class="on">find <span class="sig">&lt;terms&gt;</span></div>
@@ -183,13 +214,24 @@ const faqJsonLd = {
         <p>One file's symbols with line ranges, who imports it, and who calls each symbol — in a single call. Not a grep: the actual answer to <em>who uses this?</em></p>
       </div>
     </div>
-    <div class="flow rise">
-      <div class="step cold"><div class="k">Which files?</div><div class="cmd">coldstart find</div><div class="cap">Ranked candidates, each with the evidence for why it ranked.</div></div>
-      <div class="arrow">→</div>
-      <div class="step cold"><div class="k">What is it? Who uses it?</div><div class="cmd">coldstart gs</div><div class="cap">One file's symbols, importers, and per-symbol callers.</div></div>
-      <div class="arrow">→</div>
-      <div class="step warm"><div class="k">Now read</div><div class="cmd">Read</div><div class="cap">Open the one method body that matters — not the whole file.</div></div>
+
+    <div class="term type rise" role="img" aria-label="Terminal: coldstart find returns ranked, evidence-backed files with a past agent's note, then gs shows one file's symbols and callers">
+      <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="term-title">agent — coldstart</span></div>
+      <div class="term-body">
+<span class="l" style="animation-delay:.05s"><span class="p-prompt">$</span> <span class="p-cmd">coldstart find</span> auth session cookie</span>
+<span class="gap"></span>
+<span class="l" style="animation-delay:.5s"><span class="p-frost">src/auth/service.ts</span>  <span class="p-hit">3/3</span> <span class="p-dim">defines</span> auth, session, cookie</span>
+<span class="l" style="animation-delay:.7s">  <span class="p-ember">note</span> <span class="p-dim">[fresh]</span> signs &amp; verifies session cookies · login/logout entry</span>
+<span class="l" style="animation-delay:.9s"><span class="p-frost">src/middleware/session.ts</span>  <span class="p-hit">2/3</span> <span class="p-dim">imports</span> session, cookie</span>
+<span class="l" style="animation-delay:1.1s"><span class="p-frost">src/routes/login.ts</span>  <span class="p-hit">2/3</span> <span class="p-dim">defines</span> auth · <span class="p-dim">imports</span> session</span>
+<span class="gap"></span>
+<span class="l" style="animation-delay:1.5s"><span class="p-prompt">$</span> <span class="p-cmd">coldstart gs</span> src/auth/service.ts</span>
+<span class="l" style="animation-delay:1.7s"><span class="p-dim">symbols</span>  signCookie <span class="p-dim">L12</span> · verify <span class="p-dim">L34</span> · rotate <span class="p-dim">L61</span></span>
+<span class="l" style="animation-delay:1.9s"><span class="p-dim">callers</span>  verify ← <span class="p-file">middleware/session.ts</span>, <span class="p-file">routes/login.ts</span></span>
+<span class="l" style="animation-delay:2.1s"><span class="p-dim">imported by</span>  4 files <span class="p-frost">→ read only the body you need</span><span class="cursor"></span></span>
+      </div>
     </div>
+
     <div class="keynote cool rise">
       <span class="kk">Measured, not promised</span>
       <p><b>−64% tokens on Arches</b> (Python/Django), <b>−31% on JMRI</b> (Java) — head-to-head against a no-tool baseline on real applications, recall equal or better in both. <a href="/blog/what-the-numbers-actually-say/">How we measured it →</a></p>
@@ -252,14 +294,23 @@ const faqJsonLd = {
   window.addEventListener('scroll', onScroll, {passive:true});
   onScroll();
   var rises = Array.prototype.slice.call(document.querySelectorAll('.rise'));
+  var stamp = document.getElementById('stamp');
   if (reduce || !('IntersectionObserver' in window)){
     rises.forEach(function(el){ el.classList.add('in'); });
+    if (stamp) stamp.classList.add('in');
     return;
   }
   var obs = new IntersectionObserver(function(entries){
     entries.forEach(function(e){ if (e.isIntersecting){ e.target.classList.add('in'); obs.unobserve(e.target); } });
   }, {rootMargin:'0px 0px -12% 0px', threshold:.08});
   rises.forEach(function(el){ obs.observe(el); });
+  var noteCard = document.getElementById('noteCard');
+  if (stamp && noteCard){
+    var stampObs = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){ if (e.isIntersecting){ stamp.classList.add('in'); stampObs.unobserve(e.target); } });
+    }, {threshold:.5});
+    stampObs.observe(noteCard);
+  }
 })();
 (function(){
   var btn = document.getElementById('copy-install');
