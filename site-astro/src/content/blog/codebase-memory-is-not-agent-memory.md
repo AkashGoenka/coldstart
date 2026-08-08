@@ -31,6 +31,45 @@ A note about code has a ground truth sitting right next to it: the file. That ch
 
 That's the part conversational memory tooling doesn't have to solve and codebase memory can't skip. In practice it means stamping each note against the exact state of the file it was verified against, so a later read can tell in one comparison whether the file has moved on without it. A note that can't tell you it might be wrong is a liability dressed as a convenience.
 
+<figure class="wide essay-fig ">
+<div class="fig-plot">
+<svg viewBox="0 0 920 340" role="img" aria-labelledby="r5t r5d">
+<title id="r5t">Two different things called memory</title>
+<desc id="r5d">Top row: a preference about a person, held until restated, with no file beside it to check against. Bottom row: a note about code, stamped against the file it describes, so it can be flagged stale the moment the file moves.</desc>
+<defs>
+<filter id="r5" x="-6%" y="-6%" width="112%" height="112%">
+<feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="13" result="n"/>
+<feDisplacementMap in="SourceGraphic" in2="n" scale="2.6" xChannelSelector="R" yChannelSelector="G"/>
+</filter>
+</defs>
+<g filter="url(#r5)">
+<rect class="f-box" x="70" y="74" width="260" height="62" rx="6"/>
+<rect class="f-box-ok" x="400" y="74" width="280" height="62" rx="6"/>
+<path class="f-pen" d="M340 105 L390 105"/>
+<path class="f-pen" d="M379 99 L390 105 M379 111 L390 105"/>
+<rect class="f-box" x="70" y="244" width="240" height="62" rx="6"/>
+<rect class="f-box" x="380" y="244" width="170" height="62" rx="6"/>
+<path class="f-pen" d="M320 275 L370 275"/>
+<path class="f-pen" d="M359 269 L370 275 M359 281 L370 275"/>
+<path class="f-tick" d="M560 275 L640 275"/>
+<rect class="f-box" x="650" y="244" width="200" height="62" rx="6"/>
+<rect class="f-mark" x="646" y="240" width="208" height="70" rx="8"/>
+</g>
+<text class="f-head" x="70" y="50" text-anchor="start">memory about a person</text>
+<text class="f-key" x="200" y="100" text-anchor="middle">preference stated once</text>
+<text class="f-key" x="540" y="100" text-anchor="middle">held until you say otherwise</text>
+<text class="f-sub" x="70" y="168" text-anchor="start">no file sits next to it to check against</text>
+<text class="f-head" x="70" y="220" text-anchor="start">memory about code</text>
+<text class="f-key" x="190" y="270" text-anchor="middle">note: validates session token</text>
+<text class="f-key" x="465" y="270" text-anchor="middle">the file, right now</text>
+<text class="f-sub" x="600" y="230" text-anchor="middle">stamped + checked on read</text>
+<text class="f-note" x="750" y="270" text-anchor="middle">flagged stale</text>
+<text class="f-sub" x="70" y="330" text-anchor="start">a note that can tell you it might be wrong beats one that can't</text>
+</svg>
+</div>
+<figcaption>A preference has no ground truth to check against, so it just holds until you say otherwise. A note about code sits next to the file it describes, and that's not extra ceremony — it's what lets the system catch the note going stale instead of quietly acting on it.</figcaption>
+</figure>
+
 ## Where the notes actually come from
 
 The other difference is who's qualified to write the note. For a person, the agent is the only witness. For code, the agent that just spent real turns tracing a call path, reading three files to find where a value actually gets set, running the failing case down to the line, is also the only witness that has the full context right now. A note written after the fact, by summarizing a transcript, is not the same thing. It's a paraphrase of a paraphrase.

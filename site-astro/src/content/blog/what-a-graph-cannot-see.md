@@ -5,7 +5,7 @@ lead: "coldstart's gs command builds a real graph off imports and calls, no gues
 keywords: "call graph limitations, AI coding agent architecture, static analysis limits, codebase coupling, notebook capture design"
 kicker: "Architecture"
 ogDescription: "Three scripts with zero import edges between them broke each other repeatedly for months, because their coupling lived in a shared filename convention, not in any syntax a graph could parse."
-publishDate: 2026-08-11
+publishDate: 2026-08-08
 readingTime: "7 min"
 tags: ["architecture", "graph", "notebook"]
 next: "where-the-tokens-go"
@@ -18,6 +18,38 @@ coldstart's `gs` command answers "who calls this" and "who imports this file" fr
 coldstart's own notebook has a capture step: something fires at the end of a session and writes down what the agent worked out. It runs a little differently depending on the host. Claude Code, Cursor, and Codex each have their own hook mechanism, their own transcript format, their own way of telling a script "the turn just ended." So there are three scripts: one for each host. None of them imports another. None of them calls another. If you ran any graph over that code, deterministic or LLM-generated, it would report exactly what it looks like: three unrelated files.
 
 They are not unrelated. All three read and write the same marker file in a temp directory, and the exact shape of that filename, which pieces of session and agent identity get folded into it, has to match across all three or the whole mechanism silently breaks. Not at parse time. At runtime, in whichever host happens to run second.
+
+<figure class="wide essay-fig ">
+<div class="fig-plot">
+<svg viewBox="0 0 920 380" role="img" aria-labelledby="r6t r6d">
+<title id="r6t">Three files, zero edges, one real coupling</title>
+<desc id="r6d">Three hook scripts drawn inside the graph's boundary with no edges between them, exactly what any import-and-call graph reports. Below the boundary, a dashed line the graph cannot draw connects all three through a shared marker-filename convention checked only at runtime.</desc>
+<defs>
+<filter id="r6" x="-6%" y="-6%" width="112%" height="112%">
+<feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="17" result="n"/>
+<feDisplacementMap in="SourceGraphic" in2="n" scale="2.6" xChannelSelector="R" yChannelSelector="G"/>
+</filter>
+</defs>
+<g filter="url(#r6)">
+<rect class="f-div" x="110" y="60" width="700" height="180" rx="16"/>
+<circle class="f-hop" cx="250" cy="150" r="38"/>
+<circle class="f-hop" cx="460" cy="150" r="38"/>
+<circle class="f-hop" cx="670" cy="150" r="38"/>
+<path class="f-mark" d="M250 188 C250 300 460 300 460 188"/>
+<path class="f-mark" d="M460 188 C460 300 670 300 670 188"/>
+<circle class="f-pin" cx="355" cy="300" r="6"/>
+<circle class="f-pin" cx="565" cy="300" r="6"/>
+</g>
+<text class="f-head" x="70" y="40" text-anchor="start">what the graph draws</text>
+<text class="f-sub" x="460" y="95" text-anchor="middle">zero edges between them — not a bug in the parser</text>
+<text class="f-lab" x="250" y="215" text-anchor="middle">claude hook</text>
+<text class="f-lab" x="460" y="215" text-anchor="middle">cursor hook</text>
+<text class="f-lab" x="670" y="215" text-anchor="middle">codex hook</text>
+<text class="f-note" x="460" y="352" text-anchor="middle">same marker filename, checked at runtime — no edge for this</text>
+</svg>
+</div>
+<figcaption>Any graph built from imports and calls reports exactly this: three files, zero edges. The coupling that broke things repeatedly lived in a shared filename convention checked at runtime, and there is no AST node type to hang an edge on for that.</figcaption>
+</figure>
 
 ## How the coupling actually broke things
 

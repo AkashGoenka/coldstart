@@ -6,6 +6,7 @@ import Nav from '../../components/Nav.astro';
 import Footer from '../../components/Footer.astro';
 import '../../styles/tailwind.css';
 import '../../styles/docs.css';
+import '../../styles/backdrop.css';
 
 const posts = (await getCollection('blog')).sort(
   (a, b) => b.data.publishDate.valueOf() - a.data.publishDate.valueOf()
@@ -66,6 +67,6 @@ const jsonLd = {
 </main>
 
 <hr class="thread" />
-<Footer variant="sub" />
+<Footer variant="blog" />
 </body>
 </html>

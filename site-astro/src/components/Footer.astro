@@ -1,14 +1,19 @@
 ---
-interface Props { variant?: 'home' | 'sub' }
-const { variant = 'sub' } = Astro.props;
+interface Props { variant?: 'home' | 'docs' | 'blog' }
+const { variant = 'docs' } = Astro.props;
+const taglines = {
+  home: 'navigation + memory for coding agents · MIT',
+  docs: 'docs · MIT',
+  blog: 'blog · MIT',
+};
+const tagline = taglines[variant];
 ---
 <footer>
   <div class="foot-in">
-    {variant === 'home' ? (
-      <span class="foot-brand"><span class="brand" style="font-size:14px"><svg class="mark s2" width="17" height="17" viewBox="0 0 32 32" aria-hidden="true"><circle class="core" cx="16" cy="16" r="8" fill="url(#glow)"/><use href="#flake" class="fl"/><circle class="fl" cx="16" cy="16" r="6" fill="none"/><circle class="core" cx="16" cy="16" r="3" fill="url(#core)"/></svg>coldstart</span> &nbsp; navigation + memory for coding agents · MIT</span>
-    ) : (
-      <span class="foot-brand"><a class="brand" href="/" style="font-size:15px"><svg class="mark s2" width="17" height="17" viewBox="0 0 32 32" aria-hidden="true"><circle class="core" cx="16" cy="16" r="8" fill="url(#glow)"/><use href="#flake" class="fl"/><circle class="fl" cx="16" cy="16" r="6" fill="none"/><circle class="core" cx="16" cy="16" r="3" fill="url(#core)"/></svg>coldstart</a> - blog · MIT</span>
-    )}
+    <div class="foot-id">
+      <a class="brand" href="/"><svg class="mark s2" width="17" height="17" viewBox="0 0 32 32" aria-hidden="true"><circle class="core" cx="16" cy="16" r="8" fill="url(#glow)"/><use href="#flake" class="fl"/><circle class="fl" cx="16" cy="16" r="6" fill="none"/><circle class="core" cx="16" cy="16" r="3" fill="url(#core)"/></svg>coldstart</a>
+      <span class="foot-tagline">{tagline}</span>
+    </div>
     <div class="foot-links">
       <a href="/">Home</a>
       <a href="/docs/">Docs</a>
