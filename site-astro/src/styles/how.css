@@ -247,6 +247,73 @@ body.how-page {
 .zbody .warm { color: var(--ember); }
 .zpan-foot { margin-top: auto; padding-top: 16px; color: var(--muted); font-size: 14px; }
 
+/* ============================================================
+   INDEX PAGE — reuses the temperature seam as the two-layer
+   chooser. Scoped to .how-index so the child pages' own use of
+   .temp-fig is untouched.
+   ============================================================ */
+/* Each column is an <a>, not a panel with a button in it. text-decoration and
+   colour have to be reset because .temp-col was never a link. */
+.how-index .how-card { text-decoration: none; color: inherit; position: relative; transition: background .2s; }
+.how-index .how-card.warm:hover { background: linear-gradient(160deg, color-mix(in srgb, var(--ember) 11%, transparent), transparent 68%); }
+.how-index .how-card.cold:hover { background: linear-gradient(160deg, color-mix(in srgb, var(--frost) 11%, transparent), transparent 68%); }
+
+/* Card footer. The hairline is what stops the label reading as text that floats
+   after the list; margin-top:auto pins it to a shared baseline across columns
+   even when one has more content than the other. */
+.how-card-go {
+  margin-top: auto; padding-top: 20px;
+  border-top: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  font-family: var(--mono); font-size: 12.5px; color: var(--faint);
+  transition: color .2s, border-color .2s;
+}
+.how-card-go .ar { font-size: 14px; transition: transform .2s; }
+.how-index .how-card:hover .how-card-go .ar { transform: translateX(4px); }
+.how-index .how-card.warm:hover .how-card-go { color: var(--ember); border-top-color: var(--line-warm); }
+.how-index .how-card.cold:hover .how-card-go { color: var(--frost); border-top-color: color-mix(in srgb, var(--frost) 35%, transparent); }
+/* keyboard parity with hover — the card is a real tab stop */
+.how-index .how-card:focus-visible { outline: 2px solid var(--frost); outline-offset: -2px; }
+
+/* Three tiles instead of a hairline-ruled list: same bordered-card language as
+   .state (notebook page) and .zpan (navigation page), with the left accent bar
+   carrying the temperature — frost for the index steps, ember for the note. */
+.how-index .flow-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.how-index .flow-tile {
+  border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2);
+  padding: 24px 24px 26px; position: relative; overflow: hidden;
+}
+.how-index .flow-tile::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--frost);
+}
+.how-index .flow-tile.warm { border-color: var(--line-warm); }
+.how-index .flow-tile.warm::before { background: var(--ember); }
+.how-index .flow-tile .k {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--faint); margin-bottom: 14px;
+}
+.how-index .flow-tile h3 { font-family: var(--sans); font-size: 16px; font-weight: 600; margin-bottom: 10px; }
+.how-index .flow-tile p { color: var(--muted); font-size: 15px; }
+.how-index .flow-tile code {
+  font-size: 13px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 5px; padding: 1px 6px; color: var(--frost);
+}
+.how-index .loop-close { margin-top: 22px; }
+@media (max-width: 820px) {
+  .how-index .flow-tiles { grid-template-columns: 1fr; }
+}
+
+.how-index .temp-verdict { margin-top: 30px; }
+.how-index .temp-verdict i { font-style: italic; color: var(--ink); }
+/* warm reads first here, so it leads on desktop and stacks first on mobile */
+.how-index .temp-fig { align-items: stretch; }
+/* the stacked divider belongs on whichever column is SECOND — here that's cold,
+   not warm, so the base rule would draw it against the figure's own top border */
+@media (max-width: 820px) {
+  .how-index .temp-col.warm { border-top: 0; }
+  .how-index .temp-col.cold { border-top: 1px solid var(--line); }
+}
+
 /* ---------- closing CTA ---------- */
 .how-close { padding: 66px 0 90px; border-top: 1px solid var(--line); margin-top: 34px; }
 .how-close p, .how-close .how-cmds { max-width: 680px; }
@@ -258,6 +325,19 @@ body.how-page {
   color: var(--term-ink); margin-bottom: 28px; overflow-x: auto;
 }
 .how-cmds span { color: var(--frost); }
+/* copy button — how pages ride docs.css, not landing.css, so .copy-btn has to be
+   redeclared here rather than inherited from the homepage */
+.how-page .how-cmds.has-copy { position: relative; padding-right: 84px; }
+.how-page .copy-btn {
+  position: absolute; top: 12px; right: 12px;
+  font-family: var(--mono); font-size: 11px; color: #8aa0bd; cursor: pointer;
+  background: rgba(255, 255, 255, .04); border: 1px solid var(--line);
+  border-radius: 6px; padding: 5px 10px;
+  transition: color .15s, background .15s, border-color .15s;
+}
+.how-page .copy-btn:hover { color: #eef3fb; background: rgba(255, 255, 255, .08); border-color: rgba(255, 255, 255, .16); }
+.how-page .copy-btn.copied { color: #4fd18b; border-color: rgba(79, 209, 139, .4); background: rgba(79, 209, 139, .08); }
+
 .how-next { display: flex; gap: 12px; flex-wrap: wrap; }
 .how-next a {
   font-family: var(--mono); font-size: 13.5px; padding: 11px 20px; border-radius: 8px;

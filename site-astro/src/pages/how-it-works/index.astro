@@ -1,0 +1,257 @@
+---
+import Head from '../../layouts/Head.astro';
+import SvgDefs from '../../components/SvgDefs.astro';
+import Nav from '../../components/Nav.astro';
+import Footer from '../../components/Footer.astro';
+import '../../styles/tailwind.css';
+import '../../styles/docs.css';
+import '../../styles/how.css';
+import '../../styles/backdrop.css';
+
+const title = 'How coldstart works — codebase memory for AI coding agents | coldstart';
+const description =
+  'How coldstart gives a coding agent memory of your codebase: durable notes anchored to the code they came from and re-checked on every read, over an exact index of paths, symbols and calls. Two layers, explained end to end.';
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'TechArticle',
+  headline: 'How coldstart works',
+  description,
+  url: 'https://coldstartmcp.dev/how-it-works/',
+  author: { '@type': 'Person', name: 'Akash Goenka' },
+  publisher: { '@type': 'Organization', name: 'coldstart' },
+  about: 'Codebase memory for AI coding agents',
+  proficiencyLevel: 'Beginner',
+  hasPart: [
+    {
+      '@type': 'TechArticle',
+      headline: 'How the coldstart notebook works',
+      url: 'https://coldstartmcp.dev/how-it-works/notebook/',
+    },
+    {
+      '@type': 'TechArticle',
+      headline: 'How the coldstart navigation layer works',
+      url: 'https://coldstartmcp.dev/how-it-works/navigation/',
+    },
+  ],
+};
+---
+<html lang="en">
+<head>
+  <Head
+    title={title}
+    description={description}
+    keywords="codebase memory, how it works, agent memory, codebase index, note freshness, no embeddings, AI coding agents, coldstart"
+    canonicalPath="/how-it-works/"
+    ogType="article"
+    ogTitle="How coldstart works — codebase memory for AI coding agents"
+    ogDescription="Durable notes anchored to the code they came from and re-checked on every read, over an exact index of paths, symbols and calls. Two layers, explained end to end."
+    themeColor="#070a11"
+  />
+  <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+</head>
+<body class="how-page how-index">
+<SvgDefs />
+<Nav variant="how" />
+
+<!-- ===================== HERO ===================== -->
+<header class="how-hero">
+  <div class="wrap">
+    <div class="how-eyebrow">How it works</div>
+    <h1>An agent that has <em>been here before</em> shouldn't start from <span class="cold">nothing.</span></h1>
+    <p class="lead">
+      coldstart is <b>codebase memory</b>: what an agent worked out about your code, written down at
+      the moment it worked it out, and checked against the code again every time it's read. Underneath
+      it sits an exact index, so an agent can still find the file no one has left a note on.
+    </p>
+    <a class="how-back" href="/">← back to the overview</a>
+  </div>
+</header>
+
+<!-- ===================== THE TWO LAYERS ===================== -->
+<section class="how-sec">
+  <div class="wrap">
+    <div class="how-sec-head rv">
+      <h2>Two layers, and only one of them is memory.</h2>
+      <p>
+        The index is a fact about the repository as it exists right now. The notebook is a fact about
+        what someone <b>learned</b> here that reading the file wouldn't tell you. They're built
+        differently because they expire differently.
+      </p>
+    </div>
+
+    <div class="temp-fig">
+      <div class="temp-seam"></div>
+
+      <!-- the whole panel is the link: the thing that explains IS the thing you click,
+           so there is no separate button to aim at -->
+      <a class="temp-col warm how-card" href="/how-it-works/notebook/">
+        <div class="temp-kick">The notebook</div>
+        <h3>Memory of this codebase</h3>
+        <p>
+          Notes written by the agent that did the reading — anchored to a file, often a symbol, and
+          stamped against the exact bytes it verified.
+        </p>
+        <div class="temp-items">
+          <div class="temp-item">written during the task, not after</div>
+          <div class="temp-item">addressed to a file and symbol</div>
+          <div class="temp-item">re-surfaced when the next agent needs it</div>
+          <div class="temp-item">re-checked on every read</div>
+          <div class="temp-item">says [fresh] or flags itself stale</div>
+        </div>
+        <span class="how-card-go">How the notebook works <span class="ar" aria-hidden="true">→</span></span>
+      </a>
+
+      <a class="temp-col cold how-card" href="/how-it-works/navigation/">
+        <div class="temp-kick">The navigation layer</div>
+        <h3>An exact map, no embeddings</h3>
+        <p>
+          Paths, symbol names, imports and calls, parsed and kept current in the background. Queried
+          with two lookups, answered without a model call.
+        </p>
+        <div class="temp-items">
+          <div class="temp-item">find — which files match these terms</div>
+          <div class="temp-item">gs — one file's shape and its callers</div>
+          <div class="temp-item">ranked on checkable evidence</div>
+          <div class="temp-item">no embeddings, no API key</div>
+          <div class="temp-item">useful from the first lookup</div>
+        </div>
+        <span class="how-card-go">How navigation works <span class="ar" aria-hidden="true">→</span></span>
+      </a>
+    </div>
+
+    <div class="temp-verdict rv">
+      <b>Why they can't share a design.</b> The index can be rebuilt from the repository at any
+      moment, so it is never wrong for long — a wrong entry is a bug. A note can't be rebuilt from
+      anything; the reasoning that produced it is gone the moment the session ends. So a note that
+      goes wrong stays wrong, silently, and gets acted on as fact. That asymmetry is the whole reason
+      the notebook carries freshness machinery and the index doesn't need any.
+    </div>
+
+  </div>
+</section>
+
+<!-- ===================== THE HANDOFF ===================== -->
+<!-- the one thing neither child page can show: each covers its own layer, so the
+     point where they hand off to each other only exists here -->
+<section class="how-sec">
+  <div class="wrap">
+    <div class="how-sec-head rv">
+      <h2>The index is how the memory gets found.</h2>
+      <p>
+        They aren't alternatives you pick between. Notes are addressed to files, so <b>the index is
+        what retrieves them</b> — one lookup returns the ranked files and whatever is already known
+        about those same files, together.
+      </p>
+    </div>
+
+    <div class="flow-tiles rv">
+      <div class="flow-tile">
+        <div class="k">On the code</div>
+        <h3>The ranking comes first</h3>
+        <p>
+          Filenames, path segments, exported symbols and a repo-wide reference scan — <code>find</code>
+          ranks each file by how many of your terms it covers, and shows the evidence for the
+          ranking. This runs whether or not a single note exists.
+        </p>
+      </div>
+
+      <div class="flow-tile warm">
+        <div class="k">Same result</div>
+        <h3>The note rides along</h3>
+        <p>
+          Any ranked file that has one carries a <code>Summary:</code> line against the result
+          itself, right where you're deciding whether to open it. Marked <code>[fresh]</code>, the
+          file is byte-identical to when it was verified.
+        </p>
+      </div>
+
+      <div class="flow-tile">
+        <div class="k">Your call</div>
+        <h3>The next move is yours</h3>
+        <p>
+          Open the file with <code>gs</code> if the note made it interesting. Open the note itself
+          for per-symbol detail and the flows through it. Or go straight to the code — most files
+          have no note, and the ranking alone was enough.
+        </p>
+      </div>
+    </div>
+
+    <div class="loop-close rv">
+      <b>Which is why the memory has to be addressed to code.</b> A note anchored to a file is
+      reachable by the same lookup that finds the file. A note filed under a topic or a similarity
+      score is something you'd have to go and search for separately — and an agent mid-task won't.
+    </div>
+  </div>
+</section>
+
+<!-- ===================== CLOSE ===================== -->
+<section class="how-close">
+  <div class="wrap">
+    <div class="rv">
+      <h2>Both layers install in one command.</h2>
+      <p>
+        <code>init</code> writes the agent guidance, wires your client, and builds the index. The
+        notebook starts empty and fills itself as agents work.
+      </p>
+      <div class="how-cmds has-copy">
+        <button type="button" class="copy-btn" data-copy="npm install -g @cstart/coldstart&#10;coldstart init" aria-label="Copy install commands">Copy</button>
+        npm install -g @cstart/coldstart<br><span>coldstart init</span>
+      </div>
+      <div class="how-next">
+        <a class="primary" href="/docs/">Read the docs</a>
+        <a class="ghost" href="/blog/">Engineering blog →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<Footer variant="how" />
+
+<script>
+  // same contract as the homepage copy buttons: data-copy holds the literal text,
+  // clipboard API with an execCommand fallback for non-secure contexts
+  (function () {
+    document.querySelectorAll('.copy-btn[data-copy]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var text = btn.getAttribute('data-copy') || '';
+        function done() {
+          btn.classList.add('copied');
+          btn.textContent = 'Copied';
+          setTimeout(function () { btn.classList.remove('copied'); btn.textContent = 'Copy'; }, 1600);
+        }
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(text).then(done).catch(function () {});
+          return;
+        }
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); done(); } catch (e) {}
+        document.body.removeChild(ta);
+      });
+    });
+  })();
+
+  (function () {
+    var els = document.querySelectorAll('.rv, .ring-fig, .temp-fig');
+    if (!('IntersectionObserver' in window)) {
+      els.forEach(function (el) { el.classList.add('in'); });
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.18, rootMargin: '0px 0px -8% 0px' });
+    els.forEach(function (el) { io.observe(el); });
+  })();
+</script>
+</body>
+</html>
