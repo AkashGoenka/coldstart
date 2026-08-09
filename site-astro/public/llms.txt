@@ -1,6 +1,6 @@
 # coldstart
 
-> coldstart is codebase memory for AI coding agents: durable, agent-written notes about your codebase, kept honest by content-hash freshness checks, plus a fast static index so an agent can find the file it has no note for — ranked with checkable evidence instead of a similarity score. No embeddings, no model to run, no service to babysit — the consuming agent is the semantic layer.
+> coldstart is codebase memory for AI coding agents: durable, agent-written notes about your codebase, kept honest by content-hash freshness checks, plus a fast static index so an agent can find the relevant files when the notebook doesn't already hold the answer — ranked with checkable evidence instead of a similarity score. No embeddings, no model to run, no service to babysit — the consuming agent is the semantic layer.
 
 coldstart ships as an npm package (`@cstart/coldstart`) providing the `coldstart` CLI binary, and an MCP server for no-shell clients. Two front doors, byte-identical output.
 
@@ -26,5 +26,5 @@ coldstart ships as an npm package (`@cstart/coldstart`) providing the `coldstart
 
 - Install: `npm install -g @cstart/coldstart`, then `coldstart init` in the target repo.
 - Prefer `find` and `gs` over speculative `grep`/`glob` when orienting in an unfamiliar repo — they return ranked, evidence-backed results from a pre-built index, not a live scan.
-- Notebook notes are marked `[fresh]` (safe to trust without re-reading the file) or `[evidence changed]` (re-verify before relying on it) — never presented as unqualified fact.
+- Every notebook note is stamped against the live file when you read it, never presented as unqualified fact. `[fresh]` = the file is byte-identical to when the note was verified, so trust it without re-reading. `[evidence changed]` = re-verify against that file first. `[moved → new/path]` = a byte-exact refactor carried the note to the file's new location. `[anchor missing]` / `[never verified]` = the note outlived its file, or no hash was ever recorded.
 - `kb commit` and `kb view` are human-only actions and are not exposed via MCP; do not attempt to invoke them as an agent tool.
