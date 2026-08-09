@@ -1,0 +1,310 @@
+---
+import Head from '../../layouts/Head.astro';
+import SvgDefs from '../../components/SvgDefs.astro';
+import Nav from '../../components/Nav.astro';
+import Footer from '../../components/Footer.astro';
+import '../../styles/tailwind.css';
+import '../../styles/docs.css';
+import '../../styles/how.css';
+import '../../styles/backdrop.css';
+
+const title = 'How the notebook works — codebase memory that checks itself | coldstart';
+const description =
+  'The notebook loop, explained: an agent writes down what it learned, the note is anchored to the exact code it came from, and that code is re-checked on every read — so a note that goes stale says so instead of lying.';
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'TechArticle',
+  headline: 'How the coldstart notebook works',
+  description,
+  url: 'https://coldstartmcp.dev/how-it-works/notebook/',
+  author: { '@type': 'Person', name: 'Akash Goenka' },
+  publisher: { '@type': 'Organization', name: 'coldstart' },
+  about: 'Codebase memory for AI coding agents',
+  proficiencyLevel: 'Beginner',
+};
+---
+<html lang="en">
+<head>
+  <Head
+    title={title}
+    description={description}
+    keywords="codebase memory, notebook, agent memory, stale notes, note freshness, content hash, persistent memory, AI coding agents, coldstart"
+    canonicalPath="/how-it-works/notebook/"
+    ogType="article"
+    ogTitle="How the notebook works — codebase memory that checks itself"
+    ogDescription="An agent writes down what it learned. The note is anchored to the exact code it came from, and re-checked on every read — so a stale note says so instead of lying."
+    themeColor="#070a11"
+  />
+  <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+</head>
+<body class="how-page">
+<SvgDefs />
+<Nav variant="how" />
+
+<!-- ===================== HERO ===================== -->
+<header class="how-hero">
+  <div class="wrap">
+    <div class="how-eyebrow warm">The notebook · how it works</div>
+    <h1>One agent works it out. The next one <em>doesn't have to.</em></h1>
+    <p class="lead">
+      That only holds if the note is still true. So here is the whole loop — how a note gets
+      written, what ties it to the code it came from, and <b>exactly what happens to it when that
+      code changes underneath.</b>
+    </p>
+    <a class="how-back" href="/#notebook">← back to the notebook</a>
+  </div>
+</header>
+
+<!-- ===================== THE LOOP ===================== -->
+<section class="how-sec">
+  <div class="wrap">
+    <div class="how-sec-head rv">
+      <h2>Four things happen, in a circle.</h2>
+      <p>
+        None of them is a chore you have to remember. An agent writes what it learned, the note is
+        pinned to the evidence, the evidence is re-checked on every read, and the note comes back
+        when it's relevant.
+      </p>
+    </div>
+
+    <!-- SIGNATURE FIGURE: the ring -->
+    <div class="ring-fig">
+      <svg class="ring-svg" viewBox="106 62 548 476" role="img" aria-labelledby="ringTitle ringDesc">
+        <title id="ringTitle">The notebook loop</title>
+        <desc id="ringDesc">
+          A closed cycle of four stations — learn, anchor, check, recall — drawn around a note card
+          stamped as verified. The note produced by one task is checked and handed to the next.
+        </desc>
+        <defs>
+          <linearGradient id="loopGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#4fbfe0"/>
+            <stop offset="50%" stop-color="#8fa2b8"/>
+            <stop offset="100%" stop-color="#ef9448"/>
+          </linearGradient>
+        </defs>
+
+        <circle class="ring-track" cx="380" cy="300" r="170"/>
+        <circle class="ring-draw" cx="380" cy="300" r="170" pathLength="1000" filter="url(#rough)"/>
+
+        <g class="ring-chev" filter="url(#rough)">
+          <path d="M-7,-7 L0,0 L-7,7" transform="translate(500.2,179.8) rotate(45)"/>
+          <path d="M-7,-7 L0,0 L-7,7" transform="translate(500.2,420.2) rotate(135)"/>
+          <path d="M-7,-7 L0,0 L-7,7" transform="translate(259.8,420.2) rotate(225)"/>
+          <path d="M-7,-7 L0,0 L-7,7" transform="translate(259.8,179.8) rotate(315)"/>
+        </g>
+
+        <!-- the note in the middle: what the loop is protecting -->
+        <g class="ring-card">
+          <rect class="paper" x="284" y="240" width="192" height="120" rx="4"/>
+          <text class="t" x="298" y="268">src/models.py · Tile</text>
+          <line class="rule" x1="298" y1="288" x2="396" y2="288"/>
+          <line class="rule" x1="298" y1="308" x2="378" y2="308"/>
+          <line class="rule" x1="298" y1="328" x2="392" y2="328"/>
+          <g transform="rotate(-11 428 306)">
+            <g filter="url(#rough)">
+              <circle class="stamp" cx="428" cy="306" r="31"/>
+              <circle class="stamp" cx="428" cy="306" r="25"/>
+            </g>
+            <text class="stamp-t" x="428" y="311" text-anchor="middle">FRESH</text>
+          </g>
+        </g>
+
+        <g class="ring-node s1">
+          <circle cx="380" cy="130" r="26"/>
+          <text class="n" x="380" y="135" text-anchor="middle">01</text>
+          <text class="lbl" x="380" y="88" text-anchor="middle">LEARN</text>
+        </g>
+        <g class="ring-node s2">
+          <circle cx="550" cy="300" r="26"/>
+          <text class="n" x="550" y="305" text-anchor="middle">02</text>
+          <text class="lbl" x="588" y="305" text-anchor="start">ANCHOR</text>
+        </g>
+        <g class="ring-node s3 warm">
+          <circle cx="380" cy="470" r="26"/>
+          <text class="n" x="380" y="475" text-anchor="middle">03</text>
+          <text class="lbl" x="380" y="524" text-anchor="middle">CHECK</text>
+        </g>
+        <g class="ring-node s4 warm">
+          <circle cx="210" cy="300" r="26"/>
+          <text class="n" x="210" y="305" text-anchor="middle">04</text>
+          <text class="lbl" x="172" y="305" text-anchor="end">RECALL</text>
+        </g>
+      </svg>
+    </div>
+
+    <div class="loop-list">
+      <div class="beat rv">
+        <div class="beat-n">01</div>
+        <div>
+          <h3>An agent finishes a real task, and writes down what it cost to understand.</h3>
+          <p>
+            Not what the code <i>is</i> — you can read that. The part worth keeping is what wasn't
+            written anywhere: that this function is the only safe write path, that these two files
+            always change together, that the helper you'd expect to exist doesn't.
+          </p>
+        </div>
+      </div>
+      <div class="beat rv">
+        <div class="beat-n">02</div>
+        <div>
+          <h3>The note is pinned to the exact code it came from.</h3>
+          <p>
+            It names the files and symbols it's about, and records <b>a fingerprint of each one as
+            it looked at that moment.</b> A note is never a floating opinion — it's a claim with an
+            address and a snapshot of what it was true about.
+          </p>
+        </div>
+      </div>
+      <div class="beat warm rv">
+        <div class="beat-n">03</div>
+        <div>
+          <h3>Every read re-takes the fingerprint.</h3>
+          <p>
+            Nothing is trusted from memory. Before a note is shown to anyone, the files it points at
+            are read <b>as they are right now</b> and compared against the snapshot. That one
+            comparison is the entire freshness system — there is nothing else to configure, and no
+            expiry date to guess at.
+          </p>
+        </div>
+      </div>
+      <div class="beat warm rv">
+        <div class="beat-n">04</div>
+        <div>
+          <h3>The note comes back on its own, before anyone starts searching.</h3>
+          <p>
+            When a later prompt is about that code, the note is handed to the agent up front —
+            carrying the result of the check with it, so the agent knows how far to trust it before
+            it acts on it.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="loop-close rv">
+      And the agent that just used a note is the one best placed to fix it — it has the files open.
+      A note that turns out to be wrong gets corrected in that same session, which is step one
+      again. <b>There's no maintenance step, because the maintenance is the loop.</b>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== WHEN THE CODE MOVES ===================== -->
+<section class="how-sec">
+  <div class="wrap">
+    <div class="how-sec-head rv">
+      <h2>A note about code is a note about a moving target.</h2>
+      <p>
+        So: what happens when the file changes, gets renamed, or disappears entirely? The
+        fingerprint from step two is what makes that answer mechanical instead of hopeful. Four
+        outcomes, re-decided from scratch every time the note is read.
+      </p>
+    </div>
+
+    <div class="state-grid">
+      <div class="state ok rv">
+        <div class="state-when">The file is untouched</div>
+        <div class="state-tag">[fresh]</div>
+        <h3>Nothing to re-check</h3>
+        <p>
+          Byte-for-byte what it was when the note was written. An agent can act on it without
+          opening the file at all — which is the whole point.
+        </p>
+      </div>
+
+      <div class="state warn rv rv-d1">
+        <div class="state-when">The file changed</div>
+        <div class="state-tag">[evidence changed]</div>
+        <h3>Demoted to a hypothesis</h3>
+        <p>
+          The note still appears — it's probably still mostly right — but labelled, with an
+          instruction to re-verify it against the file first. It never quietly keeps its authority
+          after the ground moved.
+        </p>
+      </div>
+
+      <div class="state move rv rv-d2">
+        <div class="state-when">The file was renamed or moved</div>
+        <div class="state-tag">[moved → src/new/path.py]</div>
+        <h3>The note follows the file</h3>
+        <p>
+          A rename isn't a deletion. If the content at the new path still matches the fingerprint,
+          the note travels with it — a refactor that shuffles your tree doesn't cost you the
+          notebook.
+        </p>
+      </div>
+
+      <div class="state gone rv rv-d3">
+        <div class="state-when">The file is gone</div>
+        <div class="state-tag">[anchor missing]</div>
+        <h3>The note goes quiet</h3>
+        <p>
+          Deleted — or simply not on this branch. A note whose files have all vanished stops
+          presenting itself as a description of live code, and returns by itself when the files do.
+          Switching branches rewrites nothing.
+        </p>
+      </div>
+    </div>
+
+    <div class="state-note rv">
+      <span class="mk">→</span>
+      <span>
+        Notice what's <i>not</i> in that list: a judgement call. <b>Every one of these is a
+        comparison, not an opinion</b> — which is why it can run on every read, in any language,
+        without a model call and without slowing anything down. A note never silently rots here. It
+        loses confidence out loud.
+      </span>
+    </div>
+
+    <div class="how-aside rv">
+      <h3>One repo, one corpus</h3>
+      <p>
+        The notebook is plain files in your repository. Commit it and the whole team's agents read
+        and write the same body of knowledge — two people writing about the same file on different
+        branches both keep their notes, and the merge combines them instead of picking a winner.
+        Private by default; sharing is opt-in.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== CLOSE ===================== -->
+<section class="how-close">
+  <div class="wrap">
+    <div class="rv">
+      <h2>It starts empty and warms with use.</h2>
+      <p>
+        The first few real tasks seed the notes. Nothing to import, nothing to write by hand — two
+        commands and the loop starts turning.
+      </p>
+      <div class="how-cmds">npm install -g @cstart/coldstart<br><span>coldstart init</span></div>
+      <div class="how-next">
+        <a class="primary" href="/docs/">Read the docs</a>
+        <a class="ghost" href="/how-it-works/navigation/">How the navigation layer works →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<Footer variant="how" />
+
+<script>
+  (function () {
+    var els = document.querySelectorAll('.rv, .ring-fig, .temp-fig');
+    if (!('IntersectionObserver' in window)) {
+      els.forEach(function (el) { el.classList.add('in'); });
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.18, rootMargin: '0px 0px -8% 0px' });
+    els.forEach(function (el) { io.observe(el); });
+  })();
+</script>
+</body>
+</html>

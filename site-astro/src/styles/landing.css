@@ -224,9 +224,8 @@ h1.title .cold{color:var(--frost);}
 
 /* the exhibit: what step three actually produces, pulled out and shown */
 .nb-exhibit{margin:44px auto 0;max-width:560px;width:100%;text-align:left;}
-.nb-exhibit-label{display:flex;align-items:center;gap:11px;margin-bottom:18px;
+.nb-exhibit-label{display:flex;align-items:center;margin-bottom:18px;
   font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);}
-.nb-exhibit-label::before{content:"";width:26px;height:1px;background:var(--ember-dim);flex:none;}
 
 /* note card — paper, not chrome: it's a page from the notebook, not another dark panel */
 .card{border:1px solid var(--paper-line);border-radius:4px;background:var(--paper);color:var(--paper-ink);
@@ -418,3 +417,24 @@ footer{border-top:1px solid var(--line);padding:50px 0;}
   .cursor{display:none;}
 }
 :focus-visible{outline:2px solid var(--frost);outline-offset:2px;border-radius:4px;}
+
+/* ---------- how-it-works entry points (below notebook + navigation) ----------
+   A small centred link-button, not a panel: it's a side door out of the section,
+   so it must read as clickable without competing with the section's own content. */
+/* Raised, not recessed: on a dark ground a darker fill reads as a hole, so the
+   affordance comes from a slight lift + border. Tinted per section so it sits
+   correctly on both the warm (notebook) and cool (index) grounds. */
+.how-link{
+  display:flex;align-items:center;gap:9px;width:max-content;margin:34px auto 0;
+  padding:9px 17px;border:1px solid var(--line);border-radius:999px;
+  background:rgba(255,255,255,.045);
+  font-family:var(--mono);font-size:13px;color:var(--muted);text-decoration:none;
+  transition:color .16s,border-color .16s,background .16s;
+}
+.how-link.warm{border-color:var(--line-warm);background:rgba(255,214,170,.055);}
+.how-link:hover{color:var(--text);background:rgba(255,255,255,.085);border-color:var(--frost);}
+.how-link.warm:hover{background:rgba(255,214,170,.1);border-color:var(--ember);}
+.how-link .ar{flex:none;transition:transform .16s,color .16s;}
+.how-link:hover .ar{transform:translateX(3px);color:var(--frost);}
+.how-link.warm:hover .ar{color:var(--ember);}
+.how-link:focus-visible{outline:2px solid var(--frost);outline-offset:3px;}

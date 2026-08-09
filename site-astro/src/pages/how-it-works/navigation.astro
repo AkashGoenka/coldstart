@@ -1,0 +1,236 @@
+---
+import Head from '../../layouts/Head.astro';
+import SvgDefs from '../../components/SvgDefs.astro';
+import Nav from '../../components/Nav.astro';
+import Footer from '../../components/Footer.astro';
+import '../../styles/tailwind.css';
+import '../../styles/docs.css';
+import '../../styles/how.css';
+import '../../styles/backdrop.css';
+
+const title = 'How the navigation layer works — an exact map, no embeddings | coldstart';
+const description =
+  'How coldstart answers "where does this live?" without a model call: a small exact map of paths, symbols, imports and calls, kept current in the background, queried with two lookups — find and gs.';
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'TechArticle',
+  headline: 'How the coldstart navigation layer works',
+  description,
+  url: 'https://coldstartmcp.dev/how-it-works/navigation/',
+  author: { '@type': 'Person', name: 'Akash Goenka' },
+  publisher: { '@type': 'Organization', name: 'coldstart' },
+  about: 'Code navigation for AI coding agents',
+  proficiencyLevel: 'Beginner',
+};
+---
+<html lang="en">
+<head>
+  <Head
+    title={title}
+    description={description}
+    keywords="code navigation, codebase index, find files, call graph, import graph, no embeddings, AI coding agents, coldstart, find, gs"
+    canonicalPath="/how-it-works/navigation/"
+    ogType="article"
+    ogTitle="How the navigation layer works — an exact map, no embeddings"
+    ogDescription="A small exact map of paths, symbols, imports and calls, kept current in the background, queried with two lookups. No embeddings, no API key, no waiting."
+    themeColor="#070a11"
+  />
+  <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+</head>
+<body class="how-page">
+<SvgDefs />
+<Nav variant="how" />
+
+<!-- ===================== HERO ===================== -->
+<header class="how-hero">
+  <div class="wrap">
+    <div class="how-eyebrow">The navigation layer · how it works</div>
+    <h1>Finding the right file shouldn't cost a <span class="cold">model call.</span></h1>
+    <p class="lead">
+      coldstart keeps a small, exact map of your repository — what exists, what it's called, and
+      what points at what — and answers <b>"where does this live?"</b> straight from that map. No
+      embeddings, no network, no waiting for a reply.
+    </p>
+    <a class="how-back" href="/#flow">← back to the navigation layer</a>
+  </div>
+</header>
+
+<!-- ===================== THE TEMPERATURE LINE ===================== -->
+<section class="how-sec">
+  <div class="wrap">
+    <div class="how-sec-head rv">
+      <h2>Two kinds of question. Only one is worth answering in advance.</h2>
+      <p>
+        Everything coldstart does follows from where it draws this line — and the line is the whole
+        design.
+      </p>
+    </div>
+
+    <!-- SIGNATURE FIGURE: the seam between what's kept exact and what's left to the model -->
+    <div class="temp-fig">
+      <div class="temp-seam" aria-hidden="true"></div>
+
+      <div class="temp-col cold">
+        <div class="temp-kick">Kept exact</div>
+        <h3>Facts with one right answer</h3>
+        <p>
+          These don't depend on what you're working on, so they're cheap to store and instant to
+          look up. coldstart keeps them, and keeps them current.
+        </p>
+        <div class="temp-items">
+          <div class="temp-item">what files exist</div>
+          <div class="temp-item">what they're named</div>
+          <div class="temp-item">what each one declares</div>
+          <div class="temp-item">what imports what</div>
+          <div class="temp-item">what calls what</div>
+        </div>
+      </div>
+
+      <div class="temp-col warm">
+        <div class="temp-kick">Left to the model</div>
+        <h3>Answers that depend on the task</h3>
+        <p>
+          These need judgement about the job in hand — and the thing asking is already a frontier
+          model. Deciding meaning ahead of time just makes a worse, staler copy of it.
+        </p>
+        <div class="temp-items">
+          <div class="temp-item">what this code means</div>
+          <div class="temp-item">whether it's the right approach</div>
+          <div class="temp-item">which of these actually matters here</div>
+          <div class="temp-item">what to change</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="temp-verdict rv">
+      That's why there's no vector database, no generated summaries, and no API key to paste.
+      <b>The semantic layer is the agent.</b> coldstart's job is to put the right files in front of
+      it, exactly and instantly, and then stay out of the way.
+    </div>
+  </div>
+</section>
+
+<!-- ===================== THE TWO LOOKUPS ===================== -->
+<section class="how-sec">
+  <div class="wrap">
+    <div class="how-sec-head rv">
+      <h2>Two lookups instead of a search party.</h2>
+      <p>
+        The usual failure mode isn't that an agent can't read code — it's that it opens three wrong
+        files first. The map turns that into one narrowing question, then one confirming one.
+      </p>
+    </div>
+
+    <div class="zoom">
+      <div class="zpan rv">
+        <div class="zpan-k">The map</div>
+        <div class="zpan-t">Everything, by name</div>
+        <div class="zbody">
+          every file path<br>
+          every symbol it declares<br>
+          every export<br>
+          <span class="hit">every import edge</span><br>
+          <span class="hit">every call edge</span>
+        </div>
+        <div class="zpan-foot">
+          Built once when you install, then patched in the background as you type. There's no index
+          command in your workflow.
+        </div>
+      </div>
+
+      <div class="zpan rv rv-d1">
+        <div class="zpan-k">Lookup one</div>
+        <div class="zpan-t"><code>find</code> — which files is this about?</div>
+        <div class="zbody">
+          <span class="hit">▸ src/auth/session.ts</span> <span class="dim">[3/3]</span><br>
+          <span class="dim">&nbsp;&nbsp;defines</span> signCookie, verify<br>
+          <span class="hit">▸ src/routes/login.ts</span> <span class="dim">[2/3]</span><br>
+          <span class="dim">&nbsp;&nbsp;imports</span> signCookie<br>
+          <span class="hit">▸ src/middleware/auth.ts</span> <span class="dim">[2/3]</span><br>
+          <span class="dim">&nbsp;&nbsp;imports</span> verify
+        </div>
+        <div class="zpan-foot">
+          You throw in every identifier you half-remember. It ranks files by how many of them are
+          really there — and says whether each file <i>defines</i> the term or only <i>imports</i>
+          it, so the top result is usually the answer.
+        </div>
+      </div>
+
+      <div class="zpan rv rv-d2">
+        <div class="zpan-k">Lookup two</div>
+        <div class="zpan-t"><code>gs</code> — what is this file, and who uses it?</div>
+        <div class="zbody">
+          <span class="warm">src/auth/session.ts</span><br>
+          &nbsp;&nbsp;signCookie<span class="dim">&nbsp;&nbsp;&nbsp;&nbsp;12–38</span><br>
+          &nbsp;&nbsp;verify<span class="dim">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;40–71</span><br>
+          &nbsp;&nbsp;rotateSecret<span class="dim">&nbsp;&nbsp;73–96</span><br>
+          <span class="dim">imported by</span><br>
+          &nbsp;&nbsp;routes/login.ts<br>
+          &nbsp;&nbsp;middleware/auth.ts
+        </div>
+        <div class="zpan-foot">
+          One file's shape: its symbols with line ranges, who imports it, who calls each one. This
+          is the real answer to "who uses this?" — not a grep for a name you might be spelling
+          differently.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== ALWAYS CURRENT ===================== -->
+<section class="how-sec">
+  <div class="wrap">
+    <div class="how-sec-head rv">
+      <h2>Current without being thought about.</h2>
+      <p>
+        A background process watches the repository and patches the map as you edit, so an agent
+        querying it sees the code you have right now, not the code you had at install time.
+        Switching branches reconciles in a few seconds. You never re-run anything, and there's
+        nothing to keep in sync by hand.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== CLOSE ===================== -->
+<section class="how-close">
+  <div class="wrap">
+    <div class="rv">
+      <h2>It works from the first lookup.</h2>
+      <p>
+        Unlike memory, navigation needs no warm-up — the map is built at install and useful
+        immediately.
+      </p>
+      <div class="how-cmds">npm install -g @cstart/coldstart<br><span>coldstart init</span></div>
+      <div class="how-next">
+        <a class="primary" href="/docs/">Read the docs</a>
+        <a class="ghost" href="/how-it-works/notebook/">How the notebook works →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<Footer variant="how" />
+
+<script>
+  (function () {
+    var els = document.querySelectorAll('.rv, .ring-fig, .temp-fig');
+    if (!('IntersectionObserver' in window)) {
+      els.forEach(function (el) { el.classList.add('in'); });
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.18, rootMargin: '0px 0px -8% 0px' });
+    els.forEach(function (el) { io.observe(el); });
+  })();
+</script>
+</body>
+</html>

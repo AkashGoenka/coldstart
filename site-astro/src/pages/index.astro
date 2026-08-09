@@ -44,6 +44,10 @@ const faqs = [
     q: 'What is the coldstart notebook?',
     a: 'The notebook is a durable set of notes the agent writes itself while it works, so what one session figures out about your codebase the next session already knows. Notes are anchored to real files and symbols and kept honest by the index, so they are flagged when the code they describe changes.',
   },
+  {
+    q: 'What happens to a note when the code changes, or the file is renamed or deleted?',
+    a: 'Every note records a fingerprint of the exact files it describes, and that fingerprint is re-checked against the live file every time the note is read. If nothing changed, the note reads `[fresh]` and can be used without re-opening the file. If the file changed, it is labelled `[evidence changed]` and the agent is told to re-verify before relying on it. If the file was renamed or moved, the note follows it as long as the content still matches. If the file is gone — deleted, or simply not on the branch you are on — the note goes quiet, and comes back by itself if the files do. None of this is a judgement call, so it runs on every read, in any language, with no model call.',
+  },
 ];
 
 const faqJsonLd = {
@@ -151,6 +155,8 @@ const faqJsonLd = {
       <span class="kk">Shared, it compounds</span>
       <p>Commit the notebook to your repo and the whole team feeds one corpus — union-merged across branches, no conflicts. Private by default; opt in with <code>coldstart init --commit-notebook</code>.</p>
     </div>
+
+    <a class="how-link warm" href="/how-it-works/notebook/">How the notebook loop works <span class="ar" aria-hidden="true">→</span></a>
   </div>
 </section>
 
@@ -228,6 +234,8 @@ const faqJsonLd = {
       <span class="kk">Measured, not promised</span>
       <p><b>−64% tokens on Arches</b> (Python/Django), <b>−31% on JMRI</b> (Java) — head-to-head against a no-tool baseline on real applications, recall equal or better in both. <a href="/blog/why-most-token-savings-tools-lie/">How we measured it →</a></p>
     </div>
+
+    <a class="how-link" href="/how-it-works/navigation/">How the index works <span class="ar" aria-hidden="true">→</span></a>
   </div>
 </section>
 

@@ -1,5 +1,5 @@
 ---
-interface Props { variant?: 'home' | 'docs' | 'blog' }
+interface Props { variant?: 'home' | 'docs' | 'blog' | 'how' }
 const { variant = 'docs' } = Astro.props;
 const installHref = variant === 'home' ? '#install' : '/#install';
 ---
