@@ -421,19 +421,32 @@ footer{border-top:1px solid var(--line);padding:50px 0;}
 /* ---------- how-it-works entry points (below notebook + navigation) ----------
    A small centred link-button, not a panel: it's a side door out of the section,
    so it must read as clickable without competing with the section's own content. */
-/* Raised, not recessed: on a dark ground a darker fill reads as a hole, so the
-   affordance comes from a slight lift + border. Tinted per section so it sits
-   correctly on both the warm (notebook) and cool (index) grounds. */
+/* Solid dark chip at rest, lifting on hover. The fill is OPAQUE and darker than
+   the section ground it sits on (warm variant darker than --warm-ground, cool
+   darker than --ink-1) so it reads as a distinct control rather than an outline;
+   full-strength text keeps it from looking faded. Hover raises the fill and warms
+   the border — a real state change, not a wash. */
 .how-link{
   display:flex;align-items:center;gap:9px;width:max-content;margin:34px auto 0;
-  padding:9px 17px;border:1px solid var(--line);border-radius:999px;
-  background:rgba(255,255,255,.045);
-  font-family:var(--mono);font-size:13px;color:var(--muted);text-decoration:none;
+  padding:10px 19px;border-radius:999px;
+  border:1px solid color-mix(in srgb,var(--frost) 32%,transparent);
+  background:color-mix(in srgb,var(--frost) 13%,var(--void));
+  box-shadow:0 1px 0 rgba(255,255,255,.05) inset, 0 6px 18px -10px rgba(0,0,0,.9);
+  font-family:var(--mono);font-size:13px;color:#b7e6f5;text-decoration:none;
   transition:color .16s,border-color .16s,background .16s;
 }
-.how-link.warm{border-color:var(--line-warm);background:rgba(255,214,170,.055);}
-.how-link:hover{color:var(--text);background:rgba(255,255,255,.085);border-color:var(--frost);}
-.how-link.warm:hover{background:rgba(255,214,170,.1);border-color:var(--ember);}
+.how-link:hover{
+  background:color-mix(in srgb,var(--frost) 22%,var(--void));
+  border-color:color-mix(in srgb,var(--frost) 62%,transparent);color:#fff;
+}
+.how-link.warm{
+  border-color:color-mix(in srgb,var(--ember) 34%,transparent);
+  background:color-mix(in srgb,var(--ember) 14%,#0b0806);color:#ffcfa4;
+}
+.how-link.warm:hover{
+  background:color-mix(in srgb,var(--ember) 23%,#0b0806);
+  border-color:color-mix(in srgb,var(--ember) 64%,transparent);color:#fff;
+}
 .how-link .ar{flex:none;transition:transform .16s,color .16s;}
 .how-link:hover .ar{transform:translateX(3px);color:var(--frost);}
 .how-link.warm:hover .ar{color:var(--ember);}
