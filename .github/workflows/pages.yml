@@ -23,6 +23,10 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history: the sitemap's <lastmod> comes from each source file's
+          # last commit date, which a shallow clone cannot provide.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 20
