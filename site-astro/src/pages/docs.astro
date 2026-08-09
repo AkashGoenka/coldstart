@@ -196,7 +196,7 @@ const techArticleJsonLd = {
 
       <h4 class="subhead">Why it can be trusted</h4>
       <ul class="tight">
-        <li><b>Freshness is mechanical.</b> Every anchor is stamped with a content hash at write time; the index re-checks it as the code changes. A drifted note renders <span class="pill changed"><span class="d"></span>evidence changed</span> and the guidance says re-verify — stale knowledge degrades into a labeled hypothesis, not a confident lie.</li>
+        <li><b>Freshness is mechanical.</b> Every anchor is stamped with a content hash at write time and re-checked against the live file on every read, so a drifted note renders <span class="pill changed"><span class="d"></span>evidence changed</span> instead of passing as fact. <a href="/how-it-works/notebook/" style="color:var(--frost)">What happens when a file changes, moves, or is deleted →</a></li>
         <li><b>The log is the truth.</b> Notes live in an append-only <code>.raw</code> event log; the Markdown notes are derived and regenerated mechanically. A note is a pure fold of its log.</li>
         <li><b>Writes go through a gate.</b> A new note's concept is searched against existing notes first — the agent must merge into a match or declare it new. Duplicates are caught at write time.</li>
         <li><b>Concurrent sessions are safe.</b> Per-note append-only logs, exclusive creation of new ids, lossless union-merge of shared notes, atomic renders — concurrent writers never silently merge or lose a note.</li>
