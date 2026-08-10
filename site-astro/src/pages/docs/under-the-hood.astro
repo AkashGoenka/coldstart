@@ -1,0 +1,175 @@
+---
+import Head from '../../layouts/Head.astro';
+import SvgDefs from '../../components/SvgDefs.astro';
+import Nav from '../../components/Nav.astro';
+import Footer from '../../components/Footer.astro';
+import DocsSidebar from '../../components/DocsSidebar.astro';
+import '../../styles/tailwind.css';
+import '../../styles/docs.css';
+import '../../styles/backdrop.css';
+
+const techArticleJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'TechArticle',
+  headline: 'Under the hood — index freshness & MCP tools | coldstart',
+  description: 'How coldstart\'s index stays fresh, lifecycle commands, MCP tool exposure, bring-your-own-semantics, and the supported-language set.',
+  url: 'https://coldstartmcp.dev/docs/under-the-hood/',
+  author: { '@type': 'Person', name: 'Akash Goenka' },
+  publisher: {
+    '@type': 'Organization',
+    name: 'coldstart'
+  },
+  about: 'Codebase memory for AI coding agents',
+  proficiencyLevel: 'Beginner'
+};
+---
+<html lang="en">
+<head>
+  <Head
+    title="Under the hood — index freshness & MCP tools | coldstart"
+    description="How coldstart's index stays fresh, lifecycle commands, MCP tool exposure, bring-your-own-semantics, and the supported-language set."
+    keywords="coldstart architecture, index freshness, MCP tools, tree-sitter languages, codebase index internals"
+    canonicalPath="/docs/under-the-hood/"
+    ogType="article"
+    ogDescription="How coldstart's index stays fresh, lifecycle commands, MCP tool exposure, bring-your-own-semantics, and the supported-language set."
+    themeColor="#070a11"
+  />
+  <script type="application/ld+json" set:html={JSON.stringify(techArticleJsonLd)} />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+</head>
+<body class="docs-page">
+<SvgDefs />
+<Nav variant="docs" />
+
+<div class="docs">
+  <DocsSidebar active="under-the-hood" />
+
+  <main class="content">
+    <div class="kicker">Under the hood</div>
+    <h1>How it stays current</h1>
+    <p class="lead-p">One background keeper watches the repo and patches an on-disk cache; readers never build. No cache TTL — the index is never discarded for being old, it's kept correct.</p>
+
+    <section id="freshness" class="doc-sec">
+      <h2>How the index stays fresh</h2>
+      <p>coldstart is <b>one keeper, thin readers</b>. A single background keeper watches the repo and keeps an on-disk cache current; the readers (<code>find</code>, <code>gs</code>, the MCP server) are stateless and never build. There is no cache TTL — the index is never discarded for being old, it's kept <em>correct</em>.</p>
+      <div class="diagram">
+        <svg viewBox="0 0 900 300" role="img" aria-label="Architecture: a single keeper watches the repo and saves an on-disk cache; three stateless readers read that cache">
+          <defs><marker id="ah2" markerWidth="9" markerHeight="9" refX="6" refY="4.5" orient="auto"><path class="d-arrowhead" d="M0,0 L9,4.5 L0,9 z"/></marker></defs>
+          <rect class="d-box d-frost" x="250" y="20" width="400" height="76" rx="10" stroke-width="2"/>
+          <text class="d-label" x="270" y="50">keeper — coldstart --daemon</text>
+          <text class="d-sub" x="270" y="74">watches repo → patch/rebuild → saves cache · serves nothing</text>
+          <rect class="d-box" x="370" y="130" width="160" height="44" rx="8"/>
+          <text class="d-cmd" x="450" y="157" text-anchor="middle">on-disk cache</text>
+          <path class="d-arrow" d="M450,98 L450,128" marker-end="url(#ah2)"/>
+          <path class="d-arrow" d="M450,176 L180,224" marker-end="url(#ah2)"/>
+          <path class="d-arrow" d="M450,176 L450,224" marker-end="url(#ah2)"/>
+          <path class="d-arrow" d="M450,176 L720,224" marker-end="url(#ah2)"/>
+          <rect class="d-box" x="70" y="230" width="210" height="50" rx="8"/><text class="d-cmd" x="175" y="252" text-anchor="middle">coldstart find</text><text class="d-sub" x="175" y="270" text-anchor="middle">reads cache, prints</text>
+          <rect class="d-box" x="345" y="230" width="210" height="50" rx="8"/><text class="d-cmd" x="450" y="252" text-anchor="middle">coldstart gs</text><text class="d-sub" x="450" y="270" text-anchor="middle">reads cache, prints</text>
+          <rect class="d-box" x="620" y="230" width="210" height="50" rx="8"/><text class="d-cmd" x="725" y="252" text-anchor="middle">MCP server</text><text class="d-sub" x="725" y="270" text-anchor="middle">reads cache, stdio</text>
+        </svg>
+      </div>
+      <div class="fgrid">
+        <div class="fcard"><div class="fnum">WHILE RUNNING</div><h4>Patched as you type</h4><p>Edits debounce (400 ms), then patch incrementally (~2–5 ms/file) or trigger a background rebuild. Re-saved in atomic generations — a reader never loads a half-written mix.</p></div>
+        <div class="fcard"><div class="fnum">ON START</div><h4>Reconciled, not rebuilt</h4><p>Stat-checks every file against its fingerprint plus a git diff, and patches exactly what changed. A branch switch that used to force a full rebuild is now typically a few seconds.</p></div>
+        <div class="fcard"><div class="fnum">AS A BACKSTOP</div><h4>Linted &amp; audited</h4><p>Every patch is checked against index invariants (a violation auto-rebuilds), and a rotating fingerprint audit after each save catches watcher-missed drift.</p></div>
+      </div>
+      <div class="callout"><span class="ct">Full internals</span>The exact pipeline (walk → parse → resolve → graph → cache) and per-language resolver notes live in <b>ARCHITECTURE.md</b> on <a href="https://github.com/AkashGoenka/coldstart">GitHub</a>.</div>
+    </section>
+
+    <section id="lifecycle" class="doc-sec">
+      <h2>Lifecycle commands</h2>
+      <div class="flags">
+        <div class="flag-row"><span class="fk">coldstart status</span><span class="fv">Keepers on this machine: alive? fresh? last operations? It also reports install health — if any keeper is running an older version than the installed binary, run <code>coldstart restart</code>; if a repo's wired hook paths no longer exist (node/nvm change), run <code>coldstart init</code> there.</span></div>
+        <div class="flag-row"><span class="fk">coldstart restart</span><span class="fv">Kill the current repo's keeper (respawns on next lookup). <code>--root DIR</code> targets another repo; <code>--all</code> kills every keeper. A fresh keeper reconciles on start, so it comes back correct, not just alive.</span></div>
+        <div class="flag-row"><span class="fk">coldstart index</span><span class="fv">Build + save the cache once, up front (single-writer prep).</span></div>
+        <div class="flag-row"><span class="fk">coldstart --version</span><span class="fv">Print the installed version and exit (<code>-v</code> works too).</span></div>
+      </div>
+      <div class="callout"><span class="ct">When anything feels stale</span>Run <code>coldstart restart</code> first. If an update doesn't seem to have taken effect, <code>coldstart status</code> tells you whether the keeper is on the old version (restart it), a hook path is dangling (re-run init), or the install didn't update. <b>TROUBLESHOOTING.md</b> on GitHub has recovery steps.</div>
+    </section>
+
+    <section id="mcp" class="doc-sec">
+      <h2>MCP tools</h2>
+      <p>For no-shell clients (like Claude Desktop), the same engine is exposed as MCP tools with byte-identical output to the CLI.</p>
+      <div class="flags">
+        <div class="flag-row"><span class="fk">find · gs</span><span class="fv">The two navigation operations.</span></div>
+        <div class="flag-row"><span class="fk">kb_search · kb_lookup</span><span class="fv">Read the notebook.</span></div>
+        <div class="flag-row"><span class="fk">kb_write · kb_status · kb_repair · kb_repair_aliases</span><span class="fv">Write to and inspect the notebook. <code>kb_repair</code> lists notes that are written but unfindable; <code>kb_repair_aliases</code> lists notes whose aliases may no longer be true.</span></div>
+      </div>
+      <div class="callout"><span class="ct">Not exposed</span><code>kb commit</code> and <code>kb view</code> stay CLI/human-only — publishing to git and opening a browser are never agent actions.</div>
+    </section>
+
+    <section id="semantics" class="doc-sec">
+      <h2>Bring your own semantics</h2>
+      <p>coldstart has no embeddings, no generated summaries, no semantic layer computed at index time — <b>on purpose. The semantic layer is the agent.</b> The index keeps what's cheap to keep exact — paths, symbols, exports, the import/call graph — and returns why each file ranked. The notebook applies the same rule to memory: it stores and freshness-checks the meaning agents author, and computes none of its own.</p>
+      <div class="callout"><span class="ct">Read the argument</span>The full case is in <b>PHILOSOPHY.md</b> on <a href="https://github.com/AkashGoenka/coldstart">GitHub</a>, or see how this plays out against <a href="/vs/vector-rag/">vector RAG specifically</a>.</div>
+    </section>
+
+    <section id="languages" class="doc-sec">
+      <h2>Supported languages</h2>
+      <p>Tree-sitter for the parsed set; the notebook's content-hash freshness works on all of them — notes on a Swift repo are as trustworthy as notes on a TypeScript one (they just lack symbol-level freshness).</p>
+      <div class="langs">
+        <span class="chip">TypeScript</span><span class="chip">JavaScript</span><span class="chip">JSX / TSX</span>
+        <span class="chip">Vue</span><span class="chip">Svelte</span><span class="chip">Astro</span><span class="chip">AngularJS</span>
+        <span class="chip">Python</span><span class="chip">Ruby (Rails)</span><span class="chip">Go</span><span class="chip">Rust</span>
+        <span class="chip">Java</span><span class="chip">Kotlin</span><span class="chip">C#</span><span class="chip">PHP (Laravel)</span><span class="chip">C++</span>
+        <span class="chip">Groovy / Gradle</span><span class="chip">GraphQL</span><span class="chip">YAML</span><span class="chip">TOML</span><span class="chip">XML</span><span class="chip">.env</span>
+      </div>
+      <p style="margin-top:16px;font-size:14px"><b>Not indexed:</b> Swift, Dart — no extension mapping; these files aren't walked or parsed. The notebook still works on them.</p>
+    </section>
+  </main>
+</div>
+
+<hr class="thread" />
+<Footer variant="docs" />
+
+<script>
+  (function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('.side a[href^="#"]'));
+    if (!links.length || !('IntersectionObserver' in window)) return;
+    var byId = {};
+    links.forEach(function (a) { byId[a.getAttribute('href').slice(1)] = a; });
+    var visible = new Set();
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) visible.add(e.target.id); else visible.delete(e.target.id);
+      });
+      var top = null, topY = Infinity;
+      visible.forEach(function (id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        var y = el.getBoundingClientRect().top;
+        if (y < topY) { topY = y; top = id; }
+      });
+      links.forEach(function (a) { a.classList.remove('active'); });
+      if (top && byId[top]) {
+        byId[top].classList.add('active');
+        var sideEl = byId[top].closest('.side');
+        if (sideEl && sideEl.scrollHeight > sideEl.clientHeight) {
+          byId[top].scrollIntoView({ block: 'nearest' });
+        }
+      }
+    }, { rootMargin: '-70px 0px -70% 0px', threshold: 0 });
+    document.querySelectorAll('.doc-sec').forEach(function (s) { obs.observe(s); });
+  })();
+
+  (function () {
+    var toggle = document.getElementById('sideToggle');
+    var list = document.getElementById('sideList');
+    if (!toggle || !list) return;
+    toggle.addEventListener('click', function () {
+      var open = list.classList.toggle('open');
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    list.querySelectorAll('a').forEach(function (a) {
+      a.addEventListener('click', function () {
+        list.classList.remove('open');
+        toggle.setAttribute('aria-expanded', 'false');
+      });
+    });
+  })();
+</script>
+</body>
+</html>

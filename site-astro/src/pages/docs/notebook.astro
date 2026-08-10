@@ -1,0 +1,276 @@
+---
+import Head from '../../layouts/Head.astro';
+import SvgDefs from '../../components/SvgDefs.astro';
+import Nav from '../../components/Nav.astro';
+import Footer from '../../components/Footer.astro';
+import DocsSidebar from '../../components/DocsSidebar.astro';
+import '../../styles/tailwind.css';
+import '../../styles/docs.css';
+import '../../styles/backdrop.css';
+
+const techArticleJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'TechArticle',
+  headline: 'The kb notebook — coldstart reference | coldstart',
+  description: 'Reference for coldstart\'s kb command family: search, lookup, write, commit, view, and sharing a notebook with a team.',
+  url: 'https://coldstartmcp.dev/docs/notebook/',
+  author: { '@type': 'Person', name: 'Akash Goenka' },
+  publisher: {
+    '@type': 'Organization',
+    name: 'coldstart'
+  },
+  about: 'Notebook and memory for AI coding agents',
+  proficiencyLevel: 'Beginner'
+};
+---
+<html lang="en">
+<head>
+  <Head
+    title="The kb notebook — coldstart reference | coldstart"
+    description="Reference for coldstart's kb command family: search, lookup, write, commit, view, and sharing a notebook with a team."
+    keywords="coldstart kb, codebase notebook, agent memory, persistent memory, kb search, kb write, AI coding agents"
+    canonicalPath="/docs/notebook/"
+    ogType="article"
+    ogDescription="Reference for coldstart's kb command family: search, lookup, write, commit, view, and sharing a notebook with a team."
+    themeColor="#070a11"
+  />
+  <script type="application/ld+json" set:html={JSON.stringify(techArticleJsonLd)} />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+</head>
+<body class="docs-page">
+<SvgDefs />
+<Nav variant="docs" />
+
+<div class="docs">
+  <DocsSidebar active="notebook" />
+
+  <main class="content">
+    <div class="kicker">Notebook</div>
+    <h1>The kb notebook</h1>
+    <p class="lead-p">A repo-local knowledge base written and read by agents — durable notes kept honest by the index, recalled automatically when a later task matches. <a href="/how-it-works/notebook/">Why it's built this way →</a></p>
+
+    <section id="notebook" class="doc-sec">
+      <h2>The notebook, in depth</h2>
+      <p>A repo-local knowledge base, written and read by agents, living in <code>.coldstart/notebook/</code>. It's the one place semantics belong: authored by the agent that just did the work, kept honest by the index, and recalled when a later task matches. <b>No human writes or grooms it.</b></p>
+
+      <h4 class="subhead">What a note is</h4>
+      <div class="types">
+        <div class="tcard file"><div class="tt">File note</div><p>What a file is for — a single summary, or per-symbol facets for hub files.</p></div>
+        <div class="tcard flow"><div class="tt">Flow note</div><p>A cross-file story: ordered steps and the invariants that hold across them.</p></div>
+        <div class="tcard lesson"><div class="tt">Lesson</div><p>A trap, rule, bug-cause, rationale, or a confirmed <em>absence</em>.</p></div>
+      </div>
+      <p style="margin-top:18px">Every note carries <b>anchors</b> — the concrete file paths and symbols its claims rest on. Anchors are what make a note checkable rather than a floating assertion.</p>
+
+      <h4 class="subhead">Where notes reach the agent</h4>
+      <ul class="tight">
+        <li><b>Summary lines on <code>find</code> results</b> — a past agent's verified overview, right where the file ranks. <span class="pill fresh"><span class="d"></span>fresh</span> means the file is byte-identical to when the summary was verified.</li>
+        <li><b>Recall at prompt time</b> — injected straight into the agent's context as a compact block before it acts. Matching notes arrive automatically; nothing matches means nothing injected.</li>
+        <li><b><code>kb search</code> / <code>kb lookup</code></b> — search the notebook and exact-address lookup before editing a file.</li>
+      </ul>
+
+      <h4 class="subhead">Why it can be trusted</h4>
+      <ul class="tight">
+        <li><b>Freshness is mechanical.</b> Every anchor is stamped with a content hash at write time and re-checked on every read. A drifted note renders <span class="pill changed"><span class="d"></span>evidence changed</span> instead of passing as fact.</li>
+        <li><b>The log is the truth.</b> Notes live in an append-only <code>.raw</code> event log; the Markdown notes are derived and regenerated mechanically.</li>
+        <li><b>Writes go through a gate.</b> A new note's concept is searched against existing notes first — duplicates are caught at write time.</li>
+        <li><b>Concurrent sessions are safe.</b> Per-note append-only logs, exclusive creation of new ids, lossless union-merge, atomic renders — concurrent writers never silently merge or lose a note.</li>
+        <li><b>Corrections happen in-session.</b> An agent that finds a note wrong while the evidence is in context fixes or retracts it right then.</li>
+      </ul>
+
+      <div class="callout"><span class="ct">On token savings</span>Because the next agent recalls a verified note instead of re-deriving it, repeated tasks re-spend far fewer tokens orienting. In head-to-head benchmarks on real applications: <b>−64% tokens on Arches</b> (Python/Django, 27-query sweep) and <b>−31% tokens on JMRI</b> (Java, 25-query sweep). Cost scales with turns, not output size.</div>
+
+      <p style="margin-top:22px"><b>Language-agnostic.</b> The freshness machinery is content-hash based, so the notebook works on any codebase — including languages the navigation index doesn't parse.</p>
+
+      <h4 class="subhead">When capture happens</h4>
+      <p>Capture is <b>trigger-timed</b>, not every-turn. The hook keeps evidence of what the session actually read or edited (search hits and path mentions never count), scores the uncaptured backlog, and asks at natural boundaries — when a burst of work settles, or a commit lands. Most turns end silently.</p>
+      <p>The ask itself is <b>non-blocking</b>: it arrives with your next prompt as a short worklist of the files the session worked with, each annotated with its existing note's state. That worklist is also written durably to <code>.coldstart/notebook/.worklist-&lt;session&gt;-&lt;agent&gt;.md</code>, so a long session can re-read it after the one-shot delivery scrolls away.</p>
+      <div class="flags" style="margin-top:16px">
+        <div class="flag-row"><span class="fk">Worklist lifecycle</span><span class="fv">Trims as notes are written, regenerates on the next capture. A missed file simply reappears rather than being lost.</span></div>
+        <div class="flag-row"><span class="fk">Per-agent keying</span><span class="fv">The main agent and each subagent it spawns share one session id but get their own worklist, so a subagent's capture never overwrites the main agent's list.</span></div>
+        <div class="flag-row"><span class="fk">Freshness benefit</span><span class="fv">Files whose notes are already fresh don't re-trigger capture, so a warmed-up repo asks less over time. Brand-new notebooks warm with use.</span></div>
+      </div>
+
+      <h4 class="subhead"><code>/capture-notes</code> — capture on demand</h4>
+      <p>Sometimes you know a moment is worth recording before the automatic score crosses — a hard-won insight, a confirmed absence, a decision that didn't touch many files. <code>/capture-notes</code> fires the capture flow immediately, with the same worklist and gate. It never forces a write.</p>
+      <p style="margin-top:12px"><code>coldstart init</code> wires it for your client: <b>Claude Code</b> and <b>Cursor</b> get a <code>/capture-notes</code> slash command; <b>Codex</b> gets a <code>capture-notes</code> skill. All three run the same one-liner, so it also works by hand:</p>
+      <div class="term">
+        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">capture on demand</span></div>
+        <div class="term-body">
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">node &lt;install&gt;/hooks/kb-elicit.mjs</span> <span class="c-flag">--manual</span>   <span class="c-dim"># prints the capture checklist for this session</span></span>
+        </div>
+      </div>
+
+      <h4 class="subhead"><code>.coldstartignore</code> — files that never get notes</h4>
+      <p><code>coldstart init</code> scaffolds <code>.coldstart/.coldstartignore</code> (gitignore syntax). Built-in defaults are <code>*.json</code>, lockfiles, <code>dist/</code>/<code>build/</code>/<code>coverage/</code>, minified files, binaries and images, and <code>.env*</code> (notes are committed; secrets must never enter them). Every collaborator gets that baseline; lines you add extend it on your machine.</p>
+      <div class="term" style="margin-top:14px">
+        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">.coldstart/.coldstartignore</span></div>
+        <div class="term-body">
+<span class="ln"><span class="c-dim"># add your own</span></span>
+<span class="ln">*.generated.ts</span>
+<span class="ln">docs/</span>
+<span class="ln"><span class="c-dim"># re-include a built-in default</span></span>
+<span class="ln">!tsconfig.json</span>
+        </div>
+      </div>
+      <p style="margin-top:12px">Ignored files are filtered at the root — they never appear in a capture worklist. Logic-bearing configs (<code>vite.config.ts</code>, CI workflows, <code>routes.rb</code>) are deliberately <em>not</em> ignored by default: they carry exactly the gotchas notes exist for.</p>
+    </section>
+
+    <section id="kb-search" class="doc-sec">
+      <div class="cmd">
+        <div class="name"><span class="c">coldstart kb search</span> <span class="badge">notebook</span></div>
+        <div class="sig">coldstart kb search &lt;terms…&gt; [--max N]</div>
+        <div class="desc">Search the notebook with plain task words, symbols, or file names. Returns ranked notes — the mid-task tool when your vocabulary shifts.</div>
+      </div>
+      <div class="term">
+        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">coldstart kb search</span></div>
+        <div class="term-body">
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart kb search</span> tile save lifecycle</span>
+<span class="gap"></span>
+<span class="ln"><span class="c-ember">tile-save-lifecycle</span>  <span class="c-dim">flow · [fresh]</span></span>
+<span class="ln"><span class="c-ember">src/models.py · Tile</span>  <span class="c-dim">file · [fresh]</span></span>
+        </div>
+      </div>
+    </section>
+
+    <section id="kb-lookup" class="doc-sec">
+      <div class="cmd">
+        <div class="name"><span class="c">coldstart kb lookup</span> <span class="badge">notebook</span></div>
+        <div class="sig">coldstart kb lookup &lt;path&gt; [symbol]</div>
+        <div class="desc">Everything known at one exact address. Run it before editing a file to pull the note (and per-symbol facets) that apply to exactly that path.</div>
+      </div>
+      <div class="term">
+        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">coldstart kb lookup</span></div>
+        <div class="term-body">
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart kb lookup</span> src/models.py Tile</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="kb-write" class="doc-sec">
+      <div class="cmd">
+        <div class="name"><span class="c">coldstart kb write</span> <span class="badge">notebook · the gate</span></div>
+        <div class="sig">coldstart kb write &lt;spec.json | array.json | -&gt; [--into &lt;id&gt; | --new]</div>
+        <div class="desc">The write gate. A two-phase, dedup-first path: the note's concept is checked against existing notes before anything is written.</div>
+      </div>
+      <ul class="tight">
+        <li><b>Batch is the capture path.</b> The spec file may be a JSON array of notes, written in one call: well-formed notes land, malformed ones are reported together, and the call ends naming any worked file still without a note.</li>
+        <li>A single new flow/lesson exits 3 with candidate matches. Resolve it with <code>--into &lt;id&gt;</code> (merge) or <code>--new</code> (declare it new).</li>
+        <li>Reads a spec file, or <code>-</code> to stream from stdin.</li>
+        <li>Correct a note: <code>&#123;"op":"retract","id":"&lt;id&gt;","target":&#123;"kind":"note"&#125;&#125;</code> removes it, or target one part with <code>target:&#123;kind:"anchor"|"alias"…, key:"…"&#125;</code>.</li>
+        <li>Freshly-coined ids are created exclusively — a same-moment duplicate becomes two notes, never a silent merge.</li>
+      </ul>
+      <div class="callout"><span class="ct">Agent-facing</span>This is the command the capture hook drives. You rarely type it by hand.</div>
+    </section>
+
+    <section id="kb-commit" class="doc-sec">
+      <div class="cmd">
+        <div class="name"><span class="c">coldstart kb commit</span> <span class="badge">notebook · human-only</span></div>
+        <div class="sig">coldstart kb commit</div>
+        <div class="desc">The one sanctioned git path for the notebook. Commits only the <code>.raw</code> logs and skeleton — never your feature code, and notes never ride along in a feature commit.</div>
+      </div>
+      <div class="callout"><span class="ct">Never an agent action</span><code>kb commit</code> is CLI/human-only and is <b>not</b> exposed as an MCP tool. Publishing notes to git is a human decision.</div>
+    </section>
+
+    <section id="kb-view" class="doc-sec">
+      <div class="cmd">
+        <div class="name"><span class="c">coldstart kb view</span> <span class="badge">notebook · human-only</span></div>
+        <div class="sig">coldstart kb view [--no-open]</div>
+        <div class="desc">Generate a single self-contained HTML browser of the whole notebook and open it in your default browser. No server — one file, freshness stamped at generation time.</div>
+      </div>
+      <div class="term">
+        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">coldstart kb view</span></div>
+        <div class="term-body">
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart kb view</span></span>
+<span class="ln"><span class="c-hit">✓</span> <span class="c-dim">kb view: wrote .coldstart/notebook/index.html — opening in browser</span></span>
+        </div>
+      </div>
+      <div class="flags">
+        <div class="flag-row"><span class="fk">--no-open</span><span class="fv">Write <code>index.html</code> but don't launch the browser.</span></div>
+      </div>
+      <p style="margin-top:18px">Once generated, the keeper re-renders it whenever notes change, so a browser reload shows the latest — you don't re-run the command.</p>
+    </section>
+
+    <section id="kb-maint" class="doc-sec">
+      <div class="cmd">
+        <div class="name"><span class="c">coldstart kb status / lint / repair / repair-aliases / render</span> <span class="badge">notebook</span></div>
+      </div>
+      <div class="flags">
+        <div class="flag-row"><span class="fk">kb status</span><span class="fv">Notebook health: note counts and per-note freshness at a glance.</span></div>
+        <div class="flag-row"><span class="fk">kb lint</span><span class="fv">Check the notebook for structural problems (broken anchors, malformed notes).</span></div>
+        <div class="flag-row"><span class="fk">kb repair</span><span class="fv">List the notes that are written but unfindable — missing fields a note can't be retrieved without (search aliases, anchor symbols, a flow's verified paths). It prints a worklist and changes nothing: your agent opens each note and the code it names and completes it with an ordinary <code>kb write</code>.</span></div>
+        <div class="flag-row"><span class="fk">kb repair-aliases</span><span class="fv">Notes whose <code>identityAliases</code> may no longer describe the file/flow (stale words from an earlier write) — not notes missing aliases entirely. Shows each note's current aliases, 10 per page, and changes nothing itself.</span></div>
+        <div class="flag-row"><span class="fk">kb render</span><span class="fv">Regenerate the derived Markdown notes from the <code>.raw</code> logs.</span></div>
+        <div class="flag-row"><span class="fk">kb init</span><span class="fv">Notebook-only setup. Redundant if you ran <code>coldstart init</code>, which already does this.</span></div>
+        <div class="flag-row"><span class="fk">kb migrate</span><span class="fv">Upgrade an older notebook's on-disk format.</span></div>
+      </div>
+    </section>
+
+    <section id="sharing" class="doc-sec">
+      <h2>Sharing with a team</h2>
+      <p>The notebook is <b>private by default</b> — <code>.coldstart/</code> is gitignored. Opt in to sharing and the whole team's agents contribute to one growing corpus.</p>
+      <div class="term">
+        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">share the notebook</span></div>
+        <div class="term-body">
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart init</span> <span class="c-flag">--commit-notebook</span>   <span class="c-dim"># make .raw committable</span></span>
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart kb commit</span>              <span class="c-dim"># publish notes to git</span></span>
+        </div>
+      </div>
+      <p style="margin-top:16px">Once committed, the <code>.raw</code> logs travel with the repo and <b>union-merge across branches and machines</b> — parallel branches of notes reconcile without conflicts. Every teammate's agent both reads from and writes to the same notebook, so the corpus grows at the speed of the whole team.</p>
+      <div class="callout"><span class="ct">Bigger notebooks, faster</span>The corpus grows exactly where the codebase gets worked. On a shared repo, that's every engineer's sessions feeding one knowledge base — and because each note stays anchored to the code, growth stays true instead of rotting.</div>
+    </section>
+  </main>
+</div>
+
+<hr class="thread" />
+<Footer variant="docs" />
+
+<script>
+  (function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('.side a[href^="#"]'));
+    if (!links.length || !('IntersectionObserver' in window)) return;
+    var byId = {};
+    links.forEach(function (a) { byId[a.getAttribute('href').slice(1)] = a; });
+    var visible = new Set();
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) visible.add(e.target.id); else visible.delete(e.target.id);
+      });
+      var top = null, topY = Infinity;
+      visible.forEach(function (id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        var y = el.getBoundingClientRect().top;
+        if (y < topY) { topY = y; top = id; }
+      });
+      links.forEach(function (a) { a.classList.remove('active'); });
+      if (top && byId[top]) {
+        byId[top].classList.add('active');
+        var sideEl = byId[top].closest('.side');
+        if (sideEl && sideEl.scrollHeight > sideEl.clientHeight) {
+          byId[top].scrollIntoView({ block: 'nearest' });
+        }
+      }
+    }, { rootMargin: '-70px 0px -70% 0px', threshold: 0 });
+    document.querySelectorAll('.doc-sec').forEach(function (s) { obs.observe(s); });
+  })();
+
+  (function () {
+    var toggle = document.getElementById('sideToggle');
+    var list = document.getElementById('sideList');
+    if (!toggle || !list) return;
+    toggle.addEventListener('click', function () {
+      var open = list.classList.toggle('open');
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    list.querySelectorAll('a').forEach(function (a) {
+      a.addEventListener('click', function () {
+        list.classList.remove('open');
+        toggle.setAttribute('aria-expanded', 'false');
+      });
+    });
+  })();
+</script>
+</body>
+</html>

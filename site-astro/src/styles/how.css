@@ -12,7 +12,7 @@ body.how-page {
   --paper: #e5d9bd;
   --paper-ink: #2a2620;
   --paper-line: #c7b790;
-  --faint: #5d6b83;
+  --faint: #7a8aa3;
   --ember-dim: #a86a35;
 }
 
@@ -177,6 +177,60 @@ body.how-page {
 .how-aside { margin-top: 40px; padding-top: 30px; border-top: 1px solid var(--line); max-width: 680px; }
 .how-aside h3 { font-family: var(--display); font-weight: 400; font-size: 21px; letter-spacing: -.01em; margin-bottom: 10px; }
 .how-aside p { color: var(--muted); font-size: 15.5px; }
+
+/* ============================================================
+   NOTEBOOK MOCK — a built (not screenshotted) recreation of `kb view`
+   ============================================================ */
+.nb-mock { margin: 0; }
+.nb-mock figcaption { margin-top: 14px; font-size: 13.5px; color: var(--muted); text-align: center; }
+.nb-mock figcaption code { color: var(--frost); }
+
+.nbm-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 20px;
+  padding: 16px 22px; border: 1px solid var(--line); border-bottom: none;
+  border-radius: 14px 14px 0 0; background: var(--surface);
+}
+.nbm-brand { display: flex; flex-direction: column; gap: 2px; }
+.nbm-kick { font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.nbm-name { font-family: var(--display); font-size: 16px; display: flex; align-items: center; gap: 8px; }
+.nbm-dot { width: 8px; height: 8px; border-radius: 50%; background: radial-gradient(circle at 34% 30%, var(--ember), var(--frost)); }
+.nbm-stats { display: flex; align-items: center; gap: 16px; font-size: 12.5px; color: var(--muted); }
+.nbm-stats b { color: var(--ink); font-size: 14px; }
+.nbm-bar { width: 60px; height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; display: inline-block; }
+.nbm-bar i { display: block; width: 50%; height: 100%; background: linear-gradient(90deg, var(--ok), var(--ember)); }
+.nbm-fresh { color: var(--ink); }
+
+.nbm-body {
+  display: grid; grid-template-columns: 200px 1fr;
+  border: 1px solid var(--line); border-radius: 0 0 14px 14px; overflow: hidden;
+  box-shadow: 0 20px 60px -20px rgba(0,0,0,.5);
+}
+.nbm-side { background: var(--surface); border-right: 1px solid var(--line); padding: 14px 10px; }
+.nbm-search {
+  font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 7px;
+  padding: 7px 10px; margin-bottom: 12px; background: var(--surface-2);
+}
+.nbm-file { font-family: var(--mono); font-size: 12.5px; color: var(--muted); padding: 6px 10px; border-radius: 6px; }
+.nbm-file.active { color: var(--frost); background: color-mix(in srgb, var(--frost) 10%, transparent); }
+
+.nbm-main { padding: 26px 30px 30px; background: var(--bg); }
+.nbm-crumb { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--frost); margin-bottom: 8px; }
+.nbm-title { font-family: var(--mono); font-size: 20px; font-weight: 600; color: var(--ink); margin-bottom: 8px; }
+.nbm-meta { font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 8px; margin-bottom: 22px; }
+.nbm-pill { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--ok); background: var(--ok-bg); border-radius: 999px; padding: 2px 9px; }
+.nbm-anchors { border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin-bottom: 22px; background: var(--surface-2); }
+.nbm-anchor-head { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+.nbm-anchor-row { display: flex; align-items: center; justify-content: space-between; font-size: 14px; margin-bottom: 12px; }
+.nbm-anchor-row code b { color: var(--frost); }
+.nbm-syms { display: flex; gap: 8px; flex-wrap: wrap; }
+.nbm-syms span { font-family: var(--mono); font-size: 12px; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px; }
+.nbm-note-head { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+.nbm-note { font-size: 14.5px; line-height: 1.65; color: var(--ink); max-width: 68ch; }
+
+@media (max-width: 640px) {
+  .nbm-side { display: none; }
+  .nbm-body { grid-template-columns: 1fr; }
+}
 
 /* ============================================================
    SIGNATURE 2 — the temperature seam (navigation page)
