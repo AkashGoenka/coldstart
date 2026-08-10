@@ -62,7 +62,7 @@ The determinism problem is quieter but I think it matters more for a tool an age
 
 Files already declare their own identity. A filename, the segments of its path, the names it exports. Most of the time, the thing you're looking for is named close to what you'd call it, because someone wrote that name for exactly the reason you're now searching for it: so the next person reading the codebase could find it. coldstart ranks files by how many of your query terms they actually cover, using that declared identity plus a real repo-wide grep pass, backed by ripgrep where it's available, git grep where it isn't.
 
-This is a worse tool than embeddings for a genuinely fuzzy conceptual query, one where nothing in your vocabulary overlaps with anything in the file. I don't think that's a gap worth pretending away. If you want that kind of retrieval, point an embedding-based tool at the same repo. coldstart isn't trying to be the same thing done differently, it's trying to be exact where exactness is available, and honest about the rest.
+This is a worse tool than embeddings for a genuinely fuzzy conceptual query, one where nothing in your vocabulary overlaps with anything in the file. I don't think that's a gap worth pretending away. If you want that kind of retrieval, point an embedding-based tool at the same repo. coldstart isn't trying to be the same thing done differently, it's trying to be exact where exactness is available, and honest about the rest. ([More on where that line actually falls.](/vs/vector-rag/))
 
 ## Why the tradeoff wins for the common case
 

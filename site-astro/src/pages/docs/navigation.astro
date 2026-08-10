@@ -1,0 +1,156 @@
+---
+import Head from '../../layouts/Head.astro';
+import SvgDefs from '../../components/SvgDefs.astro';
+import Nav from '../../components/Nav.astro';
+import Footer from '../../components/Footer.astro';
+import DocsSidebar from '../../components/DocsSidebar.astro';
+import '../../styles/tailwind.css';
+import '../../styles/docs.css';
+import '../../styles/backdrop.css';
+
+const techArticleJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'TechArticle',
+  headline: 'find & gs — coldstart navigation reference | coldstart',
+  description: 'Reference for coldstart\'s find and gs: rank candidate files for a concept, then inspect one file\'s symbols, importers, and callers.',
+  url: 'https://coldstartmcp.dev/docs/navigation/',
+  author: { '@type': 'Person', name: 'Akash Goenka' },
+  publisher: {
+    '@type': 'Organization',
+    name: 'coldstart'
+  },
+  about: 'Navigation for AI coding agents',
+  proficiencyLevel: 'Beginner'
+};
+---
+<html lang="en">
+<head>
+  <Head
+    title="find & gs — coldstart navigation reference | coldstart"
+    description="Reference for coldstart's find and gs: rank candidate files for a concept, then inspect one file's symbols, importers, and callers."
+    keywords="coldstart find, coldstart gs, code navigation, call graph, import graph, codebase index, AI coding agents"
+    canonicalPath="/docs/navigation/"
+    ogType="article"
+    ogDescription="Reference for coldstart's find and gs: rank candidate files for a concept, then inspect one file's symbols, importers, and callers."
+    themeColor="#070a11"
+  />
+  <script type="application/ld+json" set:html={JSON.stringify(techArticleJsonLd)} />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+</head>
+<body class="docs-page">
+<SvgDefs />
+<Nav variant="docs" />
+
+<div class="docs">
+  <DocsSidebar active="navigation" />
+
+  <main class="content">
+    <div class="kicker">Navigation</div>
+    <h1>find &amp; gs</h1>
+    <p class="lead-p">Two lookups answer "where does this live?" and "what is this file?" without a model call — rank candidate files for a concept, then inspect one file's symbols, importers, and callers. <a href="/how-it-works/navigation/">Why it's built this way →</a></p>
+
+    <section id="find" class="doc-sec">
+      <div class="cmd">
+        <div class="name"><span class="c">coldstart find</span> <span class="badge">navigation</span></div>
+        <div class="sig">coldstart find &lt;term&gt; [term…] [flags]</div>
+        <div class="desc"><b>Which files are about this?</b> Ranks files by how many of your query terms each covers — filenames, path segments, exported symbols, plus a repo-wide name-reference pass — and shows <em>why</em> each ranked: which terms it defines vs. imports.</div>
+      </div>
+      <div class="term">
+        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">coldstart find</span></div>
+        <div class="term-body">
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart find</span> auth session cookie</span>
+<span class="gap"></span>
+<span class="ln"><span class="c-frost">src/auth/service.ts</span>  <span class="c-hit">3/3</span> <span class="c-dim">defines</span> auth, session, cookie</span>
+<span class="ln">  <span class="c-ember">Summary</span> <span class="c-dim">[fresh]</span> Signs and verifies session cookies.</span>
+<span class="ln"><span class="c-frost">src/middleware/session.ts</span>  <span class="c-hit">2/3</span> <span class="c-dim">imports</span> session, cookie</span>
+        </div>
+      </div>
+      <p style="margin-top:16px">Pass <b>every salient identifier</b> from your task — the symbol, the domain noun, the rare token you half-remember — not one distilled keyword. <code>find</code> ranks by coverage and shows where the terms cluster, often answering without opening anything. Its reference pass runs on ripgrep, competing with raw grep on speed.</p>
+      <div class="flags">
+        <div class="flag-row"><span class="fk">--path GLOB</span><span class="fv">Scope to matching paths. Comma-combine; prefix <code>!</code> to exclude.</span></div>
+        <div class="flag-row"><span class="fk">--tests</span><span class="fv">Include test files (excluded by default).</span></div>
+        <div class="flag-row"><span class="fk">--via</span><span class="fv">Show name-reference relations — where the terms are referenced, not just declared.</span></div>
+        <div class="flag-row"><span class="fk">--json</span><span class="fv">Machine-readable output.</span></div>
+      </div>
+      <div class="callout"><span class="ct">When find says "no indexed file contains any of […]"</span>Those identifiers aren't in the repo. Don't grep spelling variants — trust the negative.</div>
+    </section>
+
+    <section id="gs" class="doc-sec">
+      <div class="cmd">
+        <div class="name"><span class="c">coldstart gs</span> <span class="badge">navigation</span></div>
+        <div class="sig">coldstart gs &lt;file&gt; [flags]</div>
+        <div class="desc"><b>What is this file, and who uses it?</b> Returns the file's top-level symbols (with line ranges), its 1-hop internal imports, who imports it, and per-symbol cross-file callers — in one call. This is the answer to "who calls this?", not a grep.</div>
+      </div>
+      <div class="term">
+        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">coldstart gs</span></div>
+        <div class="term-body">
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart gs</span> src/auth/service.ts</span>
+<span class="ln"><span class="c-dim">symbols</span>  signCookie <span class="c-dim">L12</span> · verify <span class="c-dim">L34</span> · rotate <span class="c-dim">L61</span></span>
+<span class="ln"><span class="c-dim">callers</span>  verify ← <span class="c-file">middleware/session.ts</span>, <span class="c-file">routes/login.ts</span></span>
+<span class="ln"><span class="c-dim">imported by</span>  4 files</span>
+        </div>
+      </div>
+      <div class="flags">
+        <div class="flag-row"><span class="fk">--symbol a,b</span><span class="fv">Deliver the named method bodies inline — skip a separate Read.</span></div>
+        <div class="flag-row"><span class="fk">--match TERM</span><span class="fv">Filter a god-file to one area. <code>a|b</code> = OR, <code>/regex/</code> = regex.</span></div>
+        <div class="flag-row"><span class="fk">--view V</span><span class="fv">One of <code>symbols</code> / <code>imports</code> / <code>importers</code> / <code>callers</code>. Default returns all.</span></div>
+        <div class="flag-row"><span class="fk">--json</span><span class="fv">Machine-readable output.</span></div>
+      </div>
+      <div class="callout"><span class="ct">Scope</span>Callers are one-hop and file-scoped. Named function/constant calls resolve cross-file; member-expression calls (<code>this.method()</code>, <code>api.method()</code>) don't. Chase further hops by running <code>gs</code> on the caller file.</div>
+    </section>
+  </main>
+</div>
+
+<hr class="thread" />
+<Footer variant="docs" />
+
+<script>
+  (function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('.side a[href^="#"]'));
+    if (!links.length || !('IntersectionObserver' in window)) return;
+    var byId = {};
+    links.forEach(function (a) { byId[a.getAttribute('href').slice(1)] = a; });
+    var visible = new Set();
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) visible.add(e.target.id); else visible.delete(e.target.id);
+      });
+      var top = null, topY = Infinity;
+      visible.forEach(function (id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        var y = el.getBoundingClientRect().top;
+        if (y < topY) { topY = y; top = id; }
+      });
+      links.forEach(function (a) { a.classList.remove('active'); });
+      if (top && byId[top]) {
+        byId[top].classList.add('active');
+        var sideEl = byId[top].closest('.side');
+        if (sideEl && sideEl.scrollHeight > sideEl.clientHeight) {
+          byId[top].scrollIntoView({ block: 'nearest' });
+        }
+      }
+    }, { rootMargin: '-70px 0px -70% 0px', threshold: 0 });
+    document.querySelectorAll('.doc-sec').forEach(function (s) { obs.observe(s); });
+  })();
+
+  (function () {
+    var toggle = document.getElementById('sideToggle');
+    var list = document.getElementById('sideList');
+    if (!toggle || !list) return;
+    toggle.addEventListener('click', function () {
+      var open = list.classList.toggle('open');
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    list.querySelectorAll('a').forEach(function (a) {
+      a.addEventListener('click', function () {
+        list.classList.remove('open');
+        toggle.setAttribute('aria-expanded', 'false');
+      });
+    });
+  })();
+</script>
+</body>
+</html>

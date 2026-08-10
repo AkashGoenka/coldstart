@@ -1,0 +1,68 @@
+---
+interface Props { active: 'getting-started' | 'navigation' | 'notebook' | 'under-the-hood' }
+const { active } = Astro.props;
+
+const groups = [
+  {
+    id: 'getting-started', label: 'Getting started', href: '/docs/',
+    anchors: [
+      { href: '#overview', label: 'Overview' },
+      { href: '#install', label: 'Install & setup' },
+      { href: '#flow', label: 'The intended flow' },
+    ],
+  },
+  {
+    id: 'navigation', label: 'Navigation', href: '/docs/navigation/',
+    anchors: [
+      { href: '#find', label: 'find', code: true },
+      { href: '#gs', label: 'gs', code: true },
+    ],
+  },
+  {
+    id: 'notebook', label: 'Notebook', href: '/docs/notebook/',
+    anchors: [
+      { href: '#notebook', label: 'The notebook, in depth' },
+      { href: '#kb-search', label: 'kb search', code: true },
+      { href: '#kb-lookup', label: 'kb lookup', code: true },
+      { href: '#kb-write', label: 'kb write', code: true },
+      { href: '#kb-commit', label: 'kb commit', code: true },
+      { href: '#kb-view', label: 'kb view', code: true },
+      { href: '#kb-maint', label: 'kb status / lint / repair / render', code: true },
+      { href: '#sharing', label: 'Sharing with a team' },
+    ],
+  },
+  {
+    id: 'under-the-hood', label: 'Under the hood', href: '/docs/under-the-hood/',
+    anchors: [
+      { href: '#freshness', label: 'How the index stays fresh' },
+      { href: '#lifecycle', label: 'Lifecycle commands' },
+      { href: '#mcp', label: 'MCP tools' },
+      { href: '#semantics', label: 'Bring your own semantics' },
+      { href: '#languages', label: 'Supported languages' },
+    ],
+  },
+];
+---
+<aside class="side">
+  <button class="side-toggle" id="sideToggle" type="button" aria-expanded="false" aria-controls="sideList">
+    <span class="chev" aria-hidden="true">&rsaquo;</span> Menu
+  </button>
+  <div class="side-list" id="sideList">
+    {groups.map((g) => (
+      <div class="side-group">
+        <a href={g.href} class={`gh gh-link${active === g.id ? ' active' : ''}`}>{g.label}</a>
+        {active === g.id && (
+          <>
+            {g.anchors.map((a) => (
+              <a href={a.href}>{a.code ? <code>{a.label}</code> : a.label}</a>
+            ))}
+          </>
+        )}
+      </div>
+    ))}
+  </div>
+</aside>
+<style>
+.gh-link { display: block; text-decoration: none; transition: color .12s; background: none; border-left-color: transparent; }
+.gh-link:hover, .gh-link.active { color: var(--frost); opacity: 1; background: none; border-left-color: transparent; }
+</style>

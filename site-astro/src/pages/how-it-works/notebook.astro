@@ -59,6 +59,52 @@ const jsonLd = {
   </div>
 </header>
 
+<!-- ===================== NOTEBOOK MOCK ===================== -->
+<section class="how-sec" style="padding-top:0">
+  <div class="wrap">
+    <figure class="nb-mock rv">
+      <div class="nbm-top">
+        <div class="nbm-brand"><span class="nbm-kick">Coldstart Notebook</span><span class="nbm-name"><i class="nbm-dot"></i>coldstart</span></div>
+        <div class="nbm-stats">
+          <span><b>80</b> notes</span>
+          <span><b>7</b> links</span>
+          <span class="nbm-bar"><i></i></span>
+          <span class="nbm-fresh">50% fresh</span>
+        </div>
+      </div>
+      <div class="nbm-body">
+        <div class="nbm-side">
+          <div class="nbm-search">Search title, alias, path, symbol…</div>
+          <div class="nbm-file">raw-log.ts</div>
+          <div class="nbm-file">repair.ts</div>
+          <div class="nbm-file">search.ts</div>
+          <div class="nbm-file active">tools.ts</div>
+          <div class="nbm-file">cli.ts</div>
+          <div class="nbm-file">index-manager.ts</div>
+        </div>
+        <div class="nbm-main">
+          <div class="nbm-crumb">FILE · SINGLE</div>
+          <h3 class="nbm-title">src/server/tools.ts</h3>
+          <div class="nbm-meta"><span class="nbm-pill">fresh</span> 1 anchor · 2 edits</div>
+          <div class="nbm-anchors">
+            <div class="nbm-anchor-head">anchors — verified code addresses</div>
+            <div class="nbm-anchor-row">
+              <code>src/server/<b>tools.ts</b></code>
+              <span class="nbm-pill">fresh</span>
+            </div>
+            <div class="nbm-syms"><span>handleGetStructure</span><span>findFileByPath</span></div>
+          </div>
+          <div class="nbm-note-head">note</div>
+          <p class="nbm-note">handleGetStructure builds the gs symbol page for one file. Uses findFileByPath
+            to look up the file: returns [fileId, IndexedFile] if found, null if not indexed —
+            distinguishing "not in index" from "indexed but zero symbols."</p>
+        </div>
+      </div>
+      <figcaption>coldstart's own notebook — one note, opened with <code>kb view</code>.</figcaption>
+    </figure>
+  </div>
+</section>
+
 <!-- ===================== THE LOOP ===================== -->
 <section class="how-sec">
   <div class="wrap">

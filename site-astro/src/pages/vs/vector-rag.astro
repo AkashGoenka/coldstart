@@ -1,0 +1,312 @@
+---
+import Head from '../../layouts/Head.astro';
+import SvgDefs from '../../components/SvgDefs.astro';
+import Nav from '../../components/Nav.astro';
+import Footer from '../../components/Footer.astro';
+import '../../styles/tailwind.css';
+import '../../styles/docs.css';
+import '../../styles/how.css';
+import '../../styles/backdrop.css';
+
+const title = 'coldstart vs vector RAG for codebase memory | coldstart';
+const description =
+  'Code already has ground truth — imports, symbol definitions, a call graph. RAG approximates that structure with embeddings and a similarity score. Here is what that approximation costs, and where it still wins.';
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'TechArticle',
+  headline: 'coldstart vs vector RAG for codebase memory',
+  description,
+  url: 'https://coldstartmcp.dev/vs/vector-rag/',
+  author: { '@type': 'Person', name: 'Akash Goenka' },
+  publisher: { '@type': 'Organization', name: 'coldstart' },
+  about: 'Codebase memory for AI coding agents',
+  proficiencyLevel: 'Beginner',
+};
+---
+<html lang="en">
+<head>
+  <Head
+    title={title}
+    description={description}
+    keywords="RAG vs AST, vector search for code, embeddings for code search, codebase memory, semantic code search, AI coding agent architecture, retrieval augmented generation, code index without embeddings"
+    canonicalPath="/vs/vector-rag/"
+    ogType="article"
+    ogTitle="coldstart vs vector RAG for codebase memory"
+    ogDescription="Code already has ground truth. RAG approximates it with embeddings and a similarity score. Here is what that approximation costs, and where it still wins."
+    themeColor="#070a11"
+  />
+  <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+</head>
+<body class="how-page">
+<SvgDefs />
+<Nav variant="how" />
+
+<!-- ===================== HERO ===================== -->
+<header class="how-hero">
+  <div class="wrap">
+    <div class="how-eyebrow">coldstart vs vector RAG</div>
+    <h1>Code isn't a document. Stop <em>searching</em> it like one.</h1>
+    <p class="lead">
+      RAG earned its place doing something real: finding the passage that means what you mean without
+      using your words. Applied to a codebase, it's approximating something that's <b>already exact</b>
+      — imports, symbol definitions, a call graph the parser can compute for free. Here's what that
+      approximation costs, and the one place it's still the right tool.
+    </p>
+    <a class="how-back" href="/">← back to the overview</a>
+  </div>
+</header>
+
+<!-- ===================== THE TWO PIPELINES ===================== -->
+<section class="how-sec">
+  <div class="wrap">
+    <div class="how-sec-head rv">
+      <h2>One of these is computed. The other is guessed.</h2>
+      <p>
+        A call graph isn't a fuzzy concept living somewhere in embedding space — it's a fact the
+        language already states. <code>import</code>, a function call, a class reference: the parser
+        reads the answer directly. RAG doesn't get to read it directly. It chunks the text, embeds the
+        chunks, and asks a vector store which ones <i>sound</i> related.
+      </p>
+    </div>
+
+    <div class="temp-fig">
+      <div class="temp-seam"></div>
+
+      <div class="temp-col cold">
+        <div class="temp-kick">Structural — coldstart</div>
+        <h3>What the parser already knows</h3>
+        <p>
+          Tree-sitter reads the file once. Imports, exports, symbol definitions, and every call site
+          resolve to a real edge — not a guess about what's related.
+        </p>
+        <div class="temp-items">
+          <div class="temp-item">imports resolved exactly, not inferred</div>
+          <div class="temp-item">call graph built from real references</div>
+          <div class="temp-item">a changed file repatches in milliseconds</div>
+          <div class="temp-item">zero model calls, zero API key</div>
+          <div class="temp-item">the same query returns the same rank, always</div>
+        </div>
+      </div>
+
+      <div class="temp-col warm">
+        <div class="temp-kick">Semantic — vector RAG</div>
+        <h3>What embeddings approximate</h3>
+        <p>
+          Every file is chunked, embedded, and pushed into a vector store. A query becomes another
+          embedding, compared by cosine distance to everything already indexed.
+        </p>
+        <div class="temp-items">
+          <div class="temp-item">a vector store to run, pay for, and keep online</div>
+          <div class="temp-item">chunk boundaries that don't know where a symbol ends</div>
+          <div class="temp-item">re-embedding needed on every edit, so it's batched</div>
+          <div class="temp-item">an embed call plus an ANN search, every lookup</div>
+          <div class="temp-item">a similarity score, not a fact you can check</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="temp-verdict rv">
+      <b>Neither of these is the "advanced" one.</b> RAG is the right call when there's no structure to
+      exploit — prose, tickets, a wiki, anything where your words and the target's words can legitimately
+      differ. Source code is the opposite case: it already declares its own structure, in a form a parser
+      reads deterministically. Approximating a fact you can compute is a trade, not an upgrade.
+    </div>
+  </div>
+</section>
+
+<!-- ===================== WHAT THE APPROXIMATION COSTS ===================== -->
+<section class="how-sec">
+  <div class="wrap">
+    <div class="how-sec-head rv">
+      <h2>Four costs that show up on real repos, not benchmarks.</h2>
+      <p>
+        None of these are exotic failure modes. They're the ordinary behavior of cosine similarity over
+        a corpus that keeps changing under it — which a coding session does, by definition, on nearly
+        every turn.
+      </p>
+    </div>
+
+    <div class="state-grid">
+      <div class="state warn rv">
+        <div class="state-when">Between a save and a rebuild</div>
+        <div class="state-tag">stale window</div>
+        <h3>The index answers about code that's gone</h3>
+        <p>
+          Re-embedding on every save is too expensive at agent-editing frequency, so it gets batched.
+          Until that batch runs, the index is still describing the file's previous version — with no
+          signal telling you it's out of date.
+        </p>
+      </div>
+
+      <div class="state move rv rv-d1">
+        <div class="state-when">As the repo grows</div>
+        <div class="state-tag">rank drift</div>
+        <h3>Yesterday's top result isn't today's</h3>
+        <p>
+          Cosine similarity gives no stability guarantee. Add ten unrelated files anywhere in the repo
+          and a query that used to surface the right file at rank one can drift to rank four — with
+          nothing about the query or the target having changed.
+        </p>
+      </div>
+
+      <div class="state gone rv rv-d2">
+        <div class="state-when">At chunk boundaries</div>
+        <div class="state-tag">split symbols</div>
+        <h3>A function cut in half, and returned as neither half</h3>
+        <p>
+          Fixed-size chunking doesn't know where a symbol starts or ends. A function that straddles a
+          chunk boundary gets embedded as two unrelated fragments, and a query for it can retrieve
+          either fragment without the context that makes it mean anything.
+        </p>
+      </div>
+
+      <div class="state warn rv rv-d3">
+        <div class="state-when">On every single lookup</div>
+        <div class="state-tag">recurring cost</div>
+        <h3>Paid again for a question already answered once</h3>
+        <p>
+          An embed call plus an ANN search happen on every query an agent makes — often dozens per
+          session. A parser answers "who imports this file" once, patches in milliseconds when the file
+          changes, and never has to ask an API for the answer again.
+        </p>
+      </div>
+    </div>
+
+    <div class="state-note rv">
+      <span class="mk">→</span>
+      <span>
+        None of this makes embeddings the wrong tool, full stop — it makes them a poor fit for a corpus
+        that already has ground truth. <b>If your codebase's vocabulary is genuinely inconsistent</b> —
+        legacy code where names don't match concepts, or you're searching for "the thing that does X"
+        with no shared words at all — that's a real RAG win coldstart doesn't claim. Its own
+        <code>find</code> covers a slice of that with a repo-wide grep-recall pass, not a semantic one.
+      </span>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== THE NOTEBOOK, ON TOP ===================== -->
+<section class="how-sec">
+  <div class="wrap">
+    <div class="how-sec-head rv">
+      <h2>A structural index answers <i>where</i>. Not <i>why it matters</i>.</h2>
+      <p>
+        That gap is real, and it's the one place teams reach for RAG a second time — embedding past
+        conversations, summaries, or decisions as "agent memory." Which quietly re-imports both problems
+        above, at higher stakes: now the stale, drifting thing isn't describing a file, it's describing a
+        decision someone trusted.
+      </p>
+    </div>
+
+    <div class="loop-list">
+      <div class="beat rv">
+        <div class="beat-n">01</div>
+        <div>
+          <h3>The index is a fact about the repo right now.</h3>
+          <p>
+            It can be rebuilt from the source at any moment, so a wrong entry is just a bug — never a
+            standing risk. That's true whether it's built by a parser or a vector store.
+          </p>
+        </div>
+      </div>
+      <div class="beat warm rv">
+        <div class="beat-n">02</div>
+        <div>
+          <h3>A memory is a claim someone made, not a fact you can recompute.</h3>
+          <p>
+            The reasoning behind it is gone the moment the session ends. An embedding of that claim
+            doesn't fix that — it just makes the claim searchable while it silently goes stale.
+          </p>
+        </div>
+      </div>
+      <div class="beat warm rv">
+        <div class="beat-n">03</div>
+        <div>
+          <h3>So the notebook keeps the same discipline as the index, applied one layer up.</h3>
+          <p>
+            Every note is pinned to a fingerprint of the exact files it's about, and re-checked against
+            them on every read. <code>[fresh]</code>, or it says so — the same determinism the index
+            gives you for "where," extended to "why."
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="loop-close rv">
+      <b>That's the actual comparison.</b> It isn't coldstart-the-parser against RAG-the-search-engine —
+      it's an index and a notebook that both stay honest about their own staleness, against a similarity
+      score that has no way to tell you it's wrong.
+      <a href="/how-it-works/notebook/">How the notebook works →</a>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== CLOSE ===================== -->
+<section class="how-close">
+  <div class="wrap">
+    <div class="rv">
+      <h2>No vector store to stand up. No embedding bill.</h2>
+      <p>
+        One index, kept current in the background, plus notes that check themselves. Two commands and
+        it starts working on whatever repo you're in.
+      </p>
+      <div class="how-cmds has-copy">
+        <button type="button" class="copy-btn" data-copy="npm install -g @cstart/coldstart&#10;coldstart init" aria-label="Copy install commands">Copy</button>
+        npm install -g @cstart/coldstart<br><span>coldstart init</span>
+      </div>
+      <div class="how-next">
+        <a class="primary" href="/docs/">Read the docs</a>
+        <a class="ghost" href="/blog/why-coldstart-makes-zero-llm-calls/">Why coldstart makes zero LLM calls →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<Footer variant="how" />
+
+<script>
+  (function () {
+    document.querySelectorAll('.copy-btn[data-copy]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var text = btn.getAttribute('data-copy') || '';
+        function done() {
+          btn.classList.add('copied');
+          btn.textContent = 'Copied';
+          setTimeout(function () { btn.classList.remove('copied'); btn.textContent = 'Copy'; }, 1600);
+        }
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(text).then(done).catch(function () {});
+          return;
+        }
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); done(); } catch (e) {}
+        document.body.removeChild(ta);
+      });
+    });
+  })();
+
+  (function () {
+    var els = document.querySelectorAll('.rv, .ring-fig, .temp-fig');
+    if (!('IntersectionObserver' in window)) {
+      els.forEach(function (el) { el.classList.add('in'); });
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.18, rootMargin: '0px 0px -8% 0px' });
+    els.forEach(function (el) { io.observe(el); });
+  })();
+</script>
+</body>
+</html>
