@@ -7,7 +7,7 @@
     "url": "https://github.com/AkashGoenka/coldstart",
     "source": "github"
   },
-  "version": "2.2.17",
+  "version": "2.2.18",
   "websiteUrl": "https://coldstartmcp.dev/",
   "icons": [
     {
@@ -21,7 +21,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@cstart/coldstart",
-      "version": "2.2.17",
+      "version": "2.2.18",
       "transport": {
         "type": "stdio"
       }

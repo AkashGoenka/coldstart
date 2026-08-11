@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.18] - 2026-08-11
+
+### Fixed
+- **Windows: every `child_process` spawn was missing `windowsHide`, so the daemon (and any hook
+  spawned by Claude Code/Cursor/Codex) flashed a visible console/terminal window constantly.**
+  Reported and first patched by [@lnorton89](https://github.com/lnorton89) (7 sites: `keeper.js`
+  self-relaunch, `git`/ripgrep probes, the notebook viewer's browser-open call). This release adds
+  `windowsHide: true` to 4 more sites in `src/indexer/git.ts` (high-frequency: fires on every
+  keeper cache save/reconcile) and ~13 more across `hooks/*.mjs` (the recall/nudge/elicit hooks
+  shipped by `coldstart init`), found via an exhaustive audit of every `execFile`/`execFileSync`/
+  `spawn` call site. A permanent static test (`tests/windows-hide-coverage.test.ts`) now guards
+  against any future call site reintroducing the gap. Verified on a real `windows-latest` CI
+  runner (daemon/CLI shape) and on real Windows 11 hardware (hooks shape). (#149, #151)
+
 ## [2.2.17] - 2026-08-08
 
 ### Changed
