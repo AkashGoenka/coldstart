@@ -18,8 +18,7 @@ export function gitHeadSha(root: string): string | undefined {
       cwd: root,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
-      timeout: 3000,
-    }).trim();
+      timeout: 3000, windowsHide: true }).trim();
     return /^[0-9a-f]{40}/.test(out) ? out.slice(0, 12) : undefined;
   } catch {
     return undefined;

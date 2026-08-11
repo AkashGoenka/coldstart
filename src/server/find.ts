@@ -51,7 +51,7 @@ const SCAN_CONCURRENCY = 4;
 
 function probe(bin: string, args: string[], cwd: string, requireSuccess = false): boolean {
   try {
-    execFileSync(bin, args, { cwd, stdio: 'ignore', timeout: 4000 });
+    execFileSync(bin, args, { cwd, stdio: 'ignore', timeout: 4000, windowsHide: true });
     return true;
   } catch (e: unknown) {
     if (requireSuccess) return false;
@@ -225,6 +225,7 @@ function listFilesExternal(searcher: Exclude<Searcher, { kind: 'node' }>, root: 
         cwd: root,
         encoding: 'utf8',
         maxBuffer: 64 * 1024 * 1024,
+        windowsHide: true,
         ...(argv0 ? { argv0 } : {}),
       },
       (err, stdout) => {

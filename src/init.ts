@@ -176,8 +176,7 @@ export function wireClaudeKbHooks(cwd: string): 'created' | 'updated' | { error:
 function notebookRawTracked(cwd: string): boolean {
   try {
     const listed = execFileSync('git', ['ls-files', '.coldstart/notebook/.raw'], {
-      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
-    });
+      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
     return listed.trim().length > 0;
   } catch {
     return false; // not a git repo, or git unavailable — treat as untracked
