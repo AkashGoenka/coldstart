@@ -43,7 +43,7 @@ export async function ensureKeeper(finalRoot: string): Promise<void> {
       const child = spawn(
         process.execPath,
         [entry, '--root', finalRoot, '--daemon', '--quiet'],
-        { detached: true, stdio: 'ignore' },
+        { detached: true, stdio: 'ignore', windowsHide: true },
       );
       child.unref();
     } finally {

@@ -88,7 +88,7 @@ const WRITE_CMD_RE =
 // edits to an already-dirty file. Verified across write modalities 2026-07-10.
 function gitFingerprint(root) {
   try {
-    const opts = { cwd: root, encoding: "utf8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"] };
+    const opts = { cwd: root, encoding: "utf8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"], windowsHide: true };
     const status = execFileSync("git", ["status", "--porcelain=v1"], opts);
     const stat = execFileSync("git", ["diff", "HEAD", "--shortstat"], opts);
     return createHash("sha1").update(status + " " + stat).digest("hex").slice(0, 16);
@@ -103,7 +103,7 @@ function gitFingerprint(root) {
 // across checkpoints and distrust the fingerprint whenever it moved.
 function gitHead(root) {
   try {
-    const opts = { cwd: root, encoding: "utf8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"] };
+    const opts = { cwd: root, encoding: "utf8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"], windowsHide: true };
     return execFileSync("git", ["rev-parse", "HEAD"], opts).trim().slice(0, 12);
   } catch {
     return "";
@@ -164,7 +164,7 @@ function kbSpiralHit(root, pattern) {
     if (!pattern || !root || !existsSync(join(root, ".coldstart", "notebook", ".raw"))) return null;
     const page = execFileSync(
       "node", [KB_CLI, "kb", "search", "--hook", "--max", "1", "--root", root, pattern],
-      { encoding: "utf8", timeout: 2000, stdio: ["ignore", "pipe", "ignore"] },
+      { encoding: "utf8", timeout: 2000, stdio: ["ignore", "pipe", "ignore"], windowsHide: true },
     );
     const m = page.match(/^- \*\*(.+?)\*\*/m);
     return m ? m[1] : null;

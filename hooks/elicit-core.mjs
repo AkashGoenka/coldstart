@@ -28,7 +28,7 @@ export function noteAnnotations(cli, root, files, log = noop) {
   try {
     const raw = execFileSync(
       "node", [cli, "kb", "status", "--json", "--paths", files.join(","), "--root", root],
-      { encoding: "utf8", timeout: 10000, stdio: ["ignore", "pipe", "ignore"] },
+      { encoding: "utf8", timeout: 10000, stdio: ["ignore", "pipe", "ignore"], windowsHide: true },
     );
     const byPath = new Map();
     for (const entry of JSON.parse(raw).paths || []) byPath.set(entry.path, entry.notes || []);
@@ -43,7 +43,7 @@ export function consumerCounts(cli, root, files, log = noop) {
   try {
     const raw = execFileSync(
       "node", [cli, "consumers", "--json", "--paths", files.join(","), "--root", root],
-      { encoding: "utf8", timeout: 10000, stdio: ["ignore", "pipe", "ignore"] },
+      { encoding: "utf8", timeout: 10000, stdio: ["ignore", "pipe", "ignore"], windowsHide: true },
     );
     const byPath = new Map();
     for (const entry of JSON.parse(raw).paths || []) byPath.set(entry.path, entry.consumers);
@@ -86,7 +86,7 @@ export function freshNotedSet(cli, root, files, log = noop) {
 export function gitHead(root) {
   try {
     return execFileSync("git", ["rev-parse", "HEAD"], {
-      cwd: root, encoding: "utf8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"],
+      cwd: root, encoding: "utf8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
     }).trim();
   } catch { return ""; }
 }

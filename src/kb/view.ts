@@ -112,7 +112,7 @@ function openInBrowser(file: string): void {
     : process.platform === 'win32' ? { bin: 'cmd', args: ['/c', 'start', '', file] }
     : { bin: 'xdg-open', args: [file] };
   try {
-    const child = execFile(cmd.bin, cmd.args, () => {});
+    const child = execFile(cmd.bin, cmd.args, { windowsHide: true }, () => {});
     child.unref();
   } catch { /* ignore — the path is printed regardless */ }
 }

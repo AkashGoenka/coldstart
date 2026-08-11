@@ -108,6 +108,7 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
           encoding: "utf8",
           timeout: 8000,
           stdio: ["ignore", "pipe", "ignore"],
+          windowsHide: true,
         });
         if (manual.trim()) {
           pending = pending ? `${manual.trim()}\n\n---\n\n${pending}` : manual.trim();
@@ -132,6 +133,7 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
           encoding: "utf8",
           timeout: SEARCH_TIMEOUT_MS,
           stdio: ["ignore", "pipe", "ignore"],
+          windowsHide: true,
         });
       } catch (e) {
         log(`search failed/timed out: ${String(e).split("\n")[0]}`);

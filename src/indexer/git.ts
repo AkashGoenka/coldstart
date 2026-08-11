@@ -10,6 +10,7 @@ export async function getGitHead(rootDir: string): Promise<string> {
   try {
     const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], {
       cwd: rootDir,
+      windowsHide: true,
     });
     return stdout.trim();
   } catch {
@@ -30,7 +31,7 @@ export async function getGitChangedFiles(rootDir: string, fromHead: string): Pro
   try {
     const { stdout } = await execFileAsync(
       'git', ['diff', '--name-only', '--no-renames', '-z', fromHead, 'HEAD'],
-      { cwd: rootDir, maxBuffer: GIT_BUF },
+      { cwd: rootDir, maxBuffer: GIT_BUF, windowsHide: true },
     );
     return stdout.split('\0').filter(Boolean);
   } catch {
@@ -51,7 +52,7 @@ export async function getGitExactRenames(rootDir: string, fromHead: string): Pro
   try {
     const { stdout } = await execFileAsync(
       'git', ['diff', '--name-status', '-M100%', '--diff-filter=R', '-z', fromHead, 'HEAD'],
-      { cwd: rootDir, maxBuffer: GIT_BUF },
+      { cwd: rootDir, maxBuffer: GIT_BUF, windowsHide: true },
     );
     const toks = stdout.split('\0').filter((t) => t.length);
     const out: Array<[string, string]> = [];
@@ -75,7 +76,7 @@ export async function getGitNewFiles(rootDir: string): Promise<string[] | null> 
   try {
     const { stdout } = await execFileAsync(
       'git', ['status', '--porcelain', '--no-renames', '-uall', '-z'],
-      { cwd: rootDir, maxBuffer: GIT_BUF },
+      { cwd: rootDir, maxBuffer: GIT_BUF, windowsHide: true },
     );
     const out: string[] = [];
     for (const entry of stdout.split('\0')) {
@@ -98,7 +99,7 @@ export async function getGitDirtyFiles(rootDir: string): Promise<string[] | null
   try {
     const { stdout } = await execFileAsync(
       'git', ['status', '--porcelain', '--no-renames', '-uall', '-z'],
-      { cwd: rootDir, maxBuffer: GIT_BUF },
+      { cwd: rootDir, maxBuffer: GIT_BUF, windowsHide: true },
     );
     // -z: NUL-separated `XY path` records (no rename `-> ` forms with --no-renames).
     const out: string[] = [];
