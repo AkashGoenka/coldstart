@@ -67,14 +67,18 @@ function Run-Case([string]$mode, [string]$label, [switch]$NoConsole) {
     if ($NoConsole) {
         # Hooks (hooks/*.mjs) run as a child of the host CLI's own process
         # (Claude Code / Cursor / Codex — Electron GUI-subsystem apps, which
-        # never have a console). This launches harness.mjs from a genuinely
-        # console-less GUI-subsystem process instead of Node's own detached
-        # spawn, so the result isn't just a Node-specific spawn quirk.
-        # No -Wait: NoConsoleLauncher.exe itself returns immediately after
-        # firing off node (fire-and-forget, see its own comment), so waiting
-        # here would just wait on the launcher, not the ~2s harness run.
-        Start-Process -FilePath "$PSScriptRoot\NoConsoleLauncher.exe" `
-            -ArgumentList "`"$PSScriptRoot\harness.mjs`" $mode"
+        # never have a console when launched from Explorer/Start Menu, since
+        # explorer.exe itself has none). A first attempt launched
+        # NoConsoleLauncher.exe directly via Start-Process from pwsh, but
+        # pwsh has its own console, and a plain launch (no explicit
+        # detach) still lets that console be reachable down the chain —
+        # so that attempt was testing the same non-vulnerable condition as
+        # the earlier -Direct case, just one layer removed. Routing through
+        # Node's own detached:true spawn (orchestrator-noconsole.mjs) — the
+        # SAME mechanism already proven to sever inheritance for the daemon
+        # case above — genuinely severs it here too before the WinExe
+        # launcher takes over.
+        node "$PSScriptRoot/orchestrator-noconsole.mjs" $mode
     } else {
         node "$PSScriptRoot/orchestrator.mjs" $mode
     }
