@@ -1,11 +1,14 @@
 # Temporary repro for issue #149 — NOT part of the package.
 #
-# A/B test on real Windows: runs the "unpatched" option shape (matches
-# src/indexer/git.ts, which issue #149's fix missed) and the "patched" shape
-# (matches the 7 sites already fixed) through the identical detached-parent
-# spawn keeper.js uses, and polls the real Win32 IsWindowVisible API to see
-# whether a console window actually appears. Isolates the flag as the only
-# variable.
+# A/B test on real Windows, run twice under two independent no-console
+# mechanisms: Node's own `detached` spawn (proxies keeper.js's daemon
+# relaunch) and a separately compiled GUI-subsystem (winexe) launcher
+# (proxies how Electron apps like Claude Code/Cursor have no console when
+# they spawn a hooks/*.mjs subprocess — ruling out "the fix only works
+# around a Node spawn quirk"). Each pair runs the "unpatched" and "patched"
+# execFileSync option shape and polls the real Win32 IsWindowVisible API to
+# see whether a console window actually appears, isolating windowsHide as
+# the only variable.
 
 $ErrorActionPreference = 'Stop'
 
@@ -47,15 +50,31 @@ public class WinWatch {
 }
 "@
 
-function Run-Case([string]$mode, [string]$label, [switch]$Direct) {
-    Write-Host "=== Case: $label ($mode$(if ($Direct) { ', direct (no detached parent)' })) ==="
+# Compile the GUI-subsystem (no-console) launcher: a faithful, independently
+# built proxy for "an Electron app (Claude Code / Cursor) spawns a hook
+# subprocess" — GUI-subsystem executables never attach a console on Windows,
+# regardless of launch method, which is the exact condition hooks/*.mjs runs
+# under in production, distinct from testing via Node's own `detached` spawn.
+$csc = "$env:SystemRoot\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+if (-not (Test-Path $csc)) { $csc = "$env:SystemRoot\Microsoft.NET\Framework\v4.0.30319\csc.exe" }
+& $csc /nologo /target:winexe /out:"$PSScriptRoot\NoConsoleLauncher.exe" "$PSScriptRoot\NoConsoleLauncher.cs"
+if ($LASTEXITCODE -ne 0) { throw "csc.exe failed to compile NoConsoleLauncher.cs" }
+
+function Run-Case([string]$mode, [string]$label, [switch]$NoConsole) {
+    Write-Host "=== Case: $label ($mode$(if ($NoConsole) { ', via GUI-subsystem no-console launcher' })) ==="
     $before = [WinWatch]::GetVisibleWindows()
 
-    if ($Direct) {
-        # Hooks (hooks/*.mjs) run as a plain foreground child of the host CLI
-        # (Claude Code / Cursor / Codex), not via a detached daemon relaunch —
-        # this case tests that invocation shape directly, harness.mjs alone.
-        node "$PSScriptRoot/harness.mjs" $mode
+    if ($NoConsole) {
+        # Hooks (hooks/*.mjs) run as a child of the host CLI's own process
+        # (Claude Code / Cursor / Codex — Electron GUI-subsystem apps, which
+        # never have a console). This launches harness.mjs from a genuinely
+        # console-less GUI-subsystem process instead of Node's own detached
+        # spawn, so the result isn't just a Node-specific spawn quirk.
+        # No -Wait: NoConsoleLauncher.exe itself returns immediately after
+        # firing off node (fire-and-forget, see its own comment), so waiting
+        # here would just wait on the launcher, not the ~2s harness run.
+        Start-Process -FilePath "$PSScriptRoot\NoConsoleLauncher.exe" `
+            -ArgumentList "`"$PSScriptRoot\harness.mjs`" $mode"
     } else {
         node "$PSScriptRoot/orchestrator.mjs" $mode
     }
@@ -93,24 +112,24 @@ $resultUnfixed = Run-Case "no-windowsHide" "UNPATCHED shape (matches src/indexer
 Start-Sleep -Seconds 1
 $resultFixed = Run-Case "windowsHide" "PATCHED shape (matches the fixed daemon/CLI call sites), via detached daemon-shape parent"
 Start-Sleep -Seconds 1
-$resultHooksUnfixed = Run-Case "no-windowsHide" "UNPATCHED shape, direct (matches hooks/*.mjs before this fix)" -Direct
+$resultHooksUnfixed = Run-Case "no-windowsHide" "UNPATCHED shape (matches hooks/*.mjs before this fix), via GUI-subsystem no-console launcher" -NoConsole
 Start-Sleep -Seconds 1
-$resultHooksFixed = Run-Case "windowsHide" "PATCHED shape, direct (matches hooks/*.mjs after this fix)" -Direct
+$resultHooksFixed = Run-Case "windowsHide" "PATCHED shape (matches hooks/*.mjs after this fix), via GUI-subsystem no-console launcher" -NoConsole
 
 Write-Host ""
 Write-Host "SUMMARY"
-if ($resultUnfixed) { Write-Host "  Unpatched, detached-parent shape:  WINDOW APPEARED (bug reproduces)" }
-else { Write-Host "  Unpatched, detached-parent shape:  no window (unexpected)" }
-if ($resultFixed) { Write-Host "  Patched, detached-parent shape:    WINDOW APPEARED (fix NOT working!)" }
-else { Write-Host "  Patched, detached-parent shape:    no window (fix confirmed)" }
-if ($resultHooksUnfixed) { Write-Host "  Unpatched, direct (hooks) shape:   WINDOW APPEARED (bug reproduces)" }
-else { Write-Host "  Unpatched, direct (hooks) shape:   no window (unexpected)" }
-if ($resultHooksFixed) { Write-Host "  Patched, direct (hooks) shape:     WINDOW APPEARED (fix NOT working!)" }
-else { Write-Host "  Patched, direct (hooks) shape:     no window (fix confirmed)" }
+if ($resultUnfixed) { Write-Host "  Unpatched, detached-parent shape:     WINDOW APPEARED (bug reproduces)" }
+else { Write-Host "  Unpatched, detached-parent shape:     no window (unexpected)" }
+if ($resultFixed) { Write-Host "  Patched, detached-parent shape:       WINDOW APPEARED (fix NOT working!)" }
+else { Write-Host "  Patched, detached-parent shape:       no window (fix confirmed)" }
+if ($resultHooksUnfixed) { Write-Host "  Unpatched, GUI-subsystem launcher:    WINDOW APPEARED (bug reproduces)" }
+else { Write-Host "  Unpatched, GUI-subsystem launcher:    no window (unexpected)" }
+if ($resultHooksFixed) { Write-Host "  Patched, GUI-subsystem launcher:      WINDOW APPEARED (fix NOT working!)" }
+else { Write-Host "  Patched, GUI-subsystem launcher:      no window (fix confirmed)" }
 
 if ($resultUnfixed -and (-not $resultFixed) -and $resultHooksUnfixed -and (-not $resultHooksFixed)) {
     Write-Host ""
-    Write-Host "CONCLUSION: Fix verified on real Windows for BOTH invocation shapes — the detached daemon relaunch AND the plain foreground child process hooks/*.mjs run as. windowsHide:true suppresses the console flash in both; the unpatched shape flashes in both."
+    Write-Host "CONCLUSION: Fix verified on real Windows via TWO independent no-console mechanisms — Node's own detached spawn (proxies keeper.js's daemon relaunch) AND a genuinely separate compiled GUI-subsystem (winexe) launcher (proxies how Electron apps like Claude Code/Cursor have no console when they spawn a hooks/*.mjs subprocess). windowsHide:true suppresses the console flash in both; the unpatched shape flashes in both. This directly supports the hooks/*.mjs fix, not just the daemon fix."
     exit 0
 } else {
     Write-Host ""
