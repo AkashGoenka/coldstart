@@ -2,6 +2,9 @@ name: Verify #149 windowsHide fix (temporary)
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - fix/149-windows-windowshide-console-flash
 
 jobs:
   verify:
