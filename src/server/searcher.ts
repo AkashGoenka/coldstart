@@ -40,6 +40,7 @@ function isRipgrep(bin: string, argv0?: string): boolean {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
       timeout: 4000,
+      windowsHide: true,
       ...(argv0 ? { argv0 } : {}),
     });
     return out.startsWith('ripgrep');
