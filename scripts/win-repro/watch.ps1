@@ -47,11 +47,18 @@ public class WinWatch {
 }
 "@
 
-function Run-Case([string]$mode, [string]$label) {
-    Write-Host "=== Case: $label ($mode) ==="
+function Run-Case([string]$mode, [string]$label, [switch]$Direct) {
+    Write-Host "=== Case: $label ($mode$(if ($Direct) { ', direct (no detached parent)' })) ==="
     $before = [WinWatch]::GetVisibleWindows()
 
-    node "$PSScriptRoot/orchestrator.mjs" $mode
+    if ($Direct) {
+        # Hooks (hooks/*.mjs) run as a plain foreground child of the host CLI
+        # (Claude Code / Cursor / Codex), not via a detached daemon relaunch —
+        # this case tests that invocation shape directly, harness.mjs alone.
+        node "$PSScriptRoot/harness.mjs" $mode
+    } else {
+        node "$PSScriptRoot/orchestrator.mjs" $mode
+    }
 
     $sawNewWindow = $false
     $seenTitles = New-Object System.Collections.Generic.List[string]
@@ -82,20 +89,28 @@ function Run-Case([string]$mode, [string]$label) {
     return $sawNewWindow
 }
 
-$resultUnfixed = Run-Case "no-windowsHide" "UNPATCHED shape (matches src/indexer/git.ts)"
+$resultUnfixed = Run-Case "no-windowsHide" "UNPATCHED shape (matches src/indexer/git.ts), via detached daemon-shape parent"
 Start-Sleep -Seconds 1
-$resultFixed = Run-Case "windowsHide" "PATCHED shape (matches the 7 fixed call sites)"
+$resultFixed = Run-Case "windowsHide" "PATCHED shape (matches the fixed daemon/CLI call sites), via detached daemon-shape parent"
+Start-Sleep -Seconds 1
+$resultHooksUnfixed = Run-Case "no-windowsHide" "UNPATCHED shape, direct (matches hooks/*.mjs before this fix)" -Direct
+Start-Sleep -Seconds 1
+$resultHooksFixed = Run-Case "windowsHide" "PATCHED shape, direct (matches hooks/*.mjs after this fix)" -Direct
 
 Write-Host ""
 Write-Host "SUMMARY"
-if ($resultUnfixed) { Write-Host "  Unpatched shape (no windowsHide): WINDOW APPEARED (bug reproduces)" }
-else { Write-Host "  Unpatched shape (no windowsHide): no window (unexpected)" }
-if ($resultFixed) { Write-Host "  Patched shape (windowsHide:true):  WINDOW APPEARED (fix NOT working!)" }
-else { Write-Host "  Patched shape (windowsHide:true):  no window (fix confirmed)" }
+if ($resultUnfixed) { Write-Host "  Unpatched, detached-parent shape:  WINDOW APPEARED (bug reproduces)" }
+else { Write-Host "  Unpatched, detached-parent shape:  no window (unexpected)" }
+if ($resultFixed) { Write-Host "  Patched, detached-parent shape:    WINDOW APPEARED (fix NOT working!)" }
+else { Write-Host "  Patched, detached-parent shape:    no window (fix confirmed)" }
+if ($resultHooksUnfixed) { Write-Host "  Unpatched, direct (hooks) shape:   WINDOW APPEARED (bug reproduces)" }
+else { Write-Host "  Unpatched, direct (hooks) shape:   no window (unexpected)" }
+if ($resultHooksFixed) { Write-Host "  Patched, direct (hooks) shape:     WINDOW APPEARED (fix NOT working!)" }
+else { Write-Host "  Patched, direct (hooks) shape:     no window (fix confirmed)" }
 
-if ($resultUnfixed -and (-not $resultFixed)) {
+if ($resultUnfixed -and (-not $resultFixed) -and $resultHooksUnfixed -and (-not $resultHooksFixed)) {
     Write-Host ""
-    Write-Host "CONCLUSION: Fix verified on real Windows. windowsHide:true suppresses the console flash for the patched shape; src/indexer/git.ts uses the vulnerable (unpatched) shape and would exhibit the same bug if left unfixed."
+    Write-Host "CONCLUSION: Fix verified on real Windows for BOTH invocation shapes — the detached daemon relaunch AND the plain foreground child process hooks/*.mjs run as. windowsHide:true suppresses the console flash in both; the unpatched shape flashes in both."
     exit 0
 } else {
     Write-Host ""
