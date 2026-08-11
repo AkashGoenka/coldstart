@@ -68,9 +68,10 @@ function Run-Case([string]$mode, [string]$label) {
         Start-Sleep -Milliseconds 40
     }
 
-    # Clean up stray processes this case may have spawned before the next case runs.
-    Get-Process -ErrorAction SilentlyContinue |
-        Where-Object { $_.ProcessName -match 'ping|conhost|WindowsTerminal|OpenConsole' } |
+    # Clean up only ping.exe stragglers this case spawned — never touch
+    # conhost/WindowsTerminal/OpenConsole, those can back the runner's own
+    # PowerShell session and killing them broke the next case outright.
+    Get-Process -Name 'ping' -ErrorAction SilentlyContinue |
         Stop-Process -Force -ErrorAction SilentlyContinue
 
     if ($sawNewWindow) {
