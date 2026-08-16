@@ -109,31 +109,29 @@ const techArticleJsonLd = {
 <script>
   (function () {
     var links = Array.prototype.slice.call(document.querySelectorAll('.side a[href^="#"]'));
-    if (!links.length || !('IntersectionObserver' in window)) return;
+    if (!links.length) return;
     var byId = {};
     links.forEach(function (a) { byId[a.getAttribute('href').slice(1)] = a; });
-    var visible = new Set();
-    var obs = new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) {
-        if (e.isIntersecting) visible.add(e.target.id); else visible.delete(e.target.id);
-      });
-      var top = null, topY = Infinity;
-      visible.forEach(function (id) {
-        var el = document.getElementById(id);
-        if (!el) return;
-        var y = el.getBoundingClientRect().top;
-        if (y < topY) { topY = y; top = id; }
-      });
-      links.forEach(function (a) { a.classList.remove('active'); });
-      if (top && byId[top]) {
-        byId[top].classList.add('active');
-        var sideEl = byId[top].closest('.side');
-        if (sideEl && sideEl.scrollHeight > sideEl.clientHeight) {
-          byId[top].scrollIntoView({ block: 'nearest' });
-        }
+    var sections = Array.prototype.slice.call(document.querySelectorAll('.doc-sec')).filter(function (s) { return byId[s.id]; });
+    if (!sections.length) return;
+
+    var setActive = function () {
+      var offset = 70 + window.innerHeight * 0.3;
+      var current = sections[0];
+      for (var i = 0; i < sections.length; i++) {
+        if (sections[i].getBoundingClientRect().top <= offset) current = sections[i];
       }
-    }, { rootMargin: '-70px 0px -70% 0px', threshold: 0 });
-    document.querySelectorAll('.doc-sec').forEach(function (s) { obs.observe(s); });
+      links.forEach(function (a) { a.classList.remove('active'); });
+      var link = byId[current.id];
+      link.classList.add('active');
+      var sideEl = link.closest('.side');
+      if (sideEl && sideEl.scrollHeight > sideEl.clientHeight) {
+        link.scrollIntoView({ block: 'nearest' });
+      }
+    };
+    window.addEventListener('scroll', setActive, { passive: true });
+    window.addEventListener('resize', setActive);
+    setActive();
   })();
 
   (function () {
