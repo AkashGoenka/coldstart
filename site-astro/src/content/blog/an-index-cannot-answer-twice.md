@@ -19,7 +19,7 @@ I have spent time inside one of these, reading its source and its database rathe
 
 It makes each step cheaper.
 
-Asking "what calls this function" without a graph means a text search, then reading candidates to work out which hits are real calls rather than a comment, a string, or an unrelated method with the same name. With a resolved call graph, the answer arrives directly. That is a real saving, it is not marketing, and any honest comparison has to start there.
+Asking "what calls this function" without a graph means a text search, then reading candidates to work out which hits are real calls rather than a comment, a string, or an unrelated method with the same name. With a call graph already resolved (worked out ahead of time, so the tool already knows which function calls which), the answer arrives directly. That is a real saving, it is not marketing, and any honest comparison has to start there.
 
 The same applies to reverse imports, to inheritance chains, and to the general class of question where the answer is a relationship rather than a location. Text search is bad at those. A graph is good at them. Fine.
 
@@ -27,11 +27,11 @@ The same applies to reverse imports, to inheritance chains, and to the general c
 
 What a graph makes cheaper is the individual hop. What it does not touch is how many hops you need.
 
-Consider what actually happens when an agent is given a task in an unfamiliar repository. Almost none of it is graph-shaped. The task arrives as a sentence in a human's vocabulary, something like "the export is timing out for large accounts." There is no node called that. Before any relationship question can be asked, the agent has to work out which files this sentence is even about, and that is a discovery problem, not a traversal problem.
+Consider what actually happens when an agent is given a task in an unfamiliar repository. Almost none of it is graph-shaped. The task arrives as a sentence in a human's vocabulary, something like "the export is timing out for large accounts." There is no node, no single dot in the graph, called that. Before any relationship question can be asked, the agent has to work out which files this sentence is even about, and that is a discovery problem, not a traversal problem (traversal just means walking from one connection to the next once you already know where to start).
 
 You cannot traverse a graph until you know where to enter it. Finding the entry point is the expensive part, and it is the part the graph does not help with.
 
-When I traced what these tools do at that first step, the answer was blunter than I expected. The entry point is found by text search. A grep, essentially, against the repository, with the results then sorted using the graph. The graph is not being traversed at all in the common case. It is being used to rank the output of a text search.
+When I traced what these tools do at that first step, the answer was blunter than I expected. The entry point is found by text search: a grep, essentially, against the repository, with the results then sorted using the graph. In the common case, the graph isn't being traversed at all. It's used only to rank the output of a text search.
 
 ## Ranking by popularity has a specific failure
 
@@ -39,7 +39,7 @@ That ranking step is worth looking at closely, because the way it usually works 
 
 The natural signal a graph offers for ranking is how connected a node is. A file that many other files import is probably important. So results get ordered by something like incoming edge count, with adjustments for whether the hit is a function or a route, and penalties for vendored code and tests.
 
-Read that scoring rule carefully and something is missing from it. The query. How well a file matches what you actually asked contributes nothing to its position. The ranking is a popularity prior, computed before your question existed and identical no matter what you type.
+Read that scoring rule carefully and something is missing from it. The query. How well a file matches what you actually asked contributes nothing to its position. The ranking is a popularity score, computed before your question existed and identical no matter what you type.
 
 For a lot of questions that is fine, because popular files are often relevant. It fails in a specific and predictable way: any file that is important without being widely imported is structurally unrankable. A database migration. A configuration file. A one-off definition that exactly one caller uses. A test fixture that encodes the real expected behaviour. These have almost no incoming edges by construction, so they sort to the bottom regardless of how precisely they match the question.
 
@@ -51,13 +51,13 @@ Relevance has to include the query. That sounds too obvious to state until you f
 
 The other thing worth checking is what the edges mean.
 
-Resolving a call from one file to another is hard in a dynamic language. You see a method being called on something, and to know which definition that refers to you need the type, which often is not written down. So resolvers guess. A common approach is to match on name: if exactly one function in the project has this name, link to it, and if several do, pick by some heuristic.
+Resolving a call from one file to another, working out for certain which function a given call site actually points to, is hard in a dynamic language. You see a method being called on something, and to know which definition that refers to you need the type, which often is not written down. So the resolver, the piece of the tool doing this matching, guesses. A common approach is to match on name: if exactly one function in the project has this name, link to it, and if several do, pick by some rule of thumb.
 
 I pulled the edges out of one of these databases and looked at what the guesses were. A large share pointed at language builtins, which is technically true and useless: knowing that a piece of code calls a dictionary lookup tells you nothing about your repository. Another large share were cases where the resolver had many candidates with the same name and picked one. Sampling those at random, the ones I checked were wrong. One linked a call in JavaScript to a Python test fixture that happened to share a name.
 
-The edge count was several times larger than the one I maintain. Once builtins and coin flips came out, the real gap was much smaller than the headline. This is not an accusation of bad faith. It is what happens when a number becomes a feature: the incentive is to count edges, and nothing in the interface distinguishes a resolved edge from a guess. Confidence is often recorded internally and then not shown to the agent, which means the agent treats a coin flip and a certainty identically.
+The edge count was several times larger than the one I maintain. Once builtins and coin flips came out, the real gap was much smaller than the headline. This isn't an accusation of bad faith, it's what happens when a number becomes a feature: the incentive is to count edges, and nothing in the interface distinguishes a resolved edge from a guess. How confident the tool actually was in each guess is often recorded internally and then not shown to the agent, which means the agent treats a coin flip and a certainty identically.
 
-If you are evaluating one of these, the useful question is not how many edges. It is what fraction of call sites resolved at all, and of those, how many had exactly one candidate. Those two numbers are the honest ones and they are rarely published.
+If you are evaluating one of these, the useful question isn't how many edges there are. It's what fraction of call sites (the individual places in the code where a call happens) resolved at all, and of those, how many had exactly one candidate. Those two numbers are the honest ones and they are rarely published.
 
 ## The part that actually bothers me
 
@@ -69,9 +69,9 @@ It is also the limit. Everything in the graph is already in the code. The graph 
 
 Which means it cannot record a conclusion.
 
-Say someone spends two hours on a timeout bug. They check the obvious place, the request handler, and it is not there. They check the client configuration, also not there. Eventually they find that a connection pool is being exhausted by a retry loop three files away, and that two files have to change together because an invariant lives between them and neither one states it.
+Say someone spends two hours on a timeout bug. They check the obvious place, the request handler, and it is not there. They check the client configuration, also not there. Eventually they find that a connection pool is being exhausted by a retry loop three files away, and that two files have to change together because an invariant, a rule that has to hold true between them even though nothing enforces it, lives between them and neither file states it.
 
-Now ask what of that is in the graph. The edges between those files, maybe, if the resolver was good. Not the fact that the handler was checked and cleared. Not the reason the two files are coupled. Not the invariant, which is not written anywhere in the code, which is precisely why the bug existed.
+Now ask what of that is in the graph. The edges between those files, maybe, if the resolver worked correctly. Nothing else: not the fact that the handler was checked and cleared, not the reason the two files are coupled, not the invariant itself, which was never written down anywhere in the code, which is precisely why the bug existed in the first place.
 
 Six weeks later the same area breaks again. The graph is regenerated from the same source and it is byte for byte what it was before. It has learned nothing, because it is not the kind of thing that can learn. The second investigation starts exactly where the first one did, and re-derives the same conclusions at the same cost.
 
@@ -127,7 +127,7 @@ That is the claim in one line. A graph makes each hop cheaper. It does not reduc
 <text class="f-note" x="465" y="222" text-anchor="middle">it has learned nothing, because it is not the kind of thing that can learn</text>
 </svg>
 </div>
-<figcaption>A graph makes each hop cheaper. It does not reduce how many hops you need, and because everything in it was already in the source, it cannot hold a conclusion — so the second occurrence of a question costs what the first one did.</figcaption>
+<figcaption>A graph makes each hop cheaper. It does not reduce how many hops you need, and because everything in it was already in the source, it cannot hold a conclusion, so the second occurrence of a question costs what the first one did.</figcaption>
 </figure>
 
 ## A note about the visualisation

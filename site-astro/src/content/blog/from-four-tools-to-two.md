@@ -25,7 +25,7 @@ What went away was the idea that reaching that data deserved its own front door.
 
 The reason is a pattern I only saw by reading a lot of session transcripts in a row. The traversal tools were never called first. They could not be, because you cannot trace the impact of a symbol until you know which symbol, and finding that out is what the other two tools were for. Every single invocation of a traversal tool followed an invocation of a different tool, in the previous step, answering a question that the previous step's output had raised and failed to answer.
 
-Once you see it stated that way the conclusion is forced. A tool that is only ever called immediately after another tool, in response to a gap in that tool's output, is not a tool. It is a field that is missing from that output. And keeping it as a separate operation means the agent pays a full extra round trip to get information the first call could have included.
+Once you see it stated that way the conclusion is forced. A tool that is only ever called immediately after another tool, in response to a gap in that tool's output, isn't really a tool: it's a field missing from that output. And keeping it as a separate operation means the agent pays a full extra round trip to get information the first call could have included.
 
 That is a much worse trade than it looks, because a round trip in an agent session is not a cheap operation. Every turn re-sends the entire conversation so far. Splitting one answer across two calls does not cost you a small message. It costs you the whole context again.
 
@@ -62,13 +62,13 @@ So the relationships moved into the results. Asking where something lives now te
 <text class="f-key" x="525" y="100" text-anchor="middle">trace the callers</text>
 <text class="f-sub" x="525" y="120" text-anchor="middle">a whole extra round trip</text>
 <text class="f-key" x="790" y="110" text-anchor="middle">answer</text>
-<text class="f-key" x="360" y="270" text-anchor="middle">find the files — callers and importers already in the result</text>
+<text class="f-key" x="360" y="270" text-anchor="middle">find the files: callers and importers already in the result</text>
 <text class="f-sub" x="360" y="290" text-anchor="middle">the relationships became fields, the graph never went anywhere</text>
 <text class="f-key" x="790" y="280" text-anchor="middle">answer</text>
 <text class="f-note" x="525" y="180" text-anchor="middle">this turn re-sent the entire conversation to ask one follow-up</text>
 </svg>
 </div>
-<figcaption>The traversal tools were never called first — every invocation followed another call, answering a gap the previous output had left. A tool only ever called that way is a missing field, and keeping it separate charged a full round trip for it.</figcaption>
+<figcaption>The traversal tools were never called first: every invocation followed another call, answering a gap the previous output had left. A tool only ever called that way is a missing field, and keeping it separate charged a full round trip for it.</figcaption>
 </figure>
 
 ## The part that did go down, stated honestly
@@ -87,7 +87,7 @@ When the relationship data first moved into the other operations, I made it opti
 
 The agent almost never set it.
 
-I assumed the description was not clear enough, so I rewrote it as a bulleted list with examples, which is what you do when you think the problem is legibility. That version measured worse than the one before it. Not neutral. Worse, because the longer description was itself resident context on every turn, and it bought nothing.
+I assumed the description was not clear enough, so I rewrote it as a bulleted list with examples, which is what you do when you think the problem is legibility. That version measured worse than the one before it, not neutral but actively worse, because the longer description was itself resident context on every turn, and it bought nothing.
 
 The finding underneath is that an agent does not read a parameter list looking for opportunities. It has a goal, it forms an intent, and it fills in the arguments that intent requires. A parameter that would only be requested by an agent that already knew what it was going to find is not discoverable by describing it better. You cannot document your way to a behaviour the agent has no reason to attempt.
 
@@ -103,11 +103,11 @@ Results came back annotated. A file had an architectural role. It was flagged as
 
 Every one of those fields is gone now, removed in a single commit that also switched the parser to work purely from the syntax tree.
 
-The reason they went is that they were guesses wearing the costume of facts. "Entry point" is not a property a parser can read off a file. It is a judgement, produced by heuristics over path names and import counts, and the heuristics were wrong often enough that the label was worse than silence. A file labelled a utility that is actually the core of the subsystem does not merely fail to help. It actively steers away from the answer, and it does so in confident language.
+The reason they went is that they were guesses wearing the costume of facts. "Entry point" isn't a property a parser can read off a file: it's a judgment call, produced by heuristics (rules of thumb) over path names and import counts, wrong often enough that the label ended up worse than silence. A file labelled a utility that is actually the core of the subsystem doesn't merely fail to help: it actively steers away from the answer, and does so in confident language.
 
 The deeper problem is a division of labour. The agent reading my output is a language model. It is extremely good at looking at a path, a set of exported symbols, and a few lines of code and concluding "this is the request handler." That is the one thing in this pipeline that does not need my help. What it cannot do cheaply is scan two thousand files to find which ones to look at.
 
-So the rule I ended up with: return evidence, never classification. Paths, symbol names, exports, references, line numbers, the matched lines themselves. Things I can point at in a file. No role labels, no capability tags, no generated descriptions of what a file is for. Let the model do the interpreting, since it is better at it than my heuristics and it is going to redo the work anyway.
+So the rule I ended up with: return evidence, never classification. Paths, symbol names, exports, references, line numbers, the matched lines themselves. Things I can point at in a file. No role labels, no capability tags, and no generated descriptions of what a file is for. Let the model do the interpreting, since it is better at it than my heuristics and it is going to redo the work anyway.
 
 ## Deletion four: the duplicate
 
@@ -121,19 +121,19 @@ The shell command and the server tool had drifted into different names for one o
 
 So the tools were renamed to match the shell verbs exactly, the duplicate verb was dropped, and the dead scorer went with it. One operation, one name, whichever way you reach it.
 
-The cost of an extra name is not the code. It is that everything you write about your tool now has to be conditional.
+The cost of an extra name isn't the code: it's that everything you write about your tool now has to be conditional.
 
 ## Deletion five: the server that served
 
 The third removal is the one I would not have predicted.
 
-The architecture had a background process that held the index in memory and answered queries over a local connection. This is the obvious shape. The index is expensive to build, so build it once, keep it warm, and have the command line be a thin client that asks the running process. There was a bridge layer and an HTTP daemon to do exactly this.
+The architecture had a background process, a daemon, that held the index in memory and answered queries over a local connection. This is the obvious shape. The index is expensive to build, so build it once, keep it warm, and have the command line be a thin client that asks the running process. There was a bridge layer and an HTTP daemon (a background server, listening for requests the way a website's server does) to do exactly this.
 
 Both are deleted. The commit that did it is titled, accurately, "daemon serves nothing."
 
 What replaced it is that the background process only maintains a cache on disk and answers nothing. Every query is a fresh short-lived process that reads that cache, computes, prints, and exits.
 
-This looks like a downgrade if you think about it as a server. It stops looking like one once you count what actually goes wrong in practice. A server introduces a liveness problem, a port, a protocol, a version skew between client and server, and a class of failure where the daemon is running but wrong. A file on disk has none of that. The reader either finds a valid cache or it does not.
+This looks like a downgrade if you think about it as a server. It stops looking like one once you count what actually goes wrong in practice. A server introduces a liveness problem (is it actually still running right now, or silently dead?), a port, a protocol, a version skew between client and server (the two sides quietly drifting out of agreement about how to talk to each other), and a class of failure where the daemon is running but wrong. A file on disk has none of that. The reader either finds a valid cache or it does not.
 
 The saving I imagined I was getting from keeping things warm was also not where the time went. Reading a prepared cache from disk is fast. The expensive part was always building the index, and that still happens once, in the background, exactly as before. I had optimised the cheap half of the operation and paid for it with a whole category of bugs.
 
