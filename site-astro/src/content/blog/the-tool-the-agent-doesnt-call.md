@@ -15,13 +15,13 @@ I will start with my own numbers, because the argument is worthless coming from 
 
 On a large Java repository, I checked how many of the agent's file reads had been preceded by the command I built specifically to tell it which files to read. The majority had not. The agent opened files without asking the tool that exists to rank them, in a repository where the tool was installed, working, and mentioned in the project instructions.
 
-That is not a defect report about the model. It is a fact about how tool use actually happens, and it applies to whatever you are building too.
+That's not a defect report about the model, it's a fact about how tool use actually happens, and it applies to whatever you are building too.
 
 ## Three things that look like adoption and are not
 
 The mental model I had was a chain. Make the tool available, describe it clearly, and instruct the agent to use it. Each link seemed necessary and the set seemed sufficient. None of the three does what it appears to.
 
-**Availability** means the tool is in the schema list. The agent knows it exists in the same way you know your kitchen contains a mandoline. Knowing is not reaching.
+**Availability** means the tool is in the schema list (the menu of tools the agent is told it can call). The agent knows it exists in the same way you know your kitchen contains a mandoline. Knowing is not reaching.
 
 **Documentation** is read once, at the start, along with everything else in your instruction files. By turn twenty it is a small and distant part of a conversation that now contains a stack trace, four files, and the user changing their mind. It has not been forgotten exactly. It has been outweighed.
 
@@ -35,13 +35,13 @@ Text search is universal, it is understood deeply from training, its failure mod
 
 A custom tool asks for something extra. It asks the agent to trust a ranking it cannot verify, in a format it has seen far less often, from a source it has no prior about. When your ranked output puts a file first, the agent has to decide whether to believe you. Believing you is a risk. Grepping is not.
 
-So the bar is not "is my tool better than a text search." The bar is "is my tool better by enough, at the exact moment of choosing, to overcome a habit that is already working." Those are different bars and only the second one predicts behaviour.
+The bar people assume is "is my tool better than a text search." The real bar is "is my tool better by enough, at the exact moment of choosing, to overcome a habit that is already working." Those are different bars, and only the second one predicts behaviour.
 
 ## The mistake I shipped, and so did someone else
 
 There is a specific engineering error here that I want to describe properly, because I made it and then found the same shape in another project while reading its source, which suggests it is a trap rather than an oversight.
 
-Most agent harnesses let you register a hook that fires before a tool runs. The obvious use is a gentle intervention: when the agent is about to run a search, notice, and point it at the better path first.
+Most agent harnesses (the program actually running the agent loop, like Claude Code or Cursor) let you register a hook that fires before a tool runs. The obvious use is a gentle intervention: when the agent is about to run a search, notice, and point it at the better path first.
 
 So you register the hook on the search tools. The dedicated grep tool, the file glob tool. Reasonable. That is where searching happens.
 
@@ -67,7 +67,7 @@ So injection covers the case where the vocabulary happened to match, and misses 
 
 I have ended up with three things that work, none of which involve trying harder to persuade the agent.
 
-The first is to lose gracefully. If the agent is going to reach for a text search regardless, the tool should be useful in that world rather than sulking about it. Make the output good enough that when the agent does call it, the call ends the question, so the next occurrence has a positive prior. Adoption is earned per call and it compounds.
+The first is to lose gracefully. If the agent is going to reach for a text search regardless, the tool should be useful in that world rather than sulking about it. Make the output good enough that when the agent does call it, the call ends the question, so the tool has earned a little more trust the next time the same situation comes up. Adoption is earned per call and it compounds.
 
 The second is to make the output final. Most of the times my tool got called and then the agent grepped anyway, the reason was legible in the transcript: my output raised a question it did not answer. It listed a file without saying whether the file defines the thing or merely mentions it, so the agent opened it to check. That is not the agent being stubborn. That is my output being incomplete. Every follow-up you force is a place where the habit gets to reassert itself.
 

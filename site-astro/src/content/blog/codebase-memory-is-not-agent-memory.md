@@ -19,9 +19,9 @@ I build a different kind of memory, and for a while I described it the same way,
 
 A codebase does not forget anything. The function is still named what it's named. The import graph is still exactly what it is. If you want to know whether a file exports a symbol, you can go read the file, right now, and get the true answer. Code is its own perfect record of itself.
 
-What is missing is not a record of the code. It's a record of what an agent already worked out *about* the code, on someone else's turn, that isn't visible by reading the file itself. Which of three near-identical hook scripts is the one actually wired into the live config. Why a fix to one file's default value quietly broke a second file six commits later. Whether a function that looks dead is actually called through a framework convention no import statement shows.
+What's missing is a record of what an agent already worked out *about* the code, on someone else's turn, that isn't visible by reading the file itself. Which of three near-identical hook scripts is the one actually wired into the live config. Why a fix to one file's default value quietly broke a second file six commits later. Whether a function that looks dead is actually called through a framework convention no import statement shows.
 
-None of that is a fact about the agent. It's a fact about the place. It should attach to the file, not to the user, and it should be gone the moment the file it describes changes underneath it.
+None of that is a fact about the agent. It's a fact about the place, and it should attach to the file rather than the user, disappearing the moment the file it describes changes underneath it.
 
 ## Why the storage shape has to differ
 
@@ -67,15 +67,15 @@ That's the part conversational memory tooling doesn't have to solve and codebase
 <text class="f-sub" x="70" y="330" text-anchor="start">a note that can tell you it might be wrong beats one that can't</text>
 </svg>
 </div>
-<figcaption>A preference has no ground truth to check against, so it just holds until you say otherwise. A note about code sits next to the file it describes, and that's not extra ceremony — it's what lets the system catch the note going stale instead of quietly acting on it.</figcaption>
+<figcaption>A preference has no ground truth to check against, so it just holds until you say otherwise. A note about code sits next to the file it describes, and that's what lets the system catch the note going stale instead of quietly acting on it, not extra ceremony.</figcaption>
 </figure>
 
 ## Where the notes actually come from
 
-The other difference is who's qualified to write the note. For a person, the agent is the only witness. For code, the agent that just spent real turns tracing a call path, reading three files to find where a value actually gets set, running the failing case down to the line, is also the only witness that has the full context right now. A note written after the fact, by summarizing a transcript, is not the same thing. It's a paraphrase of a paraphrase.
+The other difference is who's qualified to write the note. For a person, the agent is the only witness. For code, the agent that just spent real turns tracing a call path, reading three files to find where a value actually gets set, running the failing case down to the line, is also the only witness that has the full context right now. A note written after the fact, by summarizing a transcript, is a paraphrase of a paraphrase, not the same thing at all.
 
 So the natural place to write a codebase note is the moment the work happens, by the agent doing the work, not as a separate memory-extraction pass over a log later. The note is a byproduct of the task, not a second task.
 
 ## Naming the category
 
-I stopped calling this "agent memory" because it invites the wrong comparison. It's not a bigger or smarter version of remembering a user's preferences. It's memory for a codebase specifically: address it to the code, expire it against the code, and let the agent that did the reading be the one who writes it down. Once you name it as its own thing, the design questions get a lot easier to answer, because you stop importing answers from a problem that isn't the one in front of you.
+I stopped calling this "agent memory" because it invites the wrong comparison. This is memory for a codebase specifically, not a bigger or smarter version of remembering a user's preferences: address it to the code, expire it against the code, and let the agent that did the reading be the one who writes it down. Once you name it as its own thing, the design questions get a lot easier to answer, because you stop importing answers from a problem that isn't the one in front of you.

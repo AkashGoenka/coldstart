@@ -17,7 +17,7 @@ Then I actually decomposed a session, and the picture was not the one I had in m
 
 ## What a turn actually bills for
 
-A chat with a model is stateless underneath. The model does not remember the previous turn. Every time the agent takes an action, the entire conversation so far is sent again: the system prompt, the tool definitions, every file that was read, every command that was run, every result that came back.
+A chat with a model is stateless underneath, meaning the model itself has no memory between calls; it doesn't remember the previous turn on its own. Every time the agent takes an action, the entire conversation so far is sent again: the system prompt, the tool definitions, every file that was read, every command that was run, every result that came back.
 
 Providers soften this with prompt caching. The unchanged prefix of the conversation gets cached, and re-sending it is much cheaper than sending it fresh. Cheaper is not free. You are still billed for every cached token, on every single turn, for the rest of the session.
 
@@ -41,9 +41,9 @@ Look at what sits in that second term.
 - Every file read so far, in full.
 - Every command and its output, in full.
 
-Only the last two grow during the session, and they grow in one direction. Nothing leaves the conversation. Reading a file is not a one-time cost of that file. It is a subscription: you pay for those lines again on every remaining turn.
+Only the last two grow during the session, and they grow in one direction. Nothing leaves the conversation. Reading a file isn't a one-time cost of that file: it's a subscription, you pay for those lines again on every remaining turn.
 
-The tool schemas deserve a specific mention, because this one surprised me. A tool definition is not billed once when you install it. It is part of the prompt, so it is billed on every turn like everything else. Connect a server that exposes a dozen richly documented operations and you have added rent to the whole session, paid whether the agent calls any of them or not. A tool surface is not a menu you browse for free. It is a standing charge.
+The tool schemas deserve a specific mention, because this one surprised me. A tool definition isn't billed once when you install it: it's part of the prompt, so it's billed on every turn like everything else. Connect a server that exposes a dozen richly documented operations and you have added rent to the whole session, paid whether the agent calls any of them or not. A tool surface isn't a menu you browse for free. It's a standing charge.
 
 The practical consequence is that the resident term is mostly not yours to shrink. You can be careful about what gets read. You can keep your tool surface small. Beyond that, it is a floor that rises.
 
@@ -120,7 +120,7 @@ A tool that causes one extra turn has re-billed the entire conversation.
 
 If the resident context mostly cannot shrink, and output barely counts, then the number of turns is what you have left. And unlike the other two, it responds to design.
 
-This reframes what a good tool for an agent looks like. The question is not "how much did it print." The question is "did the agent have to ask again."
+This reframes what a good tool for an agent looks like. The question isn't how much a tool printed: it's whether the agent had to ask again.
 
 A search that returns forty file paths with no way to tell which matters causes the agent to open several of them to find out. Each open is a turn, and each opened file joins the resident context permanently. The search looked cheap. It was not. It was the most expensive thing in the sequence, because of what it made happen next.
 
@@ -130,7 +130,7 @@ Same logic in the other direction. Ten small precise calls are worse than two ca
 
 ## Measuring your own
 
-None of this needs to be taken on faith. If you use a harness that writes session transcripts to disk, the numbers are already there.
+None of this needs to be taken on faith. If you use a harness (the program running the agent loop, like Claude Code or Cursor) that writes session transcripts to disk, the numbers are already there.
 
 Each assistant message carries a usage record with separate counts for fresh input, cache reads, cache writes, and output. The total billed for that turn is the sum of all four. Two things to be careful about. Dedupe by message id first, because a streamed message can appear more than once and double counting will flatter or wreck your result. And group by turn, so you can watch the resident context climb rather than seeing one aggregate.
 

@@ -90,11 +90,11 @@ It does not read the transcript to find out what was learned. It reads it to fin
 
 Then it hands that list back to the agent that just did the work and asks it to write the notes. The files are still in context. The wrong assumption is still recent. Nothing has to be reconstructed.
 
-The rule I settled on is short: if writing the note needs a read you have not already done, do not write the note. An agent that has to go look something up in order to write a note is not remembering. It is guessing, and a guess written into a file that another agent will trust later is worse than no file at all.
+The rule I settled on is short: if writing the note needs a read you have not already done, do not write the note. An agent that has to go look something up in order to write a note isn't remembering, it's guessing, and a guess written into a file that another agent will trust later is worse than no file at all.
 
 ## Freshness is what makes the note usable
 
-Because the note is written by the agent that read the files, the tool knows which files it came from. It records a content hash for each one.
+Because the note is written by the agent that read the files, the tool knows which files it came from. It records a content hash for each one, a fingerprint of the file's exact contents at that moment, so any later change to the file produces a different fingerprint.
 
 Later, when the note is shown, one of two things is true. Either the file has not changed since the note was written, and the note can be trusted without opening the file again. Or the file has changed, and the note is shown with a warning naming the file to check.
 
@@ -114,4 +114,4 @@ I took those costs because fewer notes that are true seem more valuable than a l
 
 coldstart's notebook follows this design. Notes are written by agents after real work, stored in the repo, anchored to concrete files and symbols, and surfaced later only as reference data. If the evidence changed, the note says so.
 
-The point is not to build a perfect memory. It is to stop pretending that a transcript is the same thing as the working context that produced it.
+The point isn't to build a perfect memory: it's to stop pretending that a transcript is the same thing as the working context that produced it.

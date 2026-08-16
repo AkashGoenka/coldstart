@@ -29,15 +29,15 @@ Prompt caching is what makes a long agent session affordable at all, and every p
 
 That means a tool can genuinely shrink what's sitting in the context window and still raise the bill for that session, because it converted tokens that were about to be cheap cache reads back into expensive cache writes. A dashboard reading "40% smaller context" isn't lying about the context. It's just not the same claim as "40% cheaper session," and on the same transcript, the two numbers can point in opposite directions.
 
-The ratio this rides on is large enough to make the bet a bad one by default. On a real session I decomposed for [the tokens post](/blog/where-the-tokens-go/), the fixed base alone, system prompt plus tool schemas, sat around 25,000 tokens, resident and unchanged on every turn. Across 15 turns, re-reading that one unchanged block was roughly half the entire session's bill, and every one of those re-reads was a cheap cache hit, precisely because nothing before that point in the conversation ever moved. Touch anything earlier in the transcript to save space and you're betting against that ratio, not for it: you're risking the cheap half of the bill to shrink a number that was never the expensive part.
+The ratio this rides on is large enough to make the bet a bad one by default. On a real session I decomposed for [the tokens post](/blog/where-the-tokens-go/), the fixed base alone, system prompt plus tool schemas (the descriptions of every tool the agent can call, sent on every turn whether it uses one or not), sat around 25,000 tokens, resident and unchanged on every turn. Across 15 turns, re-reading that one unchanged block was roughly half the entire session's bill, and every one of those re-reads was a cheap cache hit, precisely because nothing before that point in the conversation ever moved. Touch anything earlier in the transcript to save space and you're betting against that ratio, not for it: you're risking the cheap half of the bill to shrink a number that was never the expensive part.
 
 So the question worth asking of anything that compresses or rewrites context already in the conversation, as opposed to a single new call's output, is whether its savings number survives being measured after the edit, from the resulting usage record, on the same real task, rather than compared against the size of the thing it rewrote. If the number only holds at the instant the edit is applied, it isn't a session cost number yet. It's a description of the edit.
 
 ## What I actually measured
 
-That's the standard I held coldstart's own numbers to: turns and total tokens across a whole session, coldstart wired in against a no-tool baseline doing the same task with plain file reads, greps, and directory listings. Each arm is a real agent session against a real repository, tokens read off that session's own usage records, not estimated and not summed from a printed total. Both arms ran the same fixed list of queries, once each, no retries.
+That's the standard I held coldstart's own numbers to: turns and total tokens across a whole session, coldstart wired in against a no-tool baseline doing the same task with plain file reads, greps, and directory listings. Call each of those two setups an arm, the standard term for one side of a comparison like this. Each arm is a real agent session against a real repository, tokens read off that session's own usage records, not estimated and not summed from a printed total. Both arms ran the same fixed list of queries, once each, no retries.
 
-I ran this on two real open-source applications rather than a synthetic benchmark repo, because a repo built to be benchmarked tends to have suspiciously clean naming and structure that a real codebase doesn't. Arches is a Python and Django application, 27 queries. JMRI is a Java application, considerably more verbose per file and with a heavier build surface, 25 queries. Both query lists are navigation questions representative of what an agent actually asks while working a real task in that codebase: where's the thing that handles this, who calls this function, what does this error trace back to. Recall was scored against a fixed, pre-written list of the files a correct answer to each query has to include, decided before either arm ran, not reconstructed afterward from whichever arm did better.
+I ran this on two real open-source applications rather than a synthetic benchmark repo, because a repo built to be benchmarked tends to have suspiciously clean naming and structure that a real codebase doesn't. Arches is a Python and Django application, 27 queries. JMRI is a Java application, considerably more verbose per file and with a heavier build surface, 25 queries. Both query lists are navigation questions representative of what an agent actually asks while working a real task in that codebase: where's the thing that handles this, who calls this function, what does this error trace back to. Recall, meaning how many of the files a correct answer actually needed were the ones the agent found, was scored against a fixed, pre-written list decided before either arm ran, not reconstructed afterward from whichever arm did better.
 
 ## The number that was too good
 
@@ -72,11 +72,11 @@ I reran the JMRI sweep in isolation, no other processes competing for CPU. The r
 <text class="f-note" x="175" y="98" text-anchor="middle">64%</text>
 <text class="f-sub" x="455" y="180" text-anchor="middle">39%, provisional</text>
 <text class="f-note" x="735" y="206" text-anchor="middle">31%</text>
-<text class="f-key" x="595" y="135" text-anchor="middle">reran in isolation — 15 points lower</text>
-<text class="f-lab" x="175" y="344" text-anchor="middle">Arches — 27 queries</text>
-<text class="f-lab" x="455" y="344" text-anchor="middle">JMRI — first run</text>
+<text class="f-key" x="595" y="135" text-anchor="middle">reran in isolation, 15 points lower</text>
+<text class="f-lab" x="175" y="344" text-anchor="middle">Arches: 27 queries</text>
+<text class="f-lab" x="455" y="344" text-anchor="middle">JMRI: first run</text>
 <text class="f-sub" x="455" y="362" text-anchor="middle">machine under contention</text>
-<text class="f-lab" x="735" y="344" text-anchor="middle">JMRI — isolated rerun</text>
+<text class="f-lab" x="735" y="344" text-anchor="middle">JMRI: isolated rerun</text>
 </svg>
 </div>
 <figcaption>The first JMRI number looked real and wasn't quite: the baseline was running on a machine under contention, inflating the gap. Isolating the rerun brought it down fifteen points, to the number that actually gets published.</figcaption>
@@ -84,11 +84,11 @@ I reran the JMRI sweep in isolation, no other processes competing for CPU. The r
 
 ## Why the correction is the point
 
-It would have been easy to keep the first number. Nobody auditing a percentage on a website reruns your benchmark. But a number you can't explain how you got is not a number, it's a claim, and the difference matters most exactly when nobody's checking. The methodology has to be something a skeptical reader could redo: real repository, fixed query list, controlled machine, counted from the actual transcript's usage records rather than eyeballed from a printed summary, same as the process in the tokens post.
+It would have been easy to keep the first number. Nobody auditing a percentage on a website reruns your benchmark. But if you can't explain how you got a number, it doesn't count as a number, only as a claim, and the difference matters most exactly when nobody's checking. The methodology has to be something a skeptical reader could redo: real repository, fixed query list, controlled machine, counted from the actual transcript's usage records rather than eyeballed from a printed summary, same as the process in the tokens post.
 
 The gap between the two real numbers is informative in its own right. Arches at 64% and JMRI at 31% are not the same win, and averaging them into one blended figure would have erased the reason they differ. Java's verbosity and build tooling change what a single turn costs in that codebase, which changes how much a tool that reduces turns can save. A single number implies the saving is a property of the tool. Two numbers, from two different codebases, show it's a property of the tool interacting with the codebase, which is the truer and less flattering thing to say.
 
-Both numbers also stayed inside the standard from the top of this post: whole session, both arms, same task, counted from the transcript. A tool that only ever shows you a percentage without saying what it was measured against, whole session or single call, isn't being cagey about a detail. It's not stating the thing that would let you check it.
+Both numbers also stayed inside the standard from the top of this post: whole session, both arms, same task, counted from the transcript. A tool that only ever shows you a percentage without saying what it was measured against, whole session or single call, is hiding the one fact that would let you check it.
 
 ## What this number doesn't cover
 
