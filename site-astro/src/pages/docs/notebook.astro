@@ -71,26 +71,14 @@ const techArticleJsonLd = {
       </ul>
 
       <h4 class="subhead">Why it can be trusted</h4>
-      <ul class="tight">
-        <li><b>Freshness is mechanical.</b> Every anchor is stamped with a content hash at write time and re-checked on every read. A drifted note renders <span class="pill changed"><span class="d"></span>evidence changed</span> instead of passing as fact.</li>
-        <li><b>The log is the truth.</b> Notes live in an append-only <code>.raw</code> event log; the Markdown notes are derived and regenerated mechanically.</li>
-        <li><b>Writes go through a gate.</b> A new note's concept is searched against existing notes first — duplicates are caught at write time.</li>
-        <li><b>Concurrent sessions are safe.</b> Per-note append-only logs, exclusive creation of new ids, lossless union-merge, atomic renders — concurrent writers never silently merge or lose a note.</li>
-        <li><b>Corrections happen in-session.</b> An agent that finds a note wrong while the evidence is in context fixes or retracts it right then.</li>
-      </ul>
+      <p>Freshness is mechanical (content-hash, re-checked on every read — a drifted note renders <span class="pill changed"><span class="d"></span>evidence changed</span> instead of passing as fact), writes go through a dedup gate, and concurrent sessions never silently lose or merge a note. Full mechanics: <a href="/how-it-works/notebook/">how the notebook works →</a></p>
 
       <div class="callout"><span class="ct">On token savings</span>Because the next agent recalls a verified note instead of re-deriving it, repeated tasks re-spend far fewer tokens orienting. In head-to-head benchmarks on real applications: <b>−64% tokens on Arches</b> (Python/Django, 27-query sweep) and <b>−31% tokens on JMRI</b> (Java, 25-query sweep). Cost scales with turns, not output size.</div>
 
       <p style="margin-top:22px"><b>Language-agnostic.</b> The freshness machinery is content-hash based, so the notebook works on any codebase — including languages the navigation index doesn't parse.</p>
 
       <h4 class="subhead">When capture happens</h4>
-      <p>Capture is <b>trigger-timed</b>, not every-turn. The hook keeps evidence of what the session actually read or edited (search hits and path mentions never count), scores the uncaptured backlog, and asks at natural boundaries — when a burst of work settles, or a commit lands. Most turns end silently.</p>
-      <p>The ask itself is <b>non-blocking</b>: it arrives with your next prompt as a short worklist of the files the session worked with, each annotated with its existing note's state. That worklist is also written durably to <code>.coldstart/notebook/.worklist-&lt;session&gt;-&lt;agent&gt;.md</code>, so a long session can re-read it after the one-shot delivery scrolls away.</p>
-      <div class="flags" style="margin-top:16px">
-        <div class="flag-row"><span class="fk">Worklist lifecycle</span><span class="fv">Trims as notes are written, regenerates on the next capture. A missed file simply reappears rather than being lost.</span></div>
-        <div class="flag-row"><span class="fk">Per-agent keying</span><span class="fv">The main agent and each subagent it spawns share one session id but get their own worklist, so a subagent's capture never overwrites the main agent's list.</span></div>
-        <div class="flag-row"><span class="fk">Freshness benefit</span><span class="fv">Files whose notes are already fresh don't re-trigger capture, so a warmed-up repo asks less over time. Brand-new notebooks warm with use.</span></div>
-      </div>
+      <p>Capture is <b>trigger-timed</b>, not every-turn — the hook scores what the session actually read or edited (search hits and path mentions never count) and asks at natural boundaries, when a burst of work settles or a commit lands. The ask is <b>non-blocking</b>: it arrives with your next prompt as a worklist of the files the session touched, each annotated with its existing note's state, and is also written durably to <code>.coldstart/notebook/.worklist-&lt;session&gt;-&lt;agent&gt;.md</code> so a long session can re-read it after the one-shot delivery scrolls away. Missed files simply reappear on the next trigger; a warmed-up repo (notes already fresh) asks less over time.</p>
 
       <h4 class="subhead"><code>/capture-notes</code> — capture on demand</h4>
       <p>Sometimes you know a moment is worth recording before the automatic score crosses — a hard-won insight, a confirmed absence, a decision that didn't touch many files. <code>/capture-notes</code> fires the capture flow immediately, with the same worklist and gate. It never forces a write.</p>
@@ -218,7 +206,6 @@ const techArticleJsonLd = {
         </div>
       </div>
       <p style="margin-top:16px">Once committed, the <code>.raw</code> logs travel with the repo and <b>union-merge across branches and machines</b> — parallel branches of notes reconcile without conflicts. Every teammate's agent both reads from and writes to the same notebook, so the corpus grows at the speed of the whole team.</p>
-      <div class="callout"><span class="ct">Bigger notebooks, faster</span>The corpus grows exactly where the codebase gets worked. On a shared repo, that's every engineer's sessions feeding one knowledge base — and because each note stays anchored to the code, growth stays true instead of rotting.</div>
     </section>
   </main>
 </div>
@@ -229,31 +216,29 @@ const techArticleJsonLd = {
 <script>
   (function () {
     var links = Array.prototype.slice.call(document.querySelectorAll('.side a[href^="#"]'));
-    if (!links.length || !('IntersectionObserver' in window)) return;
+    if (!links.length) return;
     var byId = {};
     links.forEach(function (a) { byId[a.getAttribute('href').slice(1)] = a; });
-    var visible = new Set();
-    var obs = new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) {
-        if (e.isIntersecting) visible.add(e.target.id); else visible.delete(e.target.id);
-      });
-      var top = null, topY = Infinity;
-      visible.forEach(function (id) {
-        var el = document.getElementById(id);
-        if (!el) return;
-        var y = el.getBoundingClientRect().top;
-        if (y < topY) { topY = y; top = id; }
-      });
-      links.forEach(function (a) { a.classList.remove('active'); });
-      if (top && byId[top]) {
-        byId[top].classList.add('active');
-        var sideEl = byId[top].closest('.side');
-        if (sideEl && sideEl.scrollHeight > sideEl.clientHeight) {
-          byId[top].scrollIntoView({ block: 'nearest' });
-        }
+    var sections = Array.prototype.slice.call(document.querySelectorAll('.doc-sec')).filter(function (s) { return byId[s.id]; });
+    if (!sections.length) return;
+
+    var setActive = function () {
+      var offset = 70 + window.innerHeight * 0.3;
+      var current = sections[0];
+      for (var i = 0; i < sections.length; i++) {
+        if (sections[i].getBoundingClientRect().top <= offset) current = sections[i];
       }
-    }, { rootMargin: '-70px 0px -70% 0px', threshold: 0 });
-    document.querySelectorAll('.doc-sec').forEach(function (s) { obs.observe(s); });
+      links.forEach(function (a) { a.classList.remove('active'); });
+      var link = byId[current.id];
+      link.classList.add('active');
+      var sideEl = link.closest('.side');
+      if (sideEl && sideEl.scrollHeight > sideEl.clientHeight) {
+        link.scrollIntoView({ block: 'nearest' });
+      }
+    };
+    window.addEventListener('scroll', setActive, { passive: true });
+    window.addEventListener('resize', setActive);
+    setActive();
   })();
 
   (function () {
