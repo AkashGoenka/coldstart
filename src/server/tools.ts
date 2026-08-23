@@ -8,6 +8,11 @@ import {
   type RelatedFile,
 } from '../indexer/content-tokens.js';
 import { buildRichPage } from './find.js';
+import {
+  coChangePartnersFor,
+  type CoChangeIndex,
+  type CoChangePartner,
+} from '../indexer/cochange.js';
 
 // For a target file, find callers of its exported symbols via symbolEdges.
 // Returns up to CALLERS_CAP unique caller files, each with up to a few example
@@ -132,6 +137,10 @@ export function handleGetStructure(
     view?: GsView;
     symbol?: string;
   },
+  /** Keeper-derived "edited together" pairs. Absent (no keeper has run here,
+   *  shallow clone, not a git repo) → the section is omitted entirely, never
+   *  rendered as an empty list that would read as "nothing moves with this". */
+  coChange?: CoChangeIndex | null,
 ): object {
   if (!params.file_path) {
     return { error: 'file_path is required' };
@@ -356,9 +365,55 @@ export function handleGetStructure(
   // Dedupe is against what THIS payload renders (importsOut/importersShown),
   // not the raw edge set — a god-file's truncated importer list can hide a
   // file that the edge set technically contains.
+  // Edited-together (git history channel). Rendered in EVERY view, not just
+  // full: it was full-only at first, and the very first real session to reach
+  // for it asked `gs models.py --match spatialview --view symbols` — the
+  // narrow view our own guidance advertises as load-bearing — so the section
+  // was structurally unreachable at the one moment it was wanted. A narrow
+  // view means "show me less of this file", not "hide the channel that says
+  // which OTHER file an edit here forgets".
+  //
+  // The exclusion set comes from the import graph itself (outEdges/inEdges),
+  // NOT from whichever lists this view happens to render. Two reasons: the
+  // heading claims these pairs are "NOT an import or call edge", which is only
+  // true if every graph neighbour is excluded — in `--view symbols` nothing
+  // populates importsOut/importersShown, so a plain importer would have been
+  // printed here under a false heading; and in full view the old set excluded
+  // only the *shown* importers, so a god-file's truncated list let an importer
+  // past the same guard. bodyRefImporters stays in as a same-page dedup.
+  //
+  // Computed BEFORE Related so its picks can be excluded there too — the two
+  // channels overlap (a file that co-ships often tends to share vocabulary),
+  // and the same path printed under two headings spends budget twice.
+  const coChangeOut: CoChangePartner[] = coChangePartnersFor(
+    coChange ?? null,
+    fileId,
+    new Set<string>([
+      fileId,
+      ...(index.outEdges.get(fileId) ?? []),
+      ...(index.inEdges.get(fileId) ?? []),
+      ...bodyRefImporters,
+    ]),
+  );
+
+  // Related, like Edited together, renders in EVERY view. Both answer "which
+  // OTHER file does this connect to", and a narrow view is a request for less
+  // of THIS file, not for fewer channels — asking for `--view symbols` on a
+  // god-file is exactly when the name-reference neighbours matter most.
+  //
+  // Same exclusion rule as co-change, and for the same reason: the heading
+  // promises "no import edge", which is only true if every graph neighbour is
+  // excluded. importsOut/importersShown are empty in a narrow view and capped
+  // in the full one, so they cannot be the source of that guarantee.
   let relatedOut: RelatedFile[] = [];
-  if (view === 'full') {
-    const excludeIds = new Set<string>([fileId, ...importsOut, ...importersShown, ...bodyRefImporters]);
+  {
+    const excludeIds = new Set<string>([
+      fileId,
+      ...(index.outEdges.get(fileId) ?? []),
+      ...(index.inEdges.get(fileId) ?? []),
+      ...bodyRefImporters,
+      ...coChangeOut.map(c => c.path),
+    ]);
     let sourceTokens = file.contentTokens;
     if (matchPredicate && !matchMissedSymbols && symbolsOut.length > 0 && index.contentTokenPostings.size > 0) {
       try {
@@ -506,6 +561,21 @@ export function handleGetStructure(
         lines.push(`  This list is exhaustive over indexed file content: no other file references "${params.match}" as a named identifier. Do not grep to re-verify, and do not hunt for use-sites in other subsystems.`);
       }
     }
+  }
+
+  // Edited together (git-history channel). Deliberately worded as a HABIT, not
+  // a dependency: there is no edge here, and an agent that reads it as one will
+  // go looking for an import that doesn't exist. The "N of M commits" is the
+  // evidence, shown so a weak pairing is visibly weak rather than presented
+  // with the same authority as a call edge.
+  if (coChangeOut.length > 0) {
+    lines.push('');
+    lines.push('Edited together (changed in the same commits — a habit in this repo\'s history, NOT an import or call edge, hence these files are likely related):');
+    for (const c of coChangeOut) {
+      const share = c.outOf > 0 ? ` — changed together in ${c.shared} of this file's ${c.outOf} commits` : ` — changed together in ${c.shared} commits`;
+      lines.push(`  ${c.path}${share}`);
+    }
+    lines.push('  Often the piece an edit here forgets: a sibling implementation, a test, or a cross-language counterpart with no code link. Open one before assuming this file is self-contained.');
   }
 
   // Related (content-token channel)

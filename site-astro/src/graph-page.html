@@ -1,0 +1,907 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>coldstart — codebase graph</title>
+<style>
+  :root{
+    --ink:#05070c;
+    --panel:rgba(10,14,23,.84);
+    --line:rgba(140,160,200,.16);
+    --fg:#e8ecf5;
+    --fg-dim:#8b97b0;
+    --fg-faint:#5a6480;
+    --accent:#ffd479;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:var(--ink);color:var(--fg);
+    font-family:var(--sans);overflow:hidden;-webkit-font-smoothing:antialiased;
+  }
+  canvas{display:block;position:fixed;inset:0;cursor:grab}
+  canvas.dragging{cursor:grabbing}
+  canvas.pointing{cursor:pointer}
+
+  .panel{
+    position:fixed;background:var(--panel);backdrop-filter:blur(14px);
+    border:1px solid var(--line);border-radius:10px;
+  }
+
+  #head{top:18px;left:18px;padding:14px 16px;min-width:236px}
+  #home{
+    display:inline-block;margin:0 0 9px;font-size:11px;letter-spacing:.03em;
+    color:var(--fg-faint);text-decoration:none;
+  }
+  #home:hover{color:var(--accent)}
+  #head h1{
+    margin:0 0 2px;font-size:11px;font-weight:600;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--fg-dim);
+  }
+  #repo{
+    font-family:var(--mono);font-size:19px;color:var(--fg);background:none;
+    border:none;padding:0;margin:0 0 10px;cursor:pointer;display:block;
+  }
+  #repo:hover{color:var(--accent)}
+  #repo::after{content:" ⇄";font-size:12px;color:var(--fg-faint)}
+  .stat{display:flex;justify-content:space-between;gap:18px;font-size:12px;line-height:1.75}
+  .stat b{font-family:var(--mono);font-weight:500;font-variant-numeric:tabular-nums}
+  .stat span{color:var(--fg-dim)}
+  .stat.total b{font-size:15px}
+
+  #legend{
+    top:18px;right:18px;padding:12px 14px;width:212px;
+    max-height:calc(100vh - 36px);overflow-y:auto;
+  }
+  #legend h2{
+    margin:0 0 8px;font-size:10px;font-weight:600;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--fg-dim);
+  }
+  .cl{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:11.5px;cursor:pointer;color:var(--fg-dim)}
+  .cl:hover,.cl.on{color:var(--fg)}
+  .cl .dot{width:8px;height:8px;border-radius:50%;flex:none}
+  .cl .nm{font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left}
+  .cl .ct{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--fg-faint)}
+
+  #search{top:18px;left:50%;transform:translateX(-50%);width:min(420px,50vw);padding:0}
+  #q{width:100%;background:none;border:none;outline:none;color:var(--fg);font-family:var(--mono);font-size:13px;padding:11px 14px}
+  #q::placeholder{color:var(--fg-faint)}
+  #hits{max-height:46vh;overflow-y:auto;border-top:1px solid var(--line)}
+  #hits:empty{display:none}
+  .hit{padding:7px 14px;cursor:pointer;font-size:12px;display:flex;align-items:baseline;gap:8px}
+  .hit:hover{background:rgba(255,212,121,.1)}
+  .hit b{font-family:var(--mono);font-weight:500}
+  .hit i{font-style:normal;color:var(--fg-faint);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* ---- map-mode chrome ---- */
+  #mapbar{top:18px;left:18px;padding:13px 15px;width:340px;display:none}
+  body.map #mapbar{display:block}
+  body.map #head,body.map #legend{display:none}
+  #crumb{font-size:11px;color:var(--fg-faint);margin-bottom:9px;line-height:1.7}
+  #crumb b{color:var(--fg-dim);font-family:var(--mono);font-weight:500;cursor:pointer}
+  #crumb b:hover{color:var(--accent)}
+  .who{font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:3px}
+  #mapfile{font-family:var(--mono);font-size:15px;word-break:break-all;color:var(--accent)}
+  #mappath{font-family:var(--mono);font-size:11px;color:var(--fg-faint);word-break:break-all}
+  #expblock{margin-top:11px;padding-top:10px;border-top:1px solid var(--line);display:none}
+  #expblock.on{display:block}
+  #expfile{font-family:var(--mono);font-size:13.5px;word-break:break-all;color:#8fd3ff}
+  #exppath{font-family:var(--mono);font-size:11px;color:var(--fg-faint);word-break:break-all}
+  #rels{border-top:1px solid var(--line);padding-top:9px;margin-top:11px}
+  .rel{display:flex;gap:8px;align-items:center;font-size:11.5px;padding:2.5px 0}
+  .rel .sw{width:15px;height:2px;border-radius:2px;flex:none}
+  .rel span{color:var(--fg-dim)}
+  .rel b{margin-left:auto;font-family:var(--mono);font-weight:500;font-variant-numeric:tabular-nums}
+  #back{
+    margin-top:12px;width:100%;padding:7px;border-radius:7px;cursor:pointer;
+    background:rgba(255,212,121,.1);border:1px solid rgba(255,212,121,.3);
+    color:var(--accent);font-family:var(--mono);font-size:11.5px;
+  }
+  #back:hover{background:rgba(255,212,121,.18)}
+
+  #hint{
+    position:fixed;bottom:18px;left:50%;transform:translateX(-50%);
+    font-size:11px;color:var(--fg-faint);pointer-events:none;text-align:center;
+  }
+  #tip{
+    position:fixed;pointer-events:none;background:rgba(5,7,12,.94);
+    border:1px solid var(--line);border-radius:5px;padding:4px 8px;
+    font-family:var(--mono);font-size:11px;display:none;z-index:9;white-space:nowrap;
+  }
+  @media (max-width:900px){#legend{display:none}#search{width:56vw}}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div class="panel" id="head">
+  <!-- Replaced with a link home when this page is generated for the website;
+       the CLI leaves it empty, since there is nowhere to go back to. -->
+  <a id="home" href="/">← coldstartmcp.dev</a>
+  <h1>Codebase sphere</h1>
+  <button id="repo"></button>
+  <div class="stat total"><span>files indexed</span><b id="s-files">—</b></div>
+  <div class="stat"><span>relations</span><b id="s-rel">—</b></div>
+  <div class="stat"><span>directories</span><b id="s-dirs">—</b></div>
+</div>
+
+<div class="panel" id="mapbar">
+  <div id="crumb"></div>
+  <div class="who">centre</div>
+  <div id="mapfile"></div>
+  <div id="mappath"></div>
+  <div id="expblock">
+    <div class="who">opened</div>
+    <div id="expfile"></div>
+    <div id="exppath"></div>
+  </div>
+  <div id="rels"></div>
+  <button id="back">← back to the sphere</button>
+</div>
+
+<div class="panel" id="search">
+  <input id="q" placeholder="search a file…" autocomplete="off" spellcheck="false">
+  <div id="hits"></div>
+</div>
+
+<div class="panel" id="legend"><h2>Directories</h2><div id="cls"></div></div>
+
+<div id="hint"></div>
+<div id="tip"></div>
+
+<script>
+const DATA = {"coldstart":{"repo":"coldstart","clusters":["/","docs","fixtures","hooks","other","scripts","site","site-astro","src","src/indexer","src/kb","tests","tests/fixtures","tests/fixtures/csharp-partials","tests/fixtures/java","tests/fixtures/kotlin","tests/fixtures/laravel-mini","tests/fixtures/rails-mini","tests/fixtures/typescript"],"n":[["ARCHITECTURE.md","ARCHITECTURE.md",0,16],["BLOG-STRATEGY.md","BLOG-STRATEGY.md",0,1],["CHANGELOG.md","CHANGELOG.md",0,8],["CLAUDE.md","CLAUDE.md",0,22],["PHILOSOPHY.md","PHILOSOPHY.md",0,1],["README.md","README.md",0,36],["TROUBLESHOOTING.md","TROUBLESHOOTING.md",0,4],["coldstart.md","coldstart.md",0,6],["cli-skill-spec.md","docs/cli-skill-spec.md",1,0],["find-cost-and-index-scaling.md","docs/find-cost-and-index-scaling.md",1,0],["manual-test-plan-notebook.md","docs/manual-test-plan-notebook.md",1,0],["notebook-kb-design.md","docs/notebook-kb-design.md",1,0],["notebook-kb-implementation-plan.md","docs/notebook-kb-implementation-plan.md",1,0],["notebook-note-structure-scenarios.md","docs/notebook-note-structure-scenarios.md",1,0],["test-plan-2.0.md","docs/test-plan-2.0.md",1,0],["token-link-enrichment-spec.md","docs/token-link-enrichment-spec.md",1,0],["two-tool-convergence-plan.md","docs/two-tool-convergence-plan.md",1,1],["explore-cluster.ts","explore-cluster.ts",0,3],["dashboard.ts","fixtures/overview/admin/dashboard.ts",2,1],["index.ts","fixtures/overview/auth/index.ts",2,3],["service.ts","fixtures/overview/auth/service.ts",2,1],["index.ts","fixtures/overview/forms/index.ts",2,0],["NavMenu.ts","fixtures/overview/navigation/NavMenu.ts",2,4],["Sidebar.ts","fixtures/overview/navigation/Sidebar.ts",2,4],["RoleAccessHelper.ts","fixtures/overview/permissions/RoleAccessHelper.ts",2,1],["button.ts","fixtures/overview/widgets/button.ts",2,1],["grid-builder.ts","fixtures/overview/widgets/grid-builder.ts",2,0],["index.ts","fixtures/overview/widgets/index.ts",2,2],["input.ts","fixtures/overview/widgets/input.ts",2,1],["WorkspaceMenu.ts","fixtures/overview/workspaces/WorkspaceMenu.ts",2,1],["index.ts","fixtures/overview/workspaces/index.ts",2,3],["glama.json","glama.json",0,0],["canonical-find-key.mjs","hooks/canonical-find-key.mjs",3,8],["capture-payload.mjs","hooks/capture-payload.mjs",3,26],["capture-sentinel.d.mts","hooks/capture-sentinel.d.mts",3,0],["capture-sentinel.mjs","hooks/capture-sentinel.mjs",3,5],["codex-find-nudge.mjs","hooks/codex-find-nudge.mjs",3,1],["codex-find-preguard.mjs","hooks/codex-find-preguard.mjs",3,1],["codex-kb-elicit.mjs","hooks/codex-kb-elicit.mjs",3,12],["codex-kb-recall.mjs","hooks/codex-kb-recall.mjs",3,8],["codex-nudge-handler.mjs","hooks/codex-nudge-handler.mjs",3,9],["codex-preguard-handler.mjs","hooks/codex-preguard-handler.mjs",3,6],["codex-run-hook.mjs","hooks/codex-run-hook.mjs",3,2],["coldstart-call.mjs","hooks/coldstart-call.mjs",3,8],["cursor-find-nudge.mjs","hooks/cursor-find-nudge.mjs",3,1],["cursor-find-preguard.mjs","hooks/cursor-find-preguard.mjs",3,1],["cursor-input.mjs","hooks/cursor-input.mjs",3,6],["cursor-kb-elicit.mjs","hooks/cursor-kb-elicit.mjs",3,12],["cursor-kb-recall.mjs","hooks/cursor-kb-recall.mjs",3,11],["cursor-nudge-handler.mjs","hooks/cursor-nudge-handler.mjs",3,4],["cursor-preguard-handler.mjs","hooks/cursor-preguard-handler.mjs",3,4],["cursor-run-hook.mjs","hooks/cursor-run-hook.mjs",3,2],["elicit-core.mjs","hooks/elicit-core.mjs",3,9],["evidence.mjs","hooks/evidence.mjs",3,5],["find-nudge.mjs","hooks/find-nudge.mjs",3,1],["find-preguard.mjs","hooks/find-preguard.mjs",3,1],["ignore.mjs","hooks/ignore.mjs",3,4],["kb-elicit.mjs","hooks/kb-elicit.mjs",3,18],["kb-recall.mjs","hooks/kb-recall.mjs",3,12],["note-shape.d.mts","hooks/note-shape.d.mts",3,4],["note-shape.mjs","hooks/note-shape.mjs",3,11],["nudge-handler.mjs","hooks/nudge-handler.mjs",3,13],["preguard-handler.mjs","hooks/preguard-handler.mjs",3,5],["recall-query.mjs","hooks/recall-query.mjs",3,4],["recall-seen.mjs","hooks/recall-seen.mjs",3,3],["run-hook.mjs","hooks/run-hook.mjs",3,2],["trigger.mjs","hooks/trigger.mjs",3,7],["package-lock.json","package-lock.json",0,5],["package.json","package.json",0,25],["bench-find.mjs","scripts/bench-find.mjs",5,0],["README.md","scripts/graph-viewer/README.md",5,0],["build-site-page.mjs","scripts/graph-viewer/build-site-page.mjs",5,0],["build-template.mjs","scripts/graph-viewer/build-template.mjs",5,0],["sphere.template.html","scripts/graph-viewer/sphere.template.html",5,0],["arches-coldstart.json","scripts/probe-output/arches-coldstart.json",5,0],["bitcoin-no-mcp.json","scripts/probe-output/bitcoin-no-mcp.json",5,0],["bitcoin.json","scripts/probe-output/bitcoin.json",5,0],["django.json","scripts/probe-output/django.json",5,0],["hugo.json","scripts/probe-output/hugo.json",5,0],["jmri-coldstart.json","scripts/probe-output/jmri-coldstart.json",5,0],["kafka.json","scripts/probe-output/kafka.json",5,0],["laravel.json","scripts/probe-output/laravel.json",5,0],["le-lia-maine.json","scripts/probe-output/le-lia-maine.json",5,0],["markus.json","scripts/probe-output/markus.json",5,0],["mastodon-coldstart.json","scripts/probe-output/mastodon-coldstart.json",5,0],["mastodon.json","scripts/probe-output/mastodon.json",5,0],["monica.json","scripts/probe-output/monica.json",5,0],["okhttp.json","scripts/probe-output/okhttp.json",5,0],["ripgrep.json","scripts/probe-output/ripgrep.json",5,0],["serilog.json","scripts/probe-output/serilog.json",5,0],["probe-repos.mjs","scripts/probe-repos.mjs",5,0],["replay-recall-gates.mjs","scripts/replay-recall-gates.mjs",5,0],["diff-ruby-edges.mjs","scripts/wasm-build/diff-ruby-edges.mjs",5,0],["assert.h","scripts/wasm-build/shim-sysroot/include/assert.h",5,0],["stdio.h","scripts/wasm-build/shim-sysroot/include/stdio.h",5,0],["stdlib.h","scripts/wasm-build/shim-sysroot/include/stdlib.h",5,0],["string.h","scripts/wasm-build/shim-sysroot/include/string.h",5,0],["wctype.h","scripts/wasm-build/shim-sysroot/include/wctype.h",5,0],["verify-wasm.mjs","scripts/wasm-build/verify-wasm.mjs",5,0],["wasm-probe-compare.mjs","scripts/wasm-probe-compare.mjs",5,0],["DetachedLauncher.cs","scripts/win-repro/DetachedLauncher.cs",5,0],["harness.mjs","scripts/win-repro/harness.mjs",5,0],["orchestrator.mjs","scripts/win-repro/orchestrator.mjs",5,0],["server.json","server.json",0,3],["astro.config.mjs","site-astro/astro.config.mjs",7,0],["package-lock.json","site-astro/package-lock.json",7,0],["package.json","site-astro/package.json",7,0],["README.md","site-astro/scripts/README.md",7,0],["og.html","site-astro/scripts/og.html",7,0],["DocsSidebar.astro","site-astro/src/components/DocsSidebar.astro",7,4],["Footer.astro","site-astro/src/components/Footer.astro",7,15],["Nav.astro","site-astro/src/components/Nav.astro",7,22],["SvgDefs.astro","site-astro/src/components/SvgDefs.astro",7,11],["an-index-cannot-answer-twice.md","site-astro/src/content/blog/an-index-cannot-answer-twice.md",7,0],["codebase-memory-is-not-agent-memory.md","site-astro/src/content/blog/codebase-memory-is-not-agent-memory.md",7,4],["from-four-tools-to-two.md","site-astro/src/content/blog/from-four-tools-to-two.md",7,0],["how-your-own-benchmark-lies-to-you-first.md","site-astro/src/content/blog/how-your-own-benchmark-lies-to-you-first.md",7,4],["notes-should-be-written-by-whoever-read-the-code.md","site-astro/src/content/blog/notes-should-be-written-by-whoever-read-the-code.md",7,0],["the-tool-the-agent-doesnt-call.md","site-astro/src/content/blog/the-tool-the-agent-doesnt-call.md",7,0],["what-a-graph-cannot-see.md","site-astro/src/content/blog/what-a-graph-cannot-see.md",7,4],["where-the-tokens-go.md","site-astro/src/content/blog/where-the-tokens-go.md",7,0],["why-coldstart-makes-zero-llm-calls.md","site-astro/src/content/blog/why-coldstart-makes-zero-llm-calls.md",7,4],["why-most-token-savings-tools-lie.md","site-astro/src/content/blog/why-most-token-savings-tools-lie.md",7,3],["config.ts","site-astro/src/content/config.ts",7,0],["env.d.ts","site-astro/src/env.d.ts",7,0],["graph-page.html","site-astro/src/graph-page.html",7,0],["BlogPostLayout.astro","site-astro/src/layouts/BlogPostLayout.astro",7,11],["Head.astro","site-astro/src/layouts/Head.astro",7,14],["[slug].astro","site-astro/src/pages/blog/[slug].astro",7,1],["index.astro","site-astro/src/pages/blog/index.astro",7,11],["docs.astro","site-astro/src/pages/docs.astro",7,21],["navigation.astro","site-astro/src/pages/docs/navigation.astro",7,11],["notebook.astro","site-astro/src/pages/docs/notebook.astro",7,11],["under-the-hood.astro","site-astro/src/pages/docs/under-the-hood.astro",7,11],["index.astro","site-astro/src/pages/graph/index.astro",7,0],["index.astro","site-astro/src/pages/how-it-works/index.astro",7,11],["navigation.astro","site-astro/src/pages/how-it-works/navigation.astro",7,11],["notebook.astro","site-astro/src/pages/how-it-works/notebook.astro",7,13],["index.astro","site-astro/src/pages/index.astro",7,12],["vector-rag.astro","site-astro/src/pages/vs/vector-rag.astro",7,8],["backdrop.css","site-astro/src/styles/backdrop.css",7,11],["docs.css","site-astro/src/styles/docs.css",7,13],["how.css","site-astro/src/styles/how.css",7,9],["landing.css","site-astro/src/styles/landing.css",7,7],["tailwind.css","site-astro/src/styles/tailwind.css",7,11],["tailwind.config.mjs","site-astro/tailwind.config.mjs",7,0],["blog.html","site/blog.html",6,4],["an-index-cannot-answer-twice.html","site/blog/an-index-cannot-answer-twice.html",6,6],["from-four-tools-to-two.html","site/blog/from-four-tools-to-two.html",6,6],["notes-should-be-written-by-whoever-read-the-code.html","site/blog/notes-should-be-written-by-whoever-read-the-code.html",6,5],["the-tool-the-agent-doesnt-call.html","site/blog/the-tool-the-agent-doesnt-call.html",6,3],["where-the-tokens-go.html","site/blog/where-the-tokens-go.html",6,3],["docs.css","site/docs.css",6,4],["docs.html","site/docs.html",6,5],["index.html","site/index.html",6,4],["sitemap.xml","site/sitemap.xml",6,5],["styles.css","site/styles.css",6,3],["disk-cache.ts","src/cache/disk-cache.ts",8,25],["cli.ts","src/cli.ts",8,13],["constants.ts","src/constants.ts",8,32],["daemon-lock.ts","src/daemon-lock.ts",8,20],["daemon-log.ts","src/daemon-log.ts",8,4],["dump.ts","src/graph/dump.ts",8,5],["view-template.ts","src/graph/view-template.ts",8,1],["view.ts","src/graph/view.ts",8,9],["index-manager.ts","src/index-manager.ts",8,30],["index.ts","src/index.ts",8,80],["cochange.ts","src/indexer/cochange.ts",9,13],["content-tokens.ts","src/indexer/content-tokens.ts",9,22],["cpp-include-roots.ts","src/indexer/cpp-include-roots.ts",9,2],["csharp-synthetic.ts","src/indexer/csharp-synthetic.ts",9,8],["django-synthetic.ts","src/indexer/django-synthetic.ts",9,7],["angularjs.ts","src/indexer/extractors/angularjs.ts",9,2],["cpp.ts","src/indexer/extractors/cpp.ts",9,12],["csharp.ts","src/indexer/extractors/csharp.ts",9,15],["env.ts","src/indexer/extractors/env.ts",9,3],["go.ts","src/indexer/extractors/go.ts",9,13],["graphql.ts","src/indexer/extractors/graphql.ts",9,6],["groovy.ts","src/indexer/extractors/groovy.ts",9,11],["java.ts","src/indexer/extractors/java.ts",9,18],["kotlin.ts","src/indexer/extractors/kotlin.ts",9,13],["node-helpers.ts","src/indexer/extractors/node-helpers.ts",9,22],["parser-factory.ts","src/indexer/extractors/parser-factory.ts",9,22],["php.ts","src/indexer/extractors/php.ts",9,10],["python.ts","src/indexer/extractors/python.ts",9,13],["ruby.ts","src/indexer/extractors/ruby.ts",9,16],["rust.ts","src/indexer/extractors/rust.ts",9,10],["toml.ts","src/indexer/extractors/toml.ts",9,7],["xml.ts","src/indexer/extractors/xml.ts",9,9],["yaml.ts","src/indexer/extractors/yaml.ts",9,7],["git.ts","src/indexer/git.ts",9,13],["graph.ts","src/indexer/graph.ts",9,19],["indexed-file.ts","src/indexer/indexed-file.ts",9,13],["invariants.ts","src/indexer/invariants.ts",9,7],["laravel-synthetic.ts","src/indexer/laravel-synthetic.ts",9,10],["parser.ts","src/indexer/parser.ts",9,74],["patch.ts","src/indexer/patch.ts",9,36],["rails-synthetic.ts","src/indexer/rails-synthetic.ts",9,14],["reconcile.ts","src/indexer/reconcile.ts",9,9],["cpp.ts","src/indexer/resolvers/cpp.ts",9,5],["csharp.ts","src/indexer/resolvers/csharp.ts",9,4],["generic.ts","src/indexer/resolvers/generic.ts",9,3],["go.ts","src/indexer/resolvers/go.ts",9,7],["index.ts","src/indexer/resolvers/index.ts",9,34],["java.ts","src/indexer/resolvers/java.ts",9,6],["php.ts","src/indexer/resolvers/php.ts",9,8],["python.ts","src/indexer/resolvers/python.ts",9,10],["ruby.ts","src/indexer/resolvers/ruby.ts",9,14],["rust.ts","src/indexer/resolvers/rust.ts",9,5],["shared.ts","src/indexer/resolvers/shared.ts",9,16],["rust-workspace.ts","src/indexer/rust-workspace.ts",9,4],["symbol-edges.ts","src/indexer/symbol-edges.ts",9,15],["tokenize.ts","src/indexer/tokenize.ts",9,20],["ts-parser.ts","src/indexer/ts-parser.ts",9,8],["walker.ts","src/indexer/walker.ts",9,21],["init.ts","src/init.ts",8,37],["alias-repair.ts","src/kb/alias-repair.ts",10,15],["cli.ts","src/kb/cli.ts",10,43],["commit.ts","src/kb/commit.ts",10,8],["durable-worklist.ts","src/kb/durable-worklist.ts",10,11],["fold.ts","src/kb/fold.ts",10,19],["freshness.ts","src/kb/freshness.ts",10,21],["git.ts","src/kb/git.ts",10,5],["ids.ts","src/kb/ids.ts",10,11],["lint.ts","src/kb/lint.ts",10,14],["lookup.ts","src/kb/lookup.ts",10,11],["notes-index.ts","src/kb/notes-index.ts",10,26],["raw-log.ts","src/kb/raw-log.ts",10,33],["render.ts","src/kb/render.ts",10,13],["repair.ts","src/kb/repair.ts",10,14],["search.ts","src/kb/search.ts",10,23],["store.ts","src/kb/store.ts",10,50],["types.ts","src/kb/types.ts",10,19],["view-template.ts","src/kb/view-template.ts",10,5],["view.ts","src/kb/view.ts",10,17],["write-batch.ts","src/kb/write-batch.ts",10,14],["write-guide.ts","src/kb/write-guide.ts",10,14],["write.ts","src/kb/write.ts",10,28],["keeper-state.ts","src/keeper-state.ts",8,9],["keeper.ts","src/keeper.ts",8,13],["migrate.ts","src/migrate.ts",8,6],["restart.ts","src/restart.ts",8,5],["find.ts","src/server/find.ts",8,23],["mcp.ts","src/server/mcp.ts",8,20],["searcher.ts","src/server/searcher.ts",8,2],["tools.ts","src/server/tools.ts",8,19],["status.ts","src/status.ts",8,10],["types.ts","src/types.ts",8,63],["unwire.ts","src/unwire.ts",8,5],["watcher.ts","src/watcher.ts",8,8],["coldstart.cli.md","templates/coldstart.cli.md",4,0],["coldstart.mcp.md","templates/coldstart.mcp.md",4,1],["capture-hosts.test.ts","tests/capture-hosts.test.ts",11,5],["capture-trigger.test.ts","tests/capture-trigger.test.ts",11,10],["cochange.test.ts","tests/cochange.test.ts",11,3],["codex-hooks.test.ts","tests/codex-hooks.test.ts",11,7],["content-tokens.test.ts","tests/content-tokens.test.ts",11,7],["csharp-partial.test.ts","tests/csharp-partial.test.ts",11,13],["cursor-hooks.test.ts","tests/cursor-hooks.test.ts",11,7],["daemon-lock.test.ts","tests/daemon-lock.test.ts",11,4],["disk-cache.test.ts","tests/disk-cache.test.ts",11,2],["django-extractor.test.ts","tests/django-extractor.test.ts",11,2],["find-note-lane.test.ts","tests/find-note-lane.test.ts",11,6],["find-separator-folding.test.ts","tests/find-separator-folding.test.ts",11,3],["events.json","tests/fixtures/codex-hooks/events.json",12,0],["auth.cpp","tests/fixtures/cpp/auth.cpp",12,1],["hash.h","tests/fixtures/cpp/include/utils/hash.h",12,1],["Config.Extensions.cs","tests/fixtures/csharp-partials/Config.Extensions.cs",13,2],["Config.cs","tests/fixtures/csharp-partials/Config.cs",13,2],["Struct.Extensions.cs","tests/fixtures/csharp-partials/Struct.Extensions.cs",13,2],["Struct.cs","tests/fixtures/csharp-partials/Struct.cs",13,2],["UserService.Extensions.cs","tests/fixtures/csharp-partials/UserService.Extensions.cs",13,2],["UserService.cs","tests/fixtures/csharp-partials/UserService.cs",13,2],["AuthService.cs","tests/fixtures/csharp/AuthService.cs",12,0],["auth.go","tests/fixtures/go-replace/pkg/auth/auth.go",12,2],["utils.go","tests/fixtures/go-replace/pkg/shared/utils.go",12,2],["auth.go","tests/fixtures/go-workspace/api/handlers/auth.go",12,1],["conn.go","tests/fixtures/go-workspace/shared/db/conn.go",12,1],["auth.go","tests/fixtures/go/auth.go",12,3],["AuthService.java","tests/fixtures/java/AuthService.java",14,5],["Authenticatable.java","tests/fixtures/java/Authenticatable.java",14,2],["LoginRequest.java","tests/fixtures/java/LoginRequest.java",14,4],["Status.java","tests/fixtures/java/Status.java",14,0],["DefaultPackage.java","tests/fixtures/java/same-package/DefaultPackage.java",14,0],["Unrelated.java","tests/fixtures/java/same-package/com/example/other/Unrelated.java",14,1],["BaseService.java","tests/fixtures/java/same-package/com/example/svc/BaseService.java",14,3],["Logger.java","tests/fixtures/java/same-package/com/example/svc/Logger.java",14,1],["Service.java","tests/fixtures/java/same-package/com/example/svc/Service.java",14,3],["ShadowedClient.java","tests/fixtures/java/same-package/com/example/svc/ShadowedClient.java",14,0],["UserDto.java","tests/fixtures/java/same-package/com/example/svc/UserDto.java",14,5],["UserRepository.java","tests/fixtures/java/same-package/com/example/svc/UserRepository.java",14,6],["UserService.java","tests/fixtures/java/same-package/com/example/svc/UserService.java",14,6],["TokenService.java","tests/fixtures/java/src/main/java/com/example/TokenService.java",14,0],["UserRepository.java","tests/fixtures/java/src/main/java/com/example/UserRepository.java",14,0],["user.controller.js","tests/fixtures/javascript/user.controller.js",12,0],["user.service.js","tests/fixtures/javascript/user.service.js",12,0],["AuthService.kt","tests/fixtures/kotlin/AuthService.kt",15,3],["Unrelated.kt","tests/fixtures/kotlin/same-package/com/example/other/Unrelated.kt",15,1],["BaseService.kt","tests/fixtures/kotlin/same-package/com/example/svc/BaseService.kt",15,1],["Logger.kt","tests/fixtures/kotlin/same-package/com/example/svc/Logger.kt",15,1],["Service.kt","tests/fixtures/kotlin/same-package/com/example/svc/Service.kt",15,1],["ShadowedClient.kt","tests/fixtures/kotlin/same-package/com/example/svc/ShadowedClient.kt",15,0],["UserDto.kt","tests/fixtures/kotlin/same-package/com/example/svc/UserDto.kt",15,1],["UserRepository.kt","tests/fixtures/kotlin/same-package/com/example/svc/UserRepository.kt",15,2],["UserService.kt","tests/fixtures/kotlin/same-package/com/example/svc/UserService.kt",15,6],["Comment.php","tests/fixtures/laravel-mini/app/Models/Comment.php",16,4],["Post.php","tests/fixtures/laravel-mini/app/Models/Post.php",16,4],["User.php","tests/fixtures/laravel-mini/app/Models/User.php",16,5],["UserService.php","tests/fixtures/laravel-mini/app/Services/UserService.php",16,1],["composer.json","tests/fixtures/laravel-mini/composer.json",16,0],["index.ts","tests/fixtures/npm-workspaces/app/index.ts",12,1],["package.json","tests/fixtures/npm-workspaces/package.json",12,0],["package.json","tests/fixtures/npm-workspaces/packages/shared-utils/package.json",12,0],["format.ts","tests/fixtures/npm-workspaces/packages/shared-utils/src/format.ts",12,1],["NotificationService.php","tests/fixtures/php-path-repos/app/Services/NotificationService.php",12,1],["composer.json","tests/fixtures/php-path-repos/composer.json",12,0],["composer.json","tests/fixtures/php-path-repos/packages/mailer/composer.json",12,0],["Mailer.php","tests/fixtures/php-path-repos/packages/mailer/src/Mailer.php",12,1],["AuthService.php","tests/fixtures/php-psr4/AuthService.php",12,1],["User.php","tests/fixtures/php-psr4/app/Models/User.php",12,1],["composer.json","tests/fixtures/php-psr4/composer.json",12,0],["AuthService.php","tests/fixtures/php/AuthService.php",12,0],["foo.rb","tests/fixtures/plain-ruby/lib/foo.rb",12,0],["app.py","tests/fixtures/python-src/app.py",12,1],["__init__.py","tests/fixtures/python-src/src/config/__init__.py",12,1],["auth.py","tests/fixtures/python/auth.py",12,5],["token_service.py","tests/fixtures/python/token_service.py",12,4],["user_repository.py","tests/fixtures/python/user_repository.py",12,4],["admin_controller.rb","tests/fixtures/rails-mini/app/controllers/admin_controller.rb",17,1],["posts_controller.rb","tests/fixtures/rails-mini/app/controllers/posts_controller.rb",17,3],["bookmark.rb","tests/fixtures/rails-mini/app/models/bookmark.rb",17,2],["category.rb","tests/fixtures/rails-mini/app/models/category.rb",17,0],["comment.rb","tests/fixtures/rails-mini/app/models/comment.rb",17,2],["invite.rb","tests/fixtures/rails-mini/app/models/invite.rb",17,0],["invite.rb","tests/fixtures/rails-mini/app/models/members/invite.rb",17,1],["post.rb","tests/fixtures/rails-mini/app/models/post.rb",17,6],["status.rb","tests/fixtures/rails-mini/app/models/status.rb",17,2],["user.rb","tests/fixtures/rails-mini/app/models/user.rb",17,3],["invite_processor.rb","tests/fixtures/rails-mini/app/services/members/invite_processor.rb",17,1],["index.rb","tests/fixtures/rails-mini/app/views/posts/index.rb",17,1],["show.rb","tests/fixtures/rails-mini/app/views/posts/show.rb",17,1],["routes.rb","tests/fixtures/rails-mini/config/routes.rb",17,2],["orders_controller.rb","tests/fixtures/ruby-gemfile/app/controllers/orders_controller.rb",12,2],["payment_gem.rb","tests/fixtures/ruby-gemfile/gems/payment_gem/lib/payment_gem.rb",12,2],["processor.rb","tests/fixtures/ruby-gemfile/gems/payment_gem/lib/payment_gem/processor.rb",12,2],["auth_spec.rb","tests/fixtures/ruby-spec/spec/auth_spec.rb",12,1],["helpers.rb","tests/fixtures/ruby-spec/spec/support/helpers.rb",12,1],["auth_service.rb","tests/fixtures/ruby/auth_service.rb",12,1],["payment_service.rb","tests/fixtures/ruby/lib/services/payment_service.rb",12,0],["post.rb","tests/fixtures/ruby/post.rb",12,1],["user_repository.rb","tests/fixtures/ruby/user_repository.rb",12,1],["auth.rs","tests/fixtures/rust/auth.rs",12,3],["main.ts","tests/fixtures/ts-aliases/main.ts",12,1],["Button.ts","tests/fixtures/ts-aliases/src/components/Button.ts",12,2],["tsconfig.base.json","tests/fixtures/ts-aliases/tsconfig.base.json",12,0],["tsconfig.json","tests/fixtures/ts-aliases/tsconfig.json",12,0],["main.ts","tests/fixtures/ts-import-tokens/main.ts",12,1],["Button.ts","tests/fixtures/ts-import-tokens/src/components/Button.ts",12,0],["tsconfig.json","tests/fixtures/ts-import-tokens/tsconfig.json",12,0],["main.ts","tests/fixtures/ts-longest-prefix/main.ts",12,1],["Card.ts","tests/fixtures/ts-longest-prefix/src/components/Card.ts",12,0],["tsconfig.json","tests/fixtures/ts-longest-prefix/tsconfig.json",12,0],["Button.ts","tests/fixtures/ts-longest-prefix/ui/Button.ts",12,1],["utils.ts","tests/fixtures/ts-multi-target/fallback/utils.ts",12,1],["main.ts","tests/fixtures/ts-multi-target/main.ts",12,1],["tsconfig.json","tests/fixtures/ts-multi-target/tsconfig.json",12,0],["auth.ts","tests/fixtures/typescript/auth.ts",18,7],["db.ts","tests/fixtures/typescript/db.ts",18,4],["passwordUtils.ts","tests/fixtures/typescript/passwordUtils.ts",18,2],["reactComponent.tsx","tests/fixtures/typescript/reactComponent.tsx",18,3],["tokenService.ts","tests/fixtures/typescript/tokenService.ts",18,4],["userRepository.ts","tests/fixtures/typescript/userRepository.ts",18,5],["freshness-b3b7.test.ts","tests/freshness-b3b7.test.ts",11,7],["graph.test.ts","tests/graph.test.ts",11,4],["init.test.ts","tests/init.test.ts",11,6],["java-ruby.test.ts","tests/java-ruby.test.ts",11,8],["jvm-same-package.test.ts","tests/jvm-same-package.test.ts",11,5],["kb-alias-repair.test.ts","tests/kb-alias-repair.test.ts",11,6],["kb-concurrent-create.test.ts","tests/kb-concurrent-create.test.ts",11,3],["kb-elicit-hook.test.ts","tests/kb-elicit-hook.test.ts",11,6],["kb-facets.test.ts","tests/kb-facets.test.ts",11,12],["kb-fold.test.ts","tests/kb-fold.test.ts",11,5],["kb-ids.test.ts","tests/kb-ids.test.ts",11,1],["kb-notes-index.test.ts","tests/kb-notes-index.test.ts",11,4],["kb-rawlog-store.test.ts","tests/kb-rawlog-store.test.ts",11,2],["kb-recall-query.test.ts","tests/kb-recall-query.test.ts",11,1],["kb-render-freshness.test.ts","tests/kb-render-freshness.test.ts",11,6],["kb-repair.test.ts","tests/kb-repair.test.ts",11,10],["kb-retrieval-live.test.ts","tests/kb-retrieval-live.test.ts",11,10],["kb-search-write.test.ts","tests/kb-search-write.test.ts",11,11],["kb-session-coverage.test.ts","tests/kb-session-coverage.test.ts",11,5],["kb-shape-parity.test.ts","tests/kb-shape-parity.test.ts",11,9],["kb-store-atomic.test.ts","tests/kb-store-atomic.test.ts",11,2],["kb-view.test.ts","tests/kb-view.test.ts",11,6],["kb-watcher.test.ts","tests/kb-watcher.test.ts",11,1],["kb-write-batch.test.ts","tests/kb-write-batch.test.ts",11,9],["kb-write-guide-steps.test.ts","tests/kb-write-guide-steps.test.ts",11,2],["kb-write-parity.test.ts","tests/kb-write-parity.test.ts",11,5],["laravel-extractor.test.ts","tests/laravel-extractor.test.ts",11,13],["migrate.test.ts","tests/migrate.test.ts",11,1],["nudge-arming.test.ts","tests/nudge-arming.test.ts",11,6],["parser.test.ts","tests/parser.test.ts",11,9],["patch-delete-symbol-edges.test.ts","tests/patch-delete-symbol-edges.test.ts",11,19],["patch-hidden-dirs.test.ts","tests/patch-hidden-dirs.test.ts",11,18],["patch-synthetic-freshness.test.ts","tests/patch-synthetic-freshness.test.ts",11,20],["rails-extractor.test.ts","tests/rails-extractor.test.ts",11,16],["resolver.test.ts","tests/resolver.test.ts",11,5],["ruby-resolver-order.test.ts","tests/ruby-resolver-order.test.ts",11,1],["symbol-edges.test.ts","tests/symbol-edges.test.ts",11,9],["wasm-extraction-parity.test.ts","tests/wasm-extraction-parity.test.ts",11,1],["windows-hide-coverage.test.ts","tests/windows-hide-coverage.test.ts",11,0],["tsconfig.json","tsconfig.json",0,3],["vitest.config.ts","vitest.config.ts",0,3]],"e":[[17,166,0,1,""],[19,20,0,1,""],[18,19,0,1,""],[22,30,0,1,""],[24,19,0,1,""],[23,30,0,1,""],[30,29,0,1,""],[27,25,0,1,""],[37,42,0,1,""],[36,42,0,1,""],[45,51,0,1,""],[17,245,0,1,""],[27,28,0,1,""],[41,32,0,1,""],[17,247,0,1,""],[41,43,0,1,""],[44,51,0,1,""],[50,46,0,1,""],[54,65,0,1,""],[55,65,0,1,""],[49,46,0,1,""],[50,41,0,1,""],[62,32,0,1,""],[49,40,0,1,""],[62,43,0,1,""],[159,247,0,1,""],[168,247,0,1,""],[171,206,0,1,""],[173,247,0,1,""],[175,247,0,1,""],[174,247,0,1,""],[178,247,0,1,""],[177,247,0,1,""],[179,247,0,1,""],[176,247,0,1,""],[180,247,0,1,""],[183,247,0,1,""],[184,247,0,1,""],[185,247,0,1,""],[186,247,0,1,""],[188,247,0,1,""],[187,247,0,1,""],[189,247,0,1,""],[191,247,0,1,""],[193,247,0,1,""],[171,247,0,1,""],[170,195,0,1,""],[173,181,0,1,""],[174,181,0,1,""],[178,181,0,1,""],[179,181,0,1,""],[176,181,0,1,""],[180,181,0,1,""],[183,181,0,1,""],[184,181,0,1,""],[185,181,0,1,""],[186,181,0,1,""],[188,181,0,1,""],[187,182,0,1,""],[189,182,0,1,""],[192,247,0,1,""],[201,209,0,1,""],[199,209,0,1,""],[206,209,0,1,""],[161,160,0,1,""],[170,247,0,1,""],[173,182,0,1,""],[174,182,0,1,""],[178,182,0,1,""],[179,182,0,1,""],[176,182,0,1,""],[180,182,0,1,""],[183,182,0,1,""],[184,182,0,1,""],[185,182,0,1,""],[186,182,0,1,""],[188,182,0,1,""],[196,247,0,1,""],[194,195,0,1,""],[198,247,0,1,""],[199,169,0,1,""],[202,209,0,1,""],[205,209,0,1,""],[196,159,0,1,""],[194,205,0,1,""],[195,247,0,1,""],[198,190,0,1,""],[196,195,0,1,""],[194,247,0,1,""],[195,213,0,1,""],[198,214,0,1,""],[196,212,0,1,""],[195,179,0,1,""],[198,159,0,1,""],[157,247,0,1,""],[196,203,0,1,""],[195,185,0,1,""],[157,159,0,1,""],[196,211,0,1,""],[195,184,0,1,""],[196,168,0,1,""],[195,176,0,1,""],[196,192,0,1,""],[195,186,0,1,""],[196,197,0,1,""],[195,210,0,1,""],[196,194,0,1,""],[195,174,0,1,""],[196,170,0,1,""],[195,183,0,1,""],[196,171,0,1,""],[195,180,0,1,""],[195,173,0,1,""],[195,172,0,1,""],[195,177,0,1,""],[195,189,0,1,""],[195,187,0,1,""],[195,175,0,1,""],[195,188,0,1,""],[195,178,0,1,""],[195,168,0,1,""],[195,182,0,1,""],[213,247,0,1,""],[211,247,0,1,""],[197,207,0,1,""],[225,232,0,1,""],[208,209,0,1,""],[213,182,0,1,""],[212,247,0,1,""],[197,247,0,1,""],[225,223,0,1,""],[241,160,0,1,""],[256,168,0,1,""],[208,210,0,1,""],[203,247,0,1,""],[214,159,0,1,""],[227,232,0,1,""],[225,231,0,1,""],[249,159,0,1,""],[256,245,0,1,""],[207,209,0,1,""],[203,159,0,1,""],[221,232,0,1,""],[214,247,0,1,""],[226,247,0,1,""],[227,221,0,1,""],[225,221,0,1,""],[238,157,0,1,""],[256,247,0,1,""],[257,214,0,1,""],[207,195,0,1,""],[203,201,0,1,""],[226,157,0,1,""],[227,222,0,1,""],[257,195,0,1,""],[259,160,0,1,""],[203,204,0,1,""],[226,242,0,1,""],[227,223,0,1,""],[257,203,0,1,""],[203,207,0,1,""],[226,190,0,1,""],[257,191,0,1,""],[203,202,0,1,""],[226,221,0,1,""],[257,170,0,1,""],[203,208,0,1,""],[226,232,0,1,""],[257,212,0,1,""],[203,206,0,1,""],[226,231,0,1,""],[257,247,0,1,""],[203,205,0,1,""],[203,199,0,1,""],[203,200,0,1,""],[265,266,0,1,""],[290,289,0,1,""],[297,284,0,1,""],[298,285,0,1,""],[291,285,0,1,""],[302,289,0,1,""],[299,286,0,1,""],[300,287,0,1,""],[303,290,0,1,""],[310,313,0,1,""],[261,184,0,1,""],[280,281,0,1,""],[291,287,0,1,""],[303,289,0,1,""],[261,182,0,1,""],[276,277,0,1,""],[291,290,0,1,""],[274,275,0,1,""],[291,289,0,1,""],[296,281,0,1,""],[308,307,0,1,""],[260,157,0,1,""],[262,242,0,1,""],[263,242,0,1,""],[279,280,0,1,""],[260,247,0,1,""],[262,227,0,1,""],[263,227,0,1,""],[296,279,0,1,""],[262,221,0,1,""],[263,247,0,1,""],[279,281,0,1,""],[304,287,0,1,""],[330,336,0,1,""],[332,335,0,1,""],[335,337,0,1,""],[336,335,0,1,""],[337,335,0,1,""],[341,329,0,1,""],[345,346,0,1,""],[352,353,0,1,""],[356,353,0,1,""],[343,344,0,1,""],[359,362,0,1,""],[304,291,0,1,""],[330,337,0,1,""],[335,332,0,1,""],[341,328,0,1,""],[304,290,0,1,""],[323,324,0,1,""],[347,350,0,1,""],[342,343,0,1,""],[304,285,0,1,""],[314,317,0,1,""],[318,319,0,1,""],[304,289,0,1,""],[342,344,0,1,""],[325,327,0,1,""],[325,326,0,1,""],[364,363,0,1,""],[371,367,0,1,""],[368,366,0,1,""],[382,223,0,1,""],[366,371,0,1,""],[366,370,0,1,""],[375,195,0,1,""],[398,214,0,1,""],[401,195,0,1,""],[408,195,0,1,""],[405,214,0,1,""],[406,203,0,1,""],[409,185,0,1,""],[376,179,0,1,""],[375,179,0,1,""],[384,227,0,1,""],[394,249,0,1,""],[398,195,0,1,""],[399,240,0,1,""],[401,213,0,1,""],[403,214,0,1,""],[404,214,0,1,""],[408,203,0,1,""],[405,195,0,1,""],[407,207,0,1,""],[402,214,0,1,""],[406,247,0,1,""],[376,180,0,1,""],[375,185,0,1,""],[380,220,0,1,""],[384,231,0,1,""],[383,226,0,1,""],[398,203,0,1,""],[401,174,0,1,""],[403,195,0,1,""],[404,195,0,1,""],[408,191,0,1,""],[405,203,0,1,""],[402,195,0,1,""],[376,182,0,1,""],[375,180,0,1,""],[378,220,0,1,""],[380,237,0,1,""],[372,198,0,1,""],[383,227,0,1,""],[392,237,0,1,""],[398,191,0,1,""],[400,61,0,1,""],[401,186,0,1,""],[403,203,0,1,""],[404,203,0,1,""],[408,211,0,1,""],[405,191,0,1,""],[402,203,0,1,""],[375,182,0,1,""],[378,227,0,1,""],[380,225,0,1,""],[372,193,0,1,""],[383,224,0,1,""],[392,231,0,1,""],[398,194,0,1,""],[400,227,0,1,""],[401,183,0,1,""],[403,191,0,1,""],[404,191,0,1,""],[408,247,0,1,""],[405,197,0,1,""],[402,191,0,1,""],[378,231,0,1,""],[380,227,0,1,""],[372,238,0,1,""],[383,247,0,1,""],[398,212,0,1,""],[401,173,0,1,""],[403,212,0,1,""],[404,197,0,1,""],[405,212,0,1,""],[402,212,0,1,""],[380,231,0,1,""],[372,159,0,1,""],[398,247,0,1,""],[403,168,0,1,""],[404,212,0,1,""],[405,247,0,1,""],[402,168,0,1,""],[380,223,0,1,""],[372,239,0,1,""],[403,211,0,1,""],[404,168,0,1,""],[402,211,0,1,""],[380,228,0,1,""],[372,157,0,1,""],[403,192,0,1,""],[404,211,0,1,""],[402,192,0,1,""],[372,247,0,1,""],[403,196,0,1,""],[404,192,0,1,""],[402,196,0,1,""],[403,247,0,1,""],[404,196,0,1,""],[402,193,0,1,""],[404,247,0,1,""],[402,247,0,1,""],[338,334,0,1,""],[349,335,0,1,""],[329,340,0,1,""],[329,339,0,1,""],[305,306,0,1,""],[305,307,0,1,""],[307,306,0,1,""],[307,305,0,1,""],[306,307,0,1,""],[306,305,0,1,""],[267,268,0,1,""],[268,267,0,1,""],[271,272,0,1,""],[272,271,0,1,""],[269,270,0,1,""],[270,269,0,1,""],[385,63,0,1,""],[253,56,0,1,""],[253,53,0,1,""],[253,66,0,1,""],[253,215,0,1,""],[253,227,0,1,""],[253,231,0,1,""],[253,224,0,1,""],[396,236,0,1,""],[396,237,0,1,""],[393,234,0,1,""],[393,233,0,1,""],[393,221,0,1,""],[393,231,0,1,""],[224,226,0,1,""],[224,221,0,1,""],[224,231,0,1,""],[230,232,0,1,""],[230,226,0,1,""],[381,220,0,1,""],[391,60,0,1,""],[230,242,0,1,""],[248,215,0,1,""],[381,232,0,1,""],[391,236,0,1,""],[230,221,0,1,""],[391,243,0,1,""],[230,231,0,1,""],[386,228,0,1,""],[389,230,0,1,""],[391,33,0,1,""],[230,227,0,1,""],[386,221,0,1,""],[388,230,0,1,""],[389,237,0,1,""],[391,215,0,1,""],[230,228,0,1,""],[386,232,0,1,""],[388,242,0,1,""],[389,224,0,1,""],[391,216,0,1,""],[388,218,0,1,""],[389,221,0,1,""],[388,231,0,1,""],[389,227,0,1,""],[388,227,0,1,""],[389,226,0,1,""],[388,232,0,1,""],[389,247,0,1,""],[220,232,0,1,""],[228,232,0,1,""],[216,232,0,1,""],[220,227,0,1,""],[216,231,0,1,""],[216,227,0,1,""],[216,220,0,1,""],[377,216,0,1,""],[377,237,0,1,""],[377,231,0,1,""],[229,60,0,1,""],[229,231,0,1,""],[229,223,0,1,""],[229,226,0,1,""],[387,60,0,1,""],[229,237,0,1,""],[387,229,0,1,""],[387,216,0,1,""],[387,237,0,1,""],[387,231,0,1,""],[387,226,0,1,""],[235,237,0,1,""],[235,231,0,1,""],[217,239,0,1,""],[219,227,0,1,""],[235,236,0,1,""],[237,232,0,1,""],[217,215,0,1,""],[235,219,0,1,""],[237,223,0,1,""],[217,230,0,1,""],[237,227,0,1,""],[374,215,0,1,""],[390,219,0,1,""],[395,235,0,1,""],[217,226,0,1,""],[237,231,0,1,""],[374,229,0,1,""],[395,237,0,1,""],[217,237,0,1,""],[237,230,0,1,""],[374,216,0,1,""],[395,231,0,1,""],[217,236,0,1,""],[395,223,0,1,""],[217,235,0,1,""],[395,219,0,1,""],[217,225,0,1,""],[217,224,0,1,""],[217,218,0,1,""],[217,221,0,1,""],[217,231,0,1,""],[217,227,0,1,""],[217,234,0,1,""],[217,233,0,1,""],[236,60,0,1,""],[38,53,0,1,""],[47,53,0,1,""],[57,53,0,1,""],[236,237,0,1,""],[397,236,0,1,""],[38,56,0,1,""],[47,66,0,1,""],[57,66,0,1,""],[397,237,0,1,""],[38,33,0,1,""],[47,56,0,1,""],[57,56,0,1,""],[255,40,0,1,""],[252,53,0,1,""],[258,49,0,1,""],[38,52,0,1,""],[47,33,0,1,""],[57,33,0,1,""],[255,41,0,1,""],[252,33,0,1,""],[258,50,0,1,""],[47,52,0,1,""],[57,52,0,1,""],[255,227,0,1,""],[258,227,0,1,""],[47,46,0,1,""],[255,35,0,1,""],[258,35,0,1,""],[33,60,0,1,""],[231,232,0,1,""],[231,220,0,1,""],[231,228,0,1,""],[231,227,0,1,""],[128,126,0,1,""],[126,144,0,1,""],[126,141,0,1,""],[126,140,0,1,""],[126,127,0,1,""],[126,112,0,1,""],[126,111,0,1,""],[126,110,0,1,""],[129,127,0,1,""],[129,112,0,1,""],[129,111,0,1,""],[129,110,0,1,""],[129,144,0,1,""],[129,141,0,1,""],[129,140,0,1,""],[136,127,0,1,""],[136,112,0,1,""],[136,111,0,1,""],[136,110,0,1,""],[136,144,0,1,""],[136,141,0,1,""],[136,142,0,1,""],[136,140,0,1,""],[135,127,0,1,""],[137,127,0,1,""],[139,127,0,1,""],[135,112,0,1,""],[137,112,0,1,""],[139,112,0,1,""],[135,111,0,1,""],[137,111,0,1,""],[139,111,0,1,""],[218,231,0,1,""],[242,247,0,1,""],[135,110,0,1,""],[137,110,0,1,""],[139,110,0,1,""],[239,160,0,1,""],[242,232,0,1,""],[52,66,0,1,""],[135,144,0,1,""],[137,144,0,1,""],[139,144,0,1,""],[239,157,0,1,""],[242,168,0,1,""],[39,63,0,1,""],[40,32,0,1,""],[48,46,0,1,""],[58,52,0,1,""],[61,32,0,1,""],[135,141,0,1,""],[137,141,0,1,""],[139,141,0,1,""],[215,239,0,1,""],[242,244,0,1,""],[39,35,0,1,""],[40,43,0,1,""],[48,52,0,1,""],[58,63,0,1,""],[61,43,0,1,""],[135,142,0,1,""],[137,142,0,1,""],[139,142,0,1,""],[215,231,0,1,""],[242,231,0,1,""],[39,64,0,1,""],[48,63,0,1,""],[58,64,0,1,""],[135,140,0,1,""],[137,140,0,1,""],[139,140,0,1,""],[215,35,0,1,""],[242,227,0,1,""],[48,35,0,1,""],[242,221,0,1,""],[48,64,0,1,""],[132,127,0,1,""],[133,127,0,1,""],[132,112,0,1,""],[133,112,0,1,""],[132,111,0,1,""],[133,111,0,1,""],[132,110,0,1,""],[133,110,0,1,""],[132,109,0,1,""],[133,109,0,1,""],[132,144,0,1,""],[133,144,0,1,""],[132,141,0,1,""],[133,141,0,1,""],[132,140,0,1,""],[133,140,0,1,""],[165,247,0,1,""],[165,249,0,1,""],[165,231,0,1,""],[165,226,0,1,""],[165,234,0,1,""],[165,233,0,1,""],[165,196,0,1,""],[165,190,0,1,""],[165,167,0,1,""],[165,193,0,1,""],[165,157,0,1,""],[165,238,0,1,""],[165,159,0,1,""],[165,160,0,1,""],[167,157,0,1,""],[166,214,0,1,""],[166,195,0,1,""],[166,203,0,1,""],[166,197,0,1,""],[166,194,0,1,""],[166,170,0,1,""],[166,171,0,1,""],[166,191,0,1,""],[166,212,0,1,""],[166,192,0,1,""],[166,168,0,1,""],[166,211,0,1,""],[166,190,0,1,""],[166,198,0,1,""],[166,196,0,1,""],[166,193,0,1,""],[166,238,0,1,""],[166,159,0,1,""],[166,157,0,1,""],[166,243,0,1,""],[166,165,0,1,""],[166,160,0,1,""],[166,239,0,1,""],[166,161,0,1,""],[166,240,0,1,""],[166,247,0,1,""],[373,162,0,1,""],[373,164,0,1,""],[373,247,0,1,""],[373,167,0,1,""],[130,127,0,1,""],[130,112,0,1,""],[130,111,0,1,""],[130,110,0,1,""],[130,109,0,1,""],[130,144,0,1,""],[130,141,0,1,""],[130,140,0,1,""],[138,127,0,1,""],[138,112,0,1,""],[138,111,0,1,""],[138,110,0,1,""],[138,144,0,1,""],[138,143,0,1,""],[138,140,0,1,""],[164,247,0,1,""],[234,231,0,1,""],[164,167,0,1,""],[234,228,0,1,""],[164,231,0,1,""],[234,221,0,1,""],[164,162,0,1,""],[234,232,0,1,""],[164,163,0,1,""],[162,247,0,1,""],[131,127,0,1,""],[158,157,0,1,""],[162,167,0,1,""],[245,247,0,1,""],[131,112,0,1,""],[158,190,0,1,""],[245,168,0,1,""],[131,111,0,1,""],[246,160,0,1,""],[158,245,0,1,""],[243,60,0,1,""],[245,242,0,1,""],[131,110,0,1,""],[246,157,0,1,""],[158,239,0,1,""],[243,165,0,1,""],[245,167,0,1,""],[131,109,0,1,""],[246,238,0,1,""],[158,247,0,1,""],[243,160,0,1,""],[254,167,0,1,""],[131,144,0,1,""],[246,167,0,1,""],[243,245,0,1,""],[254,245,0,1,""],[131,141,0,1,""],[254,247,0,1,""],[131,140,0,1,""],[41,43,1,1,"normalizeColdstartCall()"],[41,32,1,1,"canonicalFindKey()"],[50,46,1,1,"adaptCursorInput()"],[62,43,1,1,"normalizeColdstartCall()"],[62,32,1,1,"canonicalFindKey()"],[49,46,1,1,"adaptCursorInput()"],[161,160,1,1,"daemonLogPath(), daemonLogPrevPath()"],[171,206,1,1,"resolvePython()"],[173,181,1,1,"firstChildOfType()"],[174,181,1,1,"firstChildOfType()"],[178,181,1,1,"firstChildOfType(), childrenOfType()"],[179,181,1,1,"firstChildOfType(), childrenOfType(), firstChildOfTypes()"],[176,181,1,1,"firstChildOfType()"],[180,181,1,1,"firstChildOfType()"],[183,181,1,1,"firstChildOfType()"],[184,181,1,1,"firstChildOfType(), sameNode()"],[185,181,1,1,"firstChildOfType(), firstChildOfTypes(), childrenOfType() +1"],[186,181,1,1,"firstChildOfType()"],[188,181,1,1,"firstChildOfType(), childrenOfType()"],[196,159,1,1,"isUnderExcludedDir()"],[196,195,1,1,"buildFileId(), parseFile()"],[196,192,1,1,"baseIndexedFile()"],[196,212,1,1,"buildFileDomains(), isTestPath()"],[196,203,1,1,"buildPackageIndex(), resolveImportsForFiles()"],[196,211,1,1,"buildSymbolEdges()"],[196,197,1,1,"addRailsSyntheticEdges()"],[196,194,1,1,"addLaravelSyntheticEdges()"],[196,170,1,1,"addCSharpSyntheticEdges()"],[196,171,1,1,"addDjangoSyntheticEdges()"],[196,168,1,1,"buildContentTokenPostings()"],[194,205,1,1,"resolvePHP()"],[195,182,1,1,"ensureParsersReady()"],[195,168,1,1,"extractContentTokens()"],[195,213,1,1,"parseTsContent()"],[195,172,1,1,"extractAngularJsSymbols()"],[195,179,1,1,"parseJavaContent()"],[195,185,1,1,"parseRubyContent()"],[195,184,1,1,"parsePythonContent()"],[195,176,1,1,"parseGoContent()"],[195,186,1,1,"parseRustContent()"],[195,210,1,1,"findRustWorkspace()"],[195,174,1,1,"parseCSharpContent()"],[195,183,1,1,"parsePhpContent()"],[195,180,1,1,"parseKotlinContent()"],[195,173,1,1,"parseCppContent()"],[195,177,1,1,"parseGraphQLContent()"],[195,189,1,1,"parseYamlContent()"],[195,187,1,1,"parseTomlContent()"],[195,175,1,1,"parseEnvContent()"],[195,188,1,1,"parseXmlContent()"],[195,178,1,1,"parseGroovyContent()"],[201,209,1,1,"tryResolveBase()"],[198,190,1,1,"getGitHead(), getGitChangedFiles(), getGitDirtyFiles()"],[198,214,1,1,"walkDirectory()"],[199,209,1,1,"tryResolveBase()"],[199,169,1,1,"getCppIncludeRoots()"],[206,209,1,1,"toFileId(), tryResolveBase()"],[205,209,1,1,"tryResolveBase()"],[207,209,1,1,"tryResolveBase()"],[207,195,1,1,"buildFileId()"],[208,209,1,1,"toFileId()"],[208,210,1,1,"findRustWorkspace()"],[226,157,1,1,"getCacheDir()"],[226,190,1,1,"getGitExactRenames(), getGitNewFiles()"],[226,221,1,1,"hashFile()"],[226,231,1,1,"loadAll()"],[226,242,1,1,"collectCoverage()"],[227,223,1,1,"isValidId()"],[227,222,1,1,"gitHeadSha()"],[227,221,1,1,"hashFile()"],[197,207,1,1,"buildRailsFqcnIndex(), resolveRailsConstantCandidates()"],[225,231,1,1,"loadAll()"],[225,223,1,1,"fileNoteId()"],[225,221,1,1,"stampAnchors()"],[238,157,1,1,"getCacheDir()"],[241,160,1,1,"listDaemonLocks(), killDaemon(), deleteLock() +1"],[249,159,1,1,"isUnderExcludedDir()"],[256,168,1,1,"buildContentTokenPostings()"],[257,214,1,1,"walkDirectory()"],[257,195,1,1,"buildFileId(), parseFile()"],[257,212,1,1,"buildFileDomains(), isTestPath()"],[257,203,1,1,"resolveImports()"],[257,170,1,1,"addCSharpSyntheticEdges()"],[257,191,1,1,"buildGraph()"],[274,275,1,1,"Hash()"],[279,281,1,1,"LoginRequest.getEmail(), LoginRequest.getPassword()"],[291,290,1,1,"UserRepository.findById()"],[296,279,1,1,"AuthService.hashPassword()"],[304,290,1,1,"UserRepository.findById()"],[368,366,1,1,"hashPassword()"],[376,179,1,1,"parseJavaContent()"],[376,180,1,1,"parseKotlinContent()"],[398,214,1,1,"walkDirectory()"],[398,195,1,1,"buildFileId(), parseFile()"],[398,212,1,1,"buildFileDomains(), isTestPath()"],[398,203,1,1,"resolveImports()"],[398,194,1,1,"addLaravelSyntheticEdges()"],[398,191,1,1,"buildGraph()"],[400,61,1,1,"handle()"],[403,214,1,1,"walkDirectory()"],[403,195,1,1,"buildFileId(), parseFile()"],[403,192,1,1,"baseIndexedFile()"],[403,212,1,1,"buildFileDomains(), isTestPath()"],[403,203,1,1,"resolveImports()"],[403,191,1,1,"buildGraph()"],[403,211,1,1,"buildSymbolEdges()"],[403,168,1,1,"buildContentTokenPostings()"],[404,214,1,1,"walkDirectory()"],[404,195,1,1,"buildFileId(), parseFile()"],[404,192,1,1,"baseIndexedFile()"],[404,212,1,1,"buildFileDomains(), isTestPath()"],[404,203,1,1,"resolveImports()"],[404,197,1,1,"addRailsSyntheticEdges()"],[404,191,1,1,"buildGraph()"],[404,211,1,1,"buildSymbolEdges()"],[404,168,1,1,"buildContentTokenPostings()"],[408,195,1,1,"buildFileId(), parseFile()"],[405,214,1,1,"walkDirectory()"],[405,195,1,1,"buildFileId(), parseFile()"],[405,212,1,1,"buildFileDomains(), isTestPath()"],[405,203,1,1,"resolveImports()"],[405,197,1,1,"addRailsSyntheticEdges()"],[405,191,1,1,"buildGraph()"],[402,214,1,1,"walkDirectory()"],[402,195,1,1,"buildFileId(), parseFile()"],[402,192,1,1,"baseIndexedFile()"],[402,212,1,1,"buildFileDomains(), isTestPath()"],[402,203,1,1,"resolveImports()"],[402,191,1,1,"buildGraph()"],[402,211,1,1,"buildSymbolEdges()"],[402,168,1,1,"buildContentTokenPostings()"],[224,231,1,1,"loadAll()"],[224,221,1,1,"stampAnchors()"],[224,226,1,1,"stampCoversTerms()"],[230,226,1,1,"stampCoversTerms()"],[230,231,1,1,"loadAll(), logMetric()"],[230,242,1,1,"parseTerms()"],[230,221,1,1,"stampAnchors(), anchorsAllMissing(), freshnessLine()"],[230,228,1,1,"renderNote()"],[248,215,1,1,"stripCodexColdstartTable(), isColdstartHookEntry(), isKbHookEntry()"],[388,227,1,1,"appendRecord()"],[389,227,1,1,"appendRecord()"],[216,231,1,1,"loadAll(), notePath()"],[216,227,1,1,"readLog()"],[216,220,1,1,"fold()"],[229,226,1,1,"loadKbNotesIndex()"],[229,231,1,1,"loadAll(), notePath()"],[229,223,1,1,"fileNoteId()"],[229,237,1,1,"kbWrite()"],[387,226,1,1,"saveKbNotesIndex()"],[217,231,1,1,"renderIds(), notebookExists(), logMetric() +2"],[217,234,1,1,"kbView()"],[217,218,1,1,"kbCommit()"],[217,239,1,1,"ensureKeeper()"],[217,226,1,1,"loadKbNotesIndex()"],[217,230,1,1,"kbSearch(), shouldImplantTop(), renderSearchPage() +2"],[217,225,1,1,"kbLookup(), renderLookup()"],[217,236,1,1,"writeGuideCli()"],[217,235,1,1,"kbWriteBatch()"],[217,221,1,1,"stampAnchors()"],[217,224,1,1,"kbLint(), lintSummary()"],[217,215,1,1,"setupNotebook(), wireClaudeKbHooks()"],[219,227,1,1,"notebookDir()"],[235,237,1,1,"kbWrite()"],[235,231,1,1,"loadNote()"],[235,236,1,1,"flowStepsWarning(), missingFieldsWarning(), flowEvidenceWarning()"],[235,219,1,1,"specPaths(), finalizeBatchCoverage()"],[237,231,1,1,"loadNote(), loadAll(), writeNoteMd() +1"],[237,227,1,1,"listIds(), appendRecord()"],[237,223,1,1,"isValidId(), fileNoteId(), coinId()"],[237,230,1,1,"kbSearch()"],[390,219,1,1,"worklistJsonPath()"],[395,219,1,1,"worklistJsonPath()"],[236,60,1,1,"stepsMissingAfterWrite(), checksForSpec()"],[33,60,1,1,"shapesBlock()"],[231,227,1,1,"notebookDir(), rawDir(), rawPath() +2"],[231,220,1,1,"fold()"],[231,228,1,1,"renderNote()"],[40,43,1,1,"normalizeColdstartCall()"],[40,32,1,1,"canonicalFindKey()"],[61,43,1,1,"normalizeColdstartCall()"],[61,32,1,1,"canonicalFindKey()"],[215,231,1,1,"initSkeleton(), logMetric()"],[215,239,1,1,"ensureKeeper(), waitForKeeperCache()"],[218,231,1,1,"loadAll()"],[239,160,1,1,"readLock(), getCurrentVersion(), isDaemonAlive() +3"],[239,157,1,1,"getCacheDir()"],[242,244,1,1,"resolveRg(), invalidateRg()"],[242,231,1,1,"notebookExists(), loadAll()"],[242,221,1,1,"stampAnchors()"],[242,168,1,1,"deriveRelatedFiles()"],[165,249,1,1,"startWatcher()"],[165,231,1,1,"renderIds(), notebookExists()"],[165,226,1,1,"buildKbNotesIndex(), saveKbNotesIndex()"],[165,190,1,1,"getGitHead()"],[165,167,1,1,"deriveCoChange(), saveCoChange()"],[165,234,1,1,"kbView()"],[165,159,1,1,"patchThreshold()"],[165,196,1,1,"patchIndex()"],[165,193,1,1,"lintIndexInvariants()"],[165,238,1,1,"updateKeeperState(), appendRepairLog()"],[165,157,1,1,"saveCachedIndex(), getCacheDir()"],[167,157,1,1,"getCacheDir()"],[166,214,1,1,"walkDirectory()"],[166,195,1,1,"buildFileId(), parseFile()"],[166,192,1,1,"baseIndexedFile()"],[166,212,1,1,"buildFileDomains(), isTestPath()"],[166,203,1,1,"resolveImports(), buildPackageIndex(), resolveImportsForFiles()"],[166,197,1,1,"addRailsSyntheticEdges()"],[166,194,1,1,"addLaravelSyntheticEdges()"],[166,170,1,1,"addCSharpSyntheticEdges()"],[166,171,1,1,"addDjangoSyntheticEdges()"],[166,191,1,1,"buildGraph()"],[166,211,1,1,"buildSymbolEdges()"],[166,168,1,1,"buildContentTokenPostings()"],[166,190,1,1,"getGitHead()"],[166,157,1,1,"loadCachedIndex(), updateCachedGitHead(), saveCachedIndex() +1"],[166,198,1,1,"reconcileChanges()"],[166,159,1,1,"patchThreshold()"],[166,196,1,1,"patchIndex()"],[166,193,1,1,"lintIndexInvariants()"],[166,238,1,1,"appendRepairLog(), updateKeeperState()"],[166,161,1,1,"attachDaemonLogger()"],[166,160,1,1,"readLock(), isDaemonAlive(), writeLock() +4"],[166,240,1,1,"migrateLegacyMcpConfig()"],[166,239,1,1,"waitForKeeperCache(), ensureKeeper()"],[166,243,1,1,"startMCPServer()"],[164,231,1,1,"notebookExists(), loadAll()"],[164,162,1,1,"buildGraphPayload()"],[164,167,1,1,"loadCoChange()"],[234,228,1,1,"renderNote()"],[234,221,1,1,"stampAnchors()"],[234,231,1,1,"loadAll()"],[246,157,1,1,"getCacheDir()"],[246,160,1,1,"listDaemonLocks(), daemonDir(), isDaemonAlive() +2"],[246,238,1,1,"readKeeperState(), readRepairTail()"],[246,167,1,1,"loadCoChange()"],[158,157,1,1,"loadCachedIndex(), saveCachedIndex()"],[158,190,1,1,"getGitHead()"],[158,239,1,1,"waitForCacheAdvance(), waitForKeeperCache(), ensureKeeper()"],[158,245,1,1,"handleGetStructure()"],[243,245,1,1,"handleFind(), handleGetStructure()"],[243,160,1,1,"getCurrentVersion()"],[245,242,1,1,"buildRichPage()"],[245,167,1,1,"coChangePartnersFor()"],[245,168,1,1,"extractContentTokens(), deriveRelatedFiles(), deriveNameEchoFiles()"],[114,116,2,0,"2 of 3 commits"],[114,119,2,0,"2 of 3 commits"],[114,121,2,0,"2 of 3 commits"],[116,119,2,0,"2 of 2 commits"],[116,121,2,0,"2 of 2 commits"],[119,121,2,0,"2 of 3 commits"],[111,121,2,0,"2 of 4 commits"],[114,122,2,0,"2 of 2 commits"],[116,122,2,0,"2 of 2 commits"],[119,122,2,0,"2 of 2 commits"],[130,143,2,0,"6 of 9 commits"],[111,130,2,0,"5 of 9 commits"],[130,138,2,0,"5 of 9 commits"],[130,131,2,0,"2 of 3 commits"],[131,132,2,0,"2 of 3 commits"],[131,133,2,0,"2 of 3 commits"],[130,132,2,0,"2 of 2 commits"],[132,133,2,0,"2 of 2 commits"],[130,133,2,0,"2 of 2 commits"],[2,68,2,0,"24 of 33 commits"],[2,5,2,0,"12 of 33 commits"],[2,103,2,0,"11 of 33 commits"],[67,68,2,0,"31 of 44 commits"],[2,67,2,0,"10 of 44 commits"],[5,67,2,0,"10 of 44 commits"],[5,68,2,0,"20 of 64 commits"],[68,103,2,0,"14 of 17 commits"],[67,103,2,0,"10 of 17 commits"],[39,48,2,0,"4 of 4 commits"],[39,215,2,0,"3 of 4 commits"],[3,39,2,0,"2 of 4 commits"],[38,40,2,0,"2 of 3 commits"],[39,40,2,0,"2 of 3 commits"],[40,48,2,0,"2 of 3 commits"],[38,48,2,0,"4 of 6 commits"],[47,48,2,0,"4 of 6 commits"],[48,58,2,0,"4 of 9 commits"],[57,58,2,0,"4 of 9 commits"],[58,217,2,0,"4 of 9 commits"],[215,243,2,0,"17 of 42 commits"],[5,215,2,0,"15 of 42 commits"],[166,215,2,0,"14 of 42 commits"],[61,242,2,0,"4 of 7 commits"],[58,61,2,0,"3 of 7 commits"],[61,215,2,0,"3 of 7 commits"],[48,52,2,0,"3 of 4 commits"],[52,57,2,0,"3 of 4 commits"],[52,58,2,0,"3 of 4 commits"],[58,218,2,0,"2 of 2 commits"],[61,218,2,0,"2 of 2 commits"],[215,218,2,0,"2 of 2 commits"],[58,222,2,0,"2 of 2 commits"],[61,222,2,0,"2 of 2 commits"],[215,222,2,0,"2 of 2 commits"],[215,242,2,0,"3 of 10 commits"],[242,243,2,0,"3 of 10 commits"],[215,234,2,0,"3 of 7 commits"],[67,234,2,0,"2 of 7 commits"],[68,234,2,0,"2 of 7 commits"],[111,143,2,0,"6 of 10 commits"],[111,141,2,0,"5 of 10 commits"],[111,135,2,0,"2 of 2 commits"],[135,137,2,0,"2 of 2 commits"],[135,142,2,0,"2 of 2 commits"],[111,137,2,0,"3 of 3 commits"],[137,142,2,0,"3 of 3 commits"],[130,137,2,0,"2 of 3 commits"],[138,143,2,0,"6 of 8 commits"],[111,138,2,0,"4 of 8 commits"],[141,143,2,0,"5 of 7 commits"],[130,141,2,0,"4 of 7 commits"],[111,142,2,0,"3 of 3 commits"],[130,142,2,0,"2 of 3 commits"],[111,136,2,0,"2 of 2 commits"],[136,137,2,0,"2 of 2 commits"],[136,142,2,0,"2 of 2 commits"],[110,111,2,0,"3 of 5 commits"],[110,130,2,0,"3 of 5 commits"],[110,138,2,0,"3 of 5 commits"],[127,130,2,0,"3 of 4 commits"],[127,143,2,0,"3 of 4 commits"],[110,127,2,0,"2 of 4 commits"],[129,130,2,0,"3 of 4 commits"],[129,138,2,0,"3 of 4 commits"],[129,143,2,0,"3 of 4 commits"],[111,126,2,0,"2 of 3 commits"],[126,129,2,0,"2 of 3 commits"],[126,130,2,0,"2 of 3 commits"],[33,217,2,0,"8 of 12 commits"],[33,243,2,0,"6 of 12 commits"],[3,33,2,0,"5 of 12 commits"],[217,231,2,0,"4 of 6 commits"],[33,231,2,0,"3 of 6 commits"],[57,231,2,0,"3 of 6 commits"],[3,5,2,0,"21 of 33 commits"],[3,215,2,0,"13 of 33 commits"],[3,243,2,0,"12 of 33 commits"],[38,47,2,0,"7 of 8 commits"],[38,57,2,0,"7 of 8 commits"],[38,379,2,0,"5 of 8 commits"],[47,57,2,0,"6 of 7 commits"],[3,47,2,0,"4 of 7 commits"],[57,379,2,0,"12 of 18 commits"],[57,215,2,0,"7 of 18 commits"],[33,236,2,0,"5 of 6 commits"],[217,236,2,0,"5 of 6 commits"],[236,243,2,0,"5 of 6 commits"],[3,252,2,0,"2 of 2 commits"],[38,252,2,0,"2 of 2 commits"],[47,252,2,0,"2 of 2 commits"],[3,255,2,0,"2 of 2 commits"],[38,255,2,0,"2 of 2 commits"],[39,255,2,0,"2 of 2 commits"],[3,258,2,0,"3 of 3 commits"],[38,258,2,0,"3 of 3 commits"],[47,258,2,0,"3 of 3 commits"],[215,379,2,0,"6 of 12 commits"],[33,379,2,0,"5 of 12 commits"],[3,397,2,0,"3 of 3 commits"],[236,397,2,0,"3 of 3 commits"],[33,397,2,0,"2 of 3 commits"],[7,33,2,0,"3 of 5 commits"],[7,217,2,0,"3 of 5 commits"],[7,237,2,0,"3 of 5 commits"],[3,153,2,0,"10 of 20 commits"],[153,154,2,0,"9 of 20 commits"],[5,153,2,0,"8 of 20 commits"],[154,156,2,0,"5 of 10 commits"],[3,154,2,0,"4 of 10 commits"],[217,230,2,0,"8 of 15 commits"],[217,388,2,0,"7 of 15 commits"],[3,219,2,0,"2 of 2 commits"],[7,219,2,0,"2 of 2 commits"],[33,219,2,0,"2 of 2 commits"],[3,235,2,0,"2 of 2 commits"],[7,235,2,0,"2 of 2 commits"],[33,235,2,0,"2 of 2 commits"],[217,237,2,0,"6 of 7 commits"],[215,237,2,0,"4 of 7 commits"],[230,237,2,0,"4 of 7 commits"],[166,243,2,0,"20 of 41 commits"],[243,245,2,0,"19 of 41 commits"],[215,374,2,0,"11 of 11 commits"],[3,374,2,0,"7 of 11 commits"],[5,374,2,0,"7 of 11 commits"],[33,390,2,0,"3 of 3 commits"],[217,390,2,0,"3 of 3 commits"],[243,390,2,0,"3 of 3 commits"],[3,395,2,0,"2 of 2 commits"],[7,395,2,0,"2 of 2 commits"],[33,395,2,0,"2 of 2 commits"],[146,147,2,0,"3 of 3 commits"],[146,148,2,0,"3 of 3 commits"],[146,149,2,0,"3 of 3 commits"],[147,148,2,0,"4 of 4 commits"],[147,149,2,0,"4 of 4 commits"],[147,151,2,0,"4 of 4 commits"],[148,149,2,0,"4 of 4 commits"],[148,151,2,0,"4 of 4 commits"],[149,151,2,0,"4 of 4 commits"],[146,150,2,0,"3 of 3 commits"],[147,150,2,0,"3 of 3 commits"],[148,150,2,0,"3 of 3 commits"],[147,152,2,0,"3 of 6 commits"],[148,152,2,0,"3 of 6 commits"],[149,152,2,0,"3 of 6 commits"],[2,165,2,0,"3 of 8 commits"],[5,165,2,0,"3 of 8 commits"],[68,165,2,0,"3 of 8 commits"],[229,387,2,0,"3 of 3 commits"],[5,229,2,0,"2 of 3 commits"],[33,229,2,0,"2 of 3 commits"],[5,387,2,0,"2 of 3 commits"],[33,387,2,0,"2 of 3 commits"],[215,216,2,0,"2 of 2 commits"],[216,220,2,0,"2 of 2 commits"],[216,228,2,0,"2 of 2 commits"],[215,220,2,0,"4 of 6 commits"],[217,220,2,0,"4 of 6 commits"],[220,230,2,0,"4 of 6 commits"],[215,228,2,0,"3 of 4 commits"],[220,228,2,0,"3 of 4 commits"],[228,232,2,0,"3 of 4 commits"],[215,232,2,0,"4 of 6 commits"],[217,232,2,0,"4 of 6 commits"],[220,232,2,0,"4 of 6 commits"],[215,377,2,0,"2 of 2 commits"],[216,377,2,0,"2 of 2 commits"],[220,377,2,0,"2 of 2 commits"],[0,5,2,0,"20 of 58 commits"],[5,59,2,0,"2 of 2 commits"],[33,59,2,0,"2 of 2 commits"],[59,60,2,0,"2 of 2 commits"],[5,60,2,0,"2 of 2 commits"],[33,60,2,0,"2 of 2 commits"],[159,166,2,0,"17 of 42 commits"],[5,166,2,0,"16 of 42 commits"],[215,248,2,0,"5 of 5 commits"],[33,248,2,0,"4 of 5 commits"],[3,248,2,0,"3 of 5 commits"],[5,391,2,0,"2 of 2 commits"],[33,391,2,0,"2 of 2 commits"],[59,391,2,0,"2 of 2 commits"],[230,388,2,0,"8 of 10 commits"],[230,389,2,0,"5 of 10 commits"],[33,381,2,0,"2 of 3 commits"],[217,381,2,0,"2 of 3 commits"],[220,381,2,0,"2 of 3 commits"],[220,388,2,0,"4 of 8 commits"],[215,386,2,0,"3 of 4 commits"],[217,386,2,0,"3 of 4 commits"],[220,386,2,0,"3 of 4 commits"],[217,389,2,0,"5 of 6 commits"],[237,389,2,0,"4 of 6 commits"],[233,234,2,0,"2 of 3 commits"],[233,393,2,0,"2 of 3 commits"],[234,393,2,0,"2 of 2 commits"],[57,66,2,0,"4 of 4 commits"],[66,253,2,0,"4 of 4 commits"],[66,379,2,0,"4 of 4 commits"],[57,253,2,0,"4 of 4 commits"],[253,379,2,0,"4 of 4 commits"],[153,155,2,0,"4 of 6 commits"],[154,155,2,0,"4 of 6 commits"],[152,155,2,0,"3 of 6 commits"],[1,155,2,0,"2 of 3 commits"],[153,156,2,0,"4 of 5 commits"],[155,156,2,0,"3 of 5 commits"],[159,195,2,0,"18 of 27 commits"],[159,243,2,0,"16 of 27 commits"],[160,166,2,0,"5 of 6 commits"],[5,160,2,0,"3 of 6 commits"],[6,160,2,0,"3 of 6 commits"],[166,196,2,0,"9 of 11 commits"],[196,247,2,0,"4 of 11 commits"],[3,196,2,0,"3 of 11 commits"],[3,249,2,0,"2 of 3 commits"],[159,249,2,0,"2 of 3 commits"],[166,249,2,0,"2 of 3 commits"],[160,241,2,0,"3 of 4 commits"],[166,241,2,0,"3 of 4 commits"],[241,259,2,0,"3 of 4 commits"],[160,259,2,0,"3 of 4 commits"],[166,259,2,0,"3 of 4 commits"],[57,224,2,0,"2 of 3 commits"],[58,224,2,0,"2 of 3 commits"],[215,224,2,0,"2 of 3 commits"],[158,166,2,0,"4 of 7 commits"],[158,243,2,0,"4 of 7 commits"],[158,245,2,0,"3 of 7 commits"],[0,3,2,0,"11 of 22 commits"],[0,159,2,0,"10 of 22 commits"],[173,174,2,0,"4 of 7 commits"],[173,176,2,0,"4 of 7 commits"],[173,179,2,0,"4 of 7 commits"],[174,180,2,0,"6 of 8 commits"],[174,183,2,0,"6 of 8 commits"],[174,184,2,0,"6 of 8 commits"],[174,176,2,0,"5 of 6 commits"],[176,180,2,0,"5 of 6 commits"],[176,183,2,0,"5 of 6 commits"],[173,178,2,0,"3 of 5 commits"],[174,178,2,0,"3 of 5 commits"],[176,178,2,0,"3 of 5 commits"],[179,185,2,0,"8 of 11 commits"],[179,180,2,0,"5 of 11 commits"],[179,184,2,0,"5 of 11 commits"],[173,182,2,0,"2 of 3 commits"],[174,182,2,0,"2 of 3 commits"],[176,182,2,0,"2 of 3 commits"],[183,184,2,0,"6 of 7 commits"],[184,185,2,0,"6 of 12 commits"],[159,185,2,0,"5 of 12 commits"],[174,186,2,0,"5 of 8 commits"],[176,186,2,0,"5 of 8 commits"],[180,186,2,0,"5 of 8 commits"],[187,189,2,0,"4 of 5 commits"],[178,187,2,0,"3 of 5 commits"],[179,187,2,0,"3 of 5 commits"],[179,188,2,0,"4 of 5 commits"],[184,188,2,0,"4 of 5 commits"],[185,188,2,0,"4 of 5 commits"],[178,189,2,0,"3 of 5 commits"],[179,189,2,0,"3 of 5 commits"],[166,213,2,0,"7 of 11 commits"],[213,243,2,0,"7 of 11 commits"],[213,245,2,0,"7 of 11 commits"],[57,400,2,0,"2 of 4 commits"],[58,400,2,0,"2 of 4 commits"],[61,400,2,0,"2 of 4 commits"],[215,240,2,0,"5 of 5 commits"],[68,240,2,0,"4 of 5 commits"],[2,240,2,0,"3 of 5 commits"],[225,380,2,0,"2 of 2 commits"],[57,380,2,0,"2 of 3 commits"],[215,380,2,0,"2 of 3 commits"],[217,380,2,0,"2 of 3 commits"],[251,380,2,0,"2 of 3 commits"],[57,262,2,0,"2 of 3 commits"],[215,262,2,0,"2 of 3 commits"],[217,262,2,0,"2 of 3 commits"],[5,6,2,0,"8 of 9 commits"],[0,6,2,0,"6 of 9 commits"],[2,6,2,0,"4 of 9 commits"],[4,5,2,0,"2 of 2 commits"],[166,192,2,0,"2 of 3 commits"],[192,196,2,0,"2 of 3 commits"],[195,247,2,0,"17 of 26 commits"],[195,245,2,0,"15 of 26 commits"],[166,200,2,0,"2 of 2 commits"],[200,203,2,0,"2 of 2 commits"],[200,204,2,0,"2 of 2 commits"],[166,203,2,0,"5 of 7 commits"],[195,203,2,0,"3 of 7 commits"],[196,203,2,0,"3 of 7 commits"],[166,204,2,0,"4 of 5 commits"],[202,204,2,0,"3 of 5 commits"],[203,204,2,0,"3 of 5 commits"],[166,247,2,0,"16 of 24 commits"],[159,247,2,0,"15 of 24 commits"],[166,406,2,0,"5 of 7 commits"],[195,406,2,0,"4 of 7 commits"],[247,406,2,0,"4 of 7 commits"],[61,62,2,0,"2 of 2 commits"],[68,177,2,0,"2 of 2 commits"],[166,177,2,0,"2 of 2 commits"],[177,179,2,0,"2 of 2 commits"],[202,206,2,0,"4 of 7 commits"],[166,202,2,0,"3 of 7 commits"],[202,205,2,0,"2 of 4 commits"],[205,206,2,0,"2 of 4 commits"],[205,207,2,0,"2 of 4 commits"],[166,206,2,0,"3 of 6 commits"],[204,206,2,0,"3 of 6 commits"],[166,207,2,0,"4 of 10 commits"],[185,207,2,0,"4 of 10 commits"],[159,207,2,0,"3 of 10 commits"],[202,209,2,0,"3 of 4 commits"],[206,209,2,0,"3 of 4 commits"],[207,209,2,0,"3 of 4 commits"],[157,166,2,0,"9 of 12 commits"],[157,159,2,0,"8 of 12 commits"],[5,157,2,0,"7 of 12 commits"],[157,168,2,0,"2 of 2 commits"],[166,168,2,0,"2 of 2 commits"],[168,196,2,0,"2 of 2 commits"],[166,256,2,0,"3 of 3 commits"],[157,256,2,0,"2 of 3 commits"],[158,256,2,0,"2 of 3 commits"],[160,246,2,0,"2 of 5 commits"],[166,246,2,0,"2 of 5 commits"],[159,245,2,0,"15 of 29 commits"],[2,16,2,0,"2 of 3 commits"],[197,207,2,0,"3 of 3 commits"],[184,197,2,0,"2 of 3 commits"],[185,197,2,0,"2 of 3 commits"],[185,405,2,0,"3 of 3 commits"],[159,405,2,0,"2 of 3 commits"],[166,405,2,0,"2 of 3 commits"],[159,191,2,0,"8 of 9 commits"],[166,191,2,0,"8 of 9 commits"],[191,195,2,0,"7 of 9 commits"],[68,211,2,0,"3 of 4 commits"],[159,211,2,0,"3 of 4 commits"],[166,211,2,0,"3 of 4 commits"],[179,375,2,0,"4 of 6 commits"],[185,375,2,0,"4 of 6 commits"],[195,375,2,0,"4 of 6 commits"],[68,401,2,0,"10 of 14 commits"],[159,401,2,0,"10 of 14 commits"],[195,401,2,0,"10 of 14 commits"],[68,214,2,0,"4 of 5 commits"],[159,214,2,0,"4 of 5 commits"],[195,214,2,0,"4 of 5 commits"],[5,212,2,0,"4 of 6 commits"],[159,212,2,0,"4 of 6 commits"],[166,212,2,0,"4 of 6 commits"],[3,408,2,0,"2 of 3 commits"],[5,408,2,0,"2 of 3 commits"],[68,408,2,0,"2 of 3 commits"],[3,369,2,0,"2 of 2 commits"],[5,369,2,0,"2 of 2 commits"],[68,369,2,0,"2 of 2 commits"],[5,22,2,0,"2 of 2 commits"],[22,23,2,0,"2 of 2 commits"],[22,159,2,0,"2 of 2 commits"],[5,23,2,0,"2 of 2 commits"],[23,159,2,0,"2 of 2 commits"],[0,190,2,0,"3 of 6 commits"],[5,190,2,0,"3 of 6 commits"],[68,190,2,0,"3 of 6 commits"],[0,278,2,0,"2 of 2 commits"],[5,278,2,0,"2 of 2 commits"],[68,278,2,0,"2 of 2 commits"],[0,325,2,0,"2 of 2 commits"],[5,325,2,0,"2 of 2 commits"],[68,325,2,0,"2 of 2 commits"],[0,326,2,0,"2 of 2 commits"],[5,326,2,0,"2 of 2 commits"],[68,326,2,0,"2 of 2 commits"],[0,327,2,0,"2 of 2 commits"],[5,327,2,0,"2 of 2 commits"],[68,327,2,0,"2 of 2 commits"],[0,351,2,0,"2 of 2 commits"],[5,351,2,0,"2 of 2 commits"],[68,351,2,0,"2 of 2 commits"],[0,366,2,0,"2 of 2 commits"],[5,366,2,0,"2 of 2 commits"],[68,366,2,0,"2 of 2 commits"],[0,367,2,0,"2 of 2 commits"],[5,367,2,0,"2 of 2 commits"],[68,367,2,0,"2 of 2 commits"],[0,370,2,0,"2 of 2 commits"],[5,370,2,0,"2 of 2 commits"],[68,370,2,0,"2 of 2 commits"],[0,371,2,0,"2 of 2 commits"],[5,371,2,0,"2 of 2 commits"],[68,371,2,0,"2 of 2 commits"],[0,411,2,0,"2 of 2 commits"],[5,411,2,0,"2 of 2 commits"],[68,411,2,0,"2 of 2 commits"],[0,412,2,0,"2 of 2 commits"],[5,412,2,0,"2 of 2 commits"],[68,412,2,0,"2 of 2 commits"]]}};
+const TAU = Math.PI * 2;
+const GOLDEN = Math.PI * (3 - Math.sqrt(5));
+
+// Relation vocabulary. Colour is semantic ONLY in map mode, where the name is
+// written next to the line anyway — the globe is deliberately polychrome.
+const REL = [
+  { name:'imports',        rev:'imported by',    hex:'#7ab2ff', col:[122,178,255] },
+  { name:'calls',          rev:'called by',      hex:'#c39cff', col:[195,156,255] },
+  { name:'edited together', rev:'edited together', hex:'#ff9d6e', col:[255,157,110] },
+  { name:'same note',      rev:'same note',      hex:'#8fe9a8', col:[143,233,168] },
+];
+
+/**
+ * Palette sets. White is deliberately absent from both: it is the brightest
+ * value on a dark ground, so it out-shouts every hue regardless of which
+ * directory happens to receive it — and the map view already spends white on
+ * hover and labels. A colour used for interaction should never also encode data.
+ *
+ * Lightness is hand-compensated per hue, not held constant: at equal HSL
+ * lightness yellow reads far brighter than blue, which makes a sphere look
+ * unevenly lit. These are tuned to sit at roughly the same perceived weight.
+ */
+const PALETTES = {
+  // adjacent hues in path order — the sphere reads as one continuous object
+  aurora: [
+    { h: 265, s: 0.70, l: 0.70 },   // violet
+    { h: 218, s: 0.88, l: 0.64 },   // blue
+    { h: 176, s: 0.68, l: 0.53 },   // teal
+    { h: 132, s: 0.60, l: 0.57 },   // green
+    { h:  44, s: 0.92, l: 0.56 },   // amber
+    { h: 350, s: 0.86, l: 0.66 },   // rose
+  ],
+  // far-apart hues in path order — each zone maximally distinct
+  jewel: [
+    { h: 214, s: 0.90, l: 0.64 },   // blue
+    { h: 344, s: 0.86, l: 0.66 },   // rose
+    { h:  44, s: 0.94, l: 0.56 },   // amber
+    { h: 158, s: 0.64, l: 0.54 },   // emerald
+    { h: 282, s: 0.74, l: 0.70 },   // violet
+    { h:  14, s: 0.86, l: 0.63 },   // coral
+  ],
+};
+let PALETTE_NAME = 'aurora';
+
+let M = null;
+let repoKeys = Object.keys(DATA), repoAt = 0;
+let mode = 'globe';
+let fade = 0;
+
+function hslToRgb(h, s, l) {
+  h = ((h % 360) + 360) % 360 / 360;
+  const f = (p, q, t) => {
+    if (t < 0) t += 1; if (t > 1) t -= 1;
+    if (t < 1/6) return p + (q - p) * 6 * t;
+    if (t < 1/2) return q;
+    if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+    return p;
+  };
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+  return [Math.round(f(p,q,h+1/3)*255), Math.round(f(p,q,h)*255), Math.round(f(p,q,h-1/3)*255)];
+}
+
+function buildModel(key) {
+  const d = DATA[key];
+  const n = d.n.length;
+  const px = new Float32Array(n), py = new Float32Array(n), pz = new Float32Array(n);
+  const cluster = new Int16Array(n), deg = new Int32Array(n);
+  for (let i = 0; i < n; i++) { cluster[i] = d.n[i][2]; deg[i] = d.n[i][3]; }
+
+  // Equal-area latitude bands: y is uniform on a unit sphere, so a band's
+  // share of y IS its share of surface — a directory with twice the files
+  // gets twice the territory, with no polar distortion.
+  const counts = new Array(d.clusters.length).fill(0);
+  for (let i = 0; i < n; i++) counts[cluster[i]]++;
+  const bandY = [];
+  let acc = 0;
+  for (let c = 0; c < d.clusters.length; c++) {
+    const y0 = 1 - 2 * (acc / n);
+    acc += counts[c];
+    bandY.push([y0, 1 - 2 * (acc / n)]);
+  }
+
+  let seed = 0x9e3779b9;
+  const rnd = () => { seed ^= seed<<13; seed^=seed>>>17; seed^=seed<<5; return (seed>>>0)/4294967296; };
+  const placed = new Array(d.clusters.length).fill(0);
+  const tint = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const c = cluster[i], j = placed[c]++;
+    const t = (j + 0.5) / counts[c];
+    const [y0, y1] = bandY[c], gap = y0 - y1;
+    const y = y0 - gap * (0.06 + 0.88 * t) - gap * 0.06 * (rnd() - 0.5);
+    const r = Math.sqrt(Math.max(0, 1 - y * y));
+    const lon = j * GOLDEN + c * 1.7;
+    px[i] = r * Math.cos(lon); py[i] = y; pz[i] = r * Math.sin(lon);
+    tint[i] = rnd();
+  }
+
+  // Six named colours on a cycle rather than an even walk of the hue wheel.
+  // The walk put most bands in the green-yellow arc and made neighbours differ
+  // by only a few degrees; cycling a fixed palette guarantees that adjacent
+  // latitude bands are always strongly different.
+  const PALETTE = PALETTES[PALETTE_NAME];
+  // Contiguous ZONES, not a repeating cycle. Cycling every band scattered the
+  // six colours into confetti and threw away the one thing the layout encodes
+  // — latitude is the directory. Six blocks of consecutive bands keep the
+  // sphere ordered top-to-bottom while still using all six colours.
+  const perZone = Math.max(1, Math.ceil(d.clusters.length / PALETTE.length));
+  const zoneOf = (c) => Math.min(PALETTE.length - 1, Math.floor(c / perZone));
+  // position within the zone, -0.5..0.5, so the four bands sharing a colour
+  // still separate from each other
+  const stepOf = (c) => (perZone === 1 ? 0 : ((c % perZone) / (perZone - 1)) - 0.5);
+  const bandRgb = d.clusters.map((_, i) => {
+    const z = PALETTE[zoneOf(i)];
+    return hslToRgb(z.h + stepOf(i) * 22, z.s, z.l + stepOf(i) * 0.16);
+  });
+  const rgb = new Uint8Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const base = PALETTE[zoneOf(cluster[i])];
+    const step = stepOf(cluster[i]);
+    // vary WITHIN the colour so a band has depth but never drifts into the
+    // neighbouring band's identity
+    const h = base.h + step * 22 + (tint[i] - 0.5) * 10;
+    const s = Math.min(1, base.s * (0.88 + tint[i] * 0.24));
+    const l = Math.min(0.94, base.l + step * 0.16 + (tint[i] - 0.5) * 0.10 + Math.min(0.07, deg[i] * 0.005));
+    const c = hslToRgb(h, s, l);
+    rgb[i*3] = c[0]; rgb[i*3+1] = c[1]; rgb[i*3+2] = c[2];
+  }
+
+  const adj = Array.from({ length: n }, () => []);
+  d.e.forEach((e, i) => { adj[e[0]].push(i); adj[e[1]].push(i); });
+
+  return {
+    key, repo: d.repo, nodes: d.n, n, px, py, pz, cluster, deg, rgb,
+    edges: d.e, adj, clusters: d.clusters, counts, bandRgb,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Canvas
+// ---------------------------------------------------------------------------
+const cvs = document.getElementById('c');
+const ctx = cvs.getContext('2d', { alpha: false });
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(devicePixelRatio || 1, 2);
+  W = innerWidth; H = innerHeight;
+  cvs.width = W * DPR; cvs.height = H * DPR;
+  cvs.style.width = W + 'px'; cvs.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+addEventListener('resize', resize);
+
+// ---------------------------------------------------------------------------
+// GLOBE — points only. No chords, no standing labels: the sphere's job is to
+// show the whole repo at once and be beautiful; naming happens on hover.
+// ---------------------------------------------------------------------------
+const cam = { yaw: 0.6, pitch: -0.25, dist: 3.0 };
+let hovered = -1, hotCluster = -1, lastInteract = 0;
+let sxb, syb, szb;
+
+function projectGlobe() {
+  const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
+  const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+  const cx = W/2, cyy = H/2;
+  // Perspective divides by (dist - z), so the focal length must carry the
+  // camera distance or the globe renders as a marble in a large empty frame.
+  const R = Math.min(W, H) * 1.06;
+  const n = M.n;
+  if (!sxb || sxb.length < n) { sxb = new Float32Array(n); syb = new Float32Array(n); szb = new Float32Array(n); }
+  for (let i = 0; i < n; i++) {
+    const x1 = M.px[i]*cy - M.pz[i]*sy, z1 = M.px[i]*sy + M.pz[i]*cy;
+    const y2 = M.py[i]*cp - z1*sp, z2 = M.py[i]*sp + z1*cp;
+    const f = R / (cam.dist - z2);
+    sxb[i] = cx + x1*f; syb[i] = cyy - y2*f; szb[i] = z2;
+  }
+  return { cx, cyy, R };
+}
+
+function drawGlobe(dt, alpha) {
+  if (!dragging && performance.now() - lastInteract > 2200) cam.yaw += 0.035 * dt;
+  const P = projectGlobe();
+  ctx.globalAlpha = alpha;
+
+  const shell = P.R / cam.dist;
+  const g = ctx.createRadialGradient(P.cx, P.cyy, shell*0.1, P.cx, P.cyy, shell*1.08);
+  g.addColorStop(0, 'rgba(26,36,60,.55)');
+  g.addColorStop(0.72, 'rgba(13,19,33,.42)');
+  g.addColorStop(1, 'rgba(5,7,12,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(P.cx, P.cyy, shell*1.08, 0, TAU); ctx.fill();
+
+  const order = [];
+  for (let i = 0; i < M.n; i++) order.push(i);
+  order.sort((a, b) => szb[a] - szb[b]);          // painter's algorithm
+  for (const i of order) {
+    const z = szb[i], front = z > 0;
+    const dim = hotCluster >= 0 && M.cluster[i] !== hotCluster;
+    // Far-side dots sit BELOW the lit shell, and a saturated colour at middling
+    // alpha over that blue-grey composites to olive. Keep them faint enough to
+    // read as depth rather than as dirty dots.
+    let a = front ? 0.96 : 0.14;
+    if (dim) a *= 0.12;
+    const rad = (1.6 + Math.min(3.6, Math.sqrt(M.deg[i]) * 0.62)) * (0.72 + 0.42 * ((z+1)/2));
+    if (i === hovered) {
+      ctx.fillStyle = 'rgba(255,212,121,.25)';
+      ctx.beginPath(); ctx.arc(sxb[i], syb[i], rad + 7, 0, TAU); ctx.fill();
+    }
+    ctx.fillStyle = 'rgba('+M.rgb[i*3]+','+M.rgb[i*3+1]+','+M.rgb[i*3+2]+','+a.toFixed(3)+')';
+    ctx.beginPath(); ctx.arc(sxb[i], syb[i], rad, 0, TAU); ctx.fill();
+  }
+
+  // The ONLY text on the sphere, and only while pointing at something.
+  if (hovered >= 0) {
+    ctx.font = '500 12px ' + MONO;
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    const label = M.nodes[hovered][0];
+    const w = ctx.measureText(label).width;
+    const x = sxb[hovered] + 11, y = syb[hovered];
+    ctx.fillStyle = 'rgba(5,7,12,.85)';
+    ctx.fillRect(x - 4, y - 9, w + 8, 18);
+    ctx.fillStyle = '#ffd479';
+    ctx.fillText(label, x, y);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ---------------------------------------------------------------------------
+// MAP — a sliding two-level window, never a growing tree.
+//
+//   centre  = the file you came FROM
+//   opened  = the neighbour you clicked, drawn with ITS own neighbours
+//
+// Click one of the opened node's neighbours and the window slides: opened
+// becomes the centre, and the node just clicked becomes the new opened. So the
+// picture never accumulates hops — it always shows exactly two levels.
+// ---------------------------------------------------------------------------
+const map = {
+  center: -1, opened: -1, nodes: [], links: [], trail: [],
+  ring: new Set(), kids: new Set(), radius: 240,
+  pan: { x: 0, y: 0 }, zoom: 1, drag: null, hover: -1,
+};
+const KID_CAP = 20;
+
+/** keep the head and tail — the distinguishing parts of a long filename */
+function shortName(s) {
+  return s.length <= 34 ? s : s.slice(0, 20) + '…' + s.slice(-12);
+}
+
+function relLabel(kind, detail, reversed) {
+  if (kind === 1) return reversed ? 'called by' : 'calls ' + (detail || 'a symbol');
+  if (kind === 2) return 'edited together' + (detail ? ' · ' + detail : '');
+  if (kind === 3) return 'same note' + (detail ? ' · ' + detail : '');
+  return reversed ? REL[0].rev : REL[0].name;
+}
+
+/** every distinct neighbour of `id`, with the relations that connect them */
+function neighboursOf(id) {
+  const byOther = new Map();
+  for (const ei of M.adj[id]) {
+    const e = M.edges[ei];
+    const other = e[0] === id ? e[1] : e[0];
+    if (other === id) continue;
+    if (!byOther.has(other)) byOther.set(other, []);
+    byOther.get(other).push({ kind: e[2], detail: e[4], reversed: e[0] !== id && e[3] === 1 });
+  }
+  return [...byOther.entries()]
+    .map(([other, rels]) => ({ other, rels }))
+    .sort((a, b) => Math.min(...a.rels.map((r) => r.kind)) - Math.min(...b.rels.map((r) => r.kind))
+                    || M.deg[b.other] - M.deg[a.other]);
+}
+
+function layoutMap(keep) {
+  const prev = new Map(map.nodes.map((n) => [n.id, n]));
+  const nodes = [], links = [], ring = new Set(), kids = new Set();
+
+  const n1 = neighboursOf(map.center);
+  const opened = (map.opened >= 0 && n1.some((nb) => nb.other === map.opened)) ? map.opened : -1;
+  map.opened = opened;
+
+  if (opened < 0) {
+    // ---- RADIAL: one file and its whole neighbourhood ----------------------
+    map.spine = false;
+    nodes.push({ id: map.center, level: 0, x: 0, y: 0, a: 0 });
+    // Ring radius grows with occupancy, or the dots touch and labels overprint.
+    const r1 = Math.max(235, n1.length * 34 / TAU);
+    map.radius = r1;
+    n1.forEach((nb, i) => {
+      const a = (i / Math.max(1, n1.length)) * TAU - Math.PI / 2;
+      nodes.push({ id: nb.other, level: 1, x: Math.cos(a) * r1, y: Math.sin(a) * r1, a });
+      ring.add(nb.other);
+      for (const r of nb.rels) links.push({ from: map.center, to: nb.other, ...r, level: 1 });
+    });
+    map.kidOverflow = 0;
+  } else {
+    // ---- SPINE: where you came FROM, and what you just opened --------------
+    //
+    // Fanning the opened node inside the centre's own ring was the ugly part:
+    // both levels landed in the same annulus, so every spoke of one crossed
+    // every spoke of the other and you could not tell whose neighbour was
+    // whose. Giving each node its own half of the screen makes overlap
+    // impossible by construction, and the A→B relation gets the middle.
+    map.spine = true;
+    const others = n1.filter((nb) => nb.other !== opened);
+    const otherIds = new Set(others.map((o) => o.other));
+    const kidList = neighboursOf(opened)
+      .filter((nb) => nb.other !== map.center && !otherIds.has(nb.other));
+    const shown = kidList.slice(0, KID_CAP);
+    map.kidOverflow = kidList.length - shown.length;
+
+    // each side spans a semicircle, so radius comes from PI, not TAU
+    const rA = Math.max(200, others.length * 34 / Math.PI);
+    const rB = Math.max(200, shown.length * 34 / Math.PI);
+    const ax = -Math.max(300, (rA + rB) * 0.30), bx = -ax;
+
+    nodes.push({ id: map.center, level: 0, x: ax, y: 0, a: Math.PI });
+    nodes.push({ id: opened, level: 0, x: bx, y: 0, a: 0 });
+    ring.add(opened);
+    for (const r of (n1.find((nb) => nb.other === opened)?.rels ?? [])) {
+      links.push({ from: map.center, to: opened, ...r, level: 1, spine: true });
+    }
+
+    // centre's remaining neighbours fan LEFT, away from the spine
+    const AL = Math.PI/2 + 0.22, AH = Math.PI*1.5 - 0.22;
+    others.forEach((nb, i) => {
+      const t = others.length === 1 ? 0.5 : i / (others.length - 1);
+      const a = AL + t * (AH - AL);
+      nodes.push({ id: nb.other, level: 1, x: ax + Math.cos(a) * rA, y: Math.sin(a) * rA, a });
+      ring.add(nb.other);
+      for (const r of nb.rels) links.push({ from: map.center, to: nb.other, ...r, level: 1 });
+    });
+
+    // opened node's neighbours fan RIGHT
+    const BL = -Math.PI/2 + 0.22, BH = Math.PI/2 - 0.22;
+    shown.forEach((nb, i) => {
+      const t = shown.length === 1 ? 0.5 : i / (shown.length - 1);
+      const a = BL + t * (BH - BL);
+      nodes.push({ id: nb.other, level: 2, x: bx + Math.cos(a) * rB, y: Math.sin(a) * rB, a });
+      kids.add(nb.other);
+      for (const r of nb.rels) links.push({ from: opened, to: nb.other, ...r, level: 2 });
+    });
+  }
+
+  // relations between two on-screen nodes that bypass the focus — real, but
+  // background, and the main source of the web when everything is drawn
+  const on = new Set(nodes.map((nd) => nd.id));
+  for (const e of M.edges) {
+    if (!on.has(e[0]) || !on.has(e[1])) continue;
+    if (links.some((l) => l.kind === e[2] &&
+        ((l.from === e[0] && l.to === e[1]) || (l.from === e[1] && l.to === e[0])))) continue;
+    links.push({ from: e[0], to: e[1], kind: e[2], detail: e[4], reversed: false, level: 9, extra: true });
+  }
+
+  for (const nd of nodes) {
+    const old = keep && prev.get(nd.id);
+    nd.cx = old ? old.cx : nd.x * 0.4;
+    nd.cy = old ? old.cy : nd.y * 0.4;
+  }
+  map.nodes = nodes; map.links = links; map.ring = ring; map.kids = kids;
+
+  let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+  for (const nd of nodes) {
+    minX = Math.min(minX, nd.x); maxX = Math.max(maxX, nd.x);
+    minY = Math.min(minY, nd.y); maxY = Math.max(maxY, nd.y);
+  }
+  // Fit against the space actually available, not the raw window: the info
+  // panel owns the left ~380px, and every node hangs a filename outside the
+  // node bounding box, so both fans clipped without this allowance.
+  const PAD_L = 380, PAD_R = 70, LABEL = 215;
+  const availW = W - PAD_L - PAD_R, availH = H - 150;
+  map.zoom = Math.min(1.15, availW / (maxX - minX + LABEL * 2), availH / (maxY - minY + 130));
+  map.pan = {
+    x: -(minX + maxX) / 2 + ((PAD_L - PAD_R) / 2) / map.zoom,
+    y: -(minY + maxY) / 2,
+  };
+}
+
+function openFile(id) {
+  if (mode === 'globe') { map.trail = []; map.opened = -1; fade = 1; }
+  mode = 'map';
+  document.body.classList.add('map');
+  map.center = id; map.opened = -1;
+  layoutMap(true); renderMapPanel();
+  hint('click a neighbour to open its connections · click one of those to slide the view along');
+}
+
+function exitMap() {
+  mode = 'globe'; fade = 1;
+  document.body.classList.remove('map');
+  map.center = -1; map.opened = -1; map.nodes = []; map.links = [];
+  hint('drag to rotate · scroll to zoom · hover for a name · click any file to explore it');
+}
+
+/** the whole navigation rule, in one place */
+function mapClick(id) {
+  if (id < 0 || id === map.center) { map.opened = -1; layoutMap(true); renderMapPanel(); return; }
+  if (map.ring.has(id)) {
+    // a neighbour of the centre: open it in place (or drill in if already open)
+    if (map.opened === id) { map.trail.push(map.center); map.center = id; map.opened = -1; }
+    else map.opened = id;
+  } else if (map.kids.has(id)) {
+    // a neighbour of the opened node: slide the window along by one
+    map.trail.push(map.center);
+    map.center = map.opened;
+    map.opened = id;
+  } else return;
+  layoutMap(true); renderMapPanel();
+}
+
+function mapScreen(nd) {
+  return [W/2 + (nd.cx + map.pan.x) * map.zoom, H/2 + (nd.cy + map.pan.y) * map.zoom];
+}
+
+function drawMap(dt, alpha) {
+  ctx.globalAlpha = alpha;
+  const k = Math.min(1, dt * 7);
+  for (const nd of map.nodes) { nd.cx += (nd.x - nd.cx) * k; nd.cy += (nd.y - nd.cy) * k; }
+
+  const cx0 = W/2 + map.pan.x * map.zoom, cy0 = H/2 + map.pan.y * map.zoom;
+  if (!map.spine) {
+    ctx.strokeStyle = 'rgba(140,160,200,.09)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(cx0, cy0, map.radius * map.zoom, 0, TAU); ctx.stroke();
+  }
+
+  const pos = new Map(map.nodes.map((nd) => [nd.id, mapScreen(nd)]));
+  const hov = map.hover;
+
+  for (const l of map.links) {
+    const A = pos.get(l.from), B = pos.get(l.to);
+    if (!A || !B) continue;
+    const touches = hov >= 0 && (l.from === hov || l.to === hov);
+    // With two focus nodes on screen the bypass links are what turn the
+    // picture into a web — keep them for hover only.
+    if (l.extra && map.spine && !touches) continue;
+    const R = REL[l.kind];
+    const base = l.extra ? 0.10 : (l.spine ? 0.9 : (l.level === 2 ? 0.7 : 0.5));
+    ctx.strokeStyle = 'rgba('+R.col[0]+','+R.col[1]+','+R.col[2]+','+(touches ? 0.95 : base)+')';
+    ctx.lineWidth = touches ? 2 : (l.extra ? 1 : (l.spine ? 2 : 1.4));
+    const dx = B[0]-A[0], dy = B[1]-A[1];
+    const mx = (A[0]+B[0])/2, my = (A[1]+B[1])/2;
+    const bow = (l.kind - 1.5) * 7;          // keeps parallel relations apart
+    ctx.beginPath();
+    ctx.moveTo(A[0], A[1]);
+    ctx.quadraticCurveTo(mx - dy*0.008*bow, my + dx*0.008*bow, B[0], B[1]);
+    ctx.stroke();
+
+    if (l.kind <= 1 && !l.extra) {
+      const t = 0.62, ax = A[0] + dx*t, ay = A[1] + dy*t;
+      const ang = Math.atan2(dy, dx) + (l.reversed ? Math.PI : 0);
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.beginPath();
+      ctx.moveTo(ax + Math.cos(ang)*5, ay + Math.sin(ang)*5);
+      ctx.lineTo(ax + Math.cos(ang+2.5)*5, ay + Math.sin(ang+2.5)*5);
+      ctx.lineTo(ax + Math.cos(ang-2.5)*5, ay + Math.sin(ang-2.5)*5);
+      ctx.fill();
+    }
+  }
+
+  // Filenames claim their boxes FIRST; relation labels route around them.
+  ctx.font = '500 11.5px ' + MONO;
+  const boxes = [], dots = [], nodeLabels = [];
+  for (const nd of map.nodes) {
+    const [x, y] = pos.get(nd.id);
+    const isC = nd.id === map.center, isO = nd.id === map.opened;
+    const r = isC ? 13 : (isO ? 10 : (nd.level === 1 ? 7.5 : 5.5));
+    // Dots are drawn AFTER the relation labels, so they must be reserved too —
+    // but in their OWN list. Putting them in `boxes` made every node's label
+    // collide with its own dot and vanish.
+    dots.push([x - r - 2, y - r - 2, r*2 + 4, r*2 + 4]);
+    const label = shortName(M.nodes[nd.id][0]);
+    const w = ctx.measureText(label).width;
+    // On the spine both focus nodes sit in open space, so their labels go
+    // straight above the dot — hanging them sideways puts them into the fan.
+    const above = map.spine && (isC || isO);
+    const right = isC ? true : (x >= cx0);
+    const lx = above ? x : (right ? x + r + 6 : x - r - 6 - w);
+    const box = above ? [x - w/2 - 3, y - r - 23, w + 6, 16] : [lx - 3, y - 8, w + 6, 16];
+    const clash = boxes.some((b) => box[0] < b[0]+b[2]+3 && b[0] < box[0]+box[2]+3 &&
+                                    box[1] < b[1]+b[3]+2 && b[1] < box[1]+box[3]+2);
+    if (clash && !isC && !isO && nd.id !== hov) { nodeLabels.push({ nd, x, y, r, skip: true }); continue; }
+    boxes.push(box);
+    nodeLabels.push({ nd, x, y, r, label, lx, box, above });
+  }
+
+  ctx.font = '500 10px ' + SANS;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const l of map.links) {
+    const show = !l.extra && (l.level === 1 || l.level === 2 ||
+                              (hov >= 0 && (l.from === hov || l.to === hov)));
+    if (!show) continue;
+    const A = pos.get(l.from), B = pos.get(l.to);
+    if (!A || !B) continue;
+    const txt = relLabel(l.kind, l.detail, l.reversed);
+    const w = ctx.measureText(txt).width;
+    let placed = null;
+    for (const t of [0.55, 0.66, 0.44, 0.75]) {
+      const x = A[0] + (B[0]-A[0])*t, y = A[1] + (B[1]-A[1])*t;
+      const box = [x - w/2 - 4, y - 8, w + 8, 16];
+      const hit = (b) => box[0] < b[0]+b[2]+3 && b[0] < box[0]+box[2]+3 &&
+                         box[1] < b[1]+b[3]+2 && b[1] < box[1]+box[3]+2;
+      if (!boxes.some(hit) && !dots.some(hit)) { placed = { x, y, box }; break; }
+    }
+    if (!placed) continue;
+    boxes.push(placed.box);
+    const R = REL[l.kind];
+    ctx.fillStyle = 'rgba(5,7,12,.9)';
+    ctx.fillRect(placed.box[0], placed.box[1], placed.box[2], placed.box[3]);
+    ctx.fillStyle = 'rgba('+R.col[0]+','+R.col[1]+','+R.col[2]+',.95)';
+    ctx.fillText(txt, placed.x, placed.y);
+  }
+
+  ctx.font = '500 11.5px ' + MONO;
+  for (const nl of nodeLabels) {
+    const { nd, x, y, r } = nl;
+    const isC = nd.id === map.center, isO = nd.id === map.opened;
+    if (isC || isO || nd.id === hov) {
+      ctx.fillStyle = isO ? 'rgba(143,211,255,.2)' : 'rgba(255,212,121,.2)';
+      ctx.beginPath(); ctx.arc(x, y, r + 9, 0, TAU); ctx.fill();
+    }
+    ctx.fillStyle = 'rgb('+M.rgb[nd.id*3]+','+M.rgb[nd.id*3+1]+','+M.rgb[nd.id*3+2]+')';
+    ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+    if (isC || isO) {
+      ctx.strokeStyle = isO ? '#8fd3ff' : '#ffd479';
+      ctx.lineWidth = 2; ctx.stroke();
+    }
+    if (nl.skip) continue;
+    ctx.textAlign = nl.above ? 'center' : 'left';
+    ctx.fillStyle = 'rgba(5,7,12,.85)';
+    ctx.fillRect(nl.box[0], nl.box[1], nl.box[2], nl.box[3]);
+    ctx.fillStyle = isC ? '#ffd479' : (isO ? '#8fd3ff' : (nd.id === hov ? '#fff' : 'rgba(232,236,245,.9)'));
+    ctx.fillText(nl.label, nl.lx, nl.above ? y - r - 15 : y);
+  }
+
+  if (map.kidOverflow > 0 && map.opened >= 0) {
+    const p = pos.get(map.opened);
+    ctx.font = '500 10px ' + SANS;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(139,151,176,.8)';
+    ctx.fillText('+' + map.kidOverflow + ' more', p[0], p[1] + 26);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function mapHit(mx, my) {
+  let best = -1, bestD = 18*18;
+  for (const nd of map.nodes) {
+    const [x, y] = mapScreen(nd);
+    const d = (x-mx)*(x-mx) + (y-my)*(y-my);
+    if (d < bestD) { bestD = d; best = nd.id; }
+  }
+  return best;
+}
+
+// ---------------------------------------------------------------------------
+// Input
+// ---------------------------------------------------------------------------
+let dragging = false, lastX = 0, lastY = 0, moved = 0;
+const tip = document.getElementById('tip');
+
+cvs.addEventListener('pointerdown', (e) => {
+  dragging = true; moved = 0; lastX = e.clientX; lastY = e.clientY;
+  cvs.setPointerCapture(e.pointerId); cvs.classList.add('dragging');
+  if (mode === 'map') {
+    const id = mapHit(e.clientX, e.clientY);
+    map.drag = id >= 0 ? map.nodes.find((n) => n.id === id) : null;
+  }
+});
+cvs.addEventListener('pointermove', (e) => {
+  const dx = e.clientX - lastX, dy = e.clientY - lastY;
+  if (dragging) {
+    moved += Math.abs(dx) + Math.abs(dy);
+    if (mode === 'globe') {
+      cam.yaw -= dx * 0.006;
+      cam.pitch = Math.max(-1.45, Math.min(1.45, cam.pitch + dy * 0.006));
+    } else if (map.drag) {
+      map.drag.x += dx / map.zoom; map.drag.y += dy / map.zoom;
+      map.drag.cx += dx / map.zoom; map.drag.cy += dy / map.zoom;
+    } else {
+      map.pan.x += dx / map.zoom; map.pan.y += dy / map.zoom;
+    }
+    lastX = e.clientX; lastY = e.clientY; lastInteract = performance.now();
+    return;
+  }
+  if (mode === 'globe') {
+    let best = -1, bestD = 13*13;
+    for (let i = 0; i < M.n; i++) {
+      if (szb[i] < -0.05) continue;               // never grab a back-face node
+      const d = (sxb[i]-e.clientX)**2 + (syb[i]-e.clientY)**2;
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    hovered = best;
+    cvs.classList.toggle('pointing', best >= 0);
+    tip.style.display = 'none';                   // the name is drawn on canvas
+  } else {
+    map.hover = mapHit(e.clientX, e.clientY);
+    cvs.classList.toggle('pointing', map.hover >= 0);
+    if (map.hover >= 0) {
+      tip.style.display = 'block';
+      tip.textContent = M.nodes[map.hover][1];
+      tip.style.left = (e.clientX + 14) + 'px'; tip.style.top = (e.clientY + 14) + 'px';
+    } else tip.style.display = 'none';
+  }
+});
+cvs.addEventListener('pointerup', (e) => {
+  const wasDrag = moved >= 5;
+  dragging = false; cvs.classList.remove('dragging'); map.drag = null;
+  if (!wasDrag) {
+    if (mode === 'globe') { if (hovered >= 0) openFile(hovered); }
+    else mapClick(mapHit(e.clientX, e.clientY));
+  }
+  lastInteract = performance.now();
+});
+cvs.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  if (mode === 'globe') cam.dist = Math.max(1.35, Math.min(6, cam.dist + e.deltaY * 0.0022));
+  else map.zoom = Math.max(0.25, Math.min(2.6, map.zoom * (1 - e.deltaY * 0.0012)));
+  lastInteract = performance.now();
+}, { passive: false });
+
+// ---------------------------------------------------------------------------
+// Panels
+// ---------------------------------------------------------------------------
+let MONO = 'monospace', SANS = 'sans-serif';
+function hint(t) { document.getElementById('hint').textContent = t; }
+
+function renderHead() {
+  document.getElementById('repo').textContent = M.repo;
+  document.getElementById('s-files').textContent = M.n.toLocaleString();
+  document.getElementById('s-rel').textContent = M.edges.length.toLocaleString();
+  document.getElementById('s-dirs').textContent = M.clusters.length;
+  const box = document.getElementById('cls');
+  box.innerHTML = '';
+  M.clusters.forEach((name, c) => {
+    const [r, g, b] = M.bandRgb[c];
+    const el = document.createElement('div');
+    el.className = 'cl' + (hotCluster === c ? ' on' : '');
+    el.innerHTML = '<i class="dot" style="background:rgb('+r+','+g+','+b+')"></i>' +
+                   '<span class="nm">' + name + '</span><i class="ct">' + M.counts[c] + '</i>';
+    el.onclick = () => { hotCluster = hotCluster === c ? -1 : c; renderHead(); };
+    box.appendChild(el);
+  });
+}
+
+function renderMapPanel() {
+  document.getElementById('mapfile').textContent = M.nodes[map.center][0];
+  document.getElementById('mappath').textContent = M.nodes[map.center][1];
+
+  const exp = document.getElementById('expblock');
+  if (map.opened >= 0) {
+    exp.classList.add('on');
+    document.getElementById('expfile').textContent = M.nodes[map.opened][0];
+    document.getElementById('exppath').textContent = M.nodes[map.opened][1];
+  } else exp.classList.remove('on');
+
+  const crumb = document.getElementById('crumb');
+  crumb.innerHTML = '';
+  map.trail.slice(-5).forEach((id) => {
+    const b = document.createElement('b');
+    b.textContent = M.nodes[id][0];
+    b.onclick = () => {
+      map.trail = map.trail.slice(0, map.trail.indexOf(id));
+      map.center = id; map.opened = -1;
+      layoutMap(true); renderMapPanel();
+    };
+    crumb.appendChild(b);
+    crumb.appendChild(document.createTextNode('  ›  '));
+  });
+
+  const who = map.opened >= 0 ? map.opened : map.center;
+  const counts = [0, 0, 0, 0];
+  for (const ei of M.adj[who]) counts[M.edges[ei][2]]++;
+  const rels = document.getElementById('rels');
+  rels.innerHTML = '';
+  REL.forEach((R, i) => {
+    const el = document.createElement('div');
+    el.className = 'rel';
+    el.innerHTML = '<i class="sw" style="background:' + (counts[i] ? R.hex : '#5a6480') + '"></i>' +
+                   '<span>' + R.name + '</span><b>' + counts[i] + '</b>';
+    rels.appendChild(el);
+  });
+  if (!counts.reduce((a, b) => a + b, 0)) {
+    const el = document.createElement('div');
+    el.className = 'rel';
+    el.innerHTML = '<span style="color:#5a6480">no resolved connections — isolated in the index</span>';
+    rels.appendChild(el);
+  }
+}
+
+document.getElementById('back').onclick = exitMap;
+document.getElementById('repo').onclick = () => { repoAt = (repoAt + 1) % repoKeys.length; load(repoKeys[repoAt]); };
+
+const q = document.getElementById('q'), hits = document.getElementById('hits');
+q.addEventListener('input', () => {
+  const v = q.value.trim().toLowerCase();
+  hits.innerHTML = '';
+  if (!v) return;
+  const out = [];
+  for (let i = 0; i < M.n; i++) {
+    const f = M.nodes[i][0].toLowerCase(), p = M.nodes[i][1].toLowerCase();
+    let s = -1;
+    if (f.startsWith(v)) s = 0; else if (f.includes(v)) s = 1; else if (p.includes(v)) s = 2;
+    if (s >= 0) out.push([s, -M.deg[i], i]);
+  }
+  out.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  for (const [, , i] of out.slice(0, 9)) {
+    const el = document.createElement('div');
+    el.className = 'hit';
+    el.innerHTML = '<b>' + M.nodes[i][0] + '</b><i>' + M.nodes[i][1] + '</i>';
+    el.onclick = () => { openFile(i); q.value = ''; hits.innerHTML = ''; q.blur(); };
+    hits.appendChild(el);
+  }
+});
+q.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { const f = hits.querySelector('.hit'); if (f) f.click(); }
+  if (e.key === 'Escape') { q.value = ''; hits.innerHTML = ''; q.blur(); }
+});
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && mode === 'map') exitMap(); });
+
+function load(key) {
+  M = buildModel(key);
+  hovered = -1; hotCluster = -1;
+  cam.yaw = 0.6; cam.pitch = -0.25; cam.dist = 3.0;
+  exitMap();
+  q.value = ''; hits.innerHTML = '';
+  renderHead();
+  // Seed the projection buffers for the NEW model: the hit-test reads them,
+  // and until the first frame runs they still describe the old repo.
+  projectGlobe();
+}
+
+function setPalette(name) { PALETTE_NAME = name; load(M.key); }
+
+const cs = getComputedStyle(document.body);
+MONO = cs.getPropertyValue('--mono'); SANS = cs.getPropertyValue('--sans');
+resize();
+load(repoKeys[repoAt]);
+
+let prev = performance.now();
+(function loop(now) {
+  const dt = Math.min(0.05, (now - prev) / 1000);
+  prev = now;
+  ctx.fillStyle = '#05070c';
+  ctx.fillRect(0, 0, W, H);
+  fade = Math.max(0, fade - dt * 3.2);
+  const a = 1 - fade;
+  if (mode === 'globe') drawGlobe(dt, a); else drawMap(dt, a);
+  requestAnimationFrame(loop);
+})(performance.now());
+</script>
+</body>
+</html>

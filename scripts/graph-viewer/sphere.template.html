@@ -1,0 +1,907 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>coldstart — codebase sphere</title>
+<style>
+  :root{
+    --ink:#05070c;
+    --panel:rgba(10,14,23,.84);
+    --line:rgba(140,160,200,.16);
+    --fg:#e8ecf5;
+    --fg-dim:#8b97b0;
+    --fg-faint:#5a6480;
+    --accent:#ffd479;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:var(--ink);color:var(--fg);
+    font-family:var(--sans);overflow:hidden;-webkit-font-smoothing:antialiased;
+  }
+  canvas{display:block;position:fixed;inset:0;cursor:grab}
+  canvas.dragging{cursor:grabbing}
+  canvas.pointing{cursor:pointer}
+
+  .panel{
+    position:fixed;background:var(--panel);backdrop-filter:blur(14px);
+    border:1px solid var(--line);border-radius:10px;
+  }
+
+  #head{top:18px;left:18px;padding:14px 16px;min-width:236px}
+  #home{
+    display:inline-block;margin:0 0 9px;font-size:11px;letter-spacing:.03em;
+    color:var(--fg-faint);text-decoration:none;
+  }
+  #home:hover{color:var(--accent)}
+  #head h1{
+    margin:0 0 2px;font-size:11px;font-weight:600;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--fg-dim);
+  }
+  #repo{
+    font-family:var(--mono);font-size:19px;color:var(--fg);background:none;
+    border:none;padding:0;margin:0 0 10px;cursor:pointer;display:block;
+  }
+  #repo:hover{color:var(--accent)}
+  #repo::after{content:" ⇄";font-size:12px;color:var(--fg-faint)}
+  .stat{display:flex;justify-content:space-between;gap:18px;font-size:12px;line-height:1.75}
+  .stat b{font-family:var(--mono);font-weight:500;font-variant-numeric:tabular-nums}
+  .stat span{color:var(--fg-dim)}
+  .stat.total b{font-size:15px}
+
+  #legend{
+    top:18px;right:18px;padding:12px 14px;width:212px;
+    max-height:calc(100vh - 36px);overflow-y:auto;
+  }
+  #legend h2{
+    margin:0 0 8px;font-size:10px;font-weight:600;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--fg-dim);
+  }
+  .cl{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:11.5px;cursor:pointer;color:var(--fg-dim)}
+  .cl:hover,.cl.on{color:var(--fg)}
+  .cl .dot{width:8px;height:8px;border-radius:50%;flex:none}
+  .cl .nm{font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left}
+  .cl .ct{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--fg-faint)}
+
+  #search{top:18px;left:50%;transform:translateX(-50%);width:min(420px,50vw);padding:0}
+  #q{width:100%;background:none;border:none;outline:none;color:var(--fg);font-family:var(--mono);font-size:13px;padding:11px 14px}
+  #q::placeholder{color:var(--fg-faint)}
+  #hits{max-height:46vh;overflow-y:auto;border-top:1px solid var(--line)}
+  #hits:empty{display:none}
+  .hit{padding:7px 14px;cursor:pointer;font-size:12px;display:flex;align-items:baseline;gap:8px}
+  .hit:hover{background:rgba(255,212,121,.1)}
+  .hit b{font-family:var(--mono);font-weight:500}
+  .hit i{font-style:normal;color:var(--fg-faint);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* ---- map-mode chrome ---- */
+  #mapbar{top:18px;left:18px;padding:13px 15px;width:340px;display:none}
+  body.map #mapbar{display:block}
+  body.map #head,body.map #legend{display:none}
+  #crumb{font-size:11px;color:var(--fg-faint);margin-bottom:9px;line-height:1.7}
+  #crumb b{color:var(--fg-dim);font-family:var(--mono);font-weight:500;cursor:pointer}
+  #crumb b:hover{color:var(--accent)}
+  .who{font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:3px}
+  #mapfile{font-family:var(--mono);font-size:15px;word-break:break-all;color:var(--accent)}
+  #mappath{font-family:var(--mono);font-size:11px;color:var(--fg-faint);word-break:break-all}
+  #expblock{margin-top:11px;padding-top:10px;border-top:1px solid var(--line);display:none}
+  #expblock.on{display:block}
+  #expfile{font-family:var(--mono);font-size:13.5px;word-break:break-all;color:#8fd3ff}
+  #exppath{font-family:var(--mono);font-size:11px;color:var(--fg-faint);word-break:break-all}
+  #rels{border-top:1px solid var(--line);padding-top:9px;margin-top:11px}
+  .rel{display:flex;gap:8px;align-items:center;font-size:11.5px;padding:2.5px 0}
+  .rel .sw{width:15px;height:2px;border-radius:2px;flex:none}
+  .rel span{color:var(--fg-dim)}
+  .rel b{margin-left:auto;font-family:var(--mono);font-weight:500;font-variant-numeric:tabular-nums}
+  #back{
+    margin-top:12px;width:100%;padding:7px;border-radius:7px;cursor:pointer;
+    background:rgba(255,212,121,.1);border:1px solid rgba(255,212,121,.3);
+    color:var(--accent);font-family:var(--mono);font-size:11.5px;
+  }
+  #back:hover{background:rgba(255,212,121,.18)}
+
+  #hint{
+    position:fixed;bottom:18px;left:50%;transform:translateX(-50%);
+    font-size:11px;color:var(--fg-faint);pointer-events:none;text-align:center;
+  }
+  #tip{
+    position:fixed;pointer-events:none;background:rgba(5,7,12,.94);
+    border:1px solid var(--line);border-radius:5px;padding:4px 8px;
+    font-family:var(--mono);font-size:11px;display:none;z-index:9;white-space:nowrap;
+  }
+  @media (max-width:900px){#legend{display:none}#search{width:56vw}}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div class="panel" id="head">
+  <!-- Replaced with a link home when this page is generated for the website;
+       the CLI leaves it empty, since there is nowhere to go back to. -->
+  <!--__HOME_LINK__-->
+  <h1>Codebase sphere</h1>
+  <button id="repo"></button>
+  <div class="stat total"><span>files indexed</span><b id="s-files">—</b></div>
+  <div class="stat"><span>relations</span><b id="s-rel">—</b></div>
+  <div class="stat"><span>directories</span><b id="s-dirs">—</b></div>
+</div>
+
+<div class="panel" id="mapbar">
+  <div id="crumb"></div>
+  <div class="who">centre</div>
+  <div id="mapfile"></div>
+  <div id="mappath"></div>
+  <div id="expblock">
+    <div class="who">opened</div>
+    <div id="expfile"></div>
+    <div id="exppath"></div>
+  </div>
+  <div id="rels"></div>
+  <button id="back">← back to the sphere</button>
+</div>
+
+<div class="panel" id="search">
+  <input id="q" placeholder="search a file…" autocomplete="off" spellcheck="false">
+  <div id="hits"></div>
+</div>
+
+<div class="panel" id="legend"><h2>Directories</h2><div id="cls"></div></div>
+
+<div id="hint"></div>
+<div id="tip"></div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const TAU = Math.PI * 2;
+const GOLDEN = Math.PI * (3 - Math.sqrt(5));
+
+// Relation vocabulary. Colour is semantic ONLY in map mode, where the name is
+// written next to the line anyway — the globe is deliberately polychrome.
+const REL = [
+  { name:'imports',        rev:'imported by',    hex:'#7ab2ff', col:[122,178,255] },
+  { name:'calls',          rev:'called by',      hex:'#c39cff', col:[195,156,255] },
+  { name:'edited together', rev:'edited together', hex:'#ff9d6e', col:[255,157,110] },
+  { name:'same note',      rev:'same note',      hex:'#8fe9a8', col:[143,233,168] },
+];
+
+/**
+ * Palette sets. White is deliberately absent from both: it is the brightest
+ * value on a dark ground, so it out-shouts every hue regardless of which
+ * directory happens to receive it — and the map view already spends white on
+ * hover and labels. A colour used for interaction should never also encode data.
+ *
+ * Lightness is hand-compensated per hue, not held constant: at equal HSL
+ * lightness yellow reads far brighter than blue, which makes a sphere look
+ * unevenly lit. These are tuned to sit at roughly the same perceived weight.
+ */
+const PALETTES = {
+  // adjacent hues in path order — the sphere reads as one continuous object
+  aurora: [
+    { h: 265, s: 0.70, l: 0.70 },   // violet
+    { h: 218, s: 0.88, l: 0.64 },   // blue
+    { h: 176, s: 0.68, l: 0.53 },   // teal
+    { h: 132, s: 0.60, l: 0.57 },   // green
+    { h:  44, s: 0.92, l: 0.56 },   // amber
+    { h: 350, s: 0.86, l: 0.66 },   // rose
+  ],
+  // far-apart hues in path order — each zone maximally distinct
+  jewel: [
+    { h: 214, s: 0.90, l: 0.64 },   // blue
+    { h: 344, s: 0.86, l: 0.66 },   // rose
+    { h:  44, s: 0.94, l: 0.56 },   // amber
+    { h: 158, s: 0.64, l: 0.54 },   // emerald
+    { h: 282, s: 0.74, l: 0.70 },   // violet
+    { h:  14, s: 0.86, l: 0.63 },   // coral
+  ],
+};
+let PALETTE_NAME = 'aurora';
+
+let M = null;
+let repoKeys = Object.keys(DATA), repoAt = 0;
+let mode = 'globe';
+let fade = 0;
+
+function hslToRgb(h, s, l) {
+  h = ((h % 360) + 360) % 360 / 360;
+  const f = (p, q, t) => {
+    if (t < 0) t += 1; if (t > 1) t -= 1;
+    if (t < 1/6) return p + (q - p) * 6 * t;
+    if (t < 1/2) return q;
+    if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+    return p;
+  };
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+  return [Math.round(f(p,q,h+1/3)*255), Math.round(f(p,q,h)*255), Math.round(f(p,q,h-1/3)*255)];
+}
+
+function buildModel(key) {
+  const d = DATA[key];
+  const n = d.n.length;
+  const px = new Float32Array(n), py = new Float32Array(n), pz = new Float32Array(n);
+  const cluster = new Int16Array(n), deg = new Int32Array(n);
+  for (let i = 0; i < n; i++) { cluster[i] = d.n[i][2]; deg[i] = d.n[i][3]; }
+
+  // Equal-area latitude bands: y is uniform on a unit sphere, so a band's
+  // share of y IS its share of surface — a directory with twice the files
+  // gets twice the territory, with no polar distortion.
+  const counts = new Array(d.clusters.length).fill(0);
+  for (let i = 0; i < n; i++) counts[cluster[i]]++;
+  const bandY = [];
+  let acc = 0;
+  for (let c = 0; c < d.clusters.length; c++) {
+    const y0 = 1 - 2 * (acc / n);
+    acc += counts[c];
+    bandY.push([y0, 1 - 2 * (acc / n)]);
+  }
+
+  let seed = 0x9e3779b9;
+  const rnd = () => { seed ^= seed<<13; seed^=seed>>>17; seed^=seed<<5; return (seed>>>0)/4294967296; };
+  const placed = new Array(d.clusters.length).fill(0);
+  const tint = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const c = cluster[i], j = placed[c]++;
+    const t = (j + 0.5) / counts[c];
+    const [y0, y1] = bandY[c], gap = y0 - y1;
+    const y = y0 - gap * (0.06 + 0.88 * t) - gap * 0.06 * (rnd() - 0.5);
+    const r = Math.sqrt(Math.max(0, 1 - y * y));
+    const lon = j * GOLDEN + c * 1.7;
+    px[i] = r * Math.cos(lon); py[i] = y; pz[i] = r * Math.sin(lon);
+    tint[i] = rnd();
+  }
+
+  // Six named colours on a cycle rather than an even walk of the hue wheel.
+  // The walk put most bands in the green-yellow arc and made neighbours differ
+  // by only a few degrees; cycling a fixed palette guarantees that adjacent
+  // latitude bands are always strongly different.
+  const PALETTE = PALETTES[PALETTE_NAME];
+  // Contiguous ZONES, not a repeating cycle. Cycling every band scattered the
+  // six colours into confetti and threw away the one thing the layout encodes
+  // — latitude is the directory. Six blocks of consecutive bands keep the
+  // sphere ordered top-to-bottom while still using all six colours.
+  const perZone = Math.max(1, Math.ceil(d.clusters.length / PALETTE.length));
+  const zoneOf = (c) => Math.min(PALETTE.length - 1, Math.floor(c / perZone));
+  // position within the zone, -0.5..0.5, so the four bands sharing a colour
+  // still separate from each other
+  const stepOf = (c) => (perZone === 1 ? 0 : ((c % perZone) / (perZone - 1)) - 0.5);
+  const bandRgb = d.clusters.map((_, i) => {
+    const z = PALETTE[zoneOf(i)];
+    return hslToRgb(z.h + stepOf(i) * 22, z.s, z.l + stepOf(i) * 0.16);
+  });
+  const rgb = new Uint8Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const base = PALETTE[zoneOf(cluster[i])];
+    const step = stepOf(cluster[i]);
+    // vary WITHIN the colour so a band has depth but never drifts into the
+    // neighbouring band's identity
+    const h = base.h + step * 22 + (tint[i] - 0.5) * 10;
+    const s = Math.min(1, base.s * (0.88 + tint[i] * 0.24));
+    const l = Math.min(0.94, base.l + step * 0.16 + (tint[i] - 0.5) * 0.10 + Math.min(0.07, deg[i] * 0.005));
+    const c = hslToRgb(h, s, l);
+    rgb[i*3] = c[0]; rgb[i*3+1] = c[1]; rgb[i*3+2] = c[2];
+  }
+
+  const adj = Array.from({ length: n }, () => []);
+  d.e.forEach((e, i) => { adj[e[0]].push(i); adj[e[1]].push(i); });
+
+  return {
+    key, repo: d.repo, nodes: d.n, n, px, py, pz, cluster, deg, rgb,
+    edges: d.e, adj, clusters: d.clusters, counts, bandRgb,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Canvas
+// ---------------------------------------------------------------------------
+const cvs = document.getElementById('c');
+const ctx = cvs.getContext('2d', { alpha: false });
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(devicePixelRatio || 1, 2);
+  W = innerWidth; H = innerHeight;
+  cvs.width = W * DPR; cvs.height = H * DPR;
+  cvs.style.width = W + 'px'; cvs.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+addEventListener('resize', resize);
+
+// ---------------------------------------------------------------------------
+// GLOBE — points only. No chords, no standing labels: the sphere's job is to
+// show the whole repo at once and be beautiful; naming happens on hover.
+// ---------------------------------------------------------------------------
+const cam = { yaw: 0.6, pitch: -0.25, dist: 3.0 };
+let hovered = -1, hotCluster = -1, lastInteract = 0;
+let sxb, syb, szb;
+
+function projectGlobe() {
+  const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
+  const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+  const cx = W/2, cyy = H/2;
+  // Perspective divides by (dist - z), so the focal length must carry the
+  // camera distance or the globe renders as a marble in a large empty frame.
+  const R = Math.min(W, H) * 1.06;
+  const n = M.n;
+  if (!sxb || sxb.length < n) { sxb = new Float32Array(n); syb = new Float32Array(n); szb = new Float32Array(n); }
+  for (let i = 0; i < n; i++) {
+    const x1 = M.px[i]*cy - M.pz[i]*sy, z1 = M.px[i]*sy + M.pz[i]*cy;
+    const y2 = M.py[i]*cp - z1*sp, z2 = M.py[i]*sp + z1*cp;
+    const f = R / (cam.dist - z2);
+    sxb[i] = cx + x1*f; syb[i] = cyy - y2*f; szb[i] = z2;
+  }
+  return { cx, cyy, R };
+}
+
+function drawGlobe(dt, alpha) {
+  if (!dragging && performance.now() - lastInteract > 2200) cam.yaw += 0.035 * dt;
+  const P = projectGlobe();
+  ctx.globalAlpha = alpha;
+
+  const shell = P.R / cam.dist;
+  const g = ctx.createRadialGradient(P.cx, P.cyy, shell*0.1, P.cx, P.cyy, shell*1.08);
+  g.addColorStop(0, 'rgba(26,36,60,.55)');
+  g.addColorStop(0.72, 'rgba(13,19,33,.42)');
+  g.addColorStop(1, 'rgba(5,7,12,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(P.cx, P.cyy, shell*1.08, 0, TAU); ctx.fill();
+
+  const order = [];
+  for (let i = 0; i < M.n; i++) order.push(i);
+  order.sort((a, b) => szb[a] - szb[b]);          // painter's algorithm
+  for (const i of order) {
+    const z = szb[i], front = z > 0;
+    const dim = hotCluster >= 0 && M.cluster[i] !== hotCluster;
+    // Far-side dots sit BELOW the lit shell, and a saturated colour at middling
+    // alpha over that blue-grey composites to olive. Keep them faint enough to
+    // read as depth rather than as dirty dots.
+    let a = front ? 0.96 : 0.14;
+    if (dim) a *= 0.12;
+    const rad = (1.6 + Math.min(3.6, Math.sqrt(M.deg[i]) * 0.62)) * (0.72 + 0.42 * ((z+1)/2));
+    if (i === hovered) {
+      ctx.fillStyle = 'rgba(255,212,121,.25)';
+      ctx.beginPath(); ctx.arc(sxb[i], syb[i], rad + 7, 0, TAU); ctx.fill();
+    }
+    ctx.fillStyle = 'rgba('+M.rgb[i*3]+','+M.rgb[i*3+1]+','+M.rgb[i*3+2]+','+a.toFixed(3)+')';
+    ctx.beginPath(); ctx.arc(sxb[i], syb[i], rad, 0, TAU); ctx.fill();
+  }
+
+  // The ONLY text on the sphere, and only while pointing at something.
+  if (hovered >= 0) {
+    ctx.font = '500 12px ' + MONO;
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    const label = M.nodes[hovered][0];
+    const w = ctx.measureText(label).width;
+    const x = sxb[hovered] + 11, y = syb[hovered];
+    ctx.fillStyle = 'rgba(5,7,12,.85)';
+    ctx.fillRect(x - 4, y - 9, w + 8, 18);
+    ctx.fillStyle = '#ffd479';
+    ctx.fillText(label, x, y);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ---------------------------------------------------------------------------
+// MAP — a sliding two-level window, never a growing tree.
+//
+//   centre  = the file you came FROM
+//   opened  = the neighbour you clicked, drawn with ITS own neighbours
+//
+// Click one of the opened node's neighbours and the window slides: opened
+// becomes the centre, and the node just clicked becomes the new opened. So the
+// picture never accumulates hops — it always shows exactly two levels.
+// ---------------------------------------------------------------------------
+const map = {
+  center: -1, opened: -1, nodes: [], links: [], trail: [],
+  ring: new Set(), kids: new Set(), radius: 240,
+  pan: { x: 0, y: 0 }, zoom: 1, drag: null, hover: -1,
+};
+const KID_CAP = 20;
+
+/** keep the head and tail — the distinguishing parts of a long filename */
+function shortName(s) {
+  return s.length <= 34 ? s : s.slice(0, 20) + '…' + s.slice(-12);
+}
+
+function relLabel(kind, detail, reversed) {
+  if (kind === 1) return reversed ? 'called by' : 'calls ' + (detail || 'a symbol');
+  if (kind === 2) return 'edited together' + (detail ? ' · ' + detail : '');
+  if (kind === 3) return 'same note' + (detail ? ' · ' + detail : '');
+  return reversed ? REL[0].rev : REL[0].name;
+}
+
+/** every distinct neighbour of `id`, with the relations that connect them */
+function neighboursOf(id) {
+  const byOther = new Map();
+  for (const ei of M.adj[id]) {
+    const e = M.edges[ei];
+    const other = e[0] === id ? e[1] : e[0];
+    if (other === id) continue;
+    if (!byOther.has(other)) byOther.set(other, []);
+    byOther.get(other).push({ kind: e[2], detail: e[4], reversed: e[0] !== id && e[3] === 1 });
+  }
+  return [...byOther.entries()]
+    .map(([other, rels]) => ({ other, rels }))
+    .sort((a, b) => Math.min(...a.rels.map((r) => r.kind)) - Math.min(...b.rels.map((r) => r.kind))
+                    || M.deg[b.other] - M.deg[a.other]);
+}
+
+function layoutMap(keep) {
+  const prev = new Map(map.nodes.map((n) => [n.id, n]));
+  const nodes = [], links = [], ring = new Set(), kids = new Set();
+
+  const n1 = neighboursOf(map.center);
+  const opened = (map.opened >= 0 && n1.some((nb) => nb.other === map.opened)) ? map.opened : -1;
+  map.opened = opened;
+
+  if (opened < 0) {
+    // ---- RADIAL: one file and its whole neighbourhood ----------------------
+    map.spine = false;
+    nodes.push({ id: map.center, level: 0, x: 0, y: 0, a: 0 });
+    // Ring radius grows with occupancy, or the dots touch and labels overprint.
+    const r1 = Math.max(235, n1.length * 34 / TAU);
+    map.radius = r1;
+    n1.forEach((nb, i) => {
+      const a = (i / Math.max(1, n1.length)) * TAU - Math.PI / 2;
+      nodes.push({ id: nb.other, level: 1, x: Math.cos(a) * r1, y: Math.sin(a) * r1, a });
+      ring.add(nb.other);
+      for (const r of nb.rels) links.push({ from: map.center, to: nb.other, ...r, level: 1 });
+    });
+    map.kidOverflow = 0;
+  } else {
+    // ---- SPINE: where you came FROM, and what you just opened --------------
+    //
+    // Fanning the opened node inside the centre's own ring was the ugly part:
+    // both levels landed in the same annulus, so every spoke of one crossed
+    // every spoke of the other and you could not tell whose neighbour was
+    // whose. Giving each node its own half of the screen makes overlap
+    // impossible by construction, and the A→B relation gets the middle.
+    map.spine = true;
+    const others = n1.filter((nb) => nb.other !== opened);
+    const otherIds = new Set(others.map((o) => o.other));
+    const kidList = neighboursOf(opened)
+      .filter((nb) => nb.other !== map.center && !otherIds.has(nb.other));
+    const shown = kidList.slice(0, KID_CAP);
+    map.kidOverflow = kidList.length - shown.length;
+
+    // each side spans a semicircle, so radius comes from PI, not TAU
+    const rA = Math.max(200, others.length * 34 / Math.PI);
+    const rB = Math.max(200, shown.length * 34 / Math.PI);
+    const ax = -Math.max(300, (rA + rB) * 0.30), bx = -ax;
+
+    nodes.push({ id: map.center, level: 0, x: ax, y: 0, a: Math.PI });
+    nodes.push({ id: opened, level: 0, x: bx, y: 0, a: 0 });
+    ring.add(opened);
+    for (const r of (n1.find((nb) => nb.other === opened)?.rels ?? [])) {
+      links.push({ from: map.center, to: opened, ...r, level: 1, spine: true });
+    }
+
+    // centre's remaining neighbours fan LEFT, away from the spine
+    const AL = Math.PI/2 + 0.22, AH = Math.PI*1.5 - 0.22;
+    others.forEach((nb, i) => {
+      const t = others.length === 1 ? 0.5 : i / (others.length - 1);
+      const a = AL + t * (AH - AL);
+      nodes.push({ id: nb.other, level: 1, x: ax + Math.cos(a) * rA, y: Math.sin(a) * rA, a });
+      ring.add(nb.other);
+      for (const r of nb.rels) links.push({ from: map.center, to: nb.other, ...r, level: 1 });
+    });
+
+    // opened node's neighbours fan RIGHT
+    const BL = -Math.PI/2 + 0.22, BH = Math.PI/2 - 0.22;
+    shown.forEach((nb, i) => {
+      const t = shown.length === 1 ? 0.5 : i / (shown.length - 1);
+      const a = BL + t * (BH - BL);
+      nodes.push({ id: nb.other, level: 2, x: bx + Math.cos(a) * rB, y: Math.sin(a) * rB, a });
+      kids.add(nb.other);
+      for (const r of nb.rels) links.push({ from: opened, to: nb.other, ...r, level: 2 });
+    });
+  }
+
+  // relations between two on-screen nodes that bypass the focus — real, but
+  // background, and the main source of the web when everything is drawn
+  const on = new Set(nodes.map((nd) => nd.id));
+  for (const e of M.edges) {
+    if (!on.has(e[0]) || !on.has(e[1])) continue;
+    if (links.some((l) => l.kind === e[2] &&
+        ((l.from === e[0] && l.to === e[1]) || (l.from === e[1] && l.to === e[0])))) continue;
+    links.push({ from: e[0], to: e[1], kind: e[2], detail: e[4], reversed: false, level: 9, extra: true });
+  }
+
+  for (const nd of nodes) {
+    const old = keep && prev.get(nd.id);
+    nd.cx = old ? old.cx : nd.x * 0.4;
+    nd.cy = old ? old.cy : nd.y * 0.4;
+  }
+  map.nodes = nodes; map.links = links; map.ring = ring; map.kids = kids;
+
+  let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+  for (const nd of nodes) {
+    minX = Math.min(minX, nd.x); maxX = Math.max(maxX, nd.x);
+    minY = Math.min(minY, nd.y); maxY = Math.max(maxY, nd.y);
+  }
+  // Fit against the space actually available, not the raw window: the info
+  // panel owns the left ~380px, and every node hangs a filename outside the
+  // node bounding box, so both fans clipped without this allowance.
+  const PAD_L = 380, PAD_R = 70, LABEL = 215;
+  const availW = W - PAD_L - PAD_R, availH = H - 150;
+  map.zoom = Math.min(1.15, availW / (maxX - minX + LABEL * 2), availH / (maxY - minY + 130));
+  map.pan = {
+    x: -(minX + maxX) / 2 + ((PAD_L - PAD_R) / 2) / map.zoom,
+    y: -(minY + maxY) / 2,
+  };
+}
+
+function openFile(id) {
+  if (mode === 'globe') { map.trail = []; map.opened = -1; fade = 1; }
+  mode = 'map';
+  document.body.classList.add('map');
+  map.center = id; map.opened = -1;
+  layoutMap(true); renderMapPanel();
+  hint('click a neighbour to open its connections · click one of those to slide the view along');
+}
+
+function exitMap() {
+  mode = 'globe'; fade = 1;
+  document.body.classList.remove('map');
+  map.center = -1; map.opened = -1; map.nodes = []; map.links = [];
+  hint('drag to rotate · scroll to zoom · hover for a name · click any file to explore it');
+}
+
+/** the whole navigation rule, in one place */
+function mapClick(id) {
+  if (id < 0 || id === map.center) { map.opened = -1; layoutMap(true); renderMapPanel(); return; }
+  if (map.ring.has(id)) {
+    // a neighbour of the centre: open it in place (or drill in if already open)
+    if (map.opened === id) { map.trail.push(map.center); map.center = id; map.opened = -1; }
+    else map.opened = id;
+  } else if (map.kids.has(id)) {
+    // a neighbour of the opened node: slide the window along by one
+    map.trail.push(map.center);
+    map.center = map.opened;
+    map.opened = id;
+  } else return;
+  layoutMap(true); renderMapPanel();
+}
+
+function mapScreen(nd) {
+  return [W/2 + (nd.cx + map.pan.x) * map.zoom, H/2 + (nd.cy + map.pan.y) * map.zoom];
+}
+
+function drawMap(dt, alpha) {
+  ctx.globalAlpha = alpha;
+  const k = Math.min(1, dt * 7);
+  for (const nd of map.nodes) { nd.cx += (nd.x - nd.cx) * k; nd.cy += (nd.y - nd.cy) * k; }
+
+  const cx0 = W/2 + map.pan.x * map.zoom, cy0 = H/2 + map.pan.y * map.zoom;
+  if (!map.spine) {
+    ctx.strokeStyle = 'rgba(140,160,200,.09)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(cx0, cy0, map.radius * map.zoom, 0, TAU); ctx.stroke();
+  }
+
+  const pos = new Map(map.nodes.map((nd) => [nd.id, mapScreen(nd)]));
+  const hov = map.hover;
+
+  for (const l of map.links) {
+    const A = pos.get(l.from), B = pos.get(l.to);
+    if (!A || !B) continue;
+    const touches = hov >= 0 && (l.from === hov || l.to === hov);
+    // With two focus nodes on screen the bypass links are what turn the
+    // picture into a web — keep them for hover only.
+    if (l.extra && map.spine && !touches) continue;
+    const R = REL[l.kind];
+    const base = l.extra ? 0.10 : (l.spine ? 0.9 : (l.level === 2 ? 0.7 : 0.5));
+    ctx.strokeStyle = 'rgba('+R.col[0]+','+R.col[1]+','+R.col[2]+','+(touches ? 0.95 : base)+')';
+    ctx.lineWidth = touches ? 2 : (l.extra ? 1 : (l.spine ? 2 : 1.4));
+    const dx = B[0]-A[0], dy = B[1]-A[1];
+    const mx = (A[0]+B[0])/2, my = (A[1]+B[1])/2;
+    const bow = (l.kind - 1.5) * 7;          // keeps parallel relations apart
+    ctx.beginPath();
+    ctx.moveTo(A[0], A[1]);
+    ctx.quadraticCurveTo(mx - dy*0.008*bow, my + dx*0.008*bow, B[0], B[1]);
+    ctx.stroke();
+
+    if (l.kind <= 1 && !l.extra) {
+      const t = 0.62, ax = A[0] + dx*t, ay = A[1] + dy*t;
+      const ang = Math.atan2(dy, dx) + (l.reversed ? Math.PI : 0);
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.beginPath();
+      ctx.moveTo(ax + Math.cos(ang)*5, ay + Math.sin(ang)*5);
+      ctx.lineTo(ax + Math.cos(ang+2.5)*5, ay + Math.sin(ang+2.5)*5);
+      ctx.lineTo(ax + Math.cos(ang-2.5)*5, ay + Math.sin(ang-2.5)*5);
+      ctx.fill();
+    }
+  }
+
+  // Filenames claim their boxes FIRST; relation labels route around them.
+  ctx.font = '500 11.5px ' + MONO;
+  const boxes = [], dots = [], nodeLabels = [];
+  for (const nd of map.nodes) {
+    const [x, y] = pos.get(nd.id);
+    const isC = nd.id === map.center, isO = nd.id === map.opened;
+    const r = isC ? 13 : (isO ? 10 : (nd.level === 1 ? 7.5 : 5.5));
+    // Dots are drawn AFTER the relation labels, so they must be reserved too —
+    // but in their OWN list. Putting them in `boxes` made every node's label
+    // collide with its own dot and vanish.
+    dots.push([x - r - 2, y - r - 2, r*2 + 4, r*2 + 4]);
+    const label = shortName(M.nodes[nd.id][0]);
+    const w = ctx.measureText(label).width;
+    // On the spine both focus nodes sit in open space, so their labels go
+    // straight above the dot — hanging them sideways puts them into the fan.
+    const above = map.spine && (isC || isO);
+    const right = isC ? true : (x >= cx0);
+    const lx = above ? x : (right ? x + r + 6 : x - r - 6 - w);
+    const box = above ? [x - w/2 - 3, y - r - 23, w + 6, 16] : [lx - 3, y - 8, w + 6, 16];
+    const clash = boxes.some((b) => box[0] < b[0]+b[2]+3 && b[0] < box[0]+box[2]+3 &&
+                                    box[1] < b[1]+b[3]+2 && b[1] < box[1]+box[3]+2);
+    if (clash && !isC && !isO && nd.id !== hov) { nodeLabels.push({ nd, x, y, r, skip: true }); continue; }
+    boxes.push(box);
+    nodeLabels.push({ nd, x, y, r, label, lx, box, above });
+  }
+
+  ctx.font = '500 10px ' + SANS;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const l of map.links) {
+    const show = !l.extra && (l.level === 1 || l.level === 2 ||
+                              (hov >= 0 && (l.from === hov || l.to === hov)));
+    if (!show) continue;
+    const A = pos.get(l.from), B = pos.get(l.to);
+    if (!A || !B) continue;
+    const txt = relLabel(l.kind, l.detail, l.reversed);
+    const w = ctx.measureText(txt).width;
+    let placed = null;
+    for (const t of [0.55, 0.66, 0.44, 0.75]) {
+      const x = A[0] + (B[0]-A[0])*t, y = A[1] + (B[1]-A[1])*t;
+      const box = [x - w/2 - 4, y - 8, w + 8, 16];
+      const hit = (b) => box[0] < b[0]+b[2]+3 && b[0] < box[0]+box[2]+3 &&
+                         box[1] < b[1]+b[3]+2 && b[1] < box[1]+box[3]+2;
+      if (!boxes.some(hit) && !dots.some(hit)) { placed = { x, y, box }; break; }
+    }
+    if (!placed) continue;
+    boxes.push(placed.box);
+    const R = REL[l.kind];
+    ctx.fillStyle = 'rgba(5,7,12,.9)';
+    ctx.fillRect(placed.box[0], placed.box[1], placed.box[2], placed.box[3]);
+    ctx.fillStyle = 'rgba('+R.col[0]+','+R.col[1]+','+R.col[2]+',.95)';
+    ctx.fillText(txt, placed.x, placed.y);
+  }
+
+  ctx.font = '500 11.5px ' + MONO;
+  for (const nl of nodeLabels) {
+    const { nd, x, y, r } = nl;
+    const isC = nd.id === map.center, isO = nd.id === map.opened;
+    if (isC || isO || nd.id === hov) {
+      ctx.fillStyle = isO ? 'rgba(143,211,255,.2)' : 'rgba(255,212,121,.2)';
+      ctx.beginPath(); ctx.arc(x, y, r + 9, 0, TAU); ctx.fill();
+    }
+    ctx.fillStyle = 'rgb('+M.rgb[nd.id*3]+','+M.rgb[nd.id*3+1]+','+M.rgb[nd.id*3+2]+')';
+    ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+    if (isC || isO) {
+      ctx.strokeStyle = isO ? '#8fd3ff' : '#ffd479';
+      ctx.lineWidth = 2; ctx.stroke();
+    }
+    if (nl.skip) continue;
+    ctx.textAlign = nl.above ? 'center' : 'left';
+    ctx.fillStyle = 'rgba(5,7,12,.85)';
+    ctx.fillRect(nl.box[0], nl.box[1], nl.box[2], nl.box[3]);
+    ctx.fillStyle = isC ? '#ffd479' : (isO ? '#8fd3ff' : (nd.id === hov ? '#fff' : 'rgba(232,236,245,.9)'));
+    ctx.fillText(nl.label, nl.lx, nl.above ? y - r - 15 : y);
+  }
+
+  if (map.kidOverflow > 0 && map.opened >= 0) {
+    const p = pos.get(map.opened);
+    ctx.font = '500 10px ' + SANS;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(139,151,176,.8)';
+    ctx.fillText('+' + map.kidOverflow + ' more', p[0], p[1] + 26);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function mapHit(mx, my) {
+  let best = -1, bestD = 18*18;
+  for (const nd of map.nodes) {
+    const [x, y] = mapScreen(nd);
+    const d = (x-mx)*(x-mx) + (y-my)*(y-my);
+    if (d < bestD) { bestD = d; best = nd.id; }
+  }
+  return best;
+}
+
+// ---------------------------------------------------------------------------
+// Input
+// ---------------------------------------------------------------------------
+let dragging = false, lastX = 0, lastY = 0, moved = 0;
+const tip = document.getElementById('tip');
+
+cvs.addEventListener('pointerdown', (e) => {
+  dragging = true; moved = 0; lastX = e.clientX; lastY = e.clientY;
+  cvs.setPointerCapture(e.pointerId); cvs.classList.add('dragging');
+  if (mode === 'map') {
+    const id = mapHit(e.clientX, e.clientY);
+    map.drag = id >= 0 ? map.nodes.find((n) => n.id === id) : null;
+  }
+});
+cvs.addEventListener('pointermove', (e) => {
+  const dx = e.clientX - lastX, dy = e.clientY - lastY;
+  if (dragging) {
+    moved += Math.abs(dx) + Math.abs(dy);
+    if (mode === 'globe') {
+      cam.yaw -= dx * 0.006;
+      cam.pitch = Math.max(-1.45, Math.min(1.45, cam.pitch + dy * 0.006));
+    } else if (map.drag) {
+      map.drag.x += dx / map.zoom; map.drag.y += dy / map.zoom;
+      map.drag.cx += dx / map.zoom; map.drag.cy += dy / map.zoom;
+    } else {
+      map.pan.x += dx / map.zoom; map.pan.y += dy / map.zoom;
+    }
+    lastX = e.clientX; lastY = e.clientY; lastInteract = performance.now();
+    return;
+  }
+  if (mode === 'globe') {
+    let best = -1, bestD = 13*13;
+    for (let i = 0; i < M.n; i++) {
+      if (szb[i] < -0.05) continue;               // never grab a back-face node
+      const d = (sxb[i]-e.clientX)**2 + (syb[i]-e.clientY)**2;
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    hovered = best;
+    cvs.classList.toggle('pointing', best >= 0);
+    tip.style.display = 'none';                   // the name is drawn on canvas
+  } else {
+    map.hover = mapHit(e.clientX, e.clientY);
+    cvs.classList.toggle('pointing', map.hover >= 0);
+    if (map.hover >= 0) {
+      tip.style.display = 'block';
+      tip.textContent = M.nodes[map.hover][1];
+      tip.style.left = (e.clientX + 14) + 'px'; tip.style.top = (e.clientY + 14) + 'px';
+    } else tip.style.display = 'none';
+  }
+});
+cvs.addEventListener('pointerup', (e) => {
+  const wasDrag = moved >= 5;
+  dragging = false; cvs.classList.remove('dragging'); map.drag = null;
+  if (!wasDrag) {
+    if (mode === 'globe') { if (hovered >= 0) openFile(hovered); }
+    else mapClick(mapHit(e.clientX, e.clientY));
+  }
+  lastInteract = performance.now();
+});
+cvs.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  if (mode === 'globe') cam.dist = Math.max(1.35, Math.min(6, cam.dist + e.deltaY * 0.0022));
+  else map.zoom = Math.max(0.25, Math.min(2.6, map.zoom * (1 - e.deltaY * 0.0012)));
+  lastInteract = performance.now();
+}, { passive: false });
+
+// ---------------------------------------------------------------------------
+// Panels
+// ---------------------------------------------------------------------------
+let MONO = 'monospace', SANS = 'sans-serif';
+function hint(t) { document.getElementById('hint').textContent = t; }
+
+function renderHead() {
+  document.getElementById('repo').textContent = M.repo;
+  document.getElementById('s-files').textContent = M.n.toLocaleString();
+  document.getElementById('s-rel').textContent = M.edges.length.toLocaleString();
+  document.getElementById('s-dirs').textContent = M.clusters.length;
+  const box = document.getElementById('cls');
+  box.innerHTML = '';
+  M.clusters.forEach((name, c) => {
+    const [r, g, b] = M.bandRgb[c];
+    const el = document.createElement('div');
+    el.className = 'cl' + (hotCluster === c ? ' on' : '');
+    el.innerHTML = '<i class="dot" style="background:rgb('+r+','+g+','+b+')"></i>' +
+                   '<span class="nm">' + name + '</span><i class="ct">' + M.counts[c] + '</i>';
+    el.onclick = () => { hotCluster = hotCluster === c ? -1 : c; renderHead(); };
+    box.appendChild(el);
+  });
+}
+
+function renderMapPanel() {
+  document.getElementById('mapfile').textContent = M.nodes[map.center][0];
+  document.getElementById('mappath').textContent = M.nodes[map.center][1];
+
+  const exp = document.getElementById('expblock');
+  if (map.opened >= 0) {
+    exp.classList.add('on');
+    document.getElementById('expfile').textContent = M.nodes[map.opened][0];
+    document.getElementById('exppath').textContent = M.nodes[map.opened][1];
+  } else exp.classList.remove('on');
+
+  const crumb = document.getElementById('crumb');
+  crumb.innerHTML = '';
+  map.trail.slice(-5).forEach((id) => {
+    const b = document.createElement('b');
+    b.textContent = M.nodes[id][0];
+    b.onclick = () => {
+      map.trail = map.trail.slice(0, map.trail.indexOf(id));
+      map.center = id; map.opened = -1;
+      layoutMap(true); renderMapPanel();
+    };
+    crumb.appendChild(b);
+    crumb.appendChild(document.createTextNode('  ›  '));
+  });
+
+  const who = map.opened >= 0 ? map.opened : map.center;
+  const counts = [0, 0, 0, 0];
+  for (const ei of M.adj[who]) counts[M.edges[ei][2]]++;
+  const rels = document.getElementById('rels');
+  rels.innerHTML = '';
+  REL.forEach((R, i) => {
+    const el = document.createElement('div');
+    el.className = 'rel';
+    el.innerHTML = '<i class="sw" style="background:' + (counts[i] ? R.hex : '#5a6480') + '"></i>' +
+                   '<span>' + R.name + '</span><b>' + counts[i] + '</b>';
+    rels.appendChild(el);
+  });
+  if (!counts.reduce((a, b) => a + b, 0)) {
+    const el = document.createElement('div');
+    el.className = 'rel';
+    el.innerHTML = '<span style="color:#5a6480">no resolved connections — isolated in the index</span>';
+    rels.appendChild(el);
+  }
+}
+
+document.getElementById('back').onclick = exitMap;
+document.getElementById('repo').onclick = () => { repoAt = (repoAt + 1) % repoKeys.length; load(repoKeys[repoAt]); };
+
+const q = document.getElementById('q'), hits = document.getElementById('hits');
+q.addEventListener('input', () => {
+  const v = q.value.trim().toLowerCase();
+  hits.innerHTML = '';
+  if (!v) return;
+  const out = [];
+  for (let i = 0; i < M.n; i++) {
+    const f = M.nodes[i][0].toLowerCase(), p = M.nodes[i][1].toLowerCase();
+    let s = -1;
+    if (f.startsWith(v)) s = 0; else if (f.includes(v)) s = 1; else if (p.includes(v)) s = 2;
+    if (s >= 0) out.push([s, -M.deg[i], i]);
+  }
+  out.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  for (const [, , i] of out.slice(0, 9)) {
+    const el = document.createElement('div');
+    el.className = 'hit';
+    el.innerHTML = '<b>' + M.nodes[i][0] + '</b><i>' + M.nodes[i][1] + '</i>';
+    el.onclick = () => { openFile(i); q.value = ''; hits.innerHTML = ''; q.blur(); };
+    hits.appendChild(el);
+  }
+});
+q.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { const f = hits.querySelector('.hit'); if (f) f.click(); }
+  if (e.key === 'Escape') { q.value = ''; hits.innerHTML = ''; q.blur(); }
+});
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && mode === 'map') exitMap(); });
+
+function load(key) {
+  M = buildModel(key);
+  hovered = -1; hotCluster = -1;
+  cam.yaw = 0.6; cam.pitch = -0.25; cam.dist = 3.0;
+  exitMap();
+  q.value = ''; hits.innerHTML = '';
+  renderHead();
+  // Seed the projection buffers for the NEW model: the hit-test reads them,
+  // and until the first frame runs they still describe the old repo.
+  projectGlobe();
+}
+
+function setPalette(name) { PALETTE_NAME = name; load(M.key); }
+
+const cs = getComputedStyle(document.body);
+MONO = cs.getPropertyValue('--mono'); SANS = cs.getPropertyValue('--sans');
+resize();
+load(repoKeys[repoAt]);
+
+let prev = performance.now();
+(function loop(now) {
+  const dt = Math.min(0.05, (now - prev) / 1000);
+  prev = now;
+  ctx.fillStyle = '#05070c';
+  ctx.fillRect(0, 0, W, H);
+  fade = Math.max(0, fade - dt * 3.2);
+  const a = 1 - fade;
+  if (mode === 'globe') drawGlobe(dt, a); else drawMap(dt, a);
+  requestAnimationFrame(loop);
+})(performance.now());
+</script>
+</body>
+</html>

@@ -160,6 +160,25 @@ Returns the file's symbols (with line ranges), its 1-hop internal imports, who i
 
 **Flags:** `--symbol a,b` (deliver named method bodies inline) · `--match TERM` (filter a god-file to one area; `a|b` = OR, `/regex/` = regex) · `--view symbols|imports|importers|callers` · `--json`
 
+### `graph` — see the whole repo at once
+
+```bash
+coldstart graph
+```
+
+For humans, not agents. Writes one self-contained HTML file and opens it: every indexed file is a
+point on a sphere, positioned by directory, and clicking one opens a 2D view of everything it is
+connected to — with each relation *named* (`imports`, `calls save(), load()`,
+`edited together · 13 of 42 commits`, `same note · <title>`). Click a neighbour to open its
+connections; click one of those and the view slides along, so you always see two levels rather than
+an ever-growing hairball.
+
+**No dependencies.** The page is HTML, CSS, and a canvas script with your repo's data baked in —
+no server, no build step, and nothing leaves your machine. Mail it, drop it in a gist, open it on a
+plane. [Try it on coldstart's own codebase.](https://coldstartmcp.dev/graph/)
+
+**Flags:** `--out PATH` (default `.coldstart/graph.html`, gitignored for you) · `--no-open` · `--json`
+
 ### Batch independent lookups in one shell call
 
 ```bash

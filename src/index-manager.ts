@@ -10,6 +10,7 @@ import { kbView } from './kb/view.js';
 import { VIEW_TEMPLATE } from './kb/view-template.js';
 import { patchIndex } from './indexer/patch.js';
 import { getGitHead } from './indexer/git.js';
+import { deriveCoChange, saveCoChange } from './indexer/cochange.js';
 import { lintIndexInvariants } from './indexer/invariants.js';
 import { saveCachedIndex, getCacheDir } from './cache/disk-cache.js';
 import { updateKeeperState, appendRepairLog } from './keeper-state.js';
@@ -83,6 +84,10 @@ export class IndexManager {
     // Seed the KB notes index so kb readers (which never load the code index)
     // have lane-2 inventories + absence stamps from the first query on.
     void this.refreshKbNotesIndex();
+
+    // Seed the co-change sidecar. Independent of the notes index and of the
+    // cache save — a repo with no notebook still gets it.
+    void this.refreshCoChange();
   }
 
   /** Stop watching (called on process exit). */
@@ -198,6 +203,42 @@ export class IndexManager {
       }
     } catch (err) {
       this.log(`[coldstart] auto symbol repair failed: ${err}`);
+    }
+  }
+
+  /**
+   * Rebuild the co-change sidecar ("which files move together", derived from
+   * git history) and persist it beside the cache.
+   *
+   * Keyed on HEAD, not on file edits: history only changes when a commit
+   * lands, so re-walking on every debounced patch would burn ~800ms repeatedly
+   * for a byte-identical result. An uncommitted edit legitimately doesn't move
+   * this signal at all — the pairing is about what SHIPPED together.
+   *
+   * Silent on failure and on shallow clones (a 1-commit CI checkout yields
+   * nothing to pair). `status` prints commitsScanned so that silence is
+   * explainable rather than looking like a bug.
+   */
+  private coChangeHead: string | null = null;
+  private refreshingCoChange = false;
+  private async refreshCoChange(head?: string): Promise<void> {
+    if (this.noCache) return; // disk writes disabled
+    if (this.refreshingCoChange) return;
+    this.refreshingCoChange = true;
+    try {
+      const at = head ?? (await getGitHead(this.activeIndex.rootDir));
+      if (!at) return; // not a git repo — nothing to derive, ever
+      if (at === this.coChangeHead) return;
+      const files = this.activeIndex.files;
+      const data = await deriveCoChange(this.activeIndex.rootDir, (p) => files.has(p), at);
+      if (!data) return;
+      await saveCoChange(this.activeIndex.rootDir, data, this.cacheDir);
+      this.coChangeHead = at;
+      this.log(`[coldstart] co-change refreshed (${data.commitsScanned} commits, ${Object.keys(data.partners).length} files with partners)`);
+    } catch (err) {
+      this.log(`[coldstart] co-change refresh failed: ${err}`);
+    } finally {
+      this.refreshingCoChange = false;
     }
   }
 
@@ -370,6 +411,9 @@ export class IndexManager {
       getGitHead(this.activeIndex.rootDir)
         .then((head) => {
           if (head) this.activeIndex.gitHead = head;
+          // A commit landed (or a branch moved) → history changed → re-pair.
+          // No-op when HEAD hasn't moved since the last derivation.
+          if (head) void this.refreshCoChange(head);
           return saveCachedIndex(this.activeIndex, this.cacheDir);
         })
         .then(() => this.stamp({ lastSave: { at: Date.now(), detail: `${this.activeIndex.files.size} files` } }))

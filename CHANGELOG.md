@@ -5,6 +5,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-08-23
+
+### Added
+- **`gs` now shows "Edited together": the files that keep changing in the same commits as the one
+  you asked about, taken from git history.** The import graph answers "what does this file
+  reference"; it cannot answer "what do people always edit alongside this file" when nothing
+  imports or calls across the pair. A study of ~11k co-edited pairs across four repositories found
+  53-71% of co-edited files are unreachable through the graph at any depth: a sibling
+  implementation sharing an interface, a test written in a different language from the code it
+  covers, a template kept in sync by naming convention, anything wired at runtime. Stacked on the
+  1-hop graph `gs` already reports, co-change adds 14 points of recall on django (43.2% to 57.2%)
+  and 10.2 points on arches (38.3% to 48.5%). The section is labelled a habit, not a dependency,
+  and prints the evidence ("changed together in 14 of this file's 17 commits") so a weak pairing
+  reads as weak. Two to three partners, never a list. Derived by the keeper into a `cochange.json`
+  sidecar beside the cache, keyed on git HEAD so an uncommitted edit never re-walks history; a
+  missing sidecar renders no section rather than an empty one. Rendered in **every** `gs` view,
+  including the narrowed ones, and files connected by an import edge are excluded so everything
+  shown is a file the graph did not give you. (#156)
+- **`coldstart graph`: an interactive map of your codebase, opened in your browser.** Every indexed
+  file is one point on a sphere whose latitude is its directory; click any file to explore its
+  neighbourhood two levels at a time. Every relation is named rather than drawn as an anonymous
+  line: imports, calls (with the symbol names), edited-together from git history, and files sharing
+  a notebook note. Output is a single self-contained HTML file with the data baked in. **No
+  dependencies, no build step, no network:** it works offline, and nothing about your code leaves
+  the machine. Human-only, like `kb view`, and deliberately not an MCP tool. Flags: `--out`,
+  `--no-open`, `--json`.
+- The same viewer, running on coldstart's own codebase, is now live at
+  [coldstartmcp.dev/graph](https://coldstartmcp.dev/graph/).
+
+### Changed
+- **`gs`'s `Related` section now renders in every view too, not only `full`.** It lists files that
+  share a rare identifier or string token with the one you asked about where no import edge connects
+  them (migration to model, config-by-name registration, cross-language pairs). It was full-view
+  only, so `--view symbols` on a large file — the call where name-reference neighbours matter most —
+  silently dropped them. Its exclusion set now reads the import graph directly for the same reason
+  the `Edited together` section does: the heading promises "no import edge", and the imports and
+  importers lists cannot back that promise when a narrow view leaves them empty and the full view
+  caps them.
+
+### Security
+- Opening the generated viewer in a browser no longer routes through `cmd /c start` on Windows.
+  `cmd` re-parses its own command line, so a file path containing `&`, `^` or `|` would have been
+  interpreted rather than opened; the path derives from the repo location and from `--out`. Both
+  `coldstart graph` and `kb view` now use `rundll32.exe url.dll,FileProtocolHandler`, which takes
+  the path as one literal argument with no shell in between. Reported by CodeQL on #157.
+
+### Fixed
+- **The notebook's own graph in `kb view` was drawing almost nothing.** It rendered only hand-typed
+  `[[wikilinks]]`, and agents essentially never write those, so a 108-note notebook showed 9
+  connected notes across 8 links. Notes that anchor the same file are now linked as well (capped at
+  8 per note, ordered by shared-file count, drawn dashed to keep them distinct from an explicit
+  wikilink). The same notebook now shows 76 connected notes across 113 links.
+
 ## [2.2.18] - 2026-08-11
 
 ### Fixed
