@@ -99,7 +99,7 @@ const techArticleJsonLd = {
         <div class="flag-row"><span class="fk">--view V</span><span class="fv">One of <code>symbols</code> / <code>imports</code> / <code>importers</code> / <code>callers</code>. Default returns all.</span></div>
         <div class="flag-row"><span class="fk">--json</span><span class="fv">Machine-readable output.</span></div>
       </div>
-      <div class="callout"><span class="ct">Moves together</span>In a repo with git history, <code>gs</code> also lists the files that keep changing in the same commits as this one, with the count as the evidence. It is a habit, not a dependency — nothing imports or calls across it — and it catches the pairs no parser can: a sibling implementation, a test in another language, a doc that has to stay in sync. Anything connected by an import edge is left out, so what you see is what the graph missed, and it shows up under <code>--view</code> too.</div>
+      <div class="callout"><span class="ct">Edited together</span>In a repo with git history, <code>gs</code> also lists the files that keep changing in the same commits as this one, with the count as the evidence. It is a habit, not a dependency — nothing imports or calls across it — and it catches the pairs no parser can: a sibling implementation, a test in another language, a doc that has to stay in sync. Anything connected by an import edge is left out, so what you see is what the graph missed, and it shows up under <code>--view</code> too.</div>
       <div class="callout"><span class="ct">Scope</span>Callers are one-hop and file-scoped. Named function/constant calls resolve cross-file; member-expression calls (<code>this.method()</code>, <code>api.method()</code>) don't. Chase further hops by running <code>gs</code> on the caller file.</div>
     </section>
 
@@ -112,7 +112,7 @@ const techArticleJsonLd = {
 <span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart graph</span></span>
 <span class="ln"><span class="c-frost">.coldstart/graph.html</span></span>
 <span class="ln">  1,615 files in 24 directory bands, 3,905 relations</span>
-<span class="ln">  <span class="c-dim">(imports 1,525 · calls 555 · moves-together 1,825 · same-note 0)</span></span>
+<span class="ln">  <span class="c-dim">(imports 1,525 · calls 555 · edited-together 1,825 · same-note 0)</span></span>
 <span class="ln">  <span class="c-dim">656 files have no relation at all.</span></span>
         </div>
       </div>
@@ -122,7 +122,7 @@ const techArticleJsonLd = {
         <div class="flag-row"><span class="fk">--no-open</span><span class="fv">Write the file without launching a browser.</span></div>
         <div class="flag-row"><span class="fk">--json</span><span class="fv">Print the counts instead of the prose summary.</span></div>
       </div>
-      <div class="callout"><span class="ct">Every line is named</span>Click a file and its neighbours fan out around it, each edge labelled with why it is there — <code>imports</code>, <code>calls save(), load()</code>, <code>moves together · 13 of 42 commits</code>, <code>same note · &lt;title&gt;</code>. Click a neighbour to open <em>its</em> connections; click one of those and the view slides along, so you are always looking at two levels rather than an ever-growing hairball.</div>
+      <div class="callout"><span class="ct">Every line is named</span>Click a file and its neighbours fan out around it, each edge labelled with why it is there — <code>imports</code>, <code>calls save(), load()</code>, <code>edited together · 13 of 42 commits</code>, <code>same note · &lt;title&gt;</code>. Click a neighbour to open <em>its</em> connections; click one of those and the view slides along, so you are always looking at two levels rather than an ever-growing hairball.</div>
       <p><a href="/graph/">Explore coldstart's own codebase in it →</a></p>
     </section>
   </main>

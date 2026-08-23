@@ -236,7 +236,7 @@ export async function runGraph(argv: string[], buildIndex: BuildFn): Promise<num
   process.stdout.write(
     `${path}\n` +
     `  ${stats.files} files in ${stats.clusters} directory bands, ` +
-    `${stats.edges} relations (imports ${imp}, calls ${calls}, moves-together ${coedit}, ` +
+    `${stats.edges} relations (imports ${imp}, calls ${calls}, edited-together ${coedit}, ` +
     `same-note ${note} from ${stats.notes} notes)\n` +
     `  ${stats.isolated} files have no relation at all.\n` +
     `  Self-contained page — no server and no dependencies. Open it anywhere, or send the file.\n`,

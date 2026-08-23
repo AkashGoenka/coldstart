@@ -162,7 +162,7 @@ const GOLDEN = Math.PI * (3 - Math.sqrt(5));
 const REL = [
   { name:'imports',        rev:'imported by',    hex:'#7ab2ff', col:[122,178,255] },
   { name:'calls',          rev:'called by',      hex:'#c39cff', col:[195,156,255] },
-  { name:'moves together', rev:'moves together', hex:'#ff9d6e', col:[255,157,110] },
+  { name:'edited together', rev:'edited together', hex:'#ff9d6e', col:[255,157,110] },
   { name:'same note',      rev:'same note',      hex:'#8fe9a8', col:[143,233,168] },
 ];
 
@@ -404,7 +404,7 @@ function shortName(s) {
 
 function relLabel(kind, detail, reversed) {
   if (kind === 1) return reversed ? 'called by' : 'calls ' + (detail || 'a symbol');
-  if (kind === 2) return 'moves together' + (detail ? ' · ' + detail : '');
+  if (kind === 2) return 'edited together' + (detail ? ' · ' + detail : '');
   if (kind === 3) return 'same note' + (detail ? ' · ' + detail : '');
   return reversed ? REL[0].rev : REL[0].name;
 }

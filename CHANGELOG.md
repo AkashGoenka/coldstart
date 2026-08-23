@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.3.0] - 2026-08-23
 
 ### Added
-- **`gs` now shows "Moves together": the files that keep changing in the same commits as the one
+- **`gs` now shows "Edited together": the files that keep changing in the same commits as the one
   you asked about, taken from git history.** The import graph answers "what does this file
   reference"; it cannot answer "what do people always edit alongside this file" when nothing
   imports or calls across the pair. A study of ~11k co-edited pairs across four repositories found
@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`coldstart graph`: an interactive map of your codebase, opened in your browser.** Every indexed
   file is one point on a sphere whose latitude is its directory; click any file to explore its
   neighbourhood two levels at a time. Every relation is named rather than drawn as an anonymous
-  line: imports, calls (with the symbol names), moves-together from git history, and files sharing
+  line: imports, calls (with the symbol names), edited-together from git history, and files sharing
   a notebook note. Output is a single self-contained HTML file with the data baked in. **No
   dependencies, no build step, no network:** it works offline, and nothing about your code leaves
   the machine. Human-only, like `kb view`, and deliberately not an MCP tool. Flags: `--out`,

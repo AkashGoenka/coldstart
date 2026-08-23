@@ -111,7 +111,7 @@ export function assignClusters(ids: string[]): Map<string, string> {
  *
  *   kind 0 import   directed  "imports" / "imported by"
  *   kind 1 calls    directed  "calls foo(), bar()"
- *   kind 2 coedit   mutual    "moves together · N of M commits"
+ *   kind 2 coedit   mutual    "edited together · N of M commits"
  *   kind 3 note     mutual    "same note · <title>"
  */
 export function buildGraphPayload(
@@ -165,7 +165,7 @@ export function buildGraphPayload(
     put(fa, fb, REL_CALLS, true, list.length > 3 ? shown + ' +' + (list.length - 3) : shown);
   }
 
-  // Moves together — carry the support count, which IS the evidence. Top 3
+  // Edited together — carry the support count, which IS the evidence. Top 3
   // only, matching what `gs` prints; drawing all 8 stored partners triples the
   // ink for pairs no agent is ever told about.
   if (cochange) {

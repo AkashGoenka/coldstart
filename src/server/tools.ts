@@ -137,7 +137,7 @@ export function handleGetStructure(
     view?: GsView;
     symbol?: string;
   },
-  /** Keeper-derived "moves together" pairs. Absent (no keeper has run here,
+  /** Keeper-derived "edited together" pairs. Absent (no keeper has run here,
    *  shallow clone, not a git repo) → the section is omitted entirely, never
    *  rendered as an empty list that would read as "nothing moves with this". */
   coChange?: CoChangeIndex | null,
@@ -365,7 +365,7 @@ export function handleGetStructure(
   // Dedupe is against what THIS payload renders (importsOut/importersShown),
   // not the raw edge set — a god-file's truncated importer list can hide a
   // file that the edge set technically contains.
-  // Moves-together (git history channel). Rendered in EVERY view, not just
+  // Edited-together (git history channel). Rendered in EVERY view, not just
   // full: it was full-only at first, and the very first real session to reach
   // for it asked `gs models.py --match spatialview --view symbols` — the
   // narrow view our own guidance advertises as load-bearing — so the section
@@ -551,14 +551,14 @@ export function handleGetStructure(
     }
   }
 
-  // Moves together (git-history channel). Deliberately worded as a HABIT, not
+  // Edited together (git-history channel). Deliberately worded as a HABIT, not
   // a dependency: there is no edge here, and an agent that reads it as one will
   // go looking for an import that doesn't exist. The "N of M commits" is the
   // evidence, shown so a weak pairing is visibly weak rather than presented
   // with the same authority as a call edge.
   if (coChangeOut.length > 0) {
     lines.push('');
-    lines.push('Moves together (changed in the same commits — a habit in this repo\'s history, NOT an import or call edge):');
+    lines.push('Edited together (changed in the same commits — a habit in this repo\'s history, NOT an import or call edge, hence these files are likely related):');
     for (const c of coChangeOut) {
       const share = c.outOf > 0 ? ` — changed together in ${c.shared} of this file's ${c.outOf} commits` : ` — changed together in ${c.shared} commits`;
       lines.push(`  ${c.path}${share}`);

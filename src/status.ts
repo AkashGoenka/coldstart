@@ -185,8 +185,8 @@ export async function runStatus(): Promise<void> {
     // indistinguishable from "this repo genuinely has no pairs".
     const cc = loadCoChange(root);
     parts.push(cc
-      ? `moves-together ${relativeAge(Date.now() - cc.builtAt)} (${cc.commitsScanned} commits, ${Object.keys(cc.partners).length} files paired)`
-      : 'moves-together not derived yet (no git history, a shallow clone, or the keeper has not finished its first pass)');
+      ? `edited-together ${relativeAge(Date.now() - cc.builtAt)} (${cc.commitsScanned} commits, ${Object.keys(cc.partners).length} files paired)`
+      : 'edited-together not derived yet (no git history, a shallow clone, or the keeper has not finished its first pass)');
     if (parts.length > 0) detailLines.push(`${root}\n  ${parts.join('\n  ')}`);
   }
   if (detailLines.length > 0) {

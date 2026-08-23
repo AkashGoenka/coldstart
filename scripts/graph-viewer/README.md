@@ -48,7 +48,7 @@ Every edge is named, which is the point of the thing:
 |---|---|---|
 | imports / imported by | `index.edges` | `imports` |
 | calls / called by | `index.symbolEdges` (`calls`), aggregated per file pair | `calls save(), load()` |
-| moves together | `cochange.json` sidecar, top 3 partners | `moves together · 13 of 42 commits` |
+| edited together | `cochange.json` sidecar, top 3 partners | `edited together · 13 of 42 commits` |
 | same note | each notebook note's `anchors` | `same note · <note title>` |
 
 File-level edges are all plain `import`, so the verbs come from symbol edges. `extends`/`implements`

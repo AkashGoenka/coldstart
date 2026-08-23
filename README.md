@@ -169,7 +169,7 @@ coldstart graph
 For humans, not agents. Writes one self-contained HTML file and opens it: every indexed file is a
 point on a sphere, positioned by directory, and clicking one opens a 2D view of everything it is
 connected to — with each relation *named* (`imports`, `calls save(), load()`,
-`moves together · 13 of 42 commits`, `same note · <title>`). Click a neighbour to open its
+`edited together · 13 of 42 commits`, `same note · <title>`). Click a neighbour to open its
 connections; click one of those and the view slides along, so you always see two levels rather than
 an ever-growing hairball.
 

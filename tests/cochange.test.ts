@@ -1,5 +1,5 @@
 /**
- * Co-change ("moves together") — derivation from real git history, the
+ * Co-change ("edited together") — derivation from real git history, the
  * parameter gates that keep it honest (min support, sweep commits, rename
  * following, index filtering), and how `gs` renders it.
  *
@@ -274,25 +274,25 @@ describe('gs rendering', () => {
 
   it('renders partners with their evidence and a not-a-dependency label', () => {
     const out = gsText(handleGetStructure(makeIndex(['a.py', 'b.py', 'c.py']), { file_path: 'a.py' }, data));
-    expect(out).toContain('Moves together');
+    expect(out).toContain('Edited together');
     expect(out).toContain('NOT an import or call edge');
     expect(out).toContain("b.py — changed together in 14 of this file's 17 commits");
   });
 
   it('omits the section entirely when no sidecar exists', () => {
     const out = gsText(handleGetStructure(makeIndex(['a.py', 'b.py']), { file_path: 'a.py' }, null));
-    expect(out).not.toContain('Moves together');
+    expect(out).not.toContain('Edited together');
   });
 
   it('omits the section for a file with no partners', () => {
     const out = gsText(handleGetStructure(makeIndex(['a.py', 'z.py']), { file_path: 'z.py' }, data));
-    expect(out).not.toContain('Moves together');
+    expect(out).not.toContain('Edited together');
   });
 
   it('does not repeat a file already listed as an import', () => {
     const index = makeIndex(['a.py', 'b.py', 'imported.py', 'c.py'], [{ from: 'a.py', to: 'imported.py' }]);
     const out = gsText(handleGetStructure(index, { file_path: 'a.py' }, data));
-    const section = out.slice(out.indexOf('Moves together'));
+    const section = out.slice(out.indexOf('Edited together'));
     expect(section).not.toContain('imported.py');
     // …and the freed slot goes to the next-strongest partner.
     expect(section).toContain('c.py');
@@ -301,7 +301,7 @@ describe('gs rendering', () => {
   it('does not repeat a file already listed as an importer', () => {
     const index = makeIndex(['a.py', 'b.py', 'imported.py', 'c.py'], [{ from: 'imported.py', to: 'a.py' }]);
     const out = gsText(handleGetStructure(index, { file_path: 'a.py' }, data));
-    const section = out.slice(out.indexOf('Moves together'));
+    const section = out.slice(out.indexOf('Edited together'));
     expect(section).not.toContain('imported.py');
   });
 
@@ -312,7 +312,7 @@ describe('gs rendering', () => {
   it('renders in every narrowed view, not just full', () => {
     for (const view of ['symbols', 'imports', 'importers', 'callers'] as const) {
       const out = gsText(handleGetStructure(makeIndex(['a.py', 'b.py']), { file_path: 'a.py', view }, data));
-      expect(out, `view=${view}`).toContain('Moves together');
+      expect(out, `view=${view}`).toContain('Edited together');
       expect(out, `view=${view}`).toContain("b.py — changed together in 14 of this file's 17 commits");
     }
   });
@@ -326,7 +326,7 @@ describe('gs rendering', () => {
     for (const edge of [{ from: 'a.py', to: 'imported.py' }, { from: 'imported.py', to: 'a.py' }]) {
       const index = makeIndex(['a.py', 'b.py', 'imported.py', 'c.py'], [edge]);
       const out = gsText(handleGetStructure(index, { file_path: 'a.py', view: 'symbols' }, data));
-      const section = out.slice(out.indexOf('Moves together'));
+      const section = out.slice(out.indexOf('Edited together'));
       expect(section, JSON.stringify(edge)).not.toContain('imported.py');
       expect(section, JSON.stringify(edge)).toContain('c.py');
     }
