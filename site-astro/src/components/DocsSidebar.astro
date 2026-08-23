@@ -16,6 +16,7 @@ const groups = [
     anchors: [
       { href: '#find', label: 'find', code: true },
       { href: '#gs', label: 'gs', code: true },
+      { href: '#graph', label: 'graph', code: true },
     ],
   },
   {
@@ -48,16 +49,19 @@ const groups = [
     <span class="chev" aria-hidden="true">&rsaquo;</span> Menu
   </button>
   <div class="side-list" id="sideList">
+    {/*
+      Only the ACTIVE group gets the uppercase section-header treatment, because
+      only it has anchors underneath. Every group used to render as a header, so
+      on any page three of the four read as section titles with nothing in them
+      — a heading that labels nothing is clutter. Inactive groups are what they
+      actually are: links to the other doc pages.
+    */}
     {groups.map((g) => (
-      <div class="side-group">
-        <a href={g.href} class={`gh gh-link${active === g.id ? ' active' : ''}`}>{g.label}</a>
-        {active === g.id && (
-          <>
-            {g.anchors.map((a) => (
-              <a href={a.href}>{a.code ? <code>{a.label}</code> : a.label}</a>
-            ))}
-          </>
-        )}
+      <div class={`side-group${active === g.id ? ' is-active' : ''}`}>
+        <a href={g.href} class={`gh-link${active === g.id ? ' gh active' : ''}`}>{g.label}</a>
+        {active === g.id && g.anchors.map((a) => (
+          <a href={a.href}>{a.code ? <code>{a.label}</code> : a.label}</a>
+        ))}
       </div>
     ))}
   </div>

@@ -22,6 +22,7 @@ import {
 } from './daemon-lock.js';
 import { getCacheDir } from './cache/disk-cache.js';
 import { readKeeperState, readRepairTail, type KeeperEventStamp } from './keeper-state.js';
+import { loadCoChange } from './indexer/cochange.js';
 
 function fileSize(path: string): string {
   try {
@@ -179,6 +180,13 @@ export async function runStatus(): Promise<void> {
       const r = repairs[repairs.length - 1];
       parts.push(`last failure ${relativeAge(Date.now() - r.at)}: ${r.event} (${r.detail})`);
     }
+    // Co-change is silent when git can't supply history (shallow CI checkout,
+    // no repo, brand-new repo). Without this line that silence is
+    // indistinguishable from "this repo genuinely has no pairs".
+    const cc = loadCoChange(root);
+    parts.push(cc
+      ? `moves-together ${relativeAge(Date.now() - cc.builtAt)} (${cc.commitsScanned} commits, ${Object.keys(cc.partners).length} files paired)`
+      : 'moves-together not derived yet (no git history, a shallow clone, or the keeper has not finished its first pass)');
     if (parts.length > 0) detailLines.push(`${root}\n  ${parts.join('\n  ')}`);
   }
   if (detailLines.length > 0) {

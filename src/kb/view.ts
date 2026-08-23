@@ -57,7 +57,48 @@ function toClientNote(root: string, note: FoldedNote) {
     outLinks,
     body,
     backlinks: [] as string[],
+    // Notes that talk about the same file. Filled in by buildViewData once
+    // every note is known — see linkByAnchor.
+    anchorLinks: [] as string[],
   };
+}
+
+/**
+ * Link notes that anchor the same file.
+ *
+ * The graph used to draw ONLY hand-typed `[[wikilinks]]`, and agents write
+ * almost none: on this repo's own notebook that was 7 links across 101 notes,
+ * so the graph showed nine nodes and the rest of the notebook was invisible.
+ * Sharing an anchored file is a real relation and it is already recorded, so
+ * derive it instead of asking anyone to hand-type it.
+ *
+ * Capped per note, strongest first (most shared files), because one hub file
+ * with twenty notes on it is a clique of 190 edges that tells you nothing.
+ */
+const ANCHOR_LINK_CAP = 8;
+
+function linkByAnchor(notes: { id: string; anchors: { path: string }[]; anchorLinks: string[] }[]): void {
+  const byPath = new Map<string, string[]>();
+  for (const n of notes) {
+    for (const p of new Set(n.anchors.map((a) => a.path))) {
+      const list = byPath.get(p);
+      if (list) list.push(n.id); else byPath.set(p, [n.id]);
+    }
+  }
+  const byId = new Map(notes.map((n) => [n.id, n]));
+  for (const n of notes) {
+    const shared = new Map<string, number>();
+    for (const p of new Set(n.anchors.map((a) => a.path))) {
+      for (const other of byPath.get(p) ?? []) {
+        if (other !== n.id) shared.set(other, (shared.get(other) ?? 0) + 1);
+      }
+    }
+    n.anchorLinks = [...shared]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, ANCHOR_LINK_CAP)
+      .map(([id]) => id)
+      .filter((id) => byId.has(id));
+  }
 }
 
 /** Build the `{ summary, notes }` payload the template bakes in. */
@@ -74,6 +115,7 @@ export function buildViewData(root: string, generated: string) {
       if (t && l !== n.id && !t.backlinks.includes(n.id)) t.backlinks.push(n.id);
     }
   }
+  linkByAnchor(notes);
   notes.sort((a, b) => (b.updated || '').localeCompare(a.updated || ''));
 
   const byType: Record<string, number> = {};

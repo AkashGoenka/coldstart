@@ -675,6 +675,9 @@ Navigation
   consumers <file>    who depends on this file
   index               build/refresh the index for this repo
 
+Picture
+  graph               open an interactive map of this codebase in your browser
+
 Notebook
   kb <sub>            search | lookup | write | commit | status | lint | repair | render | view | init
 
@@ -755,6 +758,11 @@ async function main(): Promise<void> {
     process.exit(await runIndexPrep(process.argv.slice(3), buildIndex));
   }
   // Consumer counts for the capture hook's graph annotation (fail-open there).
+  if (process.argv[2] === 'graph') {
+    const { runGraph } = await import('./cli.js');
+    process.exit(await runGraph(process.argv.slice(3), buildIndex));
+  }
+
   if (process.argv[2] === 'consumers') {
     const { runConsumers } = await import('./cli.js');
     process.exit(await runConsumers(process.argv.slice(3), buildIndex));
@@ -777,7 +785,7 @@ async function main(): Promise<void> {
   if (firstArg && !firstArg.startsWith('-')) {
     process.stderr.write(
       `[coldstart] Unknown command: ${firstArg}\n` +
-      `Commands: find, gs, index, consumers, kb, status, restart, stop, init, unwire\n`,
+      `Commands: find, gs, index, consumers, graph, kb, status, restart, stop, init, unwire\n`,
     );
     process.exit(2);
   }

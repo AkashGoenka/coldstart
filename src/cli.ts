@@ -47,6 +47,8 @@ interface ParsedArgs {
     tests?: boolean;
     json?: boolean;
     via?: boolean;
+    out?: string;
+    noOpen?: boolean;
   };
 }
 
@@ -68,6 +70,8 @@ function parseQueryArgs(argv: string[]): ParsedArgs {
       case '--tests': flags.tests = true; break;
       case '--json': flags.json = true; break;
       case '--via': flags.via = true; break;
+      case '--out': flags.out = argv[++i]; break;
+      case '--no-open': flags.noOpen = true; break;
       default:
         if (a.startsWith('--')) err(`[coldstart] unknown flag: ${a}`);
         else positional.push(a);
@@ -170,12 +174,13 @@ export async function runGs(argv: string[], buildIndex: BuildFn): Promise<number
   const index = await getIndex(root, flags.cacheDir, buildIndex, 'gs');
   if (!index) { err('[coldstart] no index available'); return 1; }
 
+  const { loadCoChange } = await import('./indexer/cochange.js');
   const result = handleGetStructure(index, {
     file_path: file,
     match: flags.match,
     symbol: flags.symbol,
     view: flags.view as 'full' | 'symbols' | 'imports' | 'importers' | 'callers' | undefined,
-  }) as HandlerResult;
+  }, loadCoChange(root, flags.cacheDir)) as HandlerResult;
 
   emit(result, flags.json === true);
   // file-not-found (no __rawText, only error) → exit 2
@@ -198,6 +203,44 @@ export async function runFind(argv: string[], buildIndex: BuildFn): Promise<numb
 
   const { buildRichPage } = await import('./server/find.js');
   process.stdout.write((await buildRichPage(index, root, query, flags.json, flags.via === true)) + '\n');
+  return 0;
+}
+
+/**
+ * `coldstart graph` — write a self-contained HTML page of the repo's file graph
+ * and open it. Human-facing only: this is a picture, not an agent surface, so
+ * it is deliberately NOT an MCP tool (same call as `kb view`).
+ *
+ * Uses the `gs` load profile because it needs exactly what `gs` needs — edges,
+ * symbol edges, and the co-change sidecar.
+ */
+export async function runGraph(argv: string[], buildIndex: BuildFn): Promise<number> {
+  const { flags } = parseQueryArgs(argv);
+  const root = resolve(flags.root ?? '.');
+  await ensureKeeper(root);
+  const index = await getIndex(root, flags.cacheDir, buildIndex, 'gs');
+  if (!index) { err('[coldstart] no index available'); return 1; }
+
+  const { graphView } = await import('./graph/view.js');
+  const { path, stats } = graphView(root, index, {
+    out: flags.out ? resolve(flags.out) : undefined,
+    open: flags.noOpen !== true,
+    cacheDir: flags.cacheDir,
+  });
+
+  if (flags.json) {
+    process.stdout.write(JSON.stringify({ path, ...stats }, null, 2) + '\n');
+    return 0;
+  }
+  const [imp, calls, coedit, note] = stats.byKind;
+  process.stdout.write(
+    `${path}\n` +
+    `  ${stats.files} files in ${stats.clusters} directory bands, ` +
+    `${stats.edges} relations (imports ${imp}, calls ${calls}, moves-together ${coedit}, ` +
+    `same-note ${note} from ${stats.notes} notes)\n` +
+    `  ${stats.isolated} files have no relation at all.\n` +
+    `  Self-contained page — no server and no dependencies. Open it anywhere, or send the file.\n`,
+  );
   return 0;
 }
 

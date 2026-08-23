@@ -49,9 +49,10 @@ export const TOOL_DEFINITIONS = [
       '- Symbols — top-level + per-class methods (name, kind, line range, extends/implements). With cross-file callers attached per exported symbol (inline if 1 caller; newline-per-caller block if ≥2). For huge files (>20 symbols, no `match`), symbols are reordered by caller count (most-used first) and truncated to top 15.\n' +
       '- Imports — 1-hop internal outbound dependencies (library imports stripped).\n' +
       '- Importers — 1-hop reverse: files in this repo that import this one. With `match`, additionally lists EVERY indexed file (importer or not, any language) whose CONTENT references the matched term even when its filename does not (a registry, admin, or config file using the symbol — or a frontend file referencing a backend name). That subsection IS the complete "who uses <symbol>" answer: it is exhaustive over indexed content, so a subsystem absent from it does NOT use the symbol — do not grep to enumerate or re-verify use-sites, and do not keep hunting in subsystems the section rules out.\n' +
+      '- Moves together — files that keep changing in the SAME COMMITS as this one, from git history, shown with the count as evidence ("changed together in 14 of this file\'s 17 commits"). This is a HABIT, not a dependency: no import or call edge connects them, so do not go looking for one. It is frequently what an edit here forgets — a sibling implementation with a shared interface, a test in another language, a doc or template that has to stay in sync. Files connected to this one by an import edge are omitted here, so everything shown is a file the graph did NOT give you. Rendered in EVERY view, including a narrowed one. Absent = no git history yet (a new file, a shallow clone) or nothing pairs strongly enough.\n' +
       '- Related — files sharing rare identifier/string-literal tokens with this file (with `match`: with the matched symbols\' code region), shown only when NO import edge connects them. These are name-reference relations the import graph cannot see — Django migrations↔models, config-by-name registration, cross-language (JS↔Python) pairs. Treat them as first-class neighbors: the shared token shown is the reason they are related.\n' +
       'Use this AFTER find surfaces a candidate file. This is the right tool for "who uses this file" / "who calls this symbol" — no separate call needed.\n\n' +
-      '`view` controls which sections you get (default `full` = all four). `symbols`, `imports`, `importers`, `callers` each return one section in isolation when you want a byte-light answer.\n\n' +
+      '`view` controls which sections you get (default `full` = all of them). `symbols`, `imports`, `importers`, `callers` each return one section in isolation when you want a byte-light answer.\n\n' +
       'For god-files (large classes, large routers, large config modules), pass `match` to filter symbols/imports/importers/callers to one area — e.g. `match: "auth"` or `match: "/^handle/"`. Substring is case-insensitive; wrap in slashes for regex.\n\n' +
       'Prefer this over Read when you need shape, neighbors, or usage. Reach for Read only for implementation details inside a method body. If you have called gs on 5+ files for one question, you are enumerating — go back to find with a sharper `path` glob or a different concept token instead.',
     inputSchema: {
@@ -245,14 +246,19 @@ export function registerToolHandlers(
         });
         break;
 
-      case 'gs':
+      case 'gs': {
+        // Re-read per call rather than caching: this server is long-lived and
+        // the keeper rewrites the sidecar whenever HEAD moves, so a cached copy
+        // would go stale across a branch switch. Small JSON, sync read.
+        const { loadCoChange } = await import('../indexer/cochange.js');
         result = handleGetStructure(index, {
           file_path: (params['file_path'] ?? params['file'] ?? params['file_name']) as string,
           match: params['match'] as string | undefined,
           symbol: params['symbol'] as string | undefined,
           view: params['view'] as 'full' | 'symbols' | 'imports' | 'importers' | 'callers' | undefined,
-        });
+        }, loadCoChange(index.rootDir));
         break;
+      }
 
       case 'kb_search': {
         const { kbSearch, renderSearchPage } = await import('../kb/search.js');

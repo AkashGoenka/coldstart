@@ -211,7 +211,11 @@ footer { border-top: 1px solid var(--line); padding: 48px 0; }
   .side-list.open { display: block; }
 }
 
-.side-group { margin-bottom: 26px; }
+.side-group { margin-bottom: 2px; }
+/* The active group is the only one carrying a header + anchor list, so it gets
+   the breathing room; the rest are single links and read as a list. */
+.side-group.is-active { margin: 20px 0 24px; }
+.side-group.is-active:first-child { margin-top: 0; }
 .side-group .gh { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); opacity: .8; margin-bottom: 10px; padding-left: 12px; }
 .side a { display: block; font-size: 14px; color: var(--muted); text-decoration: none; padding: 5px 12px; border-left: 2px solid transparent; border-radius: 0 6px 6px 0; transition: color .12s, border-color .12s, background .12s; }
 .side a code { font-family: var(--mono); font-size: 13px; }
