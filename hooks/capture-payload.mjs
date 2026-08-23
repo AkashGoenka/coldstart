@@ -142,6 +142,9 @@ function writeDurableWorklist(root, sid, aid, entries) {
  * with its own `.coldstart/checklist.md`. Placeholders {{WORKLIST}}, {{CLI}},
  * {{ROOT}}, {{SID}}, {{AID}} are substituted. The worklist is LOAD-BEARING (it is the
  * scope rule) — an override that omits {{WORKLIST}} gets it appended anyway.
+ * {{CLI}} and {{ROOT}} expand to absolute paths pasted into shell commands, so
+ * they are QUOTED at every use site below — an unquoted Windows path loses its
+ * backslashes in `sh` (same bug as `nodeCommand` in src/init.ts).
  * Trigger mechanics stay in code; only the prompt text is overridable. Merge
  * semantics when the shipped default evolves = none (the override wins
  * wholesale) — revisit before promoting past spike.
@@ -284,17 +287,17 @@ found wrong: {"op":"retract","id":"<id>","target":{"kind":"note"}} (as one array
   cat > /tmp/notes.json <<'JSON'
   [ {…note 1…}, {…note 2…} ]
 JSON
-  node {{CLI}} kb write /tmp/notes.json --root {{ROOT}} --session {{SID}} --agent {{AID}} --force
-  Full shapes: run \`node {{CLI}} kb write --root {{ROOT}}\` with no spec — it prints the guide.
+  node "{{CLI}}" kb write /tmp/notes.json --root "{{ROOT}}" --session {{SID}} --agent {{AID}} --force
+  Full shapes: run \`node "{{CLI}}" kb write --root "{{ROOT}}"\` with no spec — it prints the guide.
   (Keep --session/--agent exactly as written — they point coverage at THIS agent's worklist.)
 
 FLOW DECISION — record what you decided about FLOWS (created a new one, folded into an \
 existing one, or none) so the flow gate can be measured. Ride it on the SAME batch write — it \
 is a flag, not a second command:
-  node {{CLI}} kb write /tmp/notes.json --root {{ROOT}} --session {{SID}} --agent {{AID}} --force \\
+  node "{{CLI}}" kb write /tmp/notes.json --root "{{ROOT}}" --session {{SID}} --agent {{AID}} --force \\
     --decision <none|new|update> [--id <flow id>] --why "<one clause>"
 Only when you wrote NO notes at all is there no write to carry it, and then run it alone:
-  node {{CLI}} kb flow-decision --decision none --why "<one clause>" --root {{ROOT}} --session {{SID}}`;
+  node "{{CLI}}" kb flow-decision --decision none --why "<one clause>" --root "{{ROOT}}" --session {{SID}}`;
 }
 
 /** Ensure the permanent instructions file exists and is current; return its

@@ -437,7 +437,7 @@ describe('/capture-notes command wiring', () => {
     expect(body).toContain('!`node ');
     // Claude passes the invoking session id so capture targets THIS session's
     // worklist, not the freshest marker in a concurrent-session repo.
-    expect(body).toContain('kb-elicit.mjs --manual --session "${CLAUDE_SESSION_ID}"`');
+    expect(body).toContain('kb-elicit.mjs" --manual --session "${CLAUDE_SESSION_ID}"`');
   });
 
   it('writes a Cursor command that asks the agent to run it (no ! expansion)', () => {
@@ -445,7 +445,7 @@ describe('/capture-notes command wiring', () => {
     const body = fs.readFileSync(cursorCmd(), 'utf8');
     expect(body).not.toContain('!`');
     // No verified session var for Cursor → plain --manual (freshest-marker fallback).
-    expect(body).toContain('kb-elicit.mjs --manual');
+    expect(body).toContain('kb-elicit.mjs" --manual');
     expect(body).not.toContain('CLAUDE_SESSION_ID');
   });
 
@@ -457,7 +457,7 @@ describe('/capture-notes command wiring', () => {
     expect(body).toMatch(/^---\n/);
     expect(body).toContain(`name: ${CAPTURE_COMMAND}`);
     expect(body).toContain('description: ');
-    expect(body).toContain('kb-elicit.mjs --manual');
+    expect(body).toContain('kb-elicit.mjs" --manual');
   });
 
   it('bakes no repo-specific path — only the install path — so it works from any cwd', () => {
