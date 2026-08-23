@@ -34,6 +34,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The same viewer, running on coldstart's own codebase, is now live at
   [coldstartmcp.dev/graph](https://coldstartmcp.dev/graph/).
 
+### Security
+- Opening the generated viewer in a browser no longer routes through `cmd /c start` on Windows.
+  `cmd` re-parses its own command line, so a file path containing `&`, `^` or `|` would have been
+  interpreted rather than opened; the path derives from the repo location and from `--out`. Both
+  `coldstart graph` and `kb view` now use `rundll32.exe url.dll,FileProtocolHandler`, which takes
+  the path as one literal argument with no shell in between. Reported by CodeQL on #157.
+
 ### Fixed
 - **The notebook's own graph in `kb view` was drawing almost nothing.** It rendered only hand-typed
   `[[wikilinks]]`, and agents essentially never write those, so a 108-note notebook showed 9

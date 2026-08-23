@@ -53,9 +53,15 @@ export function renderGraphHtml(template: string, repo: string, data: unknown): 
 
 /** Best-effort open in the OS default browser. Never throws. */
 function openInBrowser(file: string): void {
+  // Windows goes through rundll32 rather than `cmd /c start`: cmd re-parses its
+  // own command line, so a path containing `&`, `^` or `|` would be interpreted
+  // instead of opened. The path here is attacker-influencable in the ordinary
+  // sense (it derives from the repo location and from `--out`), and rundll32
+  // takes it as a single literal argument with no shell in between.
   const cmd =
     process.platform === 'darwin' ? { bin: 'open', args: [file] }
-    : process.platform === 'win32' ? { bin: 'cmd', args: ['/c', 'start', '', file] }
+    : process.platform === 'win32'
+      ? { bin: 'rundll32.exe', args: ['url.dll,FileProtocolHandler', file] }
     : { bin: 'xdg-open', args: [file] };
   try {
     const child = execFile(cmd.bin, cmd.args, { windowsHide: true }, () => {});
