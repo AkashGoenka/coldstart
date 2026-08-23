@@ -396,10 +396,22 @@ export function handleGetStructure(
     ]),
   );
 
+  // Related, like Edited together, renders in EVERY view. Both answer "which
+  // OTHER file does this connect to", and a narrow view is a request for less
+  // of THIS file, not for fewer channels — asking for `--view symbols` on a
+  // god-file is exactly when the name-reference neighbours matter most.
+  //
+  // Same exclusion rule as co-change, and for the same reason: the heading
+  // promises "no import edge", which is only true if every graph neighbour is
+  // excluded. importsOut/importersShown are empty in a narrow view and capped
+  // in the full one, so they cannot be the source of that guarantee.
   let relatedOut: RelatedFile[] = [];
-  if (view === 'full') {
+  {
     const excludeIds = new Set<string>([
-      fileId, ...importsOut, ...importersShown, ...bodyRefImporters,
+      fileId,
+      ...(index.outEdges.get(fileId) ?? []),
+      ...(index.inEdges.get(fileId) ?? []),
+      ...bodyRefImporters,
       ...coChangeOut.map(c => c.path),
     ]);
     let sourceTokens = file.contentTokens;

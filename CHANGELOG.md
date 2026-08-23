@@ -34,6 +34,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The same viewer, running on coldstart's own codebase, is now live at
   [coldstartmcp.dev/graph](https://coldstartmcp.dev/graph/).
 
+### Changed
+- **`gs`'s `Related` section now renders in every view too, not only `full`.** It lists files that
+  share a rare identifier or string token with the one you asked about where no import edge connects
+  them (migration to model, config-by-name registration, cross-language pairs). It was full-view
+  only, so `--view symbols` on a large file — the call where name-reference neighbours matter most —
+  silently dropped them. Its exclusion set now reads the import graph directly for the same reason
+  the `Edited together` section does: the heading promises "no import edge", and the imports and
+  importers lists cannot back that promise when a narrow view leaves them empty and the full view
+  caps them.
+
 ### Security
 - Opening the generated viewer in a browser no longer routes through `cmd /c start` on Windows.
   `cmd` re-parses its own command line, so a file path containing `&`, `^` or `|` would have been

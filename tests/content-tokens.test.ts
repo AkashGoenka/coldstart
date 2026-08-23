@@ -323,6 +323,42 @@ describe('GS Related section rendering', () => {
     expect(res.__rawText).toContain('app/migrations/11857_fix.py — shares `limit_choices_to`');
   });
 
+  // Related was full-view-only, which meant `--view symbols` on a god-file —
+  // the one call where name-reference neighbours matter most — silently
+  // dropped them. A narrow view asks for less of THIS file, not for fewer
+  // channels. Same rule as the Edited together section.
+  it('renders Related in every narrowed view, not just full', () => {
+    const index = makeIndex([
+      { id: 'app/models/models.py', contentTokens: { limit_choices_to: TOKEN_IN_CODE, source_identifier__isnull: TOKEN_IN_CODE } },
+      { id: 'app/migrations/11857_fix.py', contentTokens: { limit_choices_to: TOKEN_IN_STRING, source_identifier__isnull: TOKEN_IN_STRING } },
+    ]);
+    for (const view of ['symbols', 'imports', 'importers', 'callers'] as const) {
+      const res = handleGetStructure(index, { file_path: 'app/models/models.py', view }) as { __rawText: string };
+      expect(res.__rawText, `view=${view}`).toContain('Related (shares rare tokens, no import edge');
+      expect(res.__rawText, `view=${view}`).toContain('app/migrations/11857_fix.py — shares `limit_choices_to`');
+    }
+  });
+
+  // The heading promises "no import edge", so the exclusion has to come from
+  // the import graph rather than from the imports/importers lists — a narrow
+  // view populates neither, and in full view the importer list is capped.
+  it('still excludes an import-edge neighbour in a view that lists no importers', () => {
+    for (const edge of [
+      { from: 'app/migrations/11857_fix.py', to: 'app/models/models.py', type: 'import' as const, specifier: 'models' },
+      { from: 'app/models/models.py', to: 'app/migrations/11857_fix.py', type: 'import' as const, specifier: 'fix' },
+    ]) {
+      const index = makeIndex(
+        [
+          { id: 'app/models/models.py', contentTokens: { limit_choices_to: TOKEN_IN_CODE, source_identifier__isnull: TOKEN_IN_CODE } },
+          { id: 'app/migrations/11857_fix.py', contentTokens: { limit_choices_to: TOKEN_IN_STRING, source_identifier__isnull: TOKEN_IN_STRING } },
+        ],
+        [edge],
+      );
+      const res = handleGetStructure(index, { file_path: 'app/models/models.py', view: 'symbols' }) as { __rawText: string };
+      expect(res.__rawText, JSON.stringify(edge)).not.toContain('Related (');
+    }
+  });
+
   it('omits Related when an import edge already connects the pair', () => {
     const index = makeIndex(
       [
