@@ -46,6 +46,7 @@ import { fileURLToPath } from "node:url";
 import { canonicalFindKey } from "./canonical-find-key.mjs";
 import { normalizeColdstartCall } from "./coldstart-call.mjs";
 import { coChangeNudge } from "./cochange-nudge.mjs";
+import { bashContentRead } from "./evidence.mjs";
 
 // hooks/ sits beside dist/ in both the repo and the published package.
 const KB_CLI = fileURLToPath(new URL("../dist/index.js", import.meta.url));
@@ -67,9 +68,15 @@ const GS_RE = /coldstart\s+gs\b|index\.js\s+gs\b/;
 const KB_RE = /coldstart\s+kb\b|index\.js\s+kb\b/;
 // the gs menu-fallback marker (printed when --symbol isn't a declared symbol)
 const GS_FALLBACK_RE = /NOT a declared symbol here|no declared symbol matches/;
-// search/shell that ISN'T coldstart find/gs — the spiral surface
+// search/shell that ISN'T coldstart find/gs — the spiral surface.
+// `cat` USED TO BE LISTED HERE and must not come back: it prints a whole file,
+// which is a Read by another name. Counting it as a spiral call meant an agent
+// working entirely through the shell (cat/head/sed -n, the auto-mode default)
+// got told it was "spiralling" for doing the exact thing the nudge asks for —
+// three cats of three different files fired the anti-grep nudge. Reading is
+// classified by bashContentRead (shared with evidence.mjs), not by this regex.
 const SEARCH_RE =
-  /(^|[;&|]|\s)(grep|egrep|fgrep|rg)\b|git\s+grep|git\s+log|(^|[;&|]|\s)find\s|(^|[;&|]|\s)ls\b|(^|[;&|]|\s)cat\b/;
+  /(^|[;&|]|\s)(grep|egrep|fgrep|rg)\b|git\s+grep|git\s+log|(^|[;&|]|\s)find\s|(^|[;&|]|\s)ls\b/;
 const GS_FILE_RE = /(?:coldstart|index\.js)\s+gs\s+(\S+)/;
 
 // The checkpoint (detector 4) only makes sense when the agent may be SPINNING IN
@@ -228,12 +235,21 @@ export default function handle(input) {
     gsFile = gm ? gm[1] : "";
   }
   const prevFallback = st.last_gs_fallback || ""; // set by the PREVIOUS gs call's output
-  const isRead = tool === "Read";
+  const isReadTool = tool === "Read";
   // gs/find/kb are tools, not the grep-spiral, even when piped to head/grep
   const isSearch =
     tool === "Grep" ||
     tool === "Glob" ||
     (tool === "Bash" && !isFind && !isGs && !isKb && SEARCH_RE.test(cmd));
+  // Shell-mediated reads — `cat`/`head`/`sed -n`/`jq`, and inline scripts in any
+  // language that open a file (`node -e '…readFileSync…'`, `python3 -c '…open(…)…'`).
+  // Agents read through the shell as readily as through the Read tool, and a
+  // nudge that only recognises the tool mistakes a working agent for a stuck one.
+  // A command that ALSO searches (`cat x | grep y`) stays a search: the grep is
+  // the operative half, and the spiral detector should still see it.
+  const isBashRead =
+    tool === "Bash" && !isFind && !isGs && !isKb && !isSearch && bashContentRead(cmd);
+  const isRead = isReadTool || isBashRead;
   const isNonfindShell = isSearch;
   // Producing, not spinning — used only to gate the checkpoint (detector 4).
   const isWrite = WRITE_TOOLS.has(tool) || (tool === "Bash" && WRITE_CMD_RE.test(cmd));
@@ -261,7 +277,7 @@ export default function handle(input) {
   const held = new Set(st.held_files || []);
   const outFiles = matchAllGroup(PATH_RE, out, 0);
   const cmdFiles = matchAllGroup(FILE_ARG_RE, cmd, 1);
-  if (isRead) {
+  if (isReadTool) {
     const rp = typeof tin.file_path === "string" ? tin.file_path : "";
     if (rp) cmdFiles.add(rp);
   }
