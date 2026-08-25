@@ -20,7 +20,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { homedir } from 'node:os';
+import { coldstartHome } from '../constants.js';
 import { isAbsolute, join } from 'node:path';
 
 export interface RgBinary {
@@ -29,7 +29,9 @@ export interface RgBinary {
   argv0?: string;
 }
 
-const CACHE_FILE = join(homedir(), '.coldstart', 'searcher.json');
+// A function, not a const — see coldstartHome(): a const would capture the
+// path at import time and ignore a COLDSTART_HOME set by a test afterwards.
+const cacheFile = (): string => join(coldstartHome(), 'searcher.json');
 
 let _rg: RgBinary | null | undefined; // undefined = not yet resolved this process
 
@@ -80,7 +82,7 @@ function appCandidates(): RgBinary[] {
 
 function loadCached(): RgBinary | null {
   try {
-    const raw = JSON.parse(readFileSync(CACHE_FILE, 'utf8')) as { bin?: string; argv0?: string };
+    const raw = JSON.parse(readFileSync(cacheFile(), 'utf8')) as { bin?: string; argv0?: string };
     if (!raw.bin) return null;
     // Absolute paths get a cheap stat; bare names (PATH rg, claude) can only be
     // trusted — a scan-time spawn failure invalidates them.
@@ -93,8 +95,8 @@ function loadCached(): RgBinary | null {
 
 function saveCached(rg: RgBinary): void {
   try {
-    mkdirSync(join(homedir(), '.coldstart'), { recursive: true });
-    writeFileSync(CACHE_FILE, JSON.stringify(rg));
+    mkdirSync(coldstartHome(), { recursive: true });
+    writeFileSync(cacheFile(), JSON.stringify(rg));
   } catch {
     /* cache is an optimization; resolution still works without it */
   }
@@ -137,7 +139,7 @@ export function resolveRg(): RgBinary | null {
 export function invalidateRg(): void {
   _rg = undefined;
   try {
-    rmSync(CACHE_FILE, { force: true });
+    rmSync(cacheFile(), { force: true });
   } catch {
     /* ignore */
   }

@@ -1,5 +1,6 @@
 import { dirname, join } from 'node:path';
 import { toFileId, tryResolveBase, MAX_DIR_WALK_DEPTH } from './shared.js';
+import { isInside } from '../paths.js';
 
 /**
  * Python resolver: handles both relative and absolute imports.
@@ -60,7 +61,7 @@ export async function resolvePython(
     if (srcLayout) return srcLayout;
     if (dir === rootDir) break;
     const parent = dirname(dir);
-    if (parent === dir || !parent.startsWith(rootDir)) break;
+    if (parent === dir || !isInside(parent, rootDir)) break;
     dir = parent;
   }
   return null;

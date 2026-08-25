@@ -1,6 +1,7 @@
 import { join, dirname, isAbsolute } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { MAX_DIR_WALK_DEPTH } from './shared.js';
+import { isInside, toPosixRelative } from '../paths.js';
 
 /**
  * Go resolver: resolves module-local import paths using go.mod / go.work.
@@ -158,8 +159,8 @@ export async function resolveGo(
         if (specifier !== name && !specifier.startsWith(name + '/')) continue;
         const suffix = specifier.slice(name.length).replace(/^\//, '');
         const absPath = suffix ? join(dir, suffix) : dir;
-        if (!absPath.startsWith(rootDir + '/') && absPath !== rootDir) continue;
-        const relPath = absPath.slice(rootDir.length + 1).replace(/\\/g, '/');
+        if (!isInside(absPath, rootDir)) continue;
+        const relPath = toPosixRelative(absPath, rootDir);
         const result = dirMap.get(relPath);
         if (result) return result;
       }
@@ -174,8 +175,8 @@ export async function resolveGo(
   if (!info) return null;
 
   const tryResolveAbs = (absPath: string): string | null => {
-    if (!absPath.startsWith(rootDir + '/') && absPath !== rootDir) return null;
-    const relPath = absPath.slice(rootDir.length + 1).replace(/\\/g, '/');
+    if (!isInside(absPath, rootDir)) return null;
+    const relPath = toPosixRelative(absPath, rootDir);
     return dirMap.get(relPath) ?? null;
   };
 

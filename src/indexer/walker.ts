@@ -1,6 +1,7 @@
-import { readdir, stat, realpath } from 'node:fs/promises';
-import { join, relative, extname } from 'node:path';
+import { readdir, stat } from 'node:fs/promises';
+import { join, extname } from 'node:path';
 import { DEFAULT_EXCLUDES, EXTENSION_TO_LANGUAGE } from '../constants.js';
+import { toPosixRelative } from './paths.js';
 import type { Language, WalkedFile } from '../types.js';
 
 export interface WalkOptions {
@@ -92,18 +93,32 @@ export async function walkDirectory(options: WalkOptions): Promise<WalkedFile[]>
         continue;
       }
 
-      // Resolve symlink chains in the path (for relative path computation only)
-      let resolvedPath = fullPath;
-      try {
-        resolvedPath = await realpath(fullPath);
-      } catch {
-        resolvedPath = fullPath;
-      }
-
-      const relativePath = relative(rootDir, resolvedPath);
+      // Relative to the root WE WERE GIVEN, from the path we walked in on.
+      //
+      // This used to relativize `await realpath(fullPath)` instead, which is a
+      // different path whenever an ANCESTOR is a link or a Windows 8.3 short
+      // name — and symlinked entries are skipped above, so ancestors were all
+      // it could still resolve. On the Windows CI runner, whose tmpdir is
+      // `C:\Users\RUNNER~1\...`, libuv's realpath expanded that to
+      // `runneradmin` while the caller's root kept the short form, and every
+      // id came out as `../../../../../runneradmin/AppData/Local/Temp/...`.
+      // Nothing threw; the ids were simply wrong.
+      //
+      // Canonicalising the root instead would fix the ids and break something
+      // else: the resolvers relativize candidate paths against the SAME root
+      // the caller passed, so file ids and import targets have to be built
+      // from that one root or they stop matching each other.
+      //
+      // Forward-slash, ALWAYS — `relative()` is OS-native, so this was
+      // `app\Models\User.php` on Windows. buildFileId normalised the *id* but
+      // the relativePath field kept the backslashes, and everything downstream
+      // (convention gating like `app/Models/`, tokenization, domain mapping)
+      // silently stopped matching. Normalising at the producer is what makes
+      // every language's path convention work on Windows, not per-caller fixes.
+      const relativePath = toPosixRelative(fullPath, rootDir);
 
       results.push({
-        absolutePath: resolvedPath,
+        absolutePath: fullPath,
         relativePath,
         language,
       });

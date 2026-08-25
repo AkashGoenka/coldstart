@@ -1,4 +1,5 @@
 import { statSync } from 'node:fs';
+import { sep } from 'node:path';
 import type { IndexedFile, Language, ParsedFile } from '../types.js';
 
 /**
@@ -35,7 +36,13 @@ export function baseIndexedFile(
   return {
     id,
     path,
-    relativePath,
+    // Forward-slash invariant, enforced HERE because all three construction
+    // sites (full index, incremental patch, probe) funnel through this
+    // function. Every path convention downstream — `app/Models/`, Django's
+    // `models.py`, Rails' `app/views/` — matches on `/`, so a caller that
+    // passed an OS-native `relative()` result silently disabled those
+    // conventions on Windows.
+    relativePath: relativePath.split(sep).join('/'),
     language,
     mtimeMs,
     sizeBytes,

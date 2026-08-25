@@ -1,4 +1,5 @@
 import { buildRailsFqcnIndex, resolveRailsConstantCandidates } from './resolvers/ruby.js';
+import { findSegmentParent } from './paths.js';
 import type { Edge, IndexedFile } from '../types.js';
 
 /**
@@ -18,11 +19,14 @@ export async function addRailsSyntheticEdges(
   const rubyFiles = indexedFiles.filter(f => f.language === 'ruby');
   if (rubyFiles.length === 0) return;
 
-  let appRoot: string | null = null;
-  for (const f of rubyFiles) {
-    const idx = f.path.lastIndexOf('/app/');
-    if (idx >= 0) { appRoot = f.path.substring(0, idx); break; }
-  }
+  // Locate the Rails app root. Matched against the file ID (always
+  // forward-slash) rather than the OS-native absolute path — `f.path` uses `\`
+  // on Windows, so the old `f.path.lastIndexOf('/app/')` never matched there
+  // and every Rails repo silently got zero synthetic edges.
+  // Matched on the file id (always forward-slash), never on the OS-native
+  // absolute path: the old `f.path.lastIndexOf('/app/')` could not match on
+  // Windows, so every Rails repo there silently got zero synthetic edges.
+  const appRoot = findSegmentParent(rubyFiles, rootDir, 'app');
   if (!appRoot) return;
 
   const fqcnIndex = await buildRailsFqcnIndex(appRoot, fullFileIdSet, rootDir);
