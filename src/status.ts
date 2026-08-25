@@ -170,7 +170,11 @@ export async function runStatus(): Promise<void> {
     const state = readKeeperState(root);
     const repairs = readRepairTail(root, 1);
     if (!state && repairs.length === 0) continue;
+    const work = state?.inProgress;
     const parts = [
+      // First, because it explains a stale index better than any of the
+      // "last X" stamps can — the answer is "it is working on it right now".
+      work ? `IN PROGRESS: ${work.kind}${work.detail ? ` (${work.detail})` : ''}, started ${relativeAge(Date.now() - work.at)}` : null,
       stampLine('reconcile', state?.lastReconcile),
       stampLine('patch', state?.lastPatch),
       stampLine('rebuild', state?.lastRebuild),

@@ -14,7 +14,7 @@ import {
 } from '../src/keeper-state.js';
 import { patchThreshold } from '../src/constants.js';
 import {
-  waitForKeeperCache, waitForCacheAdvance,
+  waitForKeeperCache, waitForCacheHead,
 } from '../src/keeper.js';
 import {
   saveCachedIndex, loadCachedIndex, getCacheDir,
@@ -537,7 +537,7 @@ describe('constants', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Tests: keeper.ts — waitForKeeperCache + waitForCacheAdvance
+// Tests: keeper.ts — waitForKeeperCache + waitForCacheHead
 // ---------------------------------------------------------------------------
 
 describe('keeper waits', () => {
@@ -569,32 +569,83 @@ describe('keeper waits', () => {
     expect(result).toBe('no-keeper');
   });
 
-  it('waitForCacheAdvance: meta.json mtime advances → true', async () => {
-    const metaDir = getCacheDir(testRoot, cacheDir);
+  // -------------------------------------------------------------------------
+  // waitForCacheHead — the reader's HEAD-drift wait. It replaced an mtime
+  // watch that could not tell "the keeper caught up" from "the keeper saved
+  // something, anything" and re-baselined itself at the wrong moment.
+  // -------------------------------------------------------------------------
+
+  const writeMeta = (root: string, dir: string, gitHead: string): void => {
+    const metaDir = getCacheDir(root, dir);
     fs.mkdirSync(metaDir, { recursive: true });
+    fs.writeFileSync(path.join(metaDir, 'meta.json'), JSON.stringify({ version: '18.0.0', gitHead }));
+  };
 
-    const metaPath = path.join(metaDir, 'meta.json');
-    fs.writeFileSync(metaPath, JSON.stringify({ version: '18.0.0' }));
-
-    // Schedule a rewrite ~300ms in
-    const promise = waitForCacheAdvance(testRoot, cacheDir, 700);
-    setTimeout(() => {
-      fs.writeFileSync(metaPath, JSON.stringify({ version: '18.0.0', updated: true }));
-    }, 300);
-
-    const result = await promise;
-    expect(result).toBe(true);
+  it('waitForCacheHead: cache already at the wanted head → "caught-up" with no wait', async () => {
+    writeMeta(testRoot, cacheDir, 'abc123');
+    const started = Date.now();
+    expect(await waitForCacheHead(testRoot, cacheDir, 'abc123', 5000)).toBe('caught-up');
+    expect(Date.now() - started).toBeLessThan(500);
   });
 
-  it('waitForCacheAdvance: nothing changes → false', async () => {
-    const metaDir = getCacheDir(testRoot, cacheDir);
-    fs.mkdirSync(metaDir, { recursive: true });
-    const metaPath = path.join(metaDir, 'meta.json');
-    fs.writeFileSync(metaPath, JSON.stringify({ version: '18.0.0' }));
+  it('waitForCacheHead: keeper re-saves at the new head mid-wait → "caught-up"', async () => {
+    writeMeta(testRoot, cacheDir, 'old-head');
+    const promise = waitForCacheHead(testRoot, cacheDir, 'new-head', 3000);
+    setTimeout(() => writeMeta(testRoot, cacheDir, 'new-head'), 300);
+    expect(await promise).toBe('caught-up');
+  });
 
-    // Short timeout, no changes
-    const result = await waitForCacheAdvance(testRoot, cacheDir, 600);
-    expect(result).toBe(false);
+  it('waitForCacheHead: a save that leaves the cache BEHIND head is not caught-up', async () => {
+    // The mtime watch this replaced returned true here: the file was
+    // rewritten, so it declared success while the cache was still stale.
+    writeMeta(testRoot, cacheDir, 'old-head');
+    const promise = waitForCacheHead(testRoot, cacheDir, 'new-head', 1200);
+    setTimeout(() => writeMeta(testRoot, cacheDir, 'another-old-head'), 300);
+    expect(await promise).toBe('timeout');
+  });
+
+  it('waitForCacheHead: a live keeper stamped "rebuild" → bails immediately, well inside the window', async () => {
+    // The pathology: a rebuild takes 30-100s and the reader used to stand
+    // still for its full 12s ceiling before serving the index it already had.
+    writeMeta(testRoot, cacheDir, 'old-head');
+    await updateKeeperState(
+      testRoot,
+      { inProgress: { kind: 'rebuild', at: Date.now(), detail: '9913 files' } },
+      cacheDir,
+    );
+    const started = Date.now();
+    expect(await waitForCacheHead(testRoot, cacheDir, 'new-head', 10_000)).toBe('rebuilding');
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it('waitForCacheHead: a "patch" stamp is NOT a reason to bail — that case is worth waiting for', async () => {
+    writeMeta(testRoot, cacheDir, 'old-head');
+    await updateKeeperState(
+      testRoot,
+      { inProgress: { kind: 'patch', at: Date.now(), detail: '4 file(s)' } },
+      cacheDir,
+    );
+    const promise = waitForCacheHead(testRoot, cacheDir, 'new-head', 3000);
+    setTimeout(() => writeMeta(testRoot, cacheDir, 'new-head'), 400);
+    expect(await promise).toBe('caught-up');
+  });
+
+  it('waitForCacheHead: a rebuild stamp from a DEAD keeper is ignored', async () => {
+    // A keeper killed mid-rebuild leaves its stamp behind forever. Believing
+    // it would silently disable the wait for every future reader.
+    writeMeta(testRoot, cacheDir, 'old-head');
+    await updateKeeperState(
+      testRoot,
+      { inProgress: { kind: 'rebuild', at: Date.now() } },
+      cacheDir,
+    );
+    // updateKeeperState always stamps the CURRENT pid; overwrite with a dead one.
+    const statePath = keeperStatePath(testRoot, cacheDir);
+    const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    state.pid = 0x7ffffff0; // far above any real pid on either platform
+    fs.writeFileSync(statePath, JSON.stringify(state));
+
+    expect(await waitForCacheHead(testRoot, cacheDir, 'new-head', 800)).toBe('timeout');
   });
 });
 

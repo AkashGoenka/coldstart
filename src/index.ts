@@ -469,6 +469,13 @@ async function buildManager(
         }
       } else if (rec.changed.size <= threshold) {
         log(quiet, `[coldstart] Loaded from cache — patching ${rec.changed.size} drifted file(s) (${rec.reason})`);
+        if (!noCache) {
+          await updateKeeperState(
+            finalRoot,
+            { inProgress: { kind: 'patch', at: Date.now(), detail: `${rec.changed.size} file(s)` } },
+            cacheDir,
+          );
+        }
         try {
           await patchIndex(index, rec.changed, finalRoot);
           const problems = lintIndexInvariants(index);
@@ -489,19 +496,36 @@ async function buildManager(
         outcome = `${rec.reason} → over threshold, rebuild`;
         index = null;
       }
-      if (!noCache) await updateKeeperState(finalRoot, { lastReconcile: { at: Date.now(), detail: outcome } }, cacheDir);
+      if (!noCache) {
+        await updateKeeperState(
+          finalRoot,
+          { inProgress: null, lastReconcile: { at: Date.now(), detail: outcome } },
+          cacheDir,
+        );
+      }
     }
   }
 
   if (!index) {
-    index = await buildIndex(finalRoot, excludes, includes, quiet);
+    // This is the branch the reader-wait pathology hangs on: a reader saw the
+    // cache behind HEAD, spawned us, and is now blocking — while the drift
+    // turned out to be repo-scale and this build will take 30-100s. Say so
+    // before starting, so it can serve its stale index and get out.
     if (!noCache) {
-      try {
-        await saveCachedIndex(index, cacheDir);
-        log(quiet, '[coldstart] Index saved to cache');
-      } catch (err) {
-        log(quiet, `[coldstart] Warning: could not save cache: ${err}`);
+      await updateKeeperState(finalRoot, { inProgress: { kind: 'rebuild', at: Date.now() } }, cacheDir);
+    }
+    try {
+      index = await buildIndex(finalRoot, excludes, includes, quiet);
+      if (!noCache) {
+        try {
+          await saveCachedIndex(index, cacheDir);
+          log(quiet, '[coldstart] Index saved to cache');
+        } catch (err) {
+          log(quiet, `[coldstart] Warning: could not save cache: ${err}`);
+        }
       }
+    } finally {
+      if (!noCache) await updateKeeperState(finalRoot, { inProgress: null }, cacheDir);
     }
   }
 
@@ -556,7 +580,9 @@ async function runKeeper(
   // compatibility) on upgrade.
   await writeLock(finalRoot, process.pid, getCurrentVersion());
   log(quiet, `[coldstart] Keeper lock written (PID ${process.pid})`);
-  if (!noCache) await updateKeeperState(finalRoot, { startedAt: Date.now() }, cacheDir);
+  // inProgress: null — a keeper killed mid-rebuild leaves its stamp behind, and
+  // this is the one moment we know for certain no work is running.
+  if (!noCache) await updateKeeperState(finalRoot, { startedAt: Date.now(), inProgress: null }, cacheDir);
 
   // Auto-migrate legacy npx-based .mcp.json entries (non-fatal).
   try { await migrateLegacyMcpConfig(finalRoot); } catch { /* ignore */ }
