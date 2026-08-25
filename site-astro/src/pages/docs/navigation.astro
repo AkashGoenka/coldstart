@@ -100,6 +100,7 @@ const techArticleJsonLd = {
         <div class="flag-row"><span class="fk">--json</span><span class="fv">Machine-readable output.</span></div>
       </div>
       <div class="callout"><span class="ct">Edited together</span>In a repo with git history, <code>gs</code> also lists the files that keep changing in the same commits as this one, with the count as the evidence. It is a habit, not a dependency — nothing imports or calls across it — and it catches the pairs no parser can: a sibling implementation, a test in another language, a doc that has to stay in sync. Anything connected by an import edge is left out, so what you see is what the graph missed, and it shows up under <code>--view</code> too.</div>
+      <div class="callout"><span class="ct">…and it comes to you</span>You don't have to ask for it. Once an agent has edited two different files in a task, the same signal is delivered to it automatically, naming the files that history says move with the ones it just changed. It's advisory — the message says plainly that this is a habit rather than a dependency, and asks the agent to check rather than to change anything. Each file is mentioned at most once per task, and the slate wipes clean every time you send a new message.</div>
       <div class="callout"><span class="ct">Scope</span>Callers are one-hop and file-scoped. Named function/constant calls resolve cross-file; member-expression calls (<code>this.method()</code>, <code>api.method()</code>) don't. Chase further hops by running <code>gs</code> on the caller file.</div>
     </section>
 

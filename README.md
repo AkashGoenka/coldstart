@@ -52,6 +52,8 @@ A single `coldstart init` does everything — navigation **and** the notebook. I
 - **Cursor** → writes `.cursor/rules/coldstart.mdc` — an always-applied rule that carries the full coldstart guidance inline (Cursor doesn't reliably resolve `@file` references in rules), rewritten on every init — and registers Cursor-specific navigation plus notebook hooks in `.cursor/hooks.json` (a `preToolUse` find-dedup guard, a `postToolUse` nudge, `beforeSubmitPrompt` recall, and `stop`/`subagentStop` capture — merged into any existing hooks). The capture hook parses Cursor's own conversation transcript. The `mcp` experience also writes `.cursor/mcp.json`.
 - **Other** → writes `coldstart.md` only, and prints the wiring directions (plus the MCP server entry for the `mcp` experience).
 
+On every client, the `PostToolUse` hook also delivers the **"Edited together"** signal without waiting to be asked. Once an agent has edited two different files, it names the files that git history says keep changing alongside them — the sibling implementation, the test in another language, the doc that drifts. Agents don't reliably run `gs` before editing, so the signal only reached them if they went looking; this puts it in front of them at the edit. It's advisory: the message says outright that the relation is a habit rather than a code dependency, and asks the agent to check rather than to change anything. Each file is named at most once per task, and the list resets whenever you send a new message.
+
 `init` then warms the index in the background, so your first lookup is instant. Re-running `init` is safe — it never duplicates entries.
 
 ### Upgrading
