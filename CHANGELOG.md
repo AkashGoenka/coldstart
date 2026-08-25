@@ -5,6 +5,65 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1] - 2026-08-26
+
+### Added
+- **The files that move with the one you're editing are now surfaced as you edit, without being
+  asked for.** `gs` has shown an "Edited together" section since 2.3.0, but it only reached agents
+  that ran `gs` before editing — and they mostly don't. This delivers the same signal at the moment
+  an edit lands. Three rules keep it quiet: the list of files in play clears on every new user
+  message (a new prompt is a new task; there is deliberately no time-based expiry, because an
+  unattended run can edit for hours without a prompt and a session survives a resume days later),
+  nothing fires until a second distinct file is edited, and no file is ever named twice. Uncapped,
+  this measured 1.07 fires per session with 34% of sessions silent. The gate is looser than the one
+  `gs` renders on purpose: "what am I forgetting" is a recall question, not a precision one. It is
+  labelled a habit rather than a dependency, so nobody goes hunting for an import that isn't there.
+  Needs no re-run of `init` on any host. (#161)
+
+### Fixed
+- **Every coldstart hook was silently dead on Windows.** `init` wrote hook commands as an unquoted
+  path, and the hosts hand that string to a POSIX shell even on Windows, which eats backslashes —
+  so `node C:\Users\...\find-nudge.mjs` became a path that resolved nowhere. Hooks fail open by
+  design, so nothing ever surfaced it: the CLI kept working perfectly while the entire nudge,
+  preguard, recall and capture layer was absent. Counted from real transcripts on one repo, 5,555
+  hook invocations produced 5,555 module-not-found errors across 14 sessions. The notebook was
+  still being written and simply never recalled. Paths are now quoted at every site, which also
+  fixes install directories containing spaces on **every** platform. Existing installs need one
+  `coldstart init` re-run to pick this up. (#158)
+- **A second, deeper class of Windows failure: absolute paths were compared as if they were already
+  forward-slash file ids.** Every instance was silent — the comparison went false, the code took its
+  "not found" branch, and a whole feature vanished with no error. Dead on Windows as a result: all
+  evidence collection (so the notebook never filled), `find`'s repo-wide scan pass (so grep-recall
+  returned zero coverage, taking `near` relations with it), Rails controller-to-view edges and
+  constant autoload, Laravel container edges, Go workspaces, npm/yarn/pnpm workspace discovery, C++
+  CMake include roots, and the wired-hook health check in `status` — the one thing that would have
+  caught the bug above. Most of it traced to a single line in the directory walker. The
+  absolute-path-versus-file-id invariant is now explicit and stamped in one shared funnel, so the
+  patch and probe paths cannot drift from the walker. Windows goes from 48 failing tests to 814
+  passing, verified end-to-end on a real 9,913-file repo, and a Windows CI lane now runs on every
+  change. `status` also prunes records whose repo no longer exists. (#159)
+- **`find` and `gs` no longer stall for 12 seconds waiting on a rebuild they cannot outwait.** A
+  reader that found the cache behind git HEAD blocked for up to 12s hoping for a re-save, while the
+  keeper was starting a full rebuild — measured at 94.8s on 9,913 files. The wait always expired and
+  then served the same index the reader already held, and every subsequent call in that window paid
+  its own 12s. The wait was longest and most futile exactly when the drift was largest, which is the
+  "tool feels slow, so the agent goes back to grep" failure. The keeper now publishes what it is
+  doing before it starts, and a reader seeing a rebuild serves what it has immediately. A stamp is
+  only believed while the process that wrote it is alive, and no stamp still means keep waiting —
+  the common patch case is worth a few seconds. `status` shows in-progress work first, since it
+  explains a stale index better than any "last run" timestamp. Indexing, the patch-versus-rebuild
+  decision, the cache format and the atomic swap are untouched. (#160)
+- **Reading a file through the shell now counts as reading a file.** The nudge that warns about a
+  grep spiral treated `cat` as a search and recognised only the editor's own Read tool, so an agent
+  working through the shell was told it was spiralling for doing exactly what the nudge asks for.
+  Reads via `cat`, `head`, `tail`, `sed -n`, `jq` and inline scripts in any language
+  (`node -e`, `python3 -c`, `php -r`, heredocs) are now recognised on both the nudge and the
+  notebook-capture side, matched on the file-open call in the script body rather than on the
+  interpreter's name. Editing through the shell counts too, so the co-change signal above reaches
+  an agent that never touches an edit tool. Both are deliberately conservative: a script whose file
+  path is computed rather than written literally claims nothing, because a wrong filename is worse
+  than silence. (#161)
+
 ## [2.3.0] - 2026-08-23
 
 ### Added
