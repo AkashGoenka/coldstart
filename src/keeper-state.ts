@@ -25,9 +25,25 @@ export interface KeeperEventStamp {
   detail: string;
 }
 
+/**
+ * What the keeper is doing RIGHT NOW, if anything. Readers use this to decide
+ * how long to stand still: a patch lands in seconds and is worth waiting for,
+ * a rebuild takes 30-100s on a large repo and never is.
+ *
+ * Present only while the work runs — cleared (set to null) when it finishes,
+ * including on failure. A lingering stamp from a keeper that died mid-rebuild
+ * is harmless: readers check the pid is alive before believing it.
+ */
+export interface KeeperWork {
+  kind: 'patch' | 'rebuild';
+  at: number;
+  detail?: string;
+}
+
 export interface KeeperState {
   pid: number;
   startedAt: number;
+  inProgress?: KeeperWork | null;
   lastReconcile?: KeeperEventStamp;
   lastPatch?: KeeperEventStamp;
   lastRebuild?: KeeperEventStamp;

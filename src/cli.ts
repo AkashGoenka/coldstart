@@ -16,7 +16,7 @@ import { resolve } from 'node:path';
 import { loadCachedIndex, saveCachedIndex, type LoadProfile } from './cache/disk-cache.js';
 import { getGitHead } from './indexer/git.js';
 import { handleGetStructure } from './server/tools.js';
-import { ensureKeeper, waitForKeeperCache, waitForCacheAdvance } from './keeper.js';
+import { ensureKeeper, waitForKeeperCache, waitForCacheHead } from './keeper.js';
 import type { CodebaseIndex } from './types.js';
 
 type BuildFn = (
@@ -103,9 +103,12 @@ export async function getIndex(
       // called by every CLI entry) spawned one, and its startup reconcile
       // re-saves the cache — give that a short window before serving stale.
       err('[coldstart] cache behind git HEAD — waiting for keeper reconcile');
-      if (await waitForCacheAdvance(root, cacheDir)) {
+      const wait = await waitForCacheHead(root, cacheDir, head);
+      if (wait === 'caught-up') {
         index = (await loadCachedIndex(root, cacheDir, profile)) ?? index;
         err(`[coldstart] cache refreshed (${Date.now() - t0}ms, ${index.files.size} files)`);
+      } else if (wait === 'rebuilding') {
+        err('[coldstart] keeper is rebuilding this repo (drift too large to patch) — serving previous index now');
       } else {
         err('[coldstart] keeper still reconciling — serving previous index (rerun shortly for fresh results)');
       }

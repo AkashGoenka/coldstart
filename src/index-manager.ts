@@ -275,6 +275,7 @@ export class IndexManager {
     const threshold = patchThreshold(this.activeIndex.files.size);
     if (batch.size <= threshold) {
       this.log(`[coldstart] ${batch.size} file(s) changed — patching incrementally`);
+      await this.stamp({ inProgress: { kind: 'patch', at: Date.now(), detail: `${batch.size} file(s)` } });
       try {
         await patchIndex(this.activeIndex, batch, this.activeIndex.rootDir);
         // Invariant lint: a patch that left the graph inconsistent must not
@@ -287,7 +288,7 @@ export class IndexManager {
           return;
         }
         this.log('[coldstart] Incremental patch done');
-        void this.stamp({ lastPatch: { at: Date.now(), detail: `${batch.size} file(s)` } });
+        void this.stamp({ inProgress: null, lastPatch: { at: Date.now(), detail: `${batch.size} file(s)` } });
         this.scheduleCacheSave();
       } catch (err) {
         this.log(`[coldstart] Patch failed (${err}) — falling back to full rebuild`);
@@ -320,16 +321,23 @@ export class IndexManager {
   private async triggerRebuild(): Promise<void> {
     if (this.rebuilding) return;
     this.rebuilding = true;
+    // Published BEFORE the work, not after: the whole point is that a reader
+    // arriving mid-rebuild can see it and stop waiting. A stamp written on
+    // completion would tell it exactly when it no longer needed one.
+    await this.stamp({
+      inProgress: { kind: 'rebuild', at: Date.now(), detail: `${this.activeIndex.files.size} files` },
+    });
     try {
       const newIndex = await this.rebuild();
       this.activeIndex = newIndex; // atomic swap
       this.log(`[coldstart] Rebuild complete (${newIndex.files.size} files)`);
       this.rebuildFailures = 0;
-      void this.stamp({ lastRebuild: { at: Date.now(), detail: `${newIndex.files.size} files` } });
+      void this.stamp({ inProgress: null, lastRebuild: { at: Date.now(), detail: `${newIndex.files.size} files` } });
       this.scheduleCacheSave();
     } catch (err) {
       this.log(`[coldstart] Rebuild failed: ${err}`);
       void this.report('rebuild-failed', String(err));
+      void this.stamp({ inProgress: null });
       this.scheduleRebuildRetry();
     } finally {
       this.rebuilding = false;
