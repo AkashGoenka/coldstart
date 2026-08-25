@@ -33,19 +33,21 @@
 import { readFile, writeFile, mkdir, readdir, rm, rename } from 'node:fs/promises';
 import { join, resolve, basename, sep } from 'node:path';
 import { createHash } from 'node:crypto';
-import { homedir } from 'node:os';
+
 import { gzip as gzipCb, gunzip as gunzipCb } from 'node:zlib';
 import { promisify } from 'node:util';
 import type {
   CodebaseIndex, CacheMeta, IndexedFile, SymbolNode, Edge, SymbolEdge,
   Language, SymbolKind, EdgeType, SymbolEdgeType, CallSite, DomainEvidence,
 } from '../types.js';
-import { CACHE_VERSION } from '../constants.js';
+import { CACHE_VERSION, coldstartHome } from '../constants.js';
 
 const gzip = promisify(gzipCb);
 const gunzip = promisify(gunzipCb);
 
-const DEFAULT_CACHE_DIR = join(homedir(), '.coldstart', 'indexes');
+// A FUNCTION, not a const: a module-level const captures the value at import
+// time, so a COLDSTART_HOME set afterwards (tests) would be silently ignored.
+const defaultCacheDir = (): string => join(coldstartHome(), 'indexes');
 const FILES_CHUNK_SIZE = 5000;
 
 export type LoadProfile = 'find' | 'gs' | 'full';
@@ -58,7 +60,7 @@ function cacheKey(rootDir: string): string {
 }
 
 export function getCacheDir(rootDir: string, baseCacheDir?: string): string {
-  const base = baseCacheDir ?? DEFAULT_CACHE_DIR;
+  const base = baseCacheDir ?? defaultCacheDir();
   return join(base, cacheKey(rootDir));
 }
 

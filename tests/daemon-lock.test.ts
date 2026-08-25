@@ -11,30 +11,36 @@ import { readLock, writeLock, watchOwnLockfile, watchOwnBinary, daemonDir } from
 // The keeper no longer serves over HTTP, so the lock carries no port.
 
 describe('daemon-lock', () => {
-  const realDaemonDir = daemonDir();
   let tmpHome: string;
-  let originalHome: string | undefined;
+  let originalColdstartHome: string | undefined;
   let testRoot: string;
 
   beforeEach(() => {
-    // Redirect ~/.coldstart/daemon/ to a temp dir so we don't touch the
-    // user's real daemons. Both readLock/writeLock/watchOwnLockfile resolve
-    // their target path via the HOME env var.
+    // Redirect the state dir to a temp dir so we never touch the user's real
+    // daemons. This MUST be COLDSTART_HOME, not HOME: `os.homedir()` on
+    // Windows reads USERPROFILE and ignores HOME, so the old HOME redirect
+    // silently no-opped there and these fixtures wrote lockfiles (PIDs 9,
+    // 12345, 22222, 33333) straight into the developer's real
+    // ~/.coldstart/daemon — where they outlived the temp roots they named and
+    // buried every genuine row in `coldstart status`.
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'coldstart-lock-test-'));
-    originalHome = process.env.HOME;
-    process.env.HOME = tmpHome;
+    originalColdstartHome = process.env.COLDSTART_HOME;
+    process.env.COLDSTART_HOME = path.join(tmpHome, '.coldstart');
     fs.mkdirSync(path.join(tmpHome, '.coldstart', 'daemon'), { recursive: true });
     // A real project root the lockfile is keyed against.
     testRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'coldstart-lock-root-'));
   });
 
   afterEach(() => {
-    process.env.HOME = originalHome;
+    // Assert isolation BEFORE restoring the env var — daemonDir() must still
+    // be resolving into the temp home at this point. The old check compared
+    // the real dir against tmpHome and could never fail, which is exactly why
+    // the Windows leak went unnoticed for so long.
+    expect(daemonDir().startsWith(tmpHome)).toBe(true);
+    if (originalColdstartHome === undefined) delete process.env.COLDSTART_HOME;
+    else process.env.COLDSTART_HOME = originalColdstartHome;
     fs.rmSync(tmpHome, { recursive: true, force: true });
     fs.rmSync(testRoot, { recursive: true, force: true });
-    // Sanity: make sure we didn't somehow write into the real daemon dir
-    // during the test (would catch a future regression in path resolution).
-    expect(realDaemonDir.startsWith(tmpHome)).toBe(false);
   });
 
   describe('readLock / writeLock version round-trip', () => {

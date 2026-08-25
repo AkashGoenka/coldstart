@@ -1,8 +1,8 @@
 import { readFile, writeFile, mkdir, unlink, open, readdir } from 'node:fs/promises';
 import { readFileSync, watch, existsSync } from 'node:fs';
 import { join, resolve, basename, dirname } from 'node:path';
-import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
+import { coldstartHome } from './constants.js';
 import { fileURLToPath } from 'node:url';
 
 export interface DaemonLock {
@@ -19,7 +19,7 @@ export interface DaemonLock {
 }
 
 export function daemonDir(): string {
-  return join(homedir(), '.coldstart', 'daemon');
+  return join(coldstartHome(), 'daemon');
 }
 
 export function rootHash(rootDir: string): string {
