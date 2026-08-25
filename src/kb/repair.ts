@@ -38,7 +38,7 @@
  * enforce the same fields, so what repair flags and what `kb write` asks for
  * cannot drift. Adding a criterion later means appending one entry there.
  */
-import { relative } from 'node:path';
+import { relative, sep } from 'node:path';
 import { NOTE_CHECKS, REPAIR_CONTRACT_VERSION } from '../../hooks/note-shape.mjs';
 import { loadAll, notePath } from './store.js';
 import { fileNoteId } from './ids.js';
@@ -167,7 +167,13 @@ export function planRepairs(root: string): RepairReport {
         note: n.id,
         type: n.type,
         title: n.title,
-        notePath: relative(root, notePath(root, n.id)),
+        // Forward-slash, like every other path coldstart prints. `relative()`
+        // is OS-native, so on Windows this rendered
+        // `.coldstart\notebook\notes\x.md` — inconsistent with the `→ open:`
+        // paths elsewhere, and actively wrong for the agent reading this page,
+        // since the very next step is pasting it into a `kb write` JSON spec
+        // where a backslash is an escape character.
+        notePath: relative(root, notePath(root, n.id)).split(sep).join('/'),
         paths: subjectPaths(n),
         detail: c.why,
         hint: c.repairHint,
