@@ -40,12 +40,109 @@ import { statSync } from "node:fs";
 // by the stat check rather than becoming false evidence.
 const BASH_PATH_RE = /(?:^|[\s"'`=(:;|])((?:[A-Za-z]:[\\/]|\.{1,2}[\\/]|[\\/])?[A-Za-z0-9_][A-Za-z0-9_.\\/-]*\.[A-Za-z0-9]{1,8})(?=$|[\s"'`):;,|>])/g;
 
+const TIER = { mention: 0, gs: 1, read: 2, edit: 3 };
+
 // Verbs whose job is printing file content. Everything not listed here is a
 // mention — including grep/rg (matched LINES are not the file) and
 // interpreter invocations (`node x.js` runs a file, it doesn't read one).
-const READ_VERBS = new Set(["cat", "head", "tail", "bat", "less", "more", "nl", "tac"]);
+const READ_VERBS = new Set([
+  "cat", "head", "tail", "bat", "less", "more", "nl", "tac",
+  // structured-file printers: same job, different format
+  "jq", "yq", "xxd", "od", "strings",
+]);
 
-const TIER = { mention: 0, gs: 1, read: 2, edit: 3 };
+/**
+ * Script-mediated reads — the gap the verb table structurally cannot close.
+ *
+ * Agents read files by running code, not just by running `cat`:
+ *
+ *   node -e 'JSON.parse(readFileSync("package-lock.json"))'
+ *   python3 -c 'import json; json.load(open("tsconfig.json"))'
+ *   ruby -e 'puts File.read("Gemfile")'
+ *
+ * The verb (`node`/`python3`/`ruby`) says nothing — the same verb also just
+ * RUNS things. What identifies a read is the file-open call inside the script,
+ * and with an inline-script flag that script body is sitting right there in the
+ * command string, so we can read it without running anything.
+ *
+ * Two conditions, both required:
+ *   INLINE_SCRIPT_RE — the source is IN this command (-e/-c/-p/--eval/heredoc),
+ *                      so what we are about to pattern-match is the real body.
+ *   READ_API_RE      — that body opens a file for reading, in ANY language.
+ *
+ * A script FILE (`node scripts/dump.mjs data.json`) stays a mention on purpose:
+ * its body is not in the command, so claiming to know what it touched would be a
+ * guess, and default-deny says a guess is a mention. Same asymmetry as the rest
+ * of this file — a missed read costs one worklist entry, an invented read
+ * pollutes every one.
+ */
+const INLINE_SCRIPT_RE =
+  /(?:^|\s)(?:-(?:e|c|p|E|ne|pe|lne)\b|--eval\b|--exec\b|-m\s+json\.tool\b)|\bphp\s+-r\b|<<-?\s*(['"]?)[A-Za-z_][A-Za-z0-9_]*\1\s*$/m;
+
+// "this code opens a file for reading" — one union across the languages an agent
+// actually reaches for in a one-liner. Deliberately shallow: it matches the CALL,
+// never tries to understand the program.
+const READ_API_RE = new RegExp(
+  [
+    // JS / TS (node, bun, deno)
+    "readFileSync", "readFile\\s*\\(", "createReadStream", "Bun\\.file", "Deno\\.readTextFile",
+    // Python
+    "\\bopen\\s*\\(", "\\.read_text\\b", "\\.readlines\\b", "json\\.load\\s*\\(",
+    "yaml\\.safe_load\\s*\\(", "tomllib\\.load\\s*\\(", "csv\\.reader\\s*\\(", "read_csv\\s*\\(",
+    // Ruby
+    "File\\.(?:read|readlines|open|foreach)", "IO\\.(?:read|readlines)",
+    // Go
+    "os\\.ReadFile", "ioutil\\.ReadFile", "os\\.Open\\s*\\(",
+    // PHP
+    "file_get_contents", "\\bfopen\\s*\\(",
+    // Java / Kotlin
+    "Files\\.(?:readString|readAllLines|readAllBytes|lines)", "\\breadText\\s*\\(",
+    // Perl / shell
+    "\\bslurp\\b", "\\$\\(\\s*<",
+  ].join("|"),
+);
+
+// The write twin: an inline script that WRITES is an edit, not a read. Without
+// this, `node -e 'writeFileSync(...)'` would land in the read tier — content
+// contact, but the wrong kind, and the capture worklist ranks edits above reads.
+const WRITE_API_RE = new RegExp(
+  [
+    "writeFileSync", "appendFileSync", "writeFile\\s*\\(", "createWriteStream", "Deno\\.writeTextFile",
+    "\\bopen\\s*\\([^)]*['\"][wax]", "\\.write_text\\b", "json\\.dump\\s*\\(",
+    "File\\.write", "os\\.WriteFile", "ioutil\\.WriteFile", "file_put_contents",
+    "Files\\.write", "\\bwriteText\\s*\\(",
+  ].join("|"),
+);
+
+// The quoted first argument of a file-open call — WHICH file the script named.
+// Detection (above) answers "is this a read"; this answers "a read of what", and
+// the two are deliberately separate: the nudge only needs the first, the capture
+// worklist needs the second or it anchors notes to the wrong file.
+const API_ARG_RE =
+  /(?:readFileSync|readFile|createReadStream|readTextFile|writeFileSync|appendFileSync|writeFile|writeTextFile|read_text|write_text|file_get_contents|file_put_contents|fopen|open|load|ReadFile|WriteFile|readString|readAllLines|readAllBytes|readText|writeText|File\.(?:read|readlines|write|foreach)|IO\.read)\s*\(\s*(['"`])([^'"`\n]+)\1/g;
+
+/** Files a shell fragment REDIRECTS into. `cat > x <<EOF` is a write even though
+ *  its verb is a read verb, so this has to override the verb table — otherwise
+ *  the same command is an edit to bashEditTargets and a read to the tiers. */
+function redirectTargets(str) {
+  const out = [];
+  for (const m of String(str).matchAll(/(?:^|[^>&\d])>>?\s*(['"]?)([\w.~/-]*\.[A-Za-z0-9]{1,8})\1(?=$|[\s;&|)])/g)) {
+    if (!/^\/dev\//.test(m[2])) out.push(m[2]);
+  }
+  for (const m of String(str).matchAll(/(?:^|[\s;&|])tee\s+(?:-a\s+)?(['"]?)([\w.~/-]*\.[A-Za-z0-9]{1,8})\1/g)) {
+    if (!/^\/dev\//.test(m[2])) out.push(m[2]);
+  }
+  return out;
+}
+
+/** Tier for a segment whose script body is inline: edit > read > (no claim). */
+function inlineScriptTier(seg) {
+  if (!INLINE_SCRIPT_RE.test(seg)) return null;
+  if (WRITE_API_RE.test(seg)) return TIER.edit;
+  if (READ_API_RE.test(seg)) return TIER.read;
+  return null;
+}
+
 
 /**
  * Tool inputs and shell tokens → a forward-slash repo-relative path, or "" for
@@ -76,11 +173,39 @@ function normRel(root, p) {
 // parse can't place stays a mention.
 function classifyBash(cmd) {
   const out = []; // [{rel-candidate, tier}]
+  const whole = String(cmd);
   // coldstart gs is cross-segment-safe to grab globally
-  for (const g of String(cmd).matchAll(/coldstart\s+gs\s+(\S+)/g)) {
+  for (const g of whole.matchAll(/coldstart\s+gs\s+(\S+)/g)) {
     out.push({ token: g[1], tier: TIER.gs });
   }
-  const segments = String(cmd).split(/\|\||&&|;|\|/);
+  // Inline scripts are classified BEFORE the segment split, and short-circuit it.
+  // A script body is full of `;` and `|` that are JS/Python/Ruby syntax, not shell
+  // operators — splitting on them shatters one read into fragments whose leading
+  // "verb" is a language keyword, and the fragment holding the path stops being
+  // the fragment holding `readFileSync`. So: decide the tier from the WHOLE
+  // command, apply it to every path token, and never split.
+  const scriptTier = inlineScriptTier(whole);
+  if (scriptTier !== null) {
+    // ATTRIBUTE ONLY THE CALL'S OWN ARGUMENT. Measured on 2961 local transcripts:
+    // of the inline read commands that name a literal path, 50.6% ALSO carry
+    // unrelated path tokens (2801 surplus tokens) — an output file, a script
+    // being invoked, a path in an adjacent `&&` clause. Tiering the whole
+    // command would promote every one of them to "read", which is precisely the
+    // mention-promoted-to-read pollution this file's header warns about.
+    // A read whose path comes from a variable, argv or a glob (58% of them)
+    // targets nothing we can name, so it attributes nothing — correct, not a gap.
+    const targets = [...whole.matchAll(API_ARG_RE)].map((m) => m[2]);
+    for (const t of targets.slice(0, 12)) out.push({ token: t, tier: scriptTier });
+    let sn = 0;
+    for (const m of whole.matchAll(BASH_PATH_RE)) {
+      if (++sn > 12) break;
+      if (!targets.some((t) => t === m[1] || t.endsWith(m[1]) || m[1].endsWith(t))) {
+        out.push({ token: m[1], tier: TIER.mention });
+      }
+    }
+    return out;
+  }
+  const segments = whole.split(/\|\||&&|;|\|/);
   for (const seg of segments) {
     // strip leading env assignments (FOO=1 cmd …) and sudo/command wrappers
     const words = seg.trim().split(/\s+/);
@@ -91,10 +216,11 @@ function classifyBash(cmd) {
     if (READ_VERBS.has(verb)) tier = TIER.read;
     else if (verb === "sed") tier = /(^|\s)-i\b/.test(seg) ? TIER.edit : TIER.read; // sed -n '1,80p' = windowed read; sed -i = in-place edit
     else if (verb === "awk") tier = TIER.read;
+    const written = new Set(redirectTargets(seg));
     let n = 0;
     for (const m of seg.matchAll(BASH_PATH_RE)) {
       if (++n > 12) break; // a single huge command must not dominate
-      out.push({ token: m[1], tier });
+      out.push({ token: m[1], tier: written.has(m[1]) ? TIER.edit : tier });
     }
   }
   return out;
@@ -335,3 +461,55 @@ export function segmentStatsCursor(text) {
   return { toolCalls, textBytes, synthesis: textBytes >= 1500 && toolCalls <= 2 };
 }
 
+
+/**
+ * bashContentRead(cmd) — did this shell command put FILE CONTENT in front of the
+ * agent? The nudge handlers' question, answered by the same table capture uses,
+ * so the two surfaces can never drift on what counts as reading a file.
+ *
+ * True for `cat`/`head`/`sed -n`/`jq` and for an inline script that opens a
+ * file (any language). False for grep/rg/ls/find — matched lines and names are
+ * not the file. Path tokens are NOT stat-checked here: the nudge only needs to
+ * know the command's JOB was reading, and it has no root to check against.
+ */
+export function bashContentRead(cmd) {
+  // Intent, not attribution. classifyBash deliberately attributes NOTHING when a
+  // script's path is computed (`open(sys.argv[1])`) — there is no file to name.
+  // The agent still had content in front of it, which is all the spiral detector
+  // asks, so inline-script intent counts here even when it anchors no path.
+  if (inlineScriptTier(String(cmd)) !== null) return true;
+  return classifyBash(cmd).some((c) => c.tier === TIER.read || c.tier === TIER.edit);
+}
+
+/**
+ * bashEditTargets(cmd) — the repo files this shell command WRITES.
+ *
+ * The write-side twin of bashContentRead, and it exists for the same reason:
+ * an agent told to "make file changes with sed, heredocs, or short scripts"
+ * edits without ever touching Edit/Write, so anything gated on tool NAMES sees
+ * nothing at all. Returns raw tokens; the caller normalizes and filters.
+ *
+ * Three shapes, because they are what agents actually use:
+ *   sed -i / inline script writes  — already tiered by classifyBash
+ *   > file, >> file                — redirection, the single most common form
+ *   tee file                       — the pipe-friendly variant
+ *
+ * NOT covered, on purpose: a redirect whose target is computed (`> "$out"`) or
+ * a script FILE that writes (body invisible). Same default-deny as the read side.
+ */
+const EDITABLE_EXT_RE =
+  /\.(?:tsx?|jsx?|mjs|cjs|py|rb|go|rs|java|kt|php|cs|astro|vue|svelte|css|scss|html?|md|ya?ml|toml|json|sh|sql)$/;
+
+export function bashEditTargets(cmd) {
+  const whole = String(cmd || "");
+  const out = new Set();
+  for (const c of classifyBash(whole)) if (c.tier === TIER.edit) out.add(c.token);
+  for (const t of redirectTargets(whole)) out.add(t);
+  // A write whose path is COMPUTED (`writeFileSync(f, s)` after `const f = …`)
+  // attributes nothing. Inferring it from "the one source path mentioned in the
+  // script" was measured and dropped: the deterministic rules above already
+  // catch 89.2% of real shell writes and that guess added 5.8%, in exchange for
+  // being able to claim an edit to a file the script only READ. Silence is the
+  // safe failure for a nudge; a wrong file name is not.
+  return [...out];
+}
