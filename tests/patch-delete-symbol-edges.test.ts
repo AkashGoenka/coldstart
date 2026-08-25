@@ -67,7 +67,13 @@ describe('patchIndex prunes symbolEdges into a deleted file', () => {
 
   it('delete of a called file leaves no dangling se.to and passes the lint', async () => {
     const idx = await buildSmall(root);
-    expect(idx.symbolEdges.some(se => se.to.startsWith('src/callee.ts#'))).toBe(true);
+    // Both assertions name their inputs rather than collapsing to a boolean —
+    // if the file ids are wrong the first one says so, instead of the edge
+    // check failing for a reason it cannot show.
+    expect([...idx.files.keys()].sort()).toEqual(['src/callee.ts', 'src/caller.ts']);
+    expect(idx.symbolEdges.map(se => se.to)).toContainEqual(
+      expect.stringMatching(/^src\/callee\.ts#/),
+    );
 
     fs.rmSync(join(root, 'src/callee.ts'));
     await patchIndex(idx, new Set([join(root, 'src/callee.ts')]), root);
