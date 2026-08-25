@@ -1,6 +1,7 @@
 import { readdir, stat, realpath } from 'node:fs/promises';
-import { join, relative, extname } from 'node:path';
+import { join, extname } from 'node:path';
 import { DEFAULT_EXCLUDES, EXTENSION_TO_LANGUAGE } from '../constants.js';
+import { toPosixRelative } from './paths.js';
 import type { Language, WalkedFile } from '../types.js';
 
 export interface WalkOptions {
@@ -100,7 +101,13 @@ export async function walkDirectory(options: WalkOptions): Promise<WalkedFile[]>
         resolvedPath = fullPath;
       }
 
-      const relativePath = relative(rootDir, resolvedPath);
+      // Forward-slash, ALWAYS — `relative()` is OS-native, so this was
+      // `app\Models\User.php` on Windows. buildFileId normalised the *id* but
+      // the relativePath field kept the backslashes, and everything downstream
+      // (convention gating like `app/Models/`, tokenization, domain mapping)
+      // silently stopped matching. Normalising at the producer is what makes
+      // every language's path convention work on Windows, not per-caller fixes.
+      const relativePath = toPosixRelative(resolvedPath, rootDir);
 
       results.push({
         absolutePath: resolvedPath,

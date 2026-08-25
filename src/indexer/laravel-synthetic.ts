@@ -1,6 +1,7 @@
 import { dirname, resolve, relative } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { buildFileId } from './parser.js';
+import { findSegmentParent } from './paths.js';
 import { resolvePHP } from './resolvers/php.js';
 import type { Edge, IndexedFile } from '../types.js';
 
@@ -20,16 +21,11 @@ export async function addLaravelSyntheticEdges(
   const phpFiles = indexedFiles.filter(f => f.language === 'php');
   if (phpFiles.length === 0) return;
 
-  // Find Laravel app root by looking for an app/ directory in walked files
-  let appRoot: string | null = null;
-  for (const f of phpFiles) {
-    const idx = f.path.lastIndexOf('/app/');
-    if (idx >= 0) {
-      appRoot = f.path.substring(0, idx);
-      break;
-    }
-  }
-  if (!appRoot) return;
+  // Find the Laravel app root. Matched on the file id (always forward-slash),
+  // never on the OS-native absolute path: the old `f.path.lastIndexOf('/app/')`
+  // could not match on Windows, so every Laravel repo there silently got zero
+  // Eloquent/container edges.
+  if (!findSegmentParent(phpFiles, rootDir, 'app')) return;
 
   const seen = new Set<string>();
   for (const e of edges) seen.add(`${e.from}|${e.to}`);
