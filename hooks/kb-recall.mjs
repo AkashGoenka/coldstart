@@ -41,6 +41,7 @@ import { recallQuery } from "./recall-query.mjs";
 // Per-session dedup: don't re-show a note this session already got, and forget
 // what was shown once the transcript shrinks (a compact). See recall-seen.mjs.
 import { readSeen, writeSeen, idsInPage, seenArgs } from "./recall-seen.mjs";
+import { resetEditTrack } from "./cochange-nudge.mjs";
 
 // hooks/ sits beside dist/ in both the repo and the published package.
 const CLI = fileURLToPath(new URL("../dist/index.js", import.meta.url));
@@ -87,6 +88,12 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     setLogRoot(root);
 
     const sid = String(input.session_id || "").replace(/[^\w-]/g, "");
+    // A new user message ends the previous task, so the co-change nudge's edit
+    // list starts empty. This is the ONLY reset: without it a stale edit set
+    // outlives its task and surfaces suggestions during an unrelated question.
+    // Fires before any early return below — recall hits must not gate it.
+    resetEditTrack(sid);
+
 
     // A pending capture (non-blocking fire at the previous Stop) is delivered
     // regardless of recall hits — it must not depend on the notebook existing

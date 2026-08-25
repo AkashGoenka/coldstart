@@ -24,6 +24,9 @@
  *                            => you have its bodies + pointers; answer or move on.
  *   6. GS-REGUESS          — re-called `gs --symbol` on a file that just returned
  *                            the method-menu fallback => pick from the menu.
+ *   7. CO-CHANGE           — an Edit/Write landed and >=2 distinct files are in play
+ *                            => the files git history says move with them (a habit,
+ *                            NOT a dependency). See cochange-nudge.mjs.
  *
  * Also REGISTERS the canonical key of every SUCCESSFUL (non-empty) find into
  * `seen_find_queries` — the PreToolUse guard (find-preguard) denies a re-run of
@@ -42,6 +45,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { canonicalFindKey } from "./canonical-find-key.mjs";
 import { normalizeColdstartCall } from "./coldstart-call.mjs";
+import { coChangeNudge } from "./cochange-nudge.mjs";
 
 // hooks/ sits beside dist/ in both the repo and the published package.
 const KB_CLI = fileURLToPath(new URL("../dist/index.js", import.meta.url));
@@ -411,6 +415,13 @@ export default function handle(input) {
       ]);
     }
   }
+
+  // (7) CO-CHANGE — an edit just landed; name the files git history says move with
+  //     it. Its state is a SEPARATE file with its own lifecycle (cleared on every
+  //     user message), deliberately not folded into `st` above, which the search
+  //     detectors and the preguard's deny-key depend on.
+  const coChange = coChangeNudge(input, key);
+  if (coChange) msgs.push([3, coChange]);
 
   // merge THIS call's evidence into the store (after novelty was computed above)
   if (scope.size > 0) {
