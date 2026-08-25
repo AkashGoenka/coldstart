@@ -109,6 +109,33 @@ function resolveHooksDir(): string {
   return path.join(installRoot(), 'hooks');
 }
 
+/**
+ * `node "<abs path>"` — the command string every host config and slash-command
+ * body is built from.
+ *
+ * **The quotes are load-bearing.** A hook `command` is a shell string, and the
+ * hosts hand it to a POSIX shell even on Windows (Claude Code runs hooks
+ * through Git Bash), which strips every backslash in an unquoted Windows path:
+ *
+ *   node C:\Users\me\...\hooks\find-nudge.mjs   →   node C:Usersme...find-nudge.mjs
+ *
+ * node then resolves that drive-relative remainder against the cwd, so EVERY
+ * fire dies with `Cannot find module`. Hooks fail open by design, so nothing
+ * ever surfaces it — the whole nudge/preguard/recall/capture layer is silently
+ * dead on Windows (5,555 fires / 0 successes over two weeks in the report that
+ * prompted this fix). Double quotes survive both `sh` and `cmd.exe`, and they
+ * also cover install paths containing spaces (`C:\Program Files\...`) on every
+ * platform.
+ *
+ * The idempotency detectors (`isColdstartHookEntry` and friends) match on the
+ * script FILENAME, not the whole string, so quoted and legacy-unquoted entries
+ * are both recognised: a re-run of `init` upgrades an existing broken entry in
+ * place, and `unwire` still strips it.
+ */
+function nodeCommand(scriptPath: string): string {
+  return `node "${scriptPath}"`;
+}
+
 // ---------------------------------------------------------------------------
 // Notebook (kb) setup — skeleton, git wiring, and the Claude recall/capture
 // hooks. Shared by `coldstart init` (always) and the `coldstart kb init` alias.
@@ -159,7 +186,7 @@ export function wireClaudeKbHooks(cwd: string): 'created' | 'updated' | { error:
   }
   const hooksCfg = (settings.hooks && typeof settings.hooks === 'object' ? settings.hooks : {}) as Record<string, unknown>;
   const stripOurs = (arr: unknown): unknown[] => (Array.isArray(arr) ? arr : []).filter((e) => !isKbHookEntry(e));
-  const entry = (file: string): unknown => ({ hooks: [{ type: 'command', command: `node ${path.join(hooksDir, file)}` }] });
+  const entry = (file: string): unknown => ({ hooks: [{ type: 'command', command: nodeCommand(path.join(hooksDir, file)) }] });
   hooksCfg.UserPromptSubmit = [...stripOurs(hooksCfg.UserPromptSubmit), entry(KB_HOOK_RECALL)];
   hooksCfg.Stop = [...stripOurs(hooksCfg.Stop), entry(KB_HOOK_ELICIT)];
   hooksCfg.SubagentStop = [...stripOurs(hooksCfg.SubagentStop), entry(KB_HOOK_ELICIT)];
@@ -381,8 +408,8 @@ export function isCodexHookEntry(entry: unknown): boolean {
  * regex `.*`. Everything else is identical — the shipped handlers are the same.
  */
 function coldstartHooks(hooksDir: string, postMatcher: string): HookSet {
-  const preCmd = `node ${path.join(hooksDir, HOOK_PRE)}`;
-  const postCmd = `node ${path.join(hooksDir, HOOK_POST)}`;
+  const preCmd = nodeCommand(path.join(hooksDir, HOOK_PRE));
+  const postCmd = nodeCommand(path.join(hooksDir, HOOK_POST));
   return {
     PreToolUse: [{ matcher: PRE_MATCHER, hooks: [{ type: 'command', command: preCmd }] }],
     PostToolUse: [{ matcher: postMatcher, hooks: [{ type: 'command', command: postCmd }] }],
@@ -474,7 +501,7 @@ export function wireCodexHooks(cwd: string): 'created' | 'updated' | { error: st
       : {};
   const stripOurs = (arr: unknown): unknown[] =>
     (Array.isArray(arr) ? arr : []).filter((entry) => !isCodexHookEntry(entry));
-  const command = (file: string): HookCommand => ({ type: 'command', command: `node ${path.join(hooksDir, file)}` });
+  const command = (file: string): HookCommand => ({ type: 'command', command: nodeCommand(path.join(hooksDir, file)) });
   hooksCfg.PreToolUse = [
     ...stripOurs(hooksCfg.PreToolUse),
     { matcher: PRE_MATCHER, hooks: [command(CODEX_HOOK_PRE)] },
@@ -553,7 +580,7 @@ export function wireCursorHooks(cwd: string): 'created' | 'updated' | { error: s
       : {};
   const stripOurs = (arr: unknown): unknown[] =>
     (Array.isArray(arr) ? arr : []).filter((entry) => !isCursorHookEntry(entry));
-  const command = (file: string): { command: string } => ({ command: `node ${path.join(hooksDir, file)}` });
+  const command = (file: string): { command: string } => ({ command: nodeCommand(path.join(hooksDir, file)) });
 
   hooksCfg.preToolUse = [...stripOurs(hooksCfg.preToolUse), command(CURSOR_HOOK_PRE)];
   hooksCfg.postToolUse = [...stripOurs(hooksCfg.postToolUse), command(CURSOR_HOOK_POST)];
@@ -660,7 +687,7 @@ export const USER_COMMANDS: Record<'capture' | 'repair' | 'repairAliases', UserC
     // REQUIRED — without it the hook refuses rather than guess a session
     // (kb-elicit.mjs --manual); Claude supplies it via ${CLAUDE_SESSION_ID}.
     invocation: (sessionExpr) =>
-      `node ${path.join(resolveHooksDir(), 'kb-elicit.mjs')} --manual`
+      `${nodeCommand(path.join(resolveHooksDir(), 'kb-elicit.mjs'))} --manual`
       + (sessionExpr ? ` --session "${sessionExpr}"` : ''),
     description: 'Capture notebook notes for the work done so far',
     skillDescription:
@@ -677,7 +704,7 @@ export const USER_COMMANDS: Record<'capture' | 'repair' | 'repairAliases', UserC
     name: REPAIR_COMMAND,
     // The CLI, not a hook: repair reads the notebook and nothing else, so it
     // needs no session and no index. `--root .` keeps it repo-agnostic.
-    invocation: () => `node ${path.join(installRoot(), 'dist', 'index.js')} kb repair --root .`,
+    invocation: () => `${nodeCommand(path.join(installRoot(), 'dist', 'index.js'))} kb repair --root .`,
     description: 'Repair notebook notes that are written but unfindable',
     skillDescription:
       'Repair coldstart notebook notes that are missing the fields which make them findable '
@@ -693,7 +720,7 @@ export const USER_COMMANDS: Record<'capture' | 'repair' | 'repairAliases', UserC
   },
   repairAliases: {
     name: REPAIR_ALIASES_COMMAND,
-    invocation: () => `node ${path.join(installRoot(), 'dist', 'index.js')} kb repair-aliases --root .`,
+    invocation: () => `${nodeCommand(path.join(installRoot(), 'dist', 'index.js'))} kb repair-aliases --root .`,
     description: 'Reconcile identityAliases that no longer describe the file/flow',
     skillDescription:
       'Reconcile coldstart notebook identityAliases against the current code — catches aliases that '
