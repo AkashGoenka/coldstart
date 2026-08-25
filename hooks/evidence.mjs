@@ -27,13 +27,18 @@
  * for bash-derived path guesses are the only I/O.
  */
 
-import { join } from "node:path";
+import { join, isAbsolute, relative, sep } from "node:path";
 import { statSync } from "node:fs";
 
 // Path-like tokens inside a shell command (same shape kb-elicit used):
 // anything with an extension. Existence on disk is verified before a bash
 // token becomes evidence — shell tokens are guesses.
-const BASH_PATH_RE = /(?:^|[\s"'`=(:;|])((?:\.{1,2}\/|\/)?[A-Za-z0-9_][A-Za-z0-9_.\/-]*\.[A-Za-z0-9]{1,8})(?=$|[\s"'`):;,|>])/g;
+// The leading alternatives also admit a Windows drive (`D:\src\a.ts`,
+// `D:/src/a.ts`) and backslash separators; without them a Windows shell token
+// either missed entirely or matched from after the colon, yielding a bogus
+// "absolute" path. Both shapes are `mustExist`-gated, so a bad guess is dropped
+// by the stat check rather than becoming false evidence.
+const BASH_PATH_RE = /(?:^|[\s"'`=(:;|])((?:[A-Za-z]:[\\/]|\.{1,2}[\\/]|[\\/])?[A-Za-z0-9_][A-Za-z0-9_.\\/-]*\.[A-Za-z0-9]{1,8})(?=$|[\s"'`):;,|>])/g;
 
 // Verbs whose job is printing file content. Everything not listed here is a
 // mention — including grep/rg (matched LINES are not the file) and
@@ -42,14 +47,28 @@ const READ_VERBS = new Set(["cat", "head", "tail", "bat", "less", "more", "nl", 
 
 const TIER = { mention: 0, gs: 1, read: 2, edit: 3 };
 
+/**
+ * Tool inputs and shell tokens → a forward-slash repo-relative path, or "" for
+ * anything outside the repo.
+ *
+ * This was POSIX-only (`s.startsWith("/")` + a `root + "/"` prefix slice). On
+ * Windows a tool input is `D:\repo\src\a.ts`, which failed the `/` test, fell
+ * through to the relative branch, and was returned VERBATIM as if it were
+ * already repo-relative — so it matched no repo file and every session on
+ * Windows collected zero evidence. Silent: capture just never had anything to
+ * work with. `isAbsolute`/`relative` handle both platforms, both separators,
+ * and the Windows cross-drive case (where `relative` returns an absolute path).
+ */
 function normRel(root, p) {
-  let s = String(p || "").trim();
+  const s = String(p || "").trim();
   if (!s) return "";
-  if (s.startsWith("/")) {
-    if (root && s.startsWith(root + "/")) return s.slice(root.length + 1);
-    return "";
+  if (isAbsolute(s)) {
+    if (!root) return "";
+    const rel = relative(root, s);
+    if (!rel || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) return "";
+    return rel.split(sep).join("/");
   }
-  return s.replace(/^\.\//, "");
+  return s.replace(/^\.[\\/]/, "").split(sep).join("/");
 }
 
 // Split a compound command into simple segments and classify each segment's

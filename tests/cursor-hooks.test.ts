@@ -42,7 +42,11 @@ afterEach(() => {
 /** Copy a fixture transcript into the temp root with __ROOT__ resolved. */
 function transcript(name: string): string {
   const target = path.join(root, name);
-  const source = fs.readFileSync(path.join(FIXTURES, name), 'utf8').replaceAll('__ROOT__', root);
+  // JSON-escape the root — see the same helper in codex-hooks.test.ts. A raw
+  // Windows `C:\Users\…` spliced into a JSONL string literal is invalid JSON,
+  // so the transcript parsed as empty and the hook emitted nothing.
+  const source = fs.readFileSync(path.join(FIXTURES, name), 'utf8')
+    .replaceAll('__ROOT__', JSON.stringify(root).slice(1, -1));
   fs.writeFileSync(target, source);
   return target;
 }

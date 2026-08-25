@@ -32,7 +32,12 @@ afterEach(() => {
 
 function rollout(name: string): string {
   const target = path.join(root, name);
-  const source = fs.readFileSync(path.join(FIXTURES, name), 'utf8').replaceAll('__ROOT__', root);
+  // JSON-escape the root before splicing it into a JSONL string literal. On
+  // Windows a raw `C:\Users\…` makes `\U` an invalid escape and the whole line
+  // fails to parse, so the hook saw an empty transcript and emitted nothing.
+  // Real Codex writes properly escaped paths; only this helper didn't.
+  const source = fs.readFileSync(path.join(FIXTURES, name), 'utf8')
+    .replaceAll('__ROOT__', JSON.stringify(root).slice(1, -1));
   fs.writeFileSync(target, source);
   return target;
 }
