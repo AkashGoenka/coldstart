@@ -10,6 +10,7 @@
  */
 
 import { existsSync, statSync, readFileSync } from 'node:fs';
+import { unlink } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -57,8 +58,13 @@ function wiredHookPaths(rootDir: string): string[] {
   if (!existsSync(settings)) return [];
   try {
     const raw = readFileSync(settings, 'utf-8');
-    const re = /(\/[^\s"']+\/hooks\/(?:kb-elicit|kb-recall|find-nudge|find-preguard)\.mjs)/g;
-    return [...new Set(Array.from(raw.matchAll(re), (m) => m[1]))];
+    // Both separators, and a Windows drive prefix. The POSIX-only form
+    // (`/…/hooks/x.mjs`) could never match a Windows entry, so the one check
+    // that would have caught #158's broken wiring was itself dead on Windows.
+    // Backslashes arrive JSON-escaped (`d:\\repo\\hooks\\…`), hence the
+    // doubled-separator alternative.
+    const re = /((?:[A-Za-z]:)?(?:\\\\|[\\/])[^\s"']*?(?:\\\\|[\\/])hooks(?:\\\\|[\\/])(?:kb-elicit|kb-recall|find-nudge|find-preguard)\.mjs)/g;
+    return [...new Set(Array.from(raw.matchAll(re), (m) => m[1].replace(/\\\\/g, '\\')))];
   } catch {
     return [];
   }
@@ -101,12 +107,44 @@ interface Row {
   logSize: string;
 }
 
+/**
+ * Drop lock records for roots that no longer exist on disk.
+ *
+ * A keeper that dies without cleanup leaves its lockfile behind, and if the
+ * repo itself is then deleted (a temp dir, a scratch clone) the record is pure
+ * garbage — it can never come back, and it can never be cleaned by the normal
+ * path because that requires a reader running IN that root. One user had 18 of
+ * them burying the single row they cared about.
+ *
+ * Deliberately conservative: only a record whose PID is dead AND whose rootDir
+ * is both known and absent. A live keeper is never touched, and neither is a
+ * legacy lock that never recorded its rootDir (we can't prove anything about
+ * it, and guessing here would delete a real keeper's lock).
+ */
+async function pruneVanishedRoots(listings: DaemonLockListing[]): Promise<{ kept: DaemonLockListing[]; pruned: number }> {
+  const kept: DaemonLockListing[] = [];
+  let pruned = 0;
+  for (const l of listings) {
+    const root = l.lock.rootDir;
+    if (root && !existsSync(root) && !isDaemonAlive(l.lock.pid)) {
+      try {
+        await unlink(l.lockPath);
+        pruned++;
+        continue;
+      } catch { /* couldn't remove it — fall through and still show the row */ }
+    }
+    kept.push(l);
+  }
+  return { kept, pruned };
+}
+
 export async function runStatus(): Promise<void> {
-  const listings = await listDaemonLocks();
+  const { kept: listings, pruned } = await pruneVanishedRoots(await listDaemonLocks());
   if (listings.length === 0) {
     process.stdout.write(
       `No coldstart keepers running.\n` +
       `Keeper directory: ${daemonDir()}\n` +
+      (pruned > 0 ? `Pruned ${pruned} record(s) for roots that no longer exist.\n` : '') +
       `Run \`coldstart find\` (or any MCP call) to spawn one.\n`,
     );
     return;
@@ -155,6 +193,8 @@ export async function runStatus(): Promise<void> {
       pad(r.logSize, widths.logSize),
     ].join('  '));
   }
+
+  if (pruned > 0) lines.push('', `Pruned ${pruned} record(s) for roots that no longer exist.`);
 
   process.stdout.write(lines.join('\n') + '\n');
 

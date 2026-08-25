@@ -213,6 +213,27 @@ function scanArgv(searcher: Exclude<Searcher, { kind: 'node' }>, term: string): 
   }
 }
 
+/**
+ * One line of scanner output → a file id that can be looked up in the index.
+ *
+ * Searchers are given `.` as their search root and echo it back in every hit:
+ * `./src/a.ts` on POSIX, but `.\src\a.ts` on Windows. Only `./` used to be
+ * stripped, so on Windows EVERY scanned path kept its `.\` prefix and its
+ * backslashes, matched nothing in `index.files` (keyed by forward-slash ids),
+ * and the whole repo-wide recall pass silently returned zero coverage — no
+ * grep-recall in `find`, no `near` relations, and absence notes could never be
+ * re-verified.
+ *
+ * Backslash translation is win32-only on purpose: on POSIX a backslash is a
+ * legal filename character, so rewriting it there would corrupt real paths.
+ */
+function normalizeScanPath(line: string): string {
+  let s = line.trim();
+  if (!s) return '';
+  if (process.platform === 'win32') s = s.split('\\').join('/');
+  return s.replace(/^\.\//, '');
+}
+
 /** Run one external scan; repo-relative paths, [] on no-match, null on SPAWN failure
  * (binary vanished — distinct from exit 1 so the caller can re-resolve rg). */
 function listFilesExternal(searcher: Exclude<Searcher, { kind: 'node' }>, root: string, term: string): Promise<string[] | null> {
@@ -232,7 +253,7 @@ function listFilesExternal(searcher: Exclude<Searcher, { kind: 'node' }>, root: 
         // execFile err: string `code` (ENOENT/EACCES) = spawn-level failure;
         // numeric `code` = the tool ran and exited non-zero (= no matches).
         if (err && typeof (err as { code?: unknown }).code === 'string') return resolve(null);
-        resolve((stdout ?? '').split('\n').map((l) => l.replace(/^\.\//, '').trim()).filter(Boolean));
+        resolve((stdout ?? '').split('\n').map((l) => normalizeScanPath(l)).filter(Boolean));
       },
     );
   });

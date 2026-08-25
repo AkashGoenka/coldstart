@@ -1,5 +1,5 @@
 import { readFile, readdir } from 'node:fs/promises';
-import { join, resolve, dirname } from 'node:path';
+import { join, resolve, dirname, basename } from 'node:path';
 import type { IndexedFile, Edge, Language } from '../../types.js';
 import { DEFAULT_EXCLUDES } from '../../constants.js';
 import { resolveGeneric } from './generic.js';
@@ -194,7 +194,11 @@ async function loadWorkspacePackages(rootDir: string): Promise<Map<string, strin
   const decls: Array<{ dir: string; patterns: string[] }> = [];
 
   for (const path of configPaths) {
-    const baseName = path.slice(path.lastIndexOf('/') + 1);
+    // `basename`, not a manual `/` slice: configPaths are OS-native absolutes,
+    // so on Windows the slice found no `/`, returned the WHOLE path, and every
+    // package.json fell through to the pnpm-YAML branch — npm/yarn workspaces
+    // were never discovered at all.
+    const baseName = basename(path);
     if (baseName === 'package.json') {
       try {
         const raw = await readFile(path, 'utf-8');

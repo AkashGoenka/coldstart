@@ -1,5 +1,6 @@
 import { dirname, join, resolve, isAbsolute } from 'node:path';
 import { readFile } from 'node:fs/promises';
+import { isInside } from './paths.js';
 
 /**
  * Shared CMakeLists.txt discovery used by the C++ resolver.
@@ -81,7 +82,7 @@ function extractIncludeRoots(
     }
 
     // Bound to rootDir
-    if (!expanded.startsWith(rootDir + '/') && expanded !== rootDir) {
+    if (!isInside(expanded, rootDir)) {
       return null;
     }
 

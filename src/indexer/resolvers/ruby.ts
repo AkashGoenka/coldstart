@@ -2,6 +2,7 @@ import { dirname, resolve, join, basename, relative, sep } from 'node:path';
 import { readFile, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tryResolveBase, MAX_DIR_WALK_DEPTH } from './shared.js';
+import { isInside } from '../paths.js';
 import { buildFileId } from '../parser.js';
 
 /**
@@ -37,7 +38,7 @@ async function findGemfileDir(startDir: string, rootDir: string): Promise<string
     } catch { /* not here */ }
     if (dir === rootDir) break;
     const parent = dirname(dir);
-    if (parent === dir || !parent.startsWith(rootDir)) break;
+    if (parent === dir || !isInside(parent, rootDir)) break;
     dir = parent;
   }
   startDirToGemfileDir.set(startDir, null);
@@ -82,7 +83,7 @@ export async function resolveRuby(
     }
     if (dir === rootDir) break;
     const parent = dirname(dir);
-    if (parent === dir || !parent.startsWith(rootDir)) break;
+    if (parent === dir || !isInside(parent, rootDir)) break;
     dir = parent;
   }
 

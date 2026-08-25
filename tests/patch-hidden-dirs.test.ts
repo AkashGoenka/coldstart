@@ -65,7 +65,10 @@ describe('patchIndex mirrors walker dir rules for hidden/excluded dirs', () => {
 
   it('rejects hidden-dir and excluded-dir files; keeps real files and root dotfiles', async () => {
     const idx = await buildSmall(root);
-    expect(idx.files.has('src/a.ts')).toBe(true);
+    // toContain, not has(): a bare boolean assertion reports only "expected
+    // false to be true", which is useless when this fails on a machine you
+    // cannot reach. The key list names the actual ids.
+    expect([...idx.files.keys()]).toContain('src/a.ts');
 
     for (const [dir, file] of [
       ['.coldstart/notebook/notes', 'leak.ts'],

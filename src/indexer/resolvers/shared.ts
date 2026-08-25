@@ -1,4 +1,5 @@
-import { join, relative, extname } from 'node:path';
+import { join, extname } from 'node:path';
+import { toPosixRelative } from '../paths.js';
 
 // Upper bound on how many directory ancestors a resolver walks when searching
 // for a project marker (go.mod, composer.json, Gemfile, a load-path root, …).
@@ -30,7 +31,7 @@ export const INDEX_FILES = [
 
 /** Converts an absolute path to a normalized forward-slash file ID relative to rootDir. */
 export function toFileId(absolutePath: string, rootDir: string): string {
-  return relative(rootDir, absolutePath).replace(/\\/g, '/');
+  return toPosixRelative(absolutePath, rootDir);
 }
 
 /**

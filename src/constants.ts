@@ -1,4 +1,29 @@
+import { join } from "node:path";
+import { homedir } from "node:os";
 import type { Language } from "./types.js";
+
+/**
+ * Root of coldstart's per-user state (`~/.coldstart` by default), overridable
+ * with `COLDSTART_HOME`.
+ *
+ * The override exists because `os.homedir()` on Windows reads USERPROFILE and
+ * IGNORES `HOME` — so tests that redirected via `process.env.HOME` (the POSIX
+ * habit) kept writing into the user's REAL state directory on Windows. One user
+ * ended up with 18 fixture lockfiles for long-deleted temp roots buried in
+ * `~/.coldstart/daemon`, with PIDs like `12345` and `22222`, permanently
+ * polluting `coldstart status`.
+ *
+ * Read through a FUNCTION, never a module-level const: a const is captured at
+ * import time, so a test setting the env var after import would silently get
+ * the real directory anyway — the same class of bug one level down.
+ *
+ * Production never sets it; tests do, and get real isolation on every platform
+ * instead of a redirect that no-ops on one of them.
+ */
+export function coldstartHome(): string {
+  const override = process.env.COLDSTART_HOME;
+  return override && override.trim() ? override : join(homedir(), ".coldstart");
+}
 
 // ---------------------------------------------------------------------------
 // Extension → Language mapping

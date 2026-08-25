@@ -7,9 +7,24 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Windows is a first-class target: coldstart wires hooks into Claude Code,
+    # Cursor and Codex on Windows too. Running ubuntu-only hid an entire class
+    # of bugs for months — every hook silently dead (#158), Rails/Laravel/Go/npm
+    # workspace resolution silently disabled, and zero evidence collected by the
+    # notebook — all invisible because the failures were "not found" branches,
+    # not exceptions. None of it surfaced until a Windows user went digging.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    name: test (${{ matrix.os }})
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
