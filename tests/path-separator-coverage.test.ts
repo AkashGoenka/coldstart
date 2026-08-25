@@ -18,9 +18,44 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import * as os from 'node:os';
 import { toPosixRelative, isInside, findSegmentParent } from '../src/indexer/paths.js';
+import { walkDirectory } from '../src/indexer/walker.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+describe('walkDirectory — a root that is not already canonical', () => {
+  // The walker canonicalises every FILE with fs.promises.realpath, so it must
+  // canonicalise the ROOT the same way. When it did not, a root reached
+  // through a link (or, on the Windows CI runner, an 8.3 short path like
+  // C:\Users\RUNNER~1\...) produced ids that climbed out of the repo:
+  //   ../../../../../runneradmin/AppData/Local/Temp/cs-delsym-uvezwu/src/a.ts
+  // Nothing threw. Every id was simply wrong, so nothing downstream matched.
+  it('still yields repo-relative ids when the root is reached through a link', async () => {
+    const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'cs-linkroot-')));
+    const real = path.join(base, 'real');
+    const link = path.join(base, 'link');
+    fs.mkdirSync(path.join(real, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(real, 'src', 'a.ts'), 'export const a = 1;\n');
+    try {
+      // 'junction' so this works on Windows without developer mode; ignored
+      // on POSIX, where a plain dir symlink needs no privilege.
+      fs.symlinkSync(real, link, 'junction');
+    } catch {
+      return; // links unavailable in this environment — nothing to assert
+    }
+    try {
+      const walked = await walkDirectory({ rootDir: link, excludes: [], includes: [] });
+      expect(walked.map((w) => w.relativePath)).toEqual(['src/a.ts']);
+      // Stated under the root we asked about, not silently re-anchored to the
+      // link's target: ids and absolute paths must both be built from the one
+      // root the caller passed, because the resolvers use that root too.
+      expect(walked[0].absolutePath).toBe(path.join(link, 'src', 'a.ts'));
+    } finally {
+      fs.rmSync(base, { recursive: true, force: true });
+    }
+  });
+});
 
 describe('path helpers — behavioural', () => {
   it('toPosixRelative yields a forward-slash id from an OS-native absolute', () => {
