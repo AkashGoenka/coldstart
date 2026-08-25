@@ -77,7 +77,7 @@ const READ_VERBS = new Set([
  * pollutes every one.
  */
 const INLINE_SCRIPT_RE =
-  /(?:^|\s)(?:-(?:e|c|p|E|ne|pe|lne)\b|--eval\b|--exec\b|-m\s+json\.tool\b)|\bphp\s+-r\b|<<[-']?\s*['"]?(?:EOF|EOS|PY|JS|RB|SH|JSON|SCRIPT)/;
+  /(?:^|\s)(?:-(?:e|c|p|E|ne|pe|lne)\b|--eval\b|--exec\b|-m\s+json\.tool\b)|\bphp\s+-r\b|<<-?\s*(['"]?)[A-Za-z_][A-Za-z0-9_]*\1\s*$/m;
 
 // "this code opens a file for reading" — one union across the languages an agent
 // actually reaches for in a one-liner. Deliberately shallow: it matches the CALL,
@@ -120,6 +120,20 @@ const WRITE_API_RE = new RegExp(
 // worklist needs the second or it anchors notes to the wrong file.
 const API_ARG_RE =
   /(?:readFileSync|readFile|createReadStream|readTextFile|writeFileSync|appendFileSync|writeFile|writeTextFile|read_text|write_text|file_get_contents|file_put_contents|fopen|open|load|ReadFile|WriteFile|readString|readAllLines|readAllBytes|readText|writeText|File\.(?:read|readlines|write|foreach)|IO\.read)\s*\(\s*(['"`])([^'"`\n]+)\1/g;
+
+/** Files a shell fragment REDIRECTS into. `cat > x <<EOF` is a write even though
+ *  its verb is a read verb, so this has to override the verb table — otherwise
+ *  the same command is an edit to bashEditTargets and a read to the tiers. */
+function redirectTargets(str) {
+  const out = [];
+  for (const m of String(str).matchAll(/(?:^|[^>&\d])>>?\s*(['"]?)([\w.~/-]*\.[A-Za-z0-9]{1,8})\1(?=$|[\s;&|)])/g)) {
+    if (!/^\/dev\//.test(m[2])) out.push(m[2]);
+  }
+  for (const m of String(str).matchAll(/(?:^|[\s;&|])tee\s+(?:-a\s+)?(['"]?)([\w.~/-]*\.[A-Za-z0-9]{1,8})\1/g)) {
+    if (!/^\/dev\//.test(m[2])) out.push(m[2]);
+  }
+  return out;
+}
 
 /** Tier for a segment whose script body is inline: edit > read > (no claim). */
 function inlineScriptTier(seg) {
@@ -202,10 +216,11 @@ function classifyBash(cmd) {
     if (READ_VERBS.has(verb)) tier = TIER.read;
     else if (verb === "sed") tier = /(^|\s)-i\b/.test(seg) ? TIER.edit : TIER.read; // sed -n '1,80p' = windowed read; sed -i = in-place edit
     else if (verb === "awk") tier = TIER.read;
+    const written = new Set(redirectTargets(seg));
     let n = 0;
     for (const m of seg.matchAll(BASH_PATH_RE)) {
       if (++n > 12) break; // a single huge command must not dominate
-      out.push({ token: m[1], tier });
+      out.push({ token: m[1], tier: written.has(m[1]) ? TIER.edit : tier });
     }
   }
   return out;
@@ -464,4 +479,37 @@ export function bashContentRead(cmd) {
   // asks, so inline-script intent counts here even when it anchors no path.
   if (inlineScriptTier(String(cmd)) !== null) return true;
   return classifyBash(cmd).some((c) => c.tier === TIER.read || c.tier === TIER.edit);
+}
+
+/**
+ * bashEditTargets(cmd) — the repo files this shell command WRITES.
+ *
+ * The write-side twin of bashContentRead, and it exists for the same reason:
+ * an agent told to "make file changes with sed, heredocs, or short scripts"
+ * edits without ever touching Edit/Write, so anything gated on tool NAMES sees
+ * nothing at all. Returns raw tokens; the caller normalizes and filters.
+ *
+ * Three shapes, because they are what agents actually use:
+ *   sed -i / inline script writes  — already tiered by classifyBash
+ *   > file, >> file                — redirection, the single most common form
+ *   tee file                       — the pipe-friendly variant
+ *
+ * NOT covered, on purpose: a redirect whose target is computed (`> "$out"`) or
+ * a script FILE that writes (body invisible). Same default-deny as the read side.
+ */
+const EDITABLE_EXT_RE =
+  /\.(?:tsx?|jsx?|mjs|cjs|py|rb|go|rs|java|kt|php|cs|astro|vue|svelte|css|scss|html?|md|ya?ml|toml|json|sh|sql)$/;
+
+export function bashEditTargets(cmd) {
+  const whole = String(cmd || "");
+  const out = new Set();
+  for (const c of classifyBash(whole)) if (c.tier === TIER.edit) out.add(c.token);
+  for (const t of redirectTargets(whole)) out.add(t);
+  // A write whose path is COMPUTED (`writeFileSync(f, s)` after `const f = …`)
+  // attributes nothing. Inferring it from "the one source path mentioned in the
+  // script" was measured and dropped: the deterministic rules above already
+  // catch 89.2% of real shell writes and that guess added 5.8%, in exchange for
+  // being able to claim an edit to a file the script only READ. Silence is the
+  // safe failure for a nudge; a wrong file name is not.
+  return [...out];
 }

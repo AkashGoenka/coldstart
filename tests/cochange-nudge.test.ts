@@ -144,4 +144,51 @@ describe('co-change edit nudge', () => {
     sidecar({ 'src/a.ts': [['src/c.ts', 9]] }, { 'src/a.ts': 10, 'src/c.ts': 12 });
     expect(coChangeNudge({ tool_name: 'Read', cwd: root, tool_input: { file_path: 'src/b.ts' } }, sid)).toBeNull();
   });
+
+  /**
+   * Editing through the SHELL counts as editing.
+   *
+   * The gate was keyed on tool NAMES (Edit/Write/MultiEdit/NotebookEdit/
+   * SearchReplace), so an agent instructed to "make file changes with sed,
+   * heredocs, or short scripts" — the auto-mode default — edited a whole task's
+   * worth of related files and was never once asked what it forgot. Only
+   * deterministic shell writes count: a redirect, tee, sed -i, or a write call
+   * naming a literal path. A computed path stays silent by design.
+   */
+  const shellEdit = (command: string) =>
+    coChangeNudge({ tool_name: 'Bash', cwd: root, tool_input: { command } }, sid);
+
+  it('fires on shell-mediated edits: redirect, heredoc, sed -i', () => {
+    sidecar({ 'src/a.ts': [['src/c.ts', 4]], 'src/b.ts': [['src/c.ts', 3]] }, { 'src/a.ts': 5, 'src/b.ts': 5 });
+    expect(shellEdit("cat > src/a.ts <<'TS'\nexport const a = 1;\nTS")).toBeNull(); // rule 2
+    expect(shellEdit('sed -i.bak "s/1/2/" src/b.ts')).toContain('src/c.ts');
+  });
+
+  it('one command that writes two files reaches the 2-file threshold by itself', () => {
+    sidecar({ 'src/a.ts': [['src/c.ts', 4]], 'src/b.ts': [['src/c.ts', 3]] }, { 'src/a.ts': 5, 'src/b.ts': 5 });
+    expect(shellEdit('sed -i "" "s/x/y/" src/a.ts && echo "z" > src/b.ts')).toContain('src/c.ts');
+  });
+
+  it('a heredoc tag is an arbitrary identifier, not a fixed vocabulary', () => {
+    sidecar({ 'src/a.ts': [['src/c.ts', 4]], 'src/b.ts': [['src/c.ts', 3]] }, { 'src/a.ts': 5, 'src/b.ts': 5 });
+    // PATCH / TS / MSG are all tags a real session used; a whitelist missed them.
+    expect(shellEdit("cat > src/a.ts <<'PATCH'\nx\nPATCH")).toBeNull();
+    expect(shellEdit("cat > src/b.ts <<'ANYTHING'\ny\nANYTHING")).toContain('src/c.ts');
+  });
+
+  it('reads, test runs and log redirects are not edits', () => {
+    sidecar({ 'src/a.ts': [['src/c.ts', 4]], 'src/b.ts': [['src/c.ts', 3]] }, { 'src/a.ts': 5, 'src/b.ts': 5 });
+    expect(shellEdit('cat src/a.ts')).toBeNull();
+    expect(shellEdit('npm test 2>&1 | tail -5')).toBeNull();
+    expect(shellEdit('grep -rn x src/a.ts > /dev/null')).toBeNull();
+    // none of the above put a file in play, so a real edit is still only file #1
+    expect(shellEdit('sed -i "" "s/x/y/" src/a.ts')).toBeNull();
+  });
+
+  it('a write to a COMPUTED path claims nothing rather than guessing', () => {
+    sidecar({ 'src/a.ts': [['src/c.ts', 4]], 'src/b.ts': [['src/c.ts', 3]] }, { 'src/a.ts': 5, 'src/b.ts': 5 });
+    expect(shellEdit('sed -i "" "s/x/y/" src/a.ts')).toBeNull();
+    // src/b.ts appears only as a string the script reads into a variable.
+    expect(shellEdit(`node -e 'const f="src/b.ts"; writeFileSync(f, s)'`)).toBeNull();
+  });
 });

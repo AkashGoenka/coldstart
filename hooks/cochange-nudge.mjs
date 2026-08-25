@@ -1,7 +1,8 @@
 /**
  * cochange-nudge.mjs — "you edited A and B; history says C moves with them."
  *
- * A PostToolUse detector that fires on the EDIT EVENT, not on a pause. Rationale:
+ * A PostToolUse detector that fires on the EDIT EVENT — an edit TOOL or a shell
+ * command that writes a file — not on a pause. Rationale:
  * a Stop fires whenever the agent finishes answering ANYTHING, so a settle-timed
  * version would surface suggestions from earlier work during an unrelated later
  * question. Firing on the edit also means the agent is still working and can act
@@ -43,6 +44,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync, renameSync, unlinkSync, readdirSync, statSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join, resolve, sep } from "node:path";
+import { bashEditTargets } from "./evidence.mjs";
 
 // ---- gate (see the measurement record before retuning) ----
 const MIN_RATIO = 0.3;  // shared / commits that touched the seed
@@ -61,6 +63,15 @@ const ORPHAN_MS = 7 * 24 * 60 * 60 * 1000;
  *  Codex have no equivalent of — miss it and Cursor edits silently never count. */
 const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit", "SearchReplace"]);
 
+/** ...and the shell, which is NOT a marginal edit path. An agent instructed to
+ *  "make file changes with sed, heredocs, or short scripts" — the auto-mode
+ *  default — never touches an edit TOOL, so a gate keyed on tool names alone
+ *  goes completely silent for that agent. Exactly the failure this nudge exists
+ *  to prevent: it edits several related files and is never asked what it forgot.
+ *  Cursor's Shell is renamed to Bash upstream by adaptCursorInput; the raw names
+ *  are accepted anyway so a host that skips adaptation still counts. */
+const SHELL_TOOLS = new Set(["Bash", "Shell", "shell", "exec"]);
+
 /** Claude keys the path `file_path`; Cursor's records key it `path` (verified on
  *  real Cursor transcripts, hooks/evidence.mjs). Accept every shape — the cost of
  *  being wrong is a silent dead feature on one host. */
@@ -70,6 +81,23 @@ function editedPath(toolInput) {
     if (typeof t[k] === "string" && t[k].trim()) return t[k];
   }
   return "";
+}
+
+/** Every repo file THIS event edited: one path for an edit tool, and possibly
+ *  several for a shell command (`sed -i a.ts && cat > b.ts <<EOF`). Returns []
+ *  for any event that edited nothing, which is the silence path. */
+function editedFiles(input, root) {
+  const tool = String((input && input.tool_name) || "");
+  if (EDIT_TOOLS.has(tool)) {
+    const p = relPath(root, editedPath(input && input.tool_input));
+    return p ? [p] : [];
+  }
+  if (SHELL_TOOLS.has(tool)) {
+    const t = input && input.tool_input;
+    const cmd = t && typeof t === "object" ? t.command || t.cmd || "" : "";
+    return bashEditTargets(cmd).map((p) => relPath(root, p)).filter(Boolean);
+  }
+  return [];
 }
 
 const TEST_RE = [
@@ -222,14 +250,13 @@ function render(picks, edited) {
  */
 export function coChangeNudge(input, key) {
   try {
-    if (!EDIT_TOOLS.has(String(input && input.tool_name))) return null;
     const root = String((input && input.cwd) || "");
     if (!root) return null;
-    const file = relPath(root, editedPath(input && input.tool_input));
-    if (!file || isTest(file)) return null; // tests are CI's problem, not a nudge's
+    const files = editedFiles(input, root).filter((f) => !isTest(f)); // tests are CI's problem
+    if (!files.length) return null;
 
     const st = loadState(key);
-    if (!st.edited.includes(file)) st.edited.push(file);
+    for (const file of files) if (!st.edited.includes(file)) st.edited.push(file);
     // Rule 2: one file in play is a trivial job. Record it, say nothing.
     if (st.edited.length < MIN_FILES) { saveState(key, st); return null; }
 
