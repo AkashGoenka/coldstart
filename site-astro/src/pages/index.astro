@@ -105,7 +105,7 @@ const faqJsonLd = {
 
     <div class="cta">
       <a class="btn btn-primary" href="/docs/">Read the docs →</a>
-      <a class="btn btn-ghost" href="/graph/">View the graph</a>
+      <a class="btn btn-ghost" href="/live/">See it live</a>
       <a class="btn btn-ghost" href="/blog/">Read the blog</a>
     </div>
     <p class="meta-line">MIT · Node 18+ · runs offline · no embeddings, no API key</p>
@@ -133,11 +133,11 @@ const faqJsonLd = {
         <div class="card" id="noteCard">
         <div class="stamp-wrap" id="stamp">
           <svg viewBox="0 0 120 120">
-            <g filter="url(#rough)" fill="none" stroke="#a86a35" stroke-width="2.4">
+            <g filter="url(#rough)" fill="none" stroke="#57cc92" stroke-width="2.4">
               <circle cx="60" cy="60" r="46"/>
               <circle cx="60" cy="60" r="38"/>
             </g>
-            <g filter="url(#rough)" fill="#a86a35">
+            <g filter="url(#rough)" fill="#57cc92">
               <text x="60" y="55" text-anchor="middle" font-family="JetBrains Mono" font-size="15" font-weight="700" letter-spacing="1">FRESH</text>
               <text x="60" y="72" text-anchor="middle" font-family="JetBrains Mono" font-size="7.5">HASH VERIFIED</text>
             </g>
@@ -223,22 +223,7 @@ const faqJsonLd = {
       </div>
     </div>
 
-    <div class="term type rise" role="img" aria-label="Terminal: coldstart find returns ranked, evidence-backed files with a past agent's note, then gs shows one file's symbols and callers">
-      <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="term-title">agent — coldstart</span></div>
-      <div class="term-body">
-<span class="l" style="animation-delay:.05s"><span class="p-prompt">$</span> <span class="p-cmd">coldstart find</span> auth session cookie</span>
-<span class="gap"></span>
-<span class="l" style="animation-delay:.5s"><span class="p-frost">src/auth/service.ts</span>  <span class="p-hit">3/3</span> <span class="p-dim">defines</span> auth, session, cookie</span>
-<span class="l" style="animation-delay:.7s">  <span class="p-ember">note</span> <span class="p-dim">[fresh]</span> signs &amp; verifies session cookies · login/logout entry</span>
-<span class="l" style="animation-delay:.9s"><span class="p-frost">src/middleware/session.ts</span>  <span class="p-hit">2/3</span> <span class="p-dim">imports</span> session, cookie</span>
-<span class="l" style="animation-delay:1.1s"><span class="p-frost">src/routes/login.ts</span>  <span class="p-hit">2/3</span> <span class="p-dim">defines</span> auth · <span class="p-dim">imports</span> session</span>
-<span class="gap"></span>
-<span class="l" style="animation-delay:1.5s"><span class="p-prompt">$</span> <span class="p-cmd">coldstart gs</span> src/auth/service.ts</span>
-<span class="l" style="animation-delay:1.7s"><span class="p-dim">symbols</span>  signCookie <span class="p-dim">L12</span> · verify <span class="p-dim">L34</span> · rotate <span class="p-dim">L61</span></span>
-<span class="l" style="animation-delay:1.9s"><span class="p-dim">callers</span>  verify ← <span class="p-file">middleware/session.ts</span>, <span class="p-file">routes/login.ts</span></span>
-<span class="l" style="animation-delay:2.1s"><span class="p-dim">imported by</span>  4 files <span class="p-frost">→ read only the body you need</span><span class="cursor"></span></span>
-      </div>
-    </div>
+    <a class="how-link" href="/demo/" style="margin-top:8px;">See it run on a real repo, live <span class="ar" aria-hidden="true">→</span></a>
 
     <div class="keynote cool rise">
       <span class="kk">Measured, not promised</span>

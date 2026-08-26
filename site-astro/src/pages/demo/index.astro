@@ -1,0 +1,282 @@
+---
+import Head from '../../layouts/Head.astro';
+import SvgDefs from '../../components/SvgDefs.astro';
+import Nav from '../../components/Nav.astro';
+import Footer from '../../components/Footer.astro';
+import '../../styles/landing.css';
+
+const title = 'Demo — one real session, this repo | coldstart';
+const description =
+  'A single continuous session against coldstart\'s own codebase: an agent with no note yet runs find and gs to answer a question, writes what it learned, then a later prompt gets the same answer for zero tool calls.';
+---
+<html lang="en">
+<head>
+  <Head
+    title={title}
+    description={description}
+    keywords="coldstart demo, coldstart find, coldstart gs, notebook recall, codebase memory demo, AI coding agent navigation"
+    canonicalPath="/demo/"
+    ogType="website"
+    ogTitle="Demo — one real session, this repo"
+    ogDescription="find + gs answer a question with no note yet. Later, the same question costs zero tool calls. One real session, not a mockup."
+    themeColor="#070a11"
+  />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+<SvgDefs />
+<Nav variant="demo" />
+
+<header class="hero" style="padding-bottom:24px;">
+  <div class="wrap hero-in">
+    <div class="kicker">Demo — one real session, captured from this repo</div>
+    <h1 class="title" style="font-size:clamp(32px,5vw,52px);">The first time, it looks things up.<br>The second time, it already knows.</h1>
+    <p class="hero-sub">One continuous session against coldstart's own codebase. Every command, every note, every answer below is real — same repo, same day. Scroll to watch it happen.</p>
+  </div>
+</header>
+
+<!-- ===================== PART 1 — FIRST TIME ===================== -->
+<section id="first-time">
+  <div class="wrap">
+    <div class="rise in">
+      <div class="eyebrow">01 · first time</div>
+      <h2>No note yet. The agent goes and looks.</h2>
+      <p class="lead">A real question, asked cold. Nothing's been written down about it yet, so the agent reaches for <code>find</code>, then <code>gs</code>, then answers from what it just read.</p>
+    </div>
+
+    <div class="recall reveal">
+      <div class="rprompt" data-t="0"><span class="who">you</span><span class="q">"why does <code>gs</code> show files edited together — is that from the import graph?"</span></div>
+
+      <div class="rflow" data-t="400"><span class="glyph">→</span><span class="rlab"><b>UserPromptSubmit</b> <span class="sub">fires · kb search runs against the notebook</span></span></div>
+      <div class="rflow" data-t="350"><span class="glyph">·</span><span class="rlab"><b>no match</b> <span class="sub">nothing written about this yet — nothing injected</span></span></div>
+      <div class="rflow think" data-t="400"><span class="glyph think"><span class="pdot"></span></span><span class="rlab"><b>Thinking…</b> <span class="sub">no note for this — check the code directly</span></span></div>
+
+      <div class="term live" data-t="2400" role="img" aria-label="Terminal output of coldstart find edited together cochange sidecar handleGetStructure">
+        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="term-title">coldstart-mcp</span></div>
+        <div class="term-body">
+<span class="l cmdline"><span class="p-prompt">$&nbsp;</span><span class="typed" data-cmd="coldstart find edited together cochange sidecar"></span><span class="type-cursor"></span></span>
+<div class="out">
+<span class="l" data-t="100"><span class="p-dim">[coldstart] cache hit (19ms, 421 files)</span></span>
+<span class="gap" data-t="0"></span>
+<span class="l" data-t="140"><span class="p-frost">▸ src/server/tools.ts</span>  <span class="p-hit">[4/5]</span></span>
+<span class="l" data-t="90">   <span class="p-ember">Role:</span>  <span class="p-dim">defines</span> symbol, handleGetStructure</span>
+<span class="l" data-t="90">   <span class="p-dim">co-change arrives as an optional</span> <b>third parameter</b><span class="p-dim">, loaded by each caller</span></span>
+<span class="gap" data-t="0"></span>
+<span class="l" data-t="140"><span class="p-frost">▸ src/cli.ts</span>  <span class="p-hit">[5/5]</span></span>
+<span class="l" data-t="90">   <span class="p-ember">Wired:</span>  <span class="p-dim">imports</span> handleGetStructure <span class="p-dim">(from tools.ts)</span></span>
+<span class="l" data-t="90">   <span class="p-dim">in</span> function runGs <span class="p-dim">[L166-191]:</span> <span class="p-dim">loadCoChange(root) → passed as 3rd arg</span><span class="cursor"></span></span>
+</div>
+        </div>
+      </div>
+
+      <div class="rflow" data-t="400"><span class="glyph">→</span><span class="rlab"><b>cli.ts</b> <span class="sub">is where it's wired — confirm with a targeted <code>gs</code></span></span></div>
+
+      <div class="term live" data-t="1900" role="img" aria-label="Terminal output of coldstart gs src/cli.ts --match cochange">
+        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="term-title">coldstart-mcp</span></div>
+        <div class="term-body">
+<span class="l cmdline"><span class="p-prompt">$&nbsp;</span><span class="typed" data-cmd="coldstart gs src/cli.ts --match cochange"></span><span class="type-cursor"></span></span>
+<div class="out">
+<span class="l" data-t="120"><span class="p-dim">2 content matches in 1 method (in-tool grep → method body)</span></span>
+<span class="gap" data-t="0"></span>
+<span class="l" data-t="120"><span class="p-ember">function runGs</span> <span class="p-dim">[L166-191]</span></span>
+<span class="l" data-t="100">  180  <span class="p-dim">const</span> &#123; loadCoChange &#125; = <span class="p-dim">await import(</span><span class="p-file">'./indexer/cochange.js'</span><span class="p-dim">)</span></span>
+<span class="l" data-t="100">  186  &#125;, <span class="p-frost">loadCoChange(root, flags.cacheDir)</span>) <span class="p-dim">as HandlerResult;</span><span class="cursor"></span></span>
+</div>
+        </div>
+      </div>
+
+      <div class="rtag" data-t="400"><span class="d"></span>answered — cites <code>src/server/tools.ts</code> + <code>src/cli.ts</code>, 2 tool calls</div>
+
+      <blockquote class="rquote" data-t="300">"Not the import graph — <code>gs</code> takes co-change as an optional third argument, lazily loaded from <code>cochange.json</code> and passed in by whichever reader is running (<code>cli.ts</code>'s <code>runGs</code> here). No index rebuild involved."</blockquote>
+
+      <div class="rflow" data-t="450"><span class="glyph">→</span><span class="rlab"><b>Stop hook</b> <span class="sub">fires · worklist: 2 files read this turn, both note-worthy</span></span></div>
+
+      <div class="card captured" data-t="350">
+        <div class="card-top">
+          <div class="kick"><span class="pill-t">Flow note</span><span class="pill fresh"><span class="d"></span>captured</span></div>
+          <div class="card-title">how the edited-together signal reaches gs without going through the index</div>
+        </div>
+        <div class="card-body">
+          <p>The "Edited together" pairs <code>gs</code> shows are <b>not part of the code index</b> and never travel through the cache pipeline — they live in a separate keeper-written sidecar (<code>cochange.json</code>) that each reader loads itself and hands to the symbol-page builder as a third argument.</p>
+          <div class="anchors">
+            <div class="lbl">Anchors</div>
+            <div class="arow">
+              <span class="anc fresh"><span class="d"></span>src/index-manager.ts</span>
+              <span class="anc fresh"><span class="d"></span>src/cli.ts</span>
+              <span class="anc fresh"><span class="d"></span>+1 more</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="keynote rise in">
+      <span class="kk">This turn</span>
+      <p><b>2 tool calls</b> to answer — <code>find</code>, then <code>gs</code> — and one note written down, unasked, so the next agent doesn't repeat the trip.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== PART 2 — SECOND TIME ===================== -->
+<section id="second-time" style="background:var(--ink-1);border-top:1px solid var(--line);border-bottom:1px solid var(--line);">
+  <div class="wrap">
+    <div class="rise in">
+      <div class="eyebrow warm">02 · second time</div>
+      <h2>Same question. Zero tool calls.</h2>
+      <p class="lead">A different session, maybe a different contributor. The note from last time is still there, still checked against the code — so this time the answer doesn't need <code>find</code> or <code>gs</code> at all.</p>
+    </div>
+
+    <div class="recall reveal">
+      <div class="rprompt" data-t="0"><span class="who">you</span><span class="q">"does <code>gs</code>'s 'edited together' come from the import graph?"</span></div>
+
+      <div class="rflow" data-t="500"><span class="glyph">→</span><span class="rlab"><b>UserPromptSubmit</b> <span class="sub">fires before the agent ever sees this message</span></span></div>
+      <div class="rflow" data-t="450"><span class="glyph">→</span><span class="rlab"><b>kb search</b> <span class="sub">ranks notebook notes against the prompt — no embeddings, term + title match</span></span></div>
+      <div class="rflow" data-t="450"><span class="glyph">✓</span><span class="rlab"><b>match found</b> <span class="sub">[fresh] · injected as context, unasked</span></span></div>
+
+      <div class="card injected" data-t="400">
+        <div class="card-top">
+          <div class="kick"><span class="pill-t">Flow note</span><span class="pill inj"><span class="d"></span>injected</span></div>
+          <div class="card-title">how the edited-together signal reaches gs without going through the index</div>
+        </div>
+        <div class="card-body">
+          <p>The "Edited together" pairs <code>gs</code> shows are <b>not part of the code index</b> and never travel through the cache pipeline — they live in a separate keeper-written sidecar (<code>cochange.json</code>) that each reader loads itself and hands to the symbol-page builder as a third argument.</p>
+          <div class="anchors">
+            <div class="lbl">Anchors</div>
+            <div class="arow">
+              <span class="anc fresh"><span class="d"></span>src/index-manager.ts</span>
+              <span class="anc fresh"><span class="d"></span>src/cli.ts</span>
+              <span class="anc fresh"><span class="d"></span>+1 more</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rflow think" data-t="700"><span class="glyph think"><span class="pdot"></span></span><span class="rlab"><b>Thinking…</b> <span class="sub">the gist already names the file and the mechanism — no search needed</span></span></div>
+
+      <div class="rtag" data-t="600"><span class="d"></span>answered — cites <code>src/index-manager.ts</code> + <code>cochange.json</code>, zero tool calls</div>
+
+      <blockquote class="rquote" data-t="400">"Not the import graph — <code>cochange.json</code> is a separate sidecar the keeper derives from <code>git log --name-status -M</code>, loaded straight into <code>gs</code>'s symbol-page builder. No index rebuild involved."</blockquote>
+    </div>
+
+    <div class="keynote cool rise in">
+      <span class="kk">The flywheel</span>
+      <p><b>2 tool calls the first time, 0 the second.</b> The note carried the answer — checked against the code at the moment it was recalled, not trusted blindly.</p>
+    </div>
+  </div>
+</section>
+
+<Footer />
+
+<style>
+.term.live .cmdline .typed{white-space:pre;}
+.term.live .type-cursor{display:inline-block;width:8px;height:15px;vertical-align:-2px;margin-left:2px;
+  background:var(--frost);animation:blink 1.05s steps(1) infinite;}
+.term.live .type-cursor.done{display:none;}
+.term.live .out .l,.term.live .out .gap{opacity:0;transform:translateY(2px);
+  transition:opacity .22s ease,transform .22s ease;}
+.term.live .out .l.in,.term.live .out .gap.in{opacity:1;transform:none;}
+@keyframes blink{50%{opacity:0;}}
+
+.recall{max-width:760px;margin:44px 0 0;}
+.recall.reveal>*{opacity:0;transform:translateY(5px);transition:opacity .32s ease,transform .32s ease;}
+.recall.reveal>*.in{opacity:1;transform:none;}
+.glyph.think{display:inline-flex;align-items:center;justify-content:center;width:13px;}
+.pdot{width:7px;height:7px;border-radius:50%;background:var(--frost);animation:pdot 1.1s ease-in-out infinite;}
+@keyframes pdot{0%,100%{opacity:.35;transform:scale(.85);}50%{opacity:1;transform:scale(1);}}
+.rquote{padding:16px 20px;border-left:2px solid var(--frost-dim);background:rgba(79,191,224,.05);
+  font-family:var(--display);font-style:italic;font-size:15.5px;line-height:1.65;color:var(--text);
+  border-radius:0 8px 8px 0;}
+.rquote code{font-family:var(--mono);font-style:normal;font-size:13.5px;color:var(--frost);}
+
+.time-gap{text-align:left;margin:0;font-family:var(--mono);font-size:12px;letter-spacing:.08em;
+  color:var(--faint);text-transform:uppercase;}
+.keynote{margin-top:40px;margin-bottom:0;}
+
+@media(prefers-reduced-motion:reduce){
+  .term.live .out .l,.term.live .out .gap{transition:none;}
+  .term.live .type-cursor{animation:none;}
+  .pdot{animation:none;}
+  .recall.reveal>*{transition:none;}
+}
+</style>
+
+<script>
+(function(){
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function typeCommand(term, done){
+    var typed = term.querySelector('.typed');
+    var cmd = typed.getAttribute('data-cmd') || '';
+    var i = 0;
+    (function tick(){
+      typed.textContent = cmd.slice(0, i);
+      i++;
+      if (i <= cmd.length) { setTimeout(tick, 14 + Math.random() * 16); } else { done(); }
+    })();
+  }
+
+  function revealTermInstantly(term){
+    var typed = term.querySelector('.typed');
+    typed.textContent = typed.getAttribute('data-cmd');
+    var cursor = term.querySelector('.type-cursor');
+    if (cursor) cursor.classList.add('done');
+    term.querySelectorAll('.out .l, .out .gap').forEach(function(el){ el.classList.add('in'); });
+  }
+
+  function revealTermOutput(term){
+    var lines = Array.prototype.slice.call(term.querySelectorAll('.out .l, .out .gap'));
+    var t = 0;
+    lines.forEach(function(el){
+      t += parseInt(el.getAttribute('data-t') || '0', 10) || 60;
+      setTimeout(function(){ el.classList.add('in'); }, t);
+    });
+  }
+
+  function runTerm(term){
+    if (term.dataset.ran) return;
+    term.dataset.ran = '1';
+    if (reduce) { revealTermInstantly(term); return; }
+    var cursor = term.querySelector('.type-cursor');
+    typeCommand(term, function(){
+      if (cursor) cursor.classList.add('done');
+      setTimeout(function(){ revealTermOutput(term); }, 240);
+    });
+  }
+
+  var timelines = Array.prototype.slice.call(document.querySelectorAll('.recall.reveal'));
+  if (!timelines.length) return;
+
+  function revealTimelineInstantly(el){
+    Array.prototype.slice.call(el.children).forEach(function(child){
+      child.classList.add('in');
+      if (child.classList.contains('term') && child.classList.contains('live')) revealTermInstantly(child);
+    });
+  }
+
+  function runTimeline(el){
+    if (reduce) { revealTimelineInstantly(el); return; }
+    var t = 0;
+    Array.prototype.slice.call(el.children).forEach(function(child){
+      t += parseInt(child.getAttribute('data-t') || '0', 10) || 0;
+      (function(child, t){
+        setTimeout(function(){
+          child.classList.add('in');
+          if (child.classList.contains('term') && child.classList.contains('live')) runTerm(child);
+        }, t);
+      })(child, t);
+    });
+  }
+
+  if (!('IntersectionObserver' in window)) { timelines.forEach(revealTimelineInstantly); return; }
+  var obs = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if (e.isIntersecting) { runTimeline(e.target); obs.unobserve(e.target); }
+    });
+  }, { threshold: 0.2 });
+  timelines.forEach(function(el){ obs.observe(el); });
+})();
+</script>
+</body>
+</html>

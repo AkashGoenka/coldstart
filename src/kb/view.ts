@@ -144,6 +144,8 @@ export function renderViewHtml(template: string, data: unknown): string {
     : 'Coldstart Notebook';
   return template
     .replace('__TITLE__', () => title)
+    // The CLI page stands alone; only the website build fills this in.
+    .replace('<!--__HOME_LINK__-->', '')
     .replace('__DATA_JSON__', () => json);
 }
 
