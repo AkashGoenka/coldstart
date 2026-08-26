@@ -7,4 +7,10 @@ scripts/probe-output/
 
 # Internal design/research docs — kept locally, not tracked
 /docs/
-.coldstart/
+
+# Local scratch under .coldstart/, except the notebook's own committed
+# surface (.raw/ logs + okf.yaml + its own .gitignore) — published via
+# `kb commit`. The nested .coldstart/notebook/.gitignore governs what inside
+# notebook/ stays local (notes/ derived md, .metrics/, worklists).
+.coldstart/*
+!.coldstart/notebook

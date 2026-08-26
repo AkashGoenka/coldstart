@@ -3,7 +3,15 @@ name: Deploy site to Pages
 on:
   push:
     branches: [main]
-    paths: ['site-astro/**', '.github/workflows/pages.yml']
+    paths:
+      - 'site-astro/**'
+      - '.github/workflows/pages.yml'
+      # These feed the notebook/graph pages baked in above — a push here
+      # changes site output even though it never touches site-astro/.
+      - 'src/**'
+      - '.coldstart/notebook/**'
+      - 'scripts/kb-viewer/**'
+      - 'scripts/graph-viewer/**'
   workflow_dispatch:
 
 permissions:
@@ -31,8 +39,20 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: site-astro/package-lock.json
-      - name: Install dependencies
+          cache-dependency-path: |
+            package-lock.json
+            site-astro/package-lock.json
+      - name: Build coldstart
+        run: |
+          npm ci
+          npm run build
+      - name: Build a fresh index for this checkout
+        run: node dist/index.js index --root .
+      - name: Regenerate notebook and graph site pages
+        run: |
+          node scripts/kb-viewer/build-site-page.mjs
+          node scripts/graph-viewer/build-site-page.mjs
+      - name: Install site dependencies
         working-directory: site-astro
         run: npm ci
       - uses: actions/configure-pages@v5
