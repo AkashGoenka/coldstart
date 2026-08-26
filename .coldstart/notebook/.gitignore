@@ -1,0 +1,8 @@
+notes/
+.metrics/
+index.html
+.worklist.md
+.worklist.json
+.worklist-*.md
+.worklist-*.json
+.capture-instructions.md
