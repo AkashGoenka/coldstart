@@ -40,8 +40,10 @@ if (!index) {
   process.exit(1);
 }
 
-// The site page deliberately carries NO notebook edges: the notebook is this
-// repo's private working memory, and note titles are not marketing copy.
+// The site page deliberately carries NO notebook edges: /graph/ shows code
+// structure (files, imports, calls, co-change), and /notebook/ is the
+// separate viewer for notes — mixing the two would blur what each page is
+// answering, independent of whether the notebook itself is public.
 const { payload, stats } = buildGraphPayload(
   'coldstart', index, loadCoChange(ROOT), [],
 );

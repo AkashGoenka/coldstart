@@ -1,11 +1,12 @@
 ---
-interface Props { variant?: 'home' | 'docs' | 'blog' | 'how' }
+interface Props { variant?: 'home' | 'docs' | 'blog' | 'how' | 'live' }
 const { variant = 'docs' } = Astro.props;
 const taglines = {
   home: 'codebase memory for coding agents · MIT',
   docs: 'docs · MIT',
   blog: 'blog · MIT',
   how: 'how it works · MIT',
+  live: 'see it live · MIT',
 };
 const tagline = taglines[variant];
 ---

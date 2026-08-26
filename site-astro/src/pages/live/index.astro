@@ -1,0 +1,104 @@
+---
+import Head from '../../layouts/Head.astro';
+import SvgDefs from '../../components/SvgDefs.astro';
+import Nav from '../../components/Nav.astro';
+import Footer from '../../components/Footer.astro';
+import '../../styles/landing.css';
+
+const title = 'See it live — coldstart on its own repo';
+const description =
+  'Three ways to see coldstart working on its own codebase: a real session start to finish, the whole repo as a walkable graph, and the actual notes it has written about itself.';
+
+const cards = [
+  {
+    href: '/demo/',
+    kicker: 'Walkthrough',
+    title: 'One real session',
+    body: 'A question asked cold, answered with find and gs — then asked again later and answered for free from a note.',
+    meta: '2 tool calls → 0',
+  },
+  {
+    href: '/graph/',
+    kicker: 'Graph',
+    title: 'The whole repo, walkable',
+    body: "Every indexed file in this repo as a sphere you can drag, search, and open — coldstart's own dependency graph.",
+    meta: 'every file, every import',
+  },
+  {
+    href: '/notebook/',
+    kicker: 'Notebook',
+    title: "This repo's real notes",
+    body: 'The actual notebook coldstart has written about its own code while working — not a mockup, the live thing.',
+    meta: 'real notes, real code',
+  },
+];
+---
+<html lang="en">
+<head>
+  <Head
+    title={title}
+    description={description}
+    keywords="coldstart demo, codebase graph, notebook viewer, AI coding agent memory, live demo"
+    canonicalPath="/live/"
+    ogType="website"
+    ogTitle={title}
+    ogDescription={description}
+    themeColor="#070a11"
+  />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+<SvgDefs />
+<Nav variant="live" />
+
+<header class="hero" style="padding-bottom:16px;">
+  <div class="wrap hero-in">
+    <div class="kicker">Real output · this repo</div>
+    <h1 class="title" style="font-size:clamp(32px,5vw,52px);">Three ways to see it,<br>none of them staged.</h1>
+    <p class="hero-sub">coldstart running on its own codebase — pick how you want to look at it.</p>
+  </div>
+</header>
+
+<section style="padding-top:24px;">
+  <div class="wrap">
+    <div class="livegrid">
+      {cards.map(c => (
+        <a class="livecard" href={c.href}>
+          <div class="lc-kicker">{c.kicker}</div>
+          <h2>{c.title}</h2>
+          <p>{c.body}</p>
+          <div class="lc-foot">
+            <span class="lc-meta">{c.meta}</span>
+            <span class="lc-go" aria-hidden="true">→</span>
+          </div>
+        </a>
+      ))}
+    </div>
+  </div>
+</section>
+
+<Footer variant="live" />
+
+<style>
+.livegrid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:8px;}
+@media(max-width:860px){.livegrid{grid-template-columns:1fr;}}
+
+.livecard{display:flex;flex-direction:column;gap:12px;padding:26px 24px;border-radius:14px;
+  border:1px solid var(--line);background:var(--ink-2);text-decoration:none;color:inherit;
+  transition:border-color .18s,transform .18s,box-shadow .18s;}
+.livecard:hover{border-color:color-mix(in srgb,var(--frost) 40%,var(--line));
+  transform:translateY(-3px);box-shadow:0 26px 54px -30px rgba(0,0,0,.75);}
+.lc-kicker{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--frost);}
+.livecard h2{font-family:var(--display);font-weight:500;font-size:21px;letter-spacing:-.01em;margin:0;color:var(--text);}
+.livecard p{font-size:14px;line-height:1.65;color:var(--muted);margin:0;flex:1;}
+.lc-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:4px;
+  padding-top:14px;border-top:1px solid var(--line);}
+.lc-meta{font-family:var(--mono);font-size:12px;color:var(--faint);}
+.lc-go{color:var(--frost);font-size:16px;transition:transform .18s;}
+.livecard:hover .lc-go{transform:translateX(3px);}
+@media(prefers-reduced-motion:reduce){.livecard,.lc-go{transition:none;}.livecard:hover{transform:none;}}
+</style>
+</body>
+</html>
