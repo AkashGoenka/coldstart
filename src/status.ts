@@ -22,6 +22,7 @@ import {
   type DaemonLockListing,
 } from './daemon-lock.js';
 import { getCacheDir } from './cache/disk-cache.js';
+import { readInflight, describeInflight } from './inflight.js';
 import { readKeeperState, readRepairTail, type KeeperEventStamp } from './keeper-state.js';
 import { loadCoChange } from './indexer/cochange.js';
 
@@ -210,11 +211,27 @@ export async function runStatus(): Promise<void> {
     const state = readKeeperState(root);
     const repairs = readRepairTail(root, 1);
     if (!state && repairs.length === 0) continue;
-    const work = state?.inProgress;
+    // Only believe an inProgress stamp if the keeper that wrote it is still
+    // alive — KeeperWork's contract is that a lingering stamp from a keeper
+    // that died mid-rebuild is harmless BECAUSE readers check the pid first
+    // (waitForCacheHead in keeper.ts already does). Without this, a killed or
+    // crashed keeper leaves a permanent "IN PROGRESS" that status reports as
+    // current forever, hiding the real reason the index is stale.
+    const work = state && isDaemonAlive(state.pid) ? state.inProgress : null;
+    // What the indexer is chewing on right now (a live record), or the unit of
+    // work that killed it (a record outliving its process). The second is the
+    // whole point: a hung build otherwise leaves nothing but a truncated log.
+    const flight = readInflight(root);
+    const flightLine = flight
+      ? isDaemonAlive(flight.pid)
+        ? `working on: ${describeInflight(flight)} (${relativeAge(Date.now() - flight.at)})`
+        : `LAST SEEN: PID ${flight.pid} died during ${describeInflight(flight)} — ${relativeAge(Date.now() - flight.at)}, never finished`
+      : null;
     const parts = [
       // First, because it explains a stale index better than any of the
       // "last X" stamps can — the answer is "it is working on it right now".
       work ? `IN PROGRESS: ${work.kind}${work.detail ? ` (${work.detail})` : ''}, started ${relativeAge(Date.now() - work.at)}` : null,
+      flightLine,
       stampLine('reconcile', state?.lastReconcile),
       stampLine('patch', state?.lastPatch),
       stampLine('rebuild', state?.lastRebuild),

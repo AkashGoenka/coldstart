@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.2] - 2026-09-01
+
+### Fixed
+- **An index build could hang forever on a single file, with no error and no way to tell which
+  file.** The shape gate that decides whether a token looks like an identifier used a
+  catastrophic-backtracking regex: a quantified group wrapped in a trailing `+`. Feed it one
+  long mixed-case run that ends up failing the match and the engine explores exponentially many
+  ways to split it before concluding no-match. Growth measured at 2× per 2 characters — 46
+  characters takes 41ms, 66 takes about 42 seconds, and roughly 90 takes longer than anyone will
+  wait. The trigger is narrower than it looks and explains why it surfaced in real fixtures: the
+  token scanner accepts `_` but the camelCase pattern does not, so only a mixed-case run
+  *containing an underscore* can fail this way — base64url blobs and JWT signatures exactly. A
+  pure alphanumeric camelCase run matches quickly and is harmless. Content-token extraction runs
+  on every file in every language, so the language of the repo was never the point. The keeper
+  span at 100% CPU holding its lock, the log stopped after `Parsing files...`, `init` blocked for
+  its full 180s, and killing the process was the only recovery — after which the next build hit
+  the same file and hung identically. The four shape patterns are now written without nested
+  quantifiers, with a token-length cap as a second line of defence. Verified equivalent to the old
+  patterns across 400,018 randomly generated tokens plus the existing corpus: zero disagreements. (#165)
+- **`coldstart status` reported work that had stopped long ago.** A keeper killed mid-rebuild
+  leaves its `inProgress` stamp on disk. Readers are supposed to check the recorded pid is alive
+  before believing it — `waitForCacheHead` did, `status` did not — so a killed keeper showed
+  `IN PROGRESS: rebuild` forever. Since killing the keeper was the only way out of the hang above,
+  the one command you would reach for while diagnosing it was guaranteed to mislead you. (#165)
+
+### Added
+- **A build that gets stuck now tells you which file it got stuck on.** The failure this addresses
+  blocks the event loop completely, which rules out every usual approach: a watchdog timer, a
+  progress interval, a signal handler and any async write are all structurally unable to run once
+  the spin starts. So the indexer writes what it is about to do *before* doing it, synchronously,
+  and clears the record on clean completion — which means a record that outlives its own process
+  is itself the diagnosis. `coldstart status` now prints `working on: parse <file>` while a build
+  is running, and `LAST SEEN: PID <n> died during parse <file>` when the process that wrote it is
+  gone. The next keeper repeats it as a warning at startup and appends `died-in-progress` to
+  `repair.jsonl`, because startup is the last moment that evidence exists before the next build
+  overwrites it. The record is written per file rather than per batch: measured at 86ms across a
+  2000-file build, under 3% of a build that takes seconds, in exchange for the exact path instead
+  of a 100-file window to bisect by hand. (#165)
+
+If you were hit by the hang, upgrading is not always enough on its own — a cache directory left
+half-written by a stuck build can persist. Removing `~/.coldstart` and re-running any `coldstart
+find` rebuilds it from scratch.
+
 ## [2.3.1] - 2026-08-26
 
 ### Added

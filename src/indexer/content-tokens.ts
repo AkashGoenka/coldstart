@@ -30,20 +30,36 @@ export const CONTENT_TOKEN_DF_MAX = 5;
 // Per-file unique-token safety cap (generated monsters)
 const MAX_TOKENS_PER_FILE = 3000;
 const MIN_TOKEN_LENGTH = 4;
+// Guards SHAPE_* below against catastrophic backtracking on long mixed-case
+// runs (hashes, base64, encoded fixtures) — no real identifier is this long.
+const MAX_TOKEN_LENGTH = 100;
 
 // ---------------------------------------------------------------------------
 // Shape gate — identifier-shaped multi-word tokens only, case preserved
+//
+// SHAPE_SNAKE/CAMEL/ALL_CAPS below are deliberately NOT written as the more
+// "obvious" `^[a-z][a-z0-9]*(?:_+[a-z0-9]+)+$` / `(?:[A-Z][a-zA-Z0-9]*)+`
+// forms: those nest a quantified group inside a `+`, which is catastrophic-
+// backtracking-shaped — a single ~80-char adversarial token (an embedded
+// hash/base64/signature) made the backtracking engine hang effectively
+// forever. Each pattern here has exactly one `*`/`+` and a fixed trailing
+// check instead, which a backtracking engine resolves in linear time; the
+// "one or more word-break" requirement is enforced by `includes('_')`
+// afterward rather than by repeating a group. Verified equivalent to the
+// original patterns against the full test corpus below.
 // ---------------------------------------------------------------------------
-const SHAPE_SNAKE = /^[a-z][a-z0-9]*(?:_+[a-z0-9]+)+$/;
-const SHAPE_CAMEL = /^[a-z][a-z0-9]*(?:[A-Z][a-zA-Z0-9]*)+$/;
+const SHAPE_SNAKE = /^[a-z][a-z0-9_]*[a-z0-9]$/;
+const SHAPE_CAMEL = /^[a-z][a-zA-Z0-9]*$/;
 const SHAPE_PASCAL = /^(?:[A-Z][a-z0-9]+){2,}$/;
-const SHAPE_ALL_CAPS = /^[A-Z][A-Z0-9]*(?:_+[A-Z0-9]+)+$/;
+const SHAPE_ALL_CAPS = /^[A-Z][A-Z0-9_]*[A-Z0-9]$/;
 
 export function isShapedToken(t: string): boolean {
-  return (
-    t.length >= MIN_TOKEN_LENGTH &&
-    (SHAPE_SNAKE.test(t) || SHAPE_CAMEL.test(t) || SHAPE_PASCAL.test(t) || SHAPE_ALL_CAPS.test(t))
-  );
+  if (t.length < MIN_TOKEN_LENGTH || t.length > MAX_TOKEN_LENGTH) return false;
+  if (SHAPE_SNAKE.test(t) && t.includes('_')) return true;
+  if (SHAPE_CAMEL.test(t) && /[A-Z]/.test(t)) return true;
+  if (SHAPE_PASCAL.test(t)) return true;
+  if (SHAPE_ALL_CAPS.test(t) && t.includes('_')) return true;
+  return false;
 }
 
 // ---------------------------------------------------------------------------

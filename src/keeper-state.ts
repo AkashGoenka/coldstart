@@ -52,7 +52,10 @@ export interface KeeperState {
 
 export interface RepairEvent {
   at: number;
-  event: 'patch-failed' | 'rebuild-failed' | 'invariant-violation' | 'reconcile-failed';
+  // 'died-in-progress': a previous indexer process vanished mid-work and left
+  // its in-flight record behind (see inflight.ts). Recorded at the next
+  // keeper start, because that is the last moment the evidence still exists.
+  event: 'patch-failed' | 'rebuild-failed' | 'invariant-violation' | 'reconcile-failed' | 'died-in-progress';
   detail: string;
 }
 
