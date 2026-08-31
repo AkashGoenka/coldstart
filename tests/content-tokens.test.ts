@@ -100,6 +100,21 @@ describe('isShapedToken', () => {
     expect(isShapedToken('a_b')).toBe(false); // too short
     expect(isShapedToken('_private_thing')).toBe(false); // leading underscore
   });
+
+  it('resolves adversarial mixed-case runs in linear time (catastrophic-backtracking regression)', () => {
+    // A ~2000-char embedded hash/base64/signature must not hang a full index
+    // rebuild. This class of input (many scattered case transitions, no
+    // trailing match) is exactly what triggers exponential backtracking on a
+    // nested-quantifier shape gate like `(?:[A-Z][a-zA-Z0-9]*)+$`.
+    const start = Date.now();
+    const adversarialCamel = 'a' + 'Aa'.repeat(1000) + '!';
+    const adversarialSnake = 'a' + 'a'.repeat(60) + '_'.repeat(60) + '!';
+    const adversarialCaps = 'A' + 'A'.repeat(60) + '_'.repeat(60) + '!';
+    expect(isShapedToken(adversarialCamel)).toBe(false);
+    expect(isShapedToken(adversarialSnake)).toBe(false);
+    expect(isShapedToken(adversarialCaps)).toBe(false);
+    expect(Date.now() - start).toBeLessThan(200);
+  });
 });
 
 // ============================================================================

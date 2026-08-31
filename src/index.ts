@@ -38,6 +38,7 @@ import { reconcileChanges } from './indexer/reconcile.js';
 import { patchIndex } from './indexer/patch.js';
 import { lintIndexInvariants } from './indexer/invariants.js';
 import { updateKeeperState, appendRepairLog } from './keeper-state.js';
+import { markInflight, clearInflight, readStaleInflight, describeInflight } from './inflight.js';
 import { patchThreshold } from './constants.js';
 import { loadCachedIndex, saveCachedIndex, getCacheDir, updateCachedGitHead } from './cache/disk-cache.js';
 import { startMCPServer } from './server/mcp.js';
@@ -140,6 +141,10 @@ export async function buildIndex(
 ): Promise<CodebaseIndex> {
   const start = Date.now();
 
+  // A build that hangs leaves no trace in the log beyond the last phase line —
+  // the event loop is blocked, so nothing can report which file it died on.
+  // markInflight writes that synchronously, before the work. See inflight.ts.
+  markInflight(rootDir, 'walk');
   log(quiet, '[coldstart] Walking filesystem...');
   const walkedFiles = await walkDirectory({ rootDir, excludes, includes });
   log(quiet, `[coldstart] Found ${walkedFiles.length} source files`);
@@ -159,7 +164,11 @@ export async function buildIndex(
       batch.map(async (wf) => {
         try {
           const id = buildFileId(wf.relativePath);
-          const parsed = await parseFile(wf.absolutePath, wf.language, id);
+          // The mark is handed to parseFile rather than set here: this whole
+          // batch is in flight at once, so a mark set at this line names the
+          // last file started, not the one burning the CPU. See parseFile.
+          const parsed = await parseFile(wf.absolutePath, wf.language, id,
+            () => markInflight(rootDir, 'parse', wf.relativePath));
           if (!parsed) return;
 
           const file: IndexedFile = {
@@ -189,6 +198,7 @@ export async function buildIndex(
     }
   }
 
+  markInflight(rootDir, 'resolve');
   log(quiet, '[coldstart] Resolving imports...');
   const { edges, unresolved } = await resolveImports(indexedFiles, rootDir);
   log(quiet, `[coldstart] Resolved ${edges.length} edges (${unresolved.length} unresolved)`);
@@ -210,6 +220,7 @@ export async function buildIndex(
     if (breakdown) process.stderr.write(`[coldstart] Resolution by language: ${breakdown}\n`);
   }
 
+  markInflight(rootDir, 'graph');
   log(quiet, '[coldstart] Building graph...');
   const nodeIds = indexedFiles.map(f => f.id);
   const { outEdges, inEdges } = buildGraph(nodeIds, edges);
@@ -266,6 +277,11 @@ export async function buildIndex(
       if (child) child.transitiveImportedByCount += file.importedByCount;
     }
   }
+
+  // The build finished, so nothing is in flight. A record left behind after
+  // this point can only mean the process died mid-work — which is exactly how
+  // readStaleInflight tells a hang apart from ordinary progress.
+  clearInflight(rootDir);
 
   return {
     rootDir,
@@ -580,6 +596,21 @@ async function runKeeper(
   // compatibility) on upgrade.
   await writeLock(finalRoot, process.pid, getCurrentVersion());
   log(quiet, `[coldstart] Keeper lock written (PID ${process.pid})`);
+  // A record left by a keeper that is GONE names the exact unit of work that
+  // killed it — the previous build hung or crashed here and never cleared it.
+  // Say so loudly and durably: this is the one moment the evidence exists, and
+  // the next build is about to overwrite it.
+  if (!noCache) {
+    const died = readStaleInflight(finalRoot, cacheDir);
+    if (died) {
+      const where = describeInflight(died);
+      log(quiet, `[coldstart] WARNING: the previous indexer (PID ${died.pid}) died during ${where}`);
+      if (died.file) {
+        log(quiet, `[coldstart] WARNING: ${died.file} is the prime suspect — it never finished parsing`);
+      }
+      await appendRepairLog(finalRoot, 'died-in-progress', where, cacheDir);
+    }
+  }
   // inProgress: null — a keeper killed mid-rebuild leaves its stamp behind, and
   // this is the one moment we know for certain no work is running.
   if (!noCache) await updateKeeperState(finalRoot, { startedAt: Date.now(), inProgress: null }, cacheDir);

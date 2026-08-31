@@ -52,10 +52,22 @@ function extractAstroFrontmatter(content: string): string | null {
   return m ? m[1] : null;
 }
 
+/**
+ * @param onWork Called immediately before each SYNCHRONOUS section of work on
+ *   this file, so a caller can record what is in flight (see inflight.ts).
+ *   It must be invoked here rather than at the call site: the caller runs a
+ *   whole batch through `Promise.all`, and the awaits below (grammar load,
+ *   file read) let every file in that batch get past the call site before any
+ *   of them reaches the CPU-bound work — so a mark set out there names the
+ *   last file STARTED, not the one actually running. Verified: it reported an
+ *   innocent file while a different one spun. There must be no `await`
+ *   between a call to this and the synchronous work it announces.
+ */
 export async function parseFile(
   filePath: string,
   language: Language,
   fileId = '',
+  onWork?: () => void,
 ): Promise<ParsedFile | null> {
   await ensureParsersReady(); // one-time (idempotent) load of the web-tree-sitter grammars
   let content: string;
@@ -67,10 +79,12 @@ export async function parseFile(
     return null;
   }
 
+  onWork?.();
   const parsed = await parseByLanguage(filePath, language, fileId, content);
   if (!parsed) return null;
   // Content-token channel is language-agnostic: shaped full-body identifiers
   // with provenance bits, extracted once here for every indexed language.
+  onWork?.();
   parsed.contentTokens = extractContentTokens(content, fileId || filePath);
   return parsed;
 }

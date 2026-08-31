@@ -16,6 +16,8 @@ import { patchThreshold } from '../src/constants.js';
 import {
   waitForKeeperCache, waitForCacheHead,
 } from '../src/keeper.js';
+import { runStatus } from '../src/status.js';
+import { writeLock } from '../src/daemon-lock.js';
 import {
   saveCachedIndex, loadCachedIndex, getCacheDir,
 } from '../src/cache/disk-cache.js';
@@ -652,6 +654,70 @@ describe('keeper waits', () => {
 // ---------------------------------------------------------------------------
 // Tests: disk-cache.ts — generation handling
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Tests: status.ts — the same dead-keeper rule the waits above enforce
+// ---------------------------------------------------------------------------
+
+describe('status rendering', () => {
+  let home: string;
+  let repoRoot: string;
+  let prevHome: string | undefined;
+
+  beforeEach(() => {
+    prevHome = process.env.COLDSTART_HOME;
+    home = fs.mkdtempSync(path.join(os.tmpdir(), 'cs-status-home-'));
+    process.env.COLDSTART_HOME = home;
+    repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cs-status-repo-'));
+  });
+
+  afterEach(() => {
+    if (prevHome === undefined) delete process.env.COLDSTART_HOME;
+    else process.env.COLDSTART_HOME = prevHome;
+    fs.rmSync(home, { recursive: true, force: true });
+    fs.rmSync(repoRoot, { recursive: true, force: true });
+  });
+
+  /** Stage one root mid-rebuild, owned by `pid`, and capture what status prints. */
+  async function renderWithKeeperPid(pid: number): Promise<string> {
+    await writeLock(repoRoot, pid, '2.3.1');
+    await updateKeeperState(repoRoot, {
+      inProgress: { kind: 'rebuild', at: Date.now(), detail: '400 files' },
+    });
+    // updateKeeperState always stamps the CURRENT pid; overwrite with the one under test.
+    const statePath = keeperStatePath(repoRoot);
+    const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    state.pid = pid;
+    fs.writeFileSync(statePath, JSON.stringify(state));
+
+    let out = '';
+    const original = process.stdout.write.bind(process.stdout);
+    (process.stdout as unknown as { write: unknown }).write = (chunk: unknown) => {
+      out += String(chunk);
+      return true;
+    };
+    try {
+      await runStatus();
+    } finally {
+      (process.stdout as unknown as { write: unknown }).write = original;
+    }
+    return out;
+  }
+
+  it('a rebuild stamp from a DEAD keeper is not reported as current', async () => {
+    // A keeper killed mid-rebuild (the only recovery from a wedged build)
+    // leaves its stamp on disk forever. Rendering it verbatim made `status`
+    // claim work was underway indefinitely — during the very incident it is
+    // reached for. KeeperWork's contract is that readers check the pid first.
+    const out = await renderWithKeeperPid(0x7ffffff0); // above any real pid
+    expect(out).not.toContain('IN PROGRESS');
+  });
+
+  it('a rebuild stamp from a LIVE keeper is still reported', async () => {
+    const out = await renderWithKeeperPid(process.pid);
+    expect(out).toContain('IN PROGRESS');
+  });
+});
 
 describe('disk-cache generations', () => {
   let cacheDir: string;
