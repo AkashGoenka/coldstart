@@ -1,0 +1,477 @@
+---
+// Specimen page for DESIGN.md. Self-contained on purpose: imports none of the
+// real stylesheets, so it can be approved or thrown away without touching the
+// live site. Not linked from nav; noindex.
+const findCmd = 'coldstart ' + 'find edited together cochange sidecar';
+const gsCmd = 'coldstart ' + 'gs src/cli.ts --match cochange';
+---
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="robots" content="noindex,nofollow" />
+<title>Specimen — coldstart design language</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style is:global>
+:root{
+  /* --- the field ------------------------------------------------------- */
+  --ground:#0b0e14;
+  --frost:#4fbfe0;
+  --ember:#ef9448;
+  --ok:#7ec89a;
+
+  /* --- text: prose is near-white. grey is labels only, never body copy. - */
+  --text:#eef3fa;
+  --muted:#a8b6c9;
+  --faint:#7f8da2;
+
+  /* --- surfaces are TRANSLUCENT so panels sit IN the field, not on it --- */
+  --surface:rgba(255,255,255,.035);
+  --line:rgba(255,255,255,.09);
+  --wash-frost:rgba(79,191,224,.07);
+  --wash-ember:rgba(239,148,72,.07);
+  --edge-ember:rgba(239,148,72,.22);
+
+  /* --- the Claude Code panel is a faithful replica: its own neutral ---- */
+  --cc-bg:#1f1f1f; --cc-raise:#2e2e2e; --cc-box:#1a1a1a;
+  --cc-line:#383838; --cc-text:#e3e3e3; --cc-dim:#8a8a8a;
+  --cc-code:#d9a05b; --cc-dot:#6b6b6b; --cc-tool:#7ec89a;
+
+  /* field controls — driven live by the dev panel at the bottom right */
+  --fa:.20;   /* frost alpha */
+  --ea:.19;   /* ember alpha */
+  --sp:78;    /* spread, in % of viewport width */
+  --field:
+    radial-gradient(calc(var(--sp) * 1%) 88% at  -6% 26%, rgba(79,191,224,var(--fa)), transparent 66%),
+    radial-gradient(calc(var(--sp) * 1%) 88% at 106% 74%, rgba(239,148,72,var(--ea)), transparent 66%),
+    linear-gradient(102deg,#0a1019 0%,#0b0e14 48%,#150f09 100%);
+
+  --seam:linear-gradient(180deg,var(--frost),var(--ember));
+  --display:"Archivo",system-ui,sans-serif;
+  --sans:"IBM Plex Sans",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  --wrap:1120px;
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{margin:0;background:var(--ground);color:var(--text);font-family:var(--sans);
+  font-size:16px;line-height:1.7;-webkit-font-smoothing:antialiased;}
+
+/* THE FIELD — frost bleeding in from the left edge, ember from the right,
+   over a dark ramp. A fixed pseudo-element, not background-attachment:fixed
+   (which only paints one viewport and is unreliable on iOS Safari). */
+body::before{
+  content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:var(--field);
+}
+/* EDGE — colour only in the outer band, full height. The content area stays
+   neutral, so no artifact ever gets tinted. */
+html[data-shape="edge"]{
+  --sp:16;
+  --field:
+    linear-gradient( 90deg, rgba(79,191,224,var(--fa)) 0%, transparent calc(var(--sp) * 1%)),
+    linear-gradient(270deg, rgba(239,148,72,var(--ea)) 0%, transparent calc(var(--sp) * 1%)),
+    #0b0e14;
+}
+/* RAMP — no blobs at all: one flat left-to-right temperature ramp. */
+html[data-shape="ramp"]{
+  --field:
+    linear-gradient(90deg,
+      rgba(79,191,224,var(--fa)) 0%, transparent 42%,
+      transparent 58%, rgba(239,148,72,var(--ea)) 100%),
+    #0b0e14;
+}
+html[data-shape="off"]{ --field:#0b0e14; }
+
+h1,h2,h3{margin:0;font-family:var(--display);font-variation-settings:"wdth" 112;
+  font-weight:600;letter-spacing:-.015em;text-wrap:balance;color:var(--text);}
+h1{font-size:clamp(34px,4.6vw,56px);line-height:1.00;letter-spacing:-.02em;}
+h2{font-size:clamp(26px,3.2vw,38px);line-height:1.15;}
+h3{font-size:21px;line-height:1.3;letter-spacing:-.01em;}
+p{margin:0;}
+code{font-family:var(--mono);font-size:.9em;color:var(--ember);
+  background:rgba(239,148,72,.09);border-radius:4px;padding:1px 5px;}
+a{color:inherit;}
+:focus-visible{outline:none;box-shadow:0 0 0 2px var(--ground),0 0 0 4px var(--frost);border-radius:4px;}
+
+.wrap{max-width:var(--wrap);margin:0 auto;padding:0 28px;position:relative;}
+
+/* the vertical seam — the signature */
+.seam{position:fixed;top:0;bottom:0;width:1px;background:var(--seam);opacity:.34;
+  left:calc(50% - min(var(--wrap),100vw)/2 + 28px + (min(var(--wrap),100vw) - 56px) * 5 / 12 + 12px);
+  z-index:0;pointer-events:none;}
+.tick{position:absolute;top:-34px;
+  left:calc(28px + (100% - 56px) * 5 / 12 + 12px);
+  transform:translate(-100%,-50%);display:flex;align-items:center;gap:9px;
+  padding-right:9px;white-space:nowrap;z-index:2;}
+.tick i{display:block;width:11px;height:1px;background:var(--frost);opacity:.6;}
+.tick span{font-family:var(--mono);font-size:11.5px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--faint);}
+.tick .dot{position:absolute;right:-2.5px;top:50%;width:5px;height:5px;margin-top:-2.5px;
+  border-radius:50%;background:var(--frost);}
+
+/* the full-bleed separator, lifted from /how-it-works — a hairline edge to
+   edge. It marks the section boundary WITHOUT banding the background. */
+section{padding:84px 0;position:relative;}
+section + section{border-top:1px solid var(--line);}
+
+.label{font-family:var(--mono);font-size:11.5px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--faint);line-height:1.4;}
+/* Leads are TEXT, not muted grey. */
+.lead{margin-top:18px;font-size:18px;line-height:1.62;color:var(--text);max-width:66ch;}
+.note{margin-top:14px;font-family:var(--mono);font-size:12px;color:var(--faint);}
+
+.split{display:grid;grid-template-columns:repeat(12,1fr);gap:24px;}
+.split > .arg{grid-column:1 / span 5;}
+.split > .art{grid-column:6 / span 7;}
+@media(min-width:1024px){ .split > .arg{position:sticky;top:56px;align-self:start;} }
+.plain{display:grid;grid-template-columns:repeat(12,1fr);gap:24px;}
+.plain > *:not(.tick){grid-column:1 / span 8;}
+@media(max-width:860px){
+  .split,.plain{display:block;}
+  .seam,.tick{display:none;}
+  section{padding:64px 0;}
+  body::before{background:
+    radial-gradient(90% 42% at 50% -4%, rgba(79,191,224,.20), transparent 68%),
+    radial-gradient(90% 42% at 50% 104%, rgba(239,148,72,.19), transparent 68%),
+    linear-gradient(176deg,#0a1019 0%,#0b0e14 50%,#150f09 100%);}
+}
+
+/* --- swatches ---------------------------------------------------------- */
+.sw{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;}
+.chip{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface);}
+.chip .fill{height:52px;}
+.chip .meta{padding:8px 10px;font-family:var(--mono);font-size:11px;line-height:1.5;color:var(--muted);}
+.chip .meta b{display:block;color:var(--text);font-weight:500;}
+
+.scale{border-top:1px solid var(--line);}
+.row{display:grid;grid-template-columns:84px 1fr;gap:20px;align-items:baseline;
+  padding:15px 0;border-bottom:1px solid var(--line);}
+.tabular{font-variant-numeric:tabular-nums;}
+
+/* --- terminal: no traffic lights. The bar names the repo and branch. ---- */
+.term{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+.term-bar{display:flex;align-items:center;gap:10px;padding:9px 14px;
+  border-bottom:1px solid var(--line);font-family:var(--mono);font-size:11.5px;color:var(--faint);}
+.term-bar .br{color:var(--frost);}
+.term-body{padding:16px 18px 18px;font-family:var(--mono);font-size:13px;
+  line-height:1.8;color:var(--text);overflow-x:auto;}
+.term-body .l{white-space:pre;display:block;}
+.p-prompt{color:var(--ok);} .p-dim{color:var(--faint);}
+.p-frost{color:var(--frost);} .p-ember{color:var(--ember);} .p-hit{color:var(--ok);}
+
+/* --- note card: an ember WASH on the field, not paper. ------------------ */
+.card{background:var(--wash-ember);border:1px solid var(--edge-ember);
+  border-radius:10px;padding:15px 17px;}
+.card .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ember);display:flex;align-items:center;gap:9px;}
+.card .k .fresh{color:var(--ok);}
+.card h3{margin-top:9px;font-size:19px;}
+.card p{margin-top:8px;font-size:15px;line-height:1.6;color:var(--text);}
+.card .anc{margin-top:12px;display:flex;flex-wrap:wrap;gap:6px;}
+.card .anc span{font-family:var(--mono);font-size:11px;background:rgba(255,255,255,.05);
+  border:1px solid var(--line);border-radius:4px;padding:2px 7px;color:var(--muted);}
+
+.stack{display:flex;flex-direction:column;gap:16px;}
+.callout{border:1px solid var(--line);border-left:2px solid var(--ember);
+  border-radius:0 8px 8px 0;background:var(--wash-ember);padding:13px 16px;margin-top:20px;}
+.callout .label{color:var(--ember);}
+.callout p{margin-top:6px;font-size:15px;}
+
+/* ======================================================================
+   CLAUDE CODE PANEL — a faithful replica, so it keeps its OWN neutral
+   ground rather than the site's field. It should read as the real thing
+   sitting on the page, not a themed imitation of it.
+   ====================================================================== */
+.cc{background:var(--cc-bg);border:1px solid var(--cc-line);border-radius:10px;
+  overflow:hidden;color:var(--cc-text);}
+.cc-head{padding:8px 14px;border-bottom:1px solid var(--cc-line);
+  font-family:var(--mono);font-size:11px;color:var(--cc-dim);display:flex;gap:9px;}
+.cc-body{padding:14px;}
+.cc-prompt{background:var(--cc-raise);border:1px solid rgba(255,255,255,.05);
+  border-radius:6px;padding:10px 14px;font-size:14px;color:#f2f2f2;line-height:1.5;}
+.cc-rail{margin-top:2px;}
+.cc-turn{display:grid;grid-template-columns:15px 1fr;gap:11px;align-items:start;
+  padding:9px 0;position:relative;}
+.cc-turn::before{content:"";position:absolute;left:7px;top:0;bottom:0;width:1px;background:var(--cc-line);}
+.cc-turn:first-child::before{top:14px;}
+.cc-turn:last-child::before{bottom:calc(100% - 14px);}
+.cc-turn .d{width:7px;height:7px;border-radius:50%;background:var(--cc-dot);
+  margin:6px 0 0 4px;position:relative;z-index:1;}
+.cc-turn.tool .d{background:var(--cc-tool);}
+.cc-turn .b{min-width:0;font-size:13.5px;line-height:1.6;}
+.cc-turn.think .b{color:var(--cc-dim);}
+.cc-turn .tname{font-weight:600;color:#f2f2f2;}
+.cc-turn .targ{font-family:var(--mono);font-size:12.5px;color:var(--cc-dim);margin-left:7px;}
+.cc-io{margin-top:8px;border:1px solid var(--cc-line);border-radius:6px;
+  background:var(--cc-box);overflow:hidden;}
+.cc-io .r{display:grid;grid-template-columns:34px 1fr;gap:8px;padding:8px 12px 8px 8px;
+  font-family:var(--mono);font-size:12px;line-height:1.65;}
+.cc-io .r + .r{border-top:1px solid var(--cc-line);}
+.cc-io .g{color:#6e6e6e;font-size:10px;letter-spacing:.1em;padding-top:3px;text-align:right;}
+.cc-io .v{color:#cfcfcf;white-space:pre-wrap;word-break:break-word;}
+.cc-io .v .more{color:#6e6e6e;}
+.cc code{font-family:var(--mono);font-size:12.5px;color:var(--cc-code);
+  background:rgba(255,255,255,.06);border-radius:4px;padding:1px 5px;}
+.cc-note{color:var(--cc-code);}
+.cc-foot{margin:12px 14px 14px;border:1px solid rgba(239,148,72,.45);border-radius:9px;
+  padding:9px 13px;display:flex;align-items:center;justify-content:space-between;
+  font-size:13px;color:#7d7d7d;background:#242424;}
+.cc-foot .rt{display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11.5px;}
+.cc-foot .send{width:22px;height:22px;border-radius:6px;background:#a8604a;
+  display:grid;place-items:center;color:#f7ded4;font-size:12px;}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;}}
+</style>
+</head>
+<body>
+<div class="seam"></div>
+
+<section id="field" style="padding-top:64px;">
+  <div class="wrap plain">
+    <div class="tick" aria-hidden="true"><span>field</span><i></i><em class="dot"></em></div>
+    <div>
+      <p class="label">Specimen · coldstart design language · v2</p>
+      <h1 style="margin-top:20px;">Frost on the left. Ember on the right. One field.</h1>
+      <p class="lead">The accents themselves light the page from opposite edges — not two black
+      grounds a shade apart, which is what the last pass shipped and you couldn't see. Every panel
+      below is <b>translucent</b>, so it sits inside this field rather than on top of it. That is
+      what makes a note match the background instead of punching out of it.</p>
+      <p class="note">Prose is near-white. Grey is for labels and captions only — never body copy.</p>
+    </div>
+  </div>
+</section>
+
+<section id="palette">
+  <div class="wrap split">
+    <div class="tick" aria-hidden="true"><span>palette</span><i></i><em class="dot"></em></div>
+    <div class="arg">
+      <p class="label">Palette</p>
+      <h2 style="margin-top:16px;">Two accents, no opaque surfaces.</h2>
+      <p class="lead">Frost is the exact index. Ember is the remembered note. There is no paper
+      stock and no solid card fill — a surface is a wash of white or accent at 3–7% over the field,
+      so the gradient shows through everything.</p>
+    </div>
+    <div class="art">
+      <div class="sw">
+        <div class="chip"><div class="fill" style="background:#4fbfe0;"></div><div class="meta"><b>--frost</b>#4fbfe0 · index</div></div>
+        <div class="chip"><div class="fill" style="background:#ef9448;"></div><div class="meta"><b>--ember</b>#ef9448 · notebook</div></div>
+        <div class="chip"><div class="fill" style="background:#7ec89a;"></div><div class="meta"><b>--ok</b>#7ec89a · state</div></div>
+        <div class="chip"><div class="fill" style="background:rgba(255,255,255,.035);"></div><div class="meta"><b>--surface</b>white 3.5%</div></div>
+        <div class="chip"><div class="fill" style="background:rgba(79,191,224,.07);"></div><div class="meta"><b>--wash-frost</b>frost 7%</div></div>
+        <div class="chip"><div class="fill" style="background:rgba(239,148,72,.07);"></div><div class="meta"><b>--wash-ember</b>ember 7%</div></div>
+      </div>
+      <div style="margin-top:16px;border:1px solid var(--line);border-radius:8px;padding:14px 16px;background:var(--surface);">
+        <p style="font-size:15px;">Body copy — <b>--text #eef3fa</b>, 17:1. This is what every paragraph uses now.</p>
+        <p style="color:var(--muted);font-size:14px;margin-top:7px;">Secondary metadata — --muted #a8b6c9, 9.5:1. Captions and asides only.</p>
+        <p class="label" style="margin-top:9px;">Labels — --faint #7f8da2, mono, never a sentence</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="type">
+  <div class="wrap split">
+    <div class="tick" aria-hidden="true"><span>type</span><i></i><em class="dot"></em></div>
+    <div class="arg">
+      <p class="label">Typography</p>
+      <h2 style="margin-top:16px;">Archivo, not a serif.</h2>
+      <p class="lead">A serif display on near-black is the most recognizable marker of
+      AI-generated design right now, and coldstart's world is an instrument panel, not a magazine.
+      Archivo's width axis at <code>wdth 112</code> reads engineered. Body and mono are unchanged.</p>
+    </div>
+    <div class="art scale">
+      <div class="row"><span class="label">d1 · 56</span><span style="font-family:var(--display);font-variation-settings:'wdth' 112;font-weight:600;font-size:56px;line-height:1.00;letter-spacing:-.02em;">Two lookups, not three reads</span></div>
+      <div class="row"><span class="label">d2 · 38</span><span style="font-family:var(--display);font-variation-settings:'wdth' 112;font-weight:600;font-size:38px;line-height:1.15;letter-spacing:-.015em;">It already knows</span></div>
+      <div class="row"><span class="label">d3 · 21</span><span style="font-family:var(--display);font-variation-settings:'wdth' 112;font-weight:600;font-size:21px;">Edited together, not imported</span></div>
+      <div class="row"><span class="label">lead · 18</span><span style="font-size:18px;line-height:1.62;">An agent writes down what it learns while it works. The next one gets it for free.</span></div>
+      <div class="row"><span class="label">body · 16</span><span>Notes are anchored to real files and symbols, and re-checked against the live file every time they're read.</span></div>
+      <div class="row"><span class="label">mono · 13</span><span style="font-family:var(--mono);font-size:13px;">{gsCmd}</span></div>
+      <div class="row"><span class="label">data</span><span class="tabular" style="font-family:var(--mono);font-size:13px;">1,204 files · 19 ms · 421 indexed · −64% tokens</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="split">
+  <div class="wrap split">
+    <div class="tick" aria-hidden="true"><span>split</span><i></i><em class="dot"></em></div>
+    <div class="arg">
+      <p class="label">Section type · split</p>
+      <h2 style="margin-top:16px;">Argument left. Artifact right.</h2>
+      <p class="lead">The default. 5 / 7 on a 12-column grid, and on desktop this left column is
+      <b>sticky</b> — the claim holds while the artifact scrolls past, which is what makes a long
+      terminal readable instead of exhausting.</p>
+      <p class="note">No traffic lights. The bar names the repo and branch, which is information.</p>
+    </div>
+    <div class="art stack">
+      <div class="term">
+        <div class="term-bar"><span>coldstart-mcp</span><span class="br">main</span></div>
+        <div class="term-body">
+<span class="l"><span class="p-prompt">$</span> {findCmd}</span>
+<span class="l"><span class="p-dim">[coldstart] cache hit (19ms, 421 files)</span></span>
+<span class="l"> </span>
+<span class="l"><span class="p-frost">▸ src/server/tools.ts</span>  <span class="p-hit">[4/5]</span></span>
+<span class="l">   <span class="p-ember">Role:</span>  <span class="p-dim">defines</span> handleGetStructure</span>
+<span class="l">   <span class="p-dim">co-change arrives as an optional third parameter</span></span>
+<span class="l"> </span>
+<span class="l"><span class="p-frost">▸ src/cli.ts</span>  <span class="p-hit">[5/5]</span></span>
+<span class="l">   <span class="p-ember">Wired:</span>  <span class="p-dim">imports</span> handleGetStructure</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="k"><span>Flow note</span><span class="fresh">● fresh</span></div>
+        <h3>How the edited-together signal reaches gs</h3>
+        <p>The pairs <code>gs</code> shows are not part of the code index and never travel through
+        the cache pipeline — they live in a keeper-written sidecar each reader loads itself.</p>
+        <div class="anc"><span>src/index-manager.ts</span><span>src/cli.ts</span><span>+1 more</span></div>
+      </div>
+      <p class="note">The note is an ember wash on the field — no paper, nothing punching forward.</p>
+    </div>
+  </div>
+</section>
+
+<section id="plain">
+  <div class="wrap plain">
+    <div class="tick" aria-hidden="true"><span>plain</span><i></i><em class="dot"></em></div>
+    <div>
+      <p class="label">Section type · plain</p>
+      <h2 style="margin-top:16px;">Columns 1–8. Still not centered.</h2>
+      <p class="lead">For FAQ, install, and the closing call to action. One column, same left rail,
+      and the right third stays open so the ember edge has somewhere to be. This is the change that
+      most affects how the landing page feels: nine screens of centered text become nine screens
+      with one consistent edge.</p>
+      <div class="callout">
+        <p class="label">Motion rule</p>
+        <p>Content is never hidden by default. Nothing here waits on JavaScript — which is exactly
+        what /demo/ and /how-it-works/ get wrong today.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="panel" style="padding-bottom:130px;">
+  <div class="wrap split">
+    <div class="tick" aria-hidden="true"><span>panel</span><i></i><em class="dot"></em></div>
+    <div class="arg">
+      <p class="label">Demo · Claude Code panel</p>
+      <h2 style="margin-top:16px;">The real chrome, rendered static.</h2>
+      <p class="lead">Built from your screenshots: neutral <code>#1f1f1f</code> ground, the prompt
+      as a raised chip, a dotted rail — <b>green for tool calls</b>, grey for thinking and prose —
+      and tool output in an <code>IN</code>/<code>OUT</code> gutter box.</p>
+      <p class="lead" style="margin-top:14px;">This panel keeps its own neutral ground on purpose.
+      It is a replica, so it should read as the real thing sitting on the page rather than a themed
+      imitation of it.</p>
+      <p class="note">Everything visible on load. No typing, no scroll triggers.</p>
+    </div>
+    <div class="art stack">
+      <div class="cc">
+        <div class="cc-head"><span>coldstart-mcp</span><span>—</span><span>no note yet</span></div>
+        <div class="cc-body">
+          <div class="cc-prompt">why does gs show files edited together — is that from the import graph?</div>
+          <div class="cc-rail">
+            <div class="cc-turn think"><span class="d"></span><span class="b">Thinking</span></div>
+            <div class="cc-turn tool"><span class="d"></span><span class="b">
+              <span class="tname">Bash</span><span class="targ">{findCmd}</span>
+              <div class="cc-io">
+                <div class="r"><span class="g">OUT</span><span class="v">▸ src/server/tools.ts  [4/5]
+   Role: defines handleGetStructure
+▸ src/cli.ts  [5/5]
+<span class="more">… +6 lines</span></span></div>
+              </div>
+            </span></div>
+            <div class="cc-turn tool"><span class="d"></span><span class="b">
+              <span class="tname">Bash</span><span class="targ">{gsCmd}</span>
+              <div class="cc-io">
+                <div class="r"><span class="g">OUT</span><span class="v">function runGs [L166-191]
+  180  const &#123; loadCoChange &#125; = await import('./indexer/cochange.js')
+<span class="more">… +1 line</span></span></div>
+              </div>
+            </span></div>
+            <div class="cc-turn"><span class="d"></span><span class="b">Not the import graph — <code>gs</code> takes co-change as an optional third argument, lazily loaded from <code>cochange.json</code> and passed in by whichever reader is running.</span></div>
+            <div class="cc-turn"><span class="d"></span><span class="b" style="color:var(--cc-dim);">Stop hook · wrote 1 note</span></div>
+          </div>
+        </div>
+        <div class="cc-foot"><span>⌘ Esc to focus or unfocus Claude</span><span class="rt"><span>Auto</span><span class="send">↑</span></span></div>
+      </div>
+
+      <div class="cc">
+        <div class="cc-head"><span>coldstart-mcp</span><span>—</span><span style="color:var(--cc-code);">note recalled</span></div>
+        <div class="cc-body">
+          <div class="cc-prompt">how does the edited-together section get its data?</div>
+          <div class="cc-rail">
+            <div class="cc-turn"><span class="d"></span><span class="b cc-note">notebook · how the edited-together signal reaches gs <span style="color:var(--cc-tool);">[fresh]</span></span></div>
+            <div class="cc-turn"><span class="d"></span><span class="b">From a keeper-written sidecar, not the index — each reader loads <code>cochange.json</code> and passes it in.</span></div>
+            <div class="cc-turn think"><span class="d"></span><span class="b">0 tool calls</span></div>
+          </div>
+        </div>
+        <div class="cc-foot"><span>⌘ Esc to focus or unfocus Claude</span><span class="rt"><span>Auto</span><span class="send">↑</span></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DEV CONTROL — specimen only, never ships ============ -->
+<div id="fieldctl">
+  <button id="ctl-toggle" type="button" aria-expanded="true">field</button>
+  <div id="ctl-body">
+    <label>shape
+      <select id="c-shape">
+        <option value="glow">corner glow (current)</option>
+        <option value="edge">edge bleed</option>
+        <option value="ramp" selected>flat ramp</option>
+        <option value="off">off</option>
+      </select>
+    </label>
+    <label>frost <input id="c-fa" type="range" min="0" max="60" value="20"><output id="o-fa">.20</output></label>
+    <label>ember <input id="c-ea" type="range" min="0" max="60" value="19"><output id="o-ea">.19</output></label>
+    <label>spread <input id="c-sp" type="range" min="4" max="95" value="50"><output id="o-sp">50%</output></label>
+    <pre id="ctl-out"></pre>
+  </div>
+</div>
+<style>
+#fieldctl{position:fixed;right:16px;bottom:16px;z-index:99;width:250px;
+  background:rgba(14,18,26,.94);border:1px solid rgba(255,255,255,.14);border-radius:10px;
+  font-family:var(--mono);font-size:11px;color:#cfd8e6;backdrop-filter:blur(10px);}
+#ctl-toggle{width:100%;text-align:left;background:none;border:0;color:#7f8da2;cursor:pointer;
+  font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;padding:9px 12px;}
+#ctl-body{padding:0 12px 12px;display:grid;gap:9px;}
+#fieldctl.closed #ctl-body{display:none;}
+#fieldctl label{display:grid;grid-template-columns:44px 1fr 38px;align-items:center;gap:8px;color:#7f8da2;}
+#fieldctl select{grid-column:2 / span 2;background:#131a26;color:#cfd8e6;border:1px solid rgba(255,255,255,.14);
+  border-radius:5px;padding:4px 6px;font-family:var(--mono);font-size:11px;}
+#fieldctl input[type=range]{width:100%;accent-color:#4fbfe0;}
+#fieldctl output{text-align:right;color:#cfd8e6;}
+#ctl-out{margin:2px 0 0;padding:8px;background:#0a0f18;border:1px solid rgba(255,255,255,.09);
+  border-radius:6px;font-size:10px;line-height:1.5;color:#8fb9c9;white-space:pre-wrap;word-break:break-all;}
+@media(max-width:860px){#fieldctl{display:none;}}
+</style>
+<script>
+(function(){
+  var r=document.documentElement, W=document.getElementById('fieldctl');
+  var sh=document.getElementById('c-shape'), fa=document.getElementById('c-fa'),
+      ea=document.getElementById('c-ea'), sp=document.getElementById('c-sp'),
+      out=document.getElementById('ctl-out');
+  var DEFAULT_SPREAD={glow:78,edge:16,ramp:50,off:50};
+  function apply(){
+    r.dataset.shape=sh.value;
+    r.style.setProperty('--fa',(fa.value/100).toFixed(2));
+    r.style.setProperty('--ea',(ea.value/100).toFixed(2));
+    r.style.setProperty('--sp',sp.value);
+    document.getElementById('o-fa').value='.'+String(fa.value).padStart(2,'0');
+    document.getElementById('o-ea').value='.'+String(ea.value).padStart(2,'0');
+    document.getElementById('o-sp').value=sp.value+'%';
+    out.textContent='shape: '+sh.value+'\n--fa: '+(fa.value/100).toFixed(2)
+      +'\n--ea: '+(ea.value/100).toFixed(2)+'\n--sp: '+sp.value;
+  }
+  sh.addEventListener('change',function(){ sp.value=DEFAULT_SPREAD[sh.value]; apply(); });
+  [fa,ea,sp].forEach(function(el){ el.addEventListener('input',apply); });
+  document.getElementById('ctl-toggle').addEventListener('click',function(){
+    W.classList.toggle('closed');
+    this.setAttribute('aria-expanded', String(!W.classList.contains('closed')));
+  });
+  apply();
+})();
+</script>
+</body>
+</html>
