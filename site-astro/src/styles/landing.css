@@ -2,32 +2,7 @@
    coldstart — home · notebook-first, destination nav (nextjs-style IA)
    temperature = concept: frost = the cold exact index, ember = the warm memory.
    ============================================================ */
-:root{
-  --void:#070a11;
-  --ink-1:#0b111c;
-  --ink-2:#0f1826;
-  --raised:#121d2d;
-  --warm-ground:#12100e;
-  --text:#e7eef8;
-  --muted:#8b9ab2;
-  --faint:#7a8aa3;
-  --frost:#4fbfe0;
-  --frost-dim:#2f89a8;
-  --ember:#ef9448;
-  --ember-dim:#a86a35;
-  --ok:#57cc92;
-  --line:#1a2536;
-  --line-warm:#2a2218;
-
-  --paper:#e5d9bd;
-  --paper-ink:#2a2620;
-  --paper-line:#c7b790;
-
-  --mono:"JetBrains Mono","SF Mono",ui-monospace,"Fira Code",Menlo,Consolas,monospace;
-  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  --display:"Newsreader",Georgia,serif;
-  --wrap:1120px;
-}
+@import './tokens.css';
 *{box-sizing:border-box;}
 body{
   margin:0;background:var(--void);color:var(--text);

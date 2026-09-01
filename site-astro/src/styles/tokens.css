@@ -1,0 +1,64 @@
+/* Design language tokens — one root block, imported by every page.
+   Consolidated from landing.css and docs.css. v2 design spec values. */
+:root {
+  /* --- The palette — NEW DESIGN SPEC ---------------------------------------- */
+  --ground: #0b0e14;
+  --frost: #4fbfe0;
+  --ember: #ef9448;
+  --ok: #7ec89a;
+  --text: #eef3fa;
+  --muted: #a8b6c9;
+  --faint: #7f8da2;
+  --surface: rgba(255,255,255,.035);
+  --line: rgba(255,255,255,.09);
+  --wash-frost: rgba(79,191,224,.07);
+  --wash-ember: rgba(239,148,72,.07);
+  --edge-ember: rgba(239,148,72,.22);
+
+  /* --- Claude Code panel — its own neutral ground ----------------------- */
+  --cc-bg: #1f1f1f;
+  --cc-raise: #2e2e2e;
+  --cc-box: #1a1a1a;
+  --cc-line: #383838;
+  --cc-text: #e3e3e3;
+  --cc-dim: #8a8a8a;
+  --cc-code: #d9a05b;
+  --cc-dot: #6b6b6b;
+  --cc-tool: #7ec89a;
+
+  /* --- Seam (the signature device) --------------------------------------- */
+  --seam: linear-gradient(180deg, var(--frost), var(--ember));
+
+  /* --- Typography — NEW DESIGN SPEC ---------------------------------------- */
+  --display: "Archivo", system-ui, sans-serif;
+  --sans: "IBM Plex Sans", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+
+  /* --- Layout ------------------------------------------------------------ */
+  --wrap: 1120px;
+
+  /* --- LEGACY VARIABLES (to be removed in subsequent steps) — currently used
+     by landing.css and docs.css. These are kept for step 1 consolidation only. */
+  --void: #070a11;
+  --ink-1: #0b111c;
+  --ink-2: #0f1826;
+  --raised: #121d2d;
+  --warm-ground: #12100e;
+  --frost-dim: #2f89a8;
+  --ember-dim: #a86a35;
+  --line-warm: #2a2218;
+  --paper: #e5d9bd;
+  --paper-ink: #2a2620;
+  --paper-line: #c7b790;
+  --bg: #070a11;
+  --surface-2: #0f1826;
+  --ink: #e7eef8;
+  --frost-bright: #6fd3ef;
+  --ember-bright: #ffb267;
+  --term-bg: #05080e;
+  --term-ink: #c3d0e2;
+  --ok-bg: #10241a;
+  --warn: #ef9448;
+  --warn-bg: #2a1e0c;
+  --radius: 12px;
+}
