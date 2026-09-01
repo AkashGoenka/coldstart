@@ -2,6 +2,32 @@
    frost = navigation/index, ember = notebook/memory */
 @import './tokens.css';
 
+/* ============================================================
+   THE FIELD — frost bleeding from left, ember from right, over dark ramp.
+   Fixed pseudo-element (not background-attachment:fixed, which is unreliable).
+   ============================================================ */
+body::before{
+  content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:
+    linear-gradient(90deg,
+      rgba(79,191,224,.20) 0%, transparent 42%,
+      transparent 58%, rgba(239,148,72,.19) 100%),
+    #0b0e14;
+}
+@media(max-width:860px){
+  body::before{background:
+    linear-gradient(180deg,
+      rgba(79,191,224,.20) 0%, transparent 42%,
+      transparent 58%, rgba(239,148,72,.19) 100%),
+    #0b0e14;}
+}
+
+/* ============================================================
+   FULL-BLEED SEPARATOR — marks section boundaries without banding background.
+   ============================================================ */
+section { padding: 84px 0; }
+section + section { border-top: 1px solid var(--line); }
+
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 body {

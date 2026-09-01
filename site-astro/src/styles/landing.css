@@ -3,6 +3,42 @@
    temperature = concept: frost = the cold exact index, ember = the warm memory.
    ============================================================ */
 @import './tokens.css';
+
+/* ============================================================
+   THE FIELD — frost bleeding from left, ember from right, over dark ramp.
+   Fixed pseudo-element (not background-attachment:fixed, which is unreliable).
+   ============================================================ */
+body::before{
+  content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:
+    linear-gradient(90deg,
+      rgba(79,191,224,.20) 0%, transparent 42%,
+      transparent 58%, rgba(239,148,72,.19) 100%),
+    #0b0e14;
+}
+@media(max-width:860px){
+  body::before{background:
+    linear-gradient(180deg,
+      rgba(79,191,224,.20) 0%, transparent 42%,
+      transparent 58%, rgba(239,148,72,.19) 100%),
+    #0b0e14;}
+}
+
+/* ============================================================
+   THE SEAM — hairline running full viewport height at column-6 gutter.
+   Shown only on desktop (≥1024px based on grid rules).
+   ============================================================ */
+.seam{position:fixed;top:0;bottom:0;width:1px;background:var(--seam);opacity:.34;
+  left:calc(50% - min(var(--wrap),100vw)/2 + 28px + (min(var(--wrap),100vw) - 56px) * 5 / 12 + 12px);
+  z-index:0;pointer-events:none;}
+@media(max-width:860px){.seam{display:none;}}
+
+/* ============================================================
+   FULL-BLEED SEPARATOR — marks section boundaries without banding background.
+   ============================================================ */
+section{padding:84px 0;}
+section + section{border-top:1px solid var(--line);}
+
 *{box-sizing:border-box;}
 body{
   margin:0;background:var(--void);color:var(--text);
