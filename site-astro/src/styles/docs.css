@@ -1,30 +1,32 @@
 /* coldstart docs — dark design system, tokens matched to landing.css
    frost = navigation/index, ember = notebook/memory */
+@import './tokens.css';
 
-:root {
-  --bg: #070a11;
-  --surface: #0f1826;
-  --surface-2: #0b111c;
-  --ink: #e7eef8;
-  --muted: #8b9ab2;
-  --frost: #4fbfe0;
-  --frost-bright: #6fd3ef;
-  --ember: #ef9448;
-  --ember-bright: #ffb267;
-  --line: #1a2536;
-  --line-warm: #2a2218;
-  --term-bg: #05080e;
-  --term-ink: #c3d0e2;
-  --ok: #57cc92;
-  --ok-bg: #10241a;
-  --warn: #ef9448;
-  --warn-bg: #2a1e0c;
-  --mono: "JetBrains Mono", "SF Mono", ui-monospace, "Fira Code", Menlo, Consolas, monospace;
-  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --display: "Newsreader", Georgia, serif;
-  --wrap: 1080px;
-  --radius: 12px;
+/* ============================================================
+   THE FIELD — frost bleeding from left, ember from right, over dark ramp.
+   Fixed pseudo-element (not background-attachment:fixed, which is unreliable).
+   ============================================================ */
+body::before{
+  content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:
+    linear-gradient(90deg,
+      rgba(79,191,224,.20) 0%, transparent 42%,
+      transparent 58%, rgba(239,148,72,.19) 100%),
+    #0b0e14;
 }
+@media(max-width:860px){
+  body::before{background:
+    linear-gradient(180deg,
+      rgba(79,191,224,.20) 0%, transparent 42%,
+      transparent 58%, rgba(239,148,72,.19) 100%),
+    #0b0e14;}
+}
+
+/* ============================================================
+   FULL-BLEED SEPARATOR — marks section boundaries without banding background.
+   ============================================================ */
+section { padding: 84px 0; }
+section + section { border-top: 1px solid var(--line); }
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
@@ -303,10 +305,6 @@ body.essay-page {
   --faint: #7a8aa3;
   --line: #1e2735;
   --line-soft: #182029;
-  --frost: #4fbfe0;
-  --frost-bright: #6fd3ef;
-  --ember: #ef9448;
-  --ember-bright: #ffb267;
   --term-border: #1e2735;
   --sel: rgba(79,191,224,.20);
   color-scheme: dark;

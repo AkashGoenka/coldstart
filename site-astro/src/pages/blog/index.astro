@@ -5,8 +5,8 @@ import SvgDefs from '../../components/SvgDefs.astro';
 import Nav from '../../components/Nav.astro';
 import Footer from '../../components/Footer.astro';
 import '../../styles/tailwind.css';
+import '../../styles/tokens.css';
 import '../../styles/docs.css';
-import '../../styles/backdrop.css';
 
 const posts = (await getCollection('blog')).sort(
   (a, b) => b.data.publishDate.valueOf() - a.data.publishDate.valueOf()
