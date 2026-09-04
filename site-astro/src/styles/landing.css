@@ -40,29 +40,6 @@ p{margin:0;}
 code{font-family:var(--mono);}
 .wrap{max-width:var(--wrap);margin:0 auto;padding:0 28px;}
 
-/* ---------- TWO-COLUMN SPINE ----------
-   One shape for every section: the argument on the left, the artifact it is
-   talking about on the right. Uniform down the page, so the eye learns the
-   layout once instead of re-reading a new arrangement per section. The text
-   column keeps a single left edge throughout — nothing is centred. */
-.two{display:grid;grid-template-columns:5fr 7fr;gap:0 48px;align-items:start;}
-.two > .col-a{min-width:0;}
-.two > .col-b{min-width:0;}
-/* The claim holds while a tall artifact scrolls past it. */
-@media(min-width:1024px){
-  .two > .col-a{position:sticky;top:88px;}
-}
-/* The hairline between the columns — the seam, as a real column edge. */
-.two{position:relative;}
-.two::before{content:"";position:absolute;top:0;bottom:0;width:1px;
-  background:var(--line);opacity:.7;
-  left:calc((100% - 48px) * 5 / 12 + 24px);}
-@media(max-width:900px){
-  .two{grid-template-columns:1fr;gap:36px;}
-  .two > .col-a{position:static;}
-  .two::before{display:none;}
-}
-
 /* scroll progress: a hairline that warms frost→ember as you descend */
 .progress{position:fixed;top:0;left:0;height:2px;width:0;z-index:60;
   background:linear-gradient(90deg,var(--frost),var(--ember));
@@ -129,19 +106,17 @@ h2{font-family:var(--display);font-weight:500;font-size:clamp(28px,4vw,42px);
 .rise.in{opacity:1;transform:none;}
 
 /* ---------- HERO ---------- */
-.hero{padding:44px 0 64px;position:relative;overflow:hidden;}
-/* No hero-local glow: the page-wide field in backdrop.css is the only field.
-   .hero-in also carries .wrap, so it must not reset max-width — doing so let
-   the hero spill to 1624px while every other section stayed at 1120. */
-.hero-in{max-width:var(--wrap);margin:0 auto;}
+.hero{padding:44px 0 64px;position:relative;overflow:hidden;text-align:center;}
+/* No hero-local glow: the page-wide field in backdrop.css is the only field. */
+.hero-in{max-width:920px;margin:0 auto;}
 .kicker{font-family:var(--mono);font-size:13px;letter-spacing:.1em;text-transform:uppercase;
   color:var(--faint);margin-bottom:20px;}
-h1.title{font-family:var(--display);font-weight:500;margin:0;
-  font-size:clamp(28px,4.4vw,44px);line-height:1.2;letter-spacing:-.01em;max-width:22ch;}
+h1.title{font-family:var(--display);font-weight:500;margin:0 auto;
+  font-size:clamp(28px,4.4vw,44px);line-height:1.2;letter-spacing:-.01em;max-width:36ch;}
 h1.title .cold{color:var(--frost);}
-.hero-sub{margin:26px 0 0;font-size:clamp(16px,2vw,18px);color:var(--muted);max-width:52ch;line-height:1.65;}
+.hero-sub{margin:26px auto 0;font-size:clamp(16px,2vw,18px);color:var(--muted);max-width:50ch;line-height:1.65;}
 .hero-sub b{color:var(--text);font-weight:500;}
-.cta{margin-top:34px;display:flex;gap:14px;align-items:center;justify-content:flex-start;flex-wrap:wrap;}
+.cta{margin-top:34px;display:flex;gap:14px;align-items:center;justify-content:center;flex-wrap:wrap;}
 .cmdline{margin:36px auto 0;display:inline-flex;align-items:center;gap:10px;
   font-family:var(--mono);font-size:14px;color:var(--muted);
   background:none;border:1px solid transparent;border-radius:8px;padding:6px 10px;cursor:pointer;
@@ -170,8 +145,6 @@ h1.title .cold{color:var(--frost);}
 .navsec .term{margin-top:48px;}
 .term-bar{display:flex;align-items:center;gap:8px;padding:12px 15px;
   border-bottom:1px solid rgba(255,255,255,.05);background:rgba(255,255,255,.015);}
-.tl{width:11px;height:11px;border-radius:50%;}
-.tl:nth-child(1){background:#ff5f57;}.tl:nth-child(2){background:#febc2e;}.tl:nth-child(3){background:#28c840;}
 .term-title{margin-left:10px;font-family:var(--mono);font-size:11.5px;color:#7a8aa3;}
 .copy-btn{margin-left:auto;font-family:var(--mono);font-size:11px;color:#8aa0bd;cursor:pointer;
   background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:6px;
@@ -196,6 +169,10 @@ h1.title .cold{color:var(--frost);}
 /* No section background: the page-wide field runs underneath, and sections are
    divided by a hairline instead of by a band of colour. */
 .navsec{border-top:1px solid var(--line);}
+.navsec > .wrap > .rise:first-child,
+.phil > .wrap > .rise:first-child{max-width:720px;margin-left:auto;margin-right:auto;text-align:center;}
+.navsec > .wrap > .rise:first-child .lead,
+.phil > .wrap > .rise:first-child .lead{margin-left:auto;margin-right:auto;}
 
 /* hand-drawn comparison: wandering grep path vs. a straight two-hop find→gs path */
 .flow-figure{margin-top:48px;}
@@ -222,11 +199,12 @@ h1.title .cold{color:var(--frost);}
 /* the notebook reads as one centered, intimate column — a diary entry, not a
    wide technical spread. The index section below stays left-set and full-width
    on purpose: warm/close vs. cold/wide is the same duality as the accent colors. */
-.nb-intro{max-width:none;margin:0;}
+.nb-intro{max-width:640px;margin-left:auto;margin-right:auto;text-align:center;}
+.nb-intro .lead{margin-left:auto;margin-right:auto;}
 .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);}
 
-.nb-main{margin-top:0;}
-.nb-steps{list-style:none;margin:28px 0 0;padding:0;max-width:none;width:100%;
+.nb-main{display:flex;flex-direction:column;align-items:center;margin-top:52px;}
+.nb-steps{list-style:none;margin:0 auto;padding:0;max-width:560px;width:100%;
   display:flex;flex-direction:column;gap:26px;text-align:left;}
 .nb-steps li{position:relative;padding-left:28px;font-size:15.5px;color:var(--muted);line-height:1.55;}
 .nb-steps li::before{content:"—";position:absolute;left:0;top:0;
@@ -234,7 +212,7 @@ h1.title .cold{color:var(--frost);}
 .nb-steps b{color:var(--text);font-weight:600;}
 
 /* the exhibit: what step three actually produces, pulled out and shown */
-.nb-exhibit{margin:0;max-width:none;width:100%;text-align:left;}
+.nb-exhibit{margin:44px auto 0;max-width:560px;width:100%;text-align:left;}
 .nb-exhibit-label{display:flex;align-items:center;margin-bottom:18px;
   font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);}
 
@@ -278,7 +256,7 @@ h1.title .cold{color:var(--frost);}
 .viewer{border:1px solid var(--line-warm);border-radius:13px;background:#0e0c09;overflow:hidden;
   box-shadow:0 30px 70px -40px rgba(0,0,0,.9);}
 .vchrome{display:flex;align-items:center;gap:8px;padding:10px 14px;background:rgba(255,255,255,.02);border-bottom:1px solid var(--line-warm);}
-.vchrome .tl{width:10px;height:10px;}
+
 .vurl{margin-left:8px;font-family:var(--mono);font-size:11px;color:var(--faint);
   background:rgba(0,0,0,.4);border:1px solid var(--line-warm);border-radius:6px;padding:3px 10px;flex:1;}
 .vapp{display:grid;grid-template-columns:200px 1fr;min-height:300px;}
@@ -338,7 +316,7 @@ h1.title .cold{color:var(--frost);}
 .keynote b{font-weight:600;}
 .keynote code{font-family:var(--mono);font-size:13px;background:rgba(0,0,0,.35);border:1px solid var(--line-warm);border-radius:6px;padding:2px 7px;color:var(--ember);}
 @media(max-width:640px){.keynote{flex-direction:column;gap:10px;}}
-.nb-foot{margin-top:40px;max-width:64ch;text-align:left;}
+.nb-foot{margin-top:40px;max-width:64ch;margin-inline:auto;text-align:center;}
 .nb-foot .big{font-family:var(--mono);font-size:clamp(17px,2.2vw,21px);letter-spacing:-.02em;line-height:1.4;color:var(--text);}
 .nb-foot .sm{margin-top:13px;font-size:14.5px;color:var(--muted);}
 .nb-foot b{color:var(--ember);font-weight:600;}
@@ -383,7 +361,9 @@ h1.title .cold{color:var(--frost);}
 
 /* ---------- FAQ ---------- */
 .faq{border-top:1px solid var(--line);}
-.faq-list{display:flex;flex-direction:column;gap:0;margin-top:0;max-width:none;}
+.faq > .wrap > .rise:first-child{max-width:720px;margin-left:auto;margin-right:auto;text-align:center;}
+.faq > .wrap > .rise:first-child .lead{margin-left:auto;margin-right:auto;}
+.faq-list{display:flex;flex-direction:column;gap:0;margin-top:48px;max-width:720px;margin-left:auto;margin-right:auto;}
 .faq-item{border:1px solid var(--line);border-bottom:none;padding:28px;list-style:none;cursor:pointer;transition:background .15s;}
 .faq-item:last-child{border-bottom:1px solid var(--line);}
 .faq-item:hover{background:var(--raised);}
@@ -400,8 +380,8 @@ h1.title .cold{color:var(--frost);}
 
 /* ---------- INSTALL (in hero) / FAQ CLOSE ---------- */
 .install-term{max-width:760px;margin:36px auto 0;text-align:left;}
-.faq-close{margin-top:52px;text-align:left;}
-.faq-close-links{display:flex;gap:14px;justify-content:flex-start;}
+.faq-close{margin-top:52px;text-align:center;}
+.faq-close-links{display:flex;gap:14px;justify-content:center;}
 .install-langs{margin-top:22px;font-family:var(--mono);font-size:12.5px;color:var(--faint);}
 
 /* ---------- FOOTER ---------- */
