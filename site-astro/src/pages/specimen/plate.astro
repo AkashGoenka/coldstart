@@ -1,16 +1,18 @@
 ---
-// COMPOSITION PATTERN: Editorial spread (4 / 8 hard asymmetric split).
-// Scene: "you are looking at an engineering drawing of a codebase."
+// Specimen B — rebuilt on DESIGN.md §4's OWN layout (5 / 7 .split + 1-8 .plain),
+// not the 4/8 print ratio the first cut borrowed from EpicInfographics.
 //
-// Specimen B. Self-contained on purpose — imports none of the real stylesheets,
-// so it can be approved or thrown away without touching the live site. Not
-// linked from nav; noindex. Sits alongside /specimen/ for direct comparison.
+// Self-contained on purpose: imports none of the real stylesheets, so it can be
+// approved or thrown away without touching the live site. Not linked; noindex.
 //
-// Adapted from EpicInfographics `blueprint` + `composition.md`, on coldstart's
-// own dark ground. Deliberately breaks DESIGN.md §12 on ONE point (radius 0,
-// not 6/10px) — that is the experiment. Everything else in §12 is honoured.
+// Kept from the first cut: Fig. numbering, dimension lines, the title block,
+// radius 0, and the drawn rail. The rail now REPLACES §5's position:fixed seam
+// — it is an absolute line inside the section, so it needs no viewport maths
+// and cannot drift out of alignment with the columns it marks.
+//
+// Dropped: the tiled drafting grid (a repeating pattern is the generated-site
+// tell on the web, whatever it is made of) and the 4/8 ratio.
 const findCmd = 'coldstart ' + 'find cochange sidecar keeper';
-const gsCmd = 'coldstart ' + 'gs src/cli.ts --match cochange';
 ---
 <html lang="en">
 <head>
@@ -28,88 +30,100 @@ const gsCmd = 'coldstart ' + 'gs src/cli.ts --match cochange';
   --ember:#ef9448;
   --ok:#7ec89a;
 
-  /* Text. Prose is near-white (DESIGN.md §12). Grey is chrome only. */
-  --ink:#eef3fa;
+  --ink:#eef3fa;          /* all prose — §12, never grey */
   --muted:#a8b6c9;
-  --faint:#7a889d;
+  --faint:#7a889d;        /* mono labels only, never a sentence */
 
-  /* Drawing ink — structural linework, never data. */
   --line:rgba(216,232,248,.17);
   --line-2:rgba(216,232,248,.30);
-  --line-soft:rgba(216,232,248,.055);
+  --line-soft:rgba(216,232,248,.07);
 
   --display:"Archivo",system-ui,sans-serif;
   --sans:"IBM Plex Sans",system-ui,sans-serif;
   --mono:"JetBrains Mono",ui-monospace,monospace;
 
-  --cell:40px;          /* the drafting grid everything snaps to */
   --wrap:1120px;
-  --s1:8px; --s2:16px; --s3:24px; --s4:40px; --s5:64px;
+  --gap:24px;
+  --s1:8px; --s2:16px; --s3:24px; --s4:40px; --s5:84px;
 }
 
 *{box-sizing:border-box;}
-html{-webkit-text-size-adjust:100%;}
 body{
   margin:0;background:var(--ground);color:var(--ink);
-  font:400 16px/1.65 var(--sans);
-  -webkit-font-smoothing:antialiased;
+  font:400 17px/1.65 var(--sans);-webkit-font-smoothing:antialiased;
+  /* `--match` must not ligate into an en dash on a CLI tool's site. */
+  font-variant-ligatures:none;
 }
 
-/* ── DEVICE 1 — the field ────────────────────────────────────────────────
-   NO tiled grid. A repeating background pattern is the web's most common
-   generated-site tell, whatever it is made of — composition.md's "the
-   background must participate" rule is written for a print canvas, and it
-   does not survive the move to a scrolling page. Structure here is carried
-   by DRAWN, NON-REPEATING linework instead: the frame, the rails, the
-   section rules, the dimension lines. The only field is the §12 ramp. */
+/* The field: the §12 ramp, and nothing else. No tiled pattern. */
 body::before{
   content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
-  background:
-    linear-gradient(90deg,
-      rgba(79,191,224,.17) 0%, transparent 42%,
-      transparent 58%, rgba(239,148,72,.16) 100%);
+  background:linear-gradient(90deg,
+    rgba(79,191,224,.17) 0%, transparent 42%,
+    transparent 58%, rgba(239,148,72,.16) 100%);
+}
+@media(max-width:860px){
+  body::before{background:linear-gradient(180deg,
+    rgba(79,191,224,.17) 0%, transparent 42%,
+    transparent 58%, rgba(239,148,72,.16) 100%);}
 }
 
-/* ── DEVICE 2 — the double-rule frame + registration crosses ───────────── */
+/* Frame + registration marks — singular chrome, not a repeating pattern. */
 .frame{position:fixed;inset:14px;border:1px solid var(--line);z-index:5;pointer-events:none;}
 .frame::after{content:"";position:absolute;inset:5px;border:1px solid var(--line-soft);}
-.reg{position:fixed;width:13px;height:13px;z-index:5;pointer-events:none;opacity:.75;}
+.reg{position:fixed;width:13px;height:13px;z-index:5;pointer-events:none;opacity:.7;}
 .reg::before,.reg::after{content:"";position:absolute;background:var(--line-2);}
 .reg::before{left:6px;top:0;width:1px;height:13px;}
 .reg::after{top:6px;left:0;height:1px;width:13px;}
 .reg.tl{left:34px;top:34px;} .reg.tr{right:34px;top:34px;} .reg.bl{left:34px;bottom:34px;}
 
-.wrap{max-width:var(--wrap);margin:0 auto;padding:0 var(--s5);}
+/* ── §4 layout ───────────────────────────────────────────────────────────
+   12 columns, 1120px, 24px gutter. Two section types and only two. */
+.wrap{max-width:var(--wrap);margin:0 auto;padding:0 28px;}
+.sec{padding:var(--s5) 0;position:relative;}
+.sec + .sec{border-top:1px solid var(--line);}   /* full-bleed hairline */
 
-/* Editorial spread: 4 / 8. composition.md forbids 50:50 — this is 1/3 : 2/3. */
-.spread{display:grid;grid-template-columns:4fr 8fr;gap:0 var(--s4);}
-/* The rail is now a primary structural device, not a hint — with the tiled
-   grid gone it is what holds the 4:8 split visible. */
-.rail{border-right:1px solid var(--line);padding-right:var(--s4);}
+.split{display:grid;grid-template-columns:repeat(12,1fr);gap:0 var(--gap);}
+.arg{grid-column:1 / span 5;padding-right:var(--s4);}
+.art{grid-column:6 / span 7;min-width:0;}
+.plain > *{grid-column:1 / span 8;}
+/* A one-column section has no 5/7 boundary, so the rail must not cut it. */
+.plain::before{display:none;}
 
-/* Full-bleed hairline separator — the one carried over from /how-it-works/. */
-.sec{border-top:1px solid var(--line);padding:var(--s5) 0;position:relative;}
-.sec:first-of-type{border-top:0;}
+/* The argument holds while a long artifact scrolls past it. */
+@media(min-width:1024px){
+  .arg{position:sticky;top:56px;align-self:start;}
+}
 
-/* ── DEVICE 3 — Fig. numbering. Every panel is captioned in the outermost
-   column, top-aligned, museum-caption style. Nothing is unlabelled. ───── */
-.fig{font:700 11px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;
-     color:var(--frost);margin:0 0 var(--s2);}
-.fig.warm{color:var(--ember);}
-.figcap{font:400 13px/1.6 var(--mono);color:var(--faint);margin:0;max-width:26ch;}
+/* ── The rail — replaces §5's fixed seam ─────────────────────────────────
+   An absolute line inside the section, sitting in the gutter between col 5
+   and col 6. Because it is measured in the same grid units as the columns,
+   it cannot drift; the old fixed version needed viewport arithmetic. */
+.split::before{
+  content:"";position:absolute;top:0;bottom:0;width:1px;background:var(--line);
+  left:calc((100% - 11 * var(--gap)) / 12 * 5 + 4.5 * var(--gap));
+}
+.sec:first-child .split::before{top:var(--s4);}
 
+/* ── Type ────────────────────────────────────────────────────────────── */
 h1,h2,.d{font-family:var(--display);font-variation-settings:"wdth" 112;
-         font-weight:600;letter-spacing:-.022em;margin:0;}
-h1{font-size:clamp(38px,6.2vw,64px);line-height:1.00;}
-h2{font-size:26px;line-height:1.08;margin:0 0 var(--s2);}
-p{margin:0 0 var(--s3);max-width:62ch;}
-.lead{font-size:18px;line-height:1.6;color:var(--ink);}
+  font-weight:600;letter-spacing:-.022em;margin:0;}
+/* Sized for a 5-column measure, not a full-bleed hero — 58px wrapped to six
+   lines and drove ~400px of dead space into the artifact column. */
+h1{font-size:clamp(34px,4.2vw,50px);line-height:1.02;}
+h2{font-size:30px;line-height:1.06;margin:0 0 var(--s3);}
+p{margin:0 0 var(--s3);max-width:64ch;}
+.lead{font-size:18px;color:var(--ink);}
 .eyebrow{font:500 11px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;
-         color:var(--faint);margin:0 0 var(--s3);}
+  color:var(--faint);margin:0 0 var(--s3);}
 
-/* ── DEVICE 4 — dimension lines. Real values measured on the drawing,
-   with a knockout label breaking the line. Data as annotation. ────────── */
-.dim{position:relative;height:1px;background:var(--line-2);margin:var(--s4) 0;}
+/* Fig. numbering — every panel captioned, in the argument column. */
+.fig{font:700 11px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;
+  color:var(--frost);margin:0 0 var(--s2);}
+.fig.warm{color:var(--ember);}
+
+/* Dimension line — a real value measured on the drawing, knockout label. */
+.dim{position:relative;height:1px;background:var(--line-2);margin:var(--s4) 0 0;}
 .dim::before,.dim::after{content:"";position:absolute;top:-3px;width:7px;height:7px;
   border-left:1px solid var(--line-2);border-bottom:1px solid var(--line-2);}
 .dim::before{left:0;transform:rotate(45deg);}
@@ -118,80 +132,88 @@ p{margin:0 0 var(--s3);max-width:62ch;}
   background:var(--ground);padding:0 12px;white-space:nowrap;
   font:500 11px/1 var(--mono);letter-spacing:.11em;text-transform:uppercase;color:var(--muted);}
 
-/* Hero. Swiss "massive number, tiny label" living in the thin column, and it
-   CROSSES A BOUNDARY — the numeral overhangs the rail to the left. */
-.hero{padding:var(--s5) 0 var(--s5);}
+/* Swiss "massive number, tiny label" — sits in the argument column. */
 .count{font-family:var(--display);font-variation-settings:"wdth" 90;font-weight:600;
-  font-size:clamp(120px,17vw,196px);line-height:.82;letter-spacing:-.05em;
-  color:var(--ink);margin:0 0 var(--s2) -.07em;}
-.count em{font-style:normal;color:var(--frost);}
-.countlab{font:500 11px/1.6 var(--mono);letter-spacing:.14em;text-transform:uppercase;
-  color:var(--faint);margin:0;max-width:20ch;}
+  font-size:104px;line-height:.82;letter-spacing:-.05em;color:var(--frost);
+  margin:var(--s4) 0 var(--s2) -.06em;}
+.countlab{font:500 11px/1.7 var(--mono);letter-spacing:.14em;text-transform:uppercase;
+  color:var(--faint);margin:0;max-width:24ch;}
 
-/* Command rows — drawn, not carded. Radius 0, hairline, no fill, no shadow. */
-.cmd{display:flex;gap:var(--s3);align-items:baseline;padding:var(--s2) 0;
-     border-top:1px solid var(--line-soft);}
-.cmd:last-child{border-bottom:1px solid var(--line-soft);}
-.cmd b{font:700 11px/1.9 var(--mono);letter-spacing:.14em;text-transform:uppercase;
-       color:var(--frost);min-width:52px;}
-.cmd code{font:400 14px/1.9 var(--mono);color:var(--ink);}
-.cmd i{font-style:normal;font-size:14px;color:var(--muted);margin-left:auto;
-       text-align:right;max-width:30ch;}
+/* ── The artifact: a terminal. Radius 0, hairline, no traffic lights. ─── */
+.term{border:1px solid var(--line);background:rgba(255,255,255,.02);}
+.termbar{display:flex;gap:var(--s2);align-items:center;padding:10px 14px;
+  border-bottom:1px solid var(--line);font:500 11px/1 var(--mono);
+  letter-spacing:.08em;color:var(--faint);}
+.termbar b{color:var(--muted);font-weight:500;}
+/* One <div> per line. Astro collapses template newlines, so `white-space:pre`
+   on a single text block silently ran the whole transcript together. */
+.termbody{padding:16px 18px;font:400 13px/1.85 var(--mono);color:var(--muted);
+  overflow-x:auto;}
+.termbody > div{white-space:pre;min-height:1.85em;}
+.termbody .p{color:var(--ok);}
+.termbody .c{color:var(--ink);}
+.termbody .f{color:var(--frost);}
+.termbody .e{color:var(--ember);}
+.termbody .d{color:var(--faint);}
 
-/* ── DEVICE 5 — the stage chain. The pipeline drawn as a dimensioned run of
-   cells on the grid, connected by the drawing line, not as five cards. ── */
-.chain{display:grid;grid-template-columns:repeat(5,1fr);align-items:stretch;margin:var(--s3) 0 0;}
-.stage{position:relative;border:1px solid var(--line);border-right:0;padding:var(--s3) var(--s2);}
+/* Pipeline stages — drawn as a run of cells, not five cards. */
+.chain{display:grid;grid-template-columns:repeat(5,1fr);}
+.stage{position:relative;border:1px solid var(--line);border-right:0;padding:var(--s3) 14px;}
 .stage:last-child{border-right:1px solid var(--line);}
 .stage b{display:block;font:700 12px/1 var(--mono);letter-spacing:.09em;
-         text-transform:uppercase;color:var(--ink);margin-bottom:var(--s1);}
+  text-transform:uppercase;color:var(--ink);margin-bottom:6px;}
 .stage span{font:400 11px/1.5 var(--mono);color:var(--faint);}
 .stage::after{content:"";position:absolute;right:-4px;top:50%;width:7px;height:7px;
   border-top:1px solid var(--line-2);border-right:1px solid var(--line-2);
   transform:translateY(-50%) rotate(45deg);background:var(--ground);}
 .stage:last-child::after{display:none;}
-/* Hatch fill marks the one stage that is cached, not recomputed. */
 .stage.hatch{background:repeating-linear-gradient(45deg,
   rgba(79,191,224,.10) 0 1.5px,transparent 1.5px 7px);}
 
-/* Notebook zone — ember. Same drawing rules, different ink. */
+/* Note card — ember ink, same drawing rules. */
 .note{border:1px solid var(--line);border-left:2px solid var(--ember);
-      padding:var(--s3);background:rgba(239,148,72,.045);}
+  padding:var(--s3);background:rgba(239,148,72,.045);}
 .note .nmeta{font:500 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;
-      color:var(--ember);margin:0 0 var(--s2);}
+  color:var(--ember);margin:0 0 var(--s2);}
 .note p{margin:0;font-size:15px;}
 .note .npath{font:400 12px/1.7 var(--mono);color:var(--faint);margin-top:var(--s2);}
 .tag{display:inline-block;font:500 10px/1 var(--mono);letter-spacing:.1em;
-     text-transform:uppercase;color:var(--ok);border:1px solid rgba(126,200,154,.35);
-     padding:4px 7px;margin-left:var(--s1);}
+  text-transform:uppercase;color:var(--ok);border:1px solid rgba(126,200,154,.35);
+  padding:4px 7px;margin-left:var(--s1);}
 
-/* ── DEVICE 6 — the title block. The footer IS the stamp. ──────────────── */
-.block{border:1px solid var(--line-2);margin:var(--s5) 0 0;max-width:520px;}
+/* Install rows, in a .plain section. */
+.inst{border-top:1px solid var(--line-soft);padding:14px 0;display:flex;
+  gap:var(--s3);align-items:baseline;}
+.inst:last-of-type{border-bottom:1px solid var(--line-soft);}
+.inst b{font:700 11px/1.9 var(--mono);letter-spacing:.14em;text-transform:uppercase;
+  color:var(--frost);min-width:64px;}
+.inst code{font:400 14px/1.9 var(--mono);color:var(--ink);}
+
+/* The title block — the footer IS the device. */
+.block{border:1px solid var(--line-2);margin-top:var(--s4);max-width:480px;}
 .block .binner{border:1px solid var(--line-soft);margin:4px;}
-.brow{display:grid;grid-template-columns:104px 1fr;border-top:1px solid var(--line-soft);}
+.brow{display:grid;grid-template-columns:96px 1fr;border-top:1px solid var(--line-soft);}
 .brow:first-child{border-top:0;}
 .brow dt{font:500 10px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;
-   color:var(--faint);padding:10px 12px;border-right:1px solid var(--line-soft);margin:0;}
+  color:var(--faint);padding:10px 12px;border-right:1px solid var(--line-soft);margin:0;}
 .brow dd{font:500 11px/1 var(--mono);color:var(--muted);padding:10px 12px;margin:0;}
 dl{margin:0;}
 
-footer{padding:var(--s5) 0 96px;}
-
-@media(max-width:900px){
-  :root{--cell:32px;}
-  .wrap{padding:0 var(--s3);}
-  .spread{grid-template-columns:1fr;gap:var(--s3);}
-  .rail{border-right:0;padding-right:0;border-bottom:1px solid var(--line-soft);
-        padding-bottom:var(--s3);}
-  .reg,.frame{display:none;}
+/* Mobile — §4: split collapses, artifact under argument, sticky off, rail hidden. */
+@media(max-width:860px){
+  :root{--s5:56px;}
+  .wrap{padding:0 20px;}
+  .arg,.art,.plain > *{grid-column:1 / -1;}
+  .arg{padding-right:0;margin-bottom:var(--s4);}
+  .split::before{display:none;}
+  .frame,.reg{display:none;}
   .chain{grid-template-columns:1fr;}
   .stage{border-right:1px solid var(--line);border-bottom:0;}
   .stage:last-child{border-bottom:1px solid var(--line);}
   .stage::after{right:auto;left:50%;top:auto;bottom:-4px;
-                transform:translateX(-50%) rotate(135deg);}
-  .cmd{flex-wrap:wrap;}
-  .cmd i{margin-left:0;text-align:left;flex-basis:100%;}
-  .count{margin-left:0;}
+    transform:translateX(-50%) rotate(135deg);}
+  h1{font-size:34px;}
+  .count{font-size:76px;}
 }
 </style>
 </head>
@@ -202,50 +224,67 @@ footer{padding:var(--s5) 0 96px;}
 
 <main class="wrap">
 
-  <!-- FIG. 1 — hero. Editorial spread: the thin column carries the biggest
-       type on the canvas, and it overhangs its own rail. -->
-  <section class="sec hero">
-    <div class="spread">
-      <div class="rail">
-        <p class="count"><em>2</em></p>
-        <p class="countlab">Operations. No model call, no network, no embedding.</p>
-      </div>
-      <div>
+  <!-- Fig. 1 — hero. .split 5/7: argument left, artifact right. -->
+  <section class="sec">
+    <div class="split">
+      <div class="arg">
+        <p class="fig">Fig. 1 — the query</p>
         <p class="eyebrow">Coldstart — navigation layer for coding agents</p>
         <h1>A drawing of the codebase, made before anything is read.</h1>
         <p class="lead" style="margin-top:24px">
-          An agent dropped into an unfamiliar repo reads its way to the answer, one
-          file at a time. Coldstart answers the question underneath that search —
-          <em>which files are relevant to this task</em> — from a static index of
-          paths, symbols and exports. Two commands, answered locally in milliseconds.
+          An agent dropped into an unfamiliar repo reads its way to the answer,
+          one file at a time. Coldstart answers the question underneath that
+          search — which files are relevant to this task — from a static index
+          of paths, symbols and exports.
         </p>
-        <div class="cmd">
-          <b>find</b><code>{findCmd}</code>
-          <i>Ranked paths, with the lines your terms cluster in</i>
+        <p class="count">2</p>
+        <p class="countlab">Operations. No model call, no network, no embedding.</p>
+      </div>
+      <div class="art">
+        <div class="term">
+          <div class="termbar"><b>coldstart</b><span>main</span><span>·</span><span>18 ms</span></div>
+          <div class="termbody">
+            <div><span class="p">$</span> <span class="c">{findCmd}</span></div>
+            <div></div>
+            <div><span class="f">▸ src/indexer/cochange.ts</span>  <span class="d">[3/3]</span></div>
+            <div>  <span class="d">Role:</span> defines cochange · imports keeper</div>
+            <div>  <span class="d">42</span>  export function buildCochange(root) {'{'}</div>
+            <div>  <span class="d">57</span>    const pairs = pairsFromLog(window)</div>
+            <div></div>
+            <div><span class="f">▸ src/index-manager.ts</span>  <span class="d">[2/3]</span></div>
+            <div>  <span class="d">Role:</span> imports cochange · defines keeper</div>
+            <div>  <span class="d">Wired:</span> uses cochange.ts</div>
+            <div>        <span class="d">near cochange-nudge.mjs</span></div>
+            <div></div>
+            <div><span class="f">▸ hooks/cochange-nudge.mjs</span>  <span class="d">[2/3]</span></div>
+            <div>  <span class="e">Summary:</span> Delivers co-change partners</div>
+            <div>  on the edit event, unasked.  <span class="e">[fresh]</span></div>
+            <div>  <span class="d">full note:</span> notes/cochange-nudge.md</div>
+            <div></div>
+            <div><span class="f">▸ tests/cochange-nudge.test.ts</span>  <span class="d">[2/3]</span></div>
+            <div>  <span class="d">Role:</span> imports cochange, keeper</div>
+            <div></div>
+            <div><span class="d">4 files · 0 model calls · no network</span></div>
+          </div>
         </div>
-        <div class="cmd">
-          <b>gs</b><code>{gsCmd}</code>
-          <i>One file: symbols, callers, importers, co-edits</i>
-        </div>
+        <div class="dim"><span>Answered locally · 18 ms</span></div>
       </div>
     </div>
   </section>
 
-  <!-- FIG. 2 — the pipeline, drawn as a dimensioned run on the grid. -->
+  <!-- Fig. 2 — the pipeline. -->
   <section class="sec">
-    <div class="spread">
-      <div class="rail">
-        <p class="fig">Fig. 2</p>
-        <p class="figcap">The index, end to end. Built once by a background keeper,
-          read by every query.</p>
-      </div>
-      <div>
+    <div class="split">
+      <div class="arg">
+        <p class="fig">Fig. 2 — the index</p>
         <h2>Built once. Read cold.</h2>
-        <p>A single keeper process watches the repo and keeps one on-disk cache
-          fresh. Queries never build — they open the cache, rank, and exit.</p>
+        <p>A single background process watches the repo and keeps one on-disk
+          cache fresh. Queries never build — they open the cache, rank, exit.</p>
+      </div>
+      <div class="art">
         <div class="chain">
           <div class="stage"><b>Walk</b><span>respecting ignores</span></div>
-          <div class="stage"><b>Parse</b><span>15 grammars, wasm</span></div>
+          <div class="stage"><b>Parse</b><span>15 grammars</span></div>
           <div class="stage"><b>Resolve</b><span>imports to files</span></div>
           <div class="stage"><b>Graph</b><span>calls + co-edits</span></div>
           <div class="stage hatch"><b>Cache</b><span>atomic, on disk</span></div>
@@ -255,24 +294,22 @@ footer{padding:var(--s5) 0 96px;}
     </div>
   </section>
 
-  <!-- FIG. 3 — the notebook. Same drawing rules, ember ink. -->
+  <!-- Fig. 3 — the notebook. -->
   <section class="sec">
-    <div class="spread">
-      <div class="rail">
-        <p class="fig warm">Fig. 3</p>
-        <p class="figcap">The notebook — what previous agents worked out here, kept
-          next to the code.</p>
-      </div>
-      <div>
+    <div class="split">
+      <div class="arg">
+        <p class="fig warm">Fig. 3 — the notebook</p>
         <h2>The second time is not like the first.</h2>
         <p>An index says where code lives. It cannot say what was already tried.
           Agents write notes after real work, anchored to the files they touched,
           and every note is stamped against those files.</p>
+      </div>
+      <div class="art">
         <div class="note">
           <p class="nmeta">Flow · how notebook capture fires<span class="tag">Fresh</span></p>
           <p>Capture is trigger-timed, not per-stop: every stop quietly updates
-            per-file evidence and a score, and only when the trigger fires is the
-            checklist delivered.</p>
+            per-file evidence and a score, and only when the trigger fires is
+            the checklist delivered.</p>
           <p class="npath">.coldstart/notebook/notes/how-notebook-capture-fires.md</p>
         </div>
         <div class="dim"><span>Anchored · versioned · committed with the repo</span></div>
@@ -280,24 +317,23 @@ footer{padding:var(--s5) 0 96px;}
     </div>
   </section>
 
-  <!-- FIG. 4 — the title block. The footer IS the device. -->
-  <footer>
-    <div class="spread">
-      <div class="rail">
-        <p class="fig">Fig. 4</p>
-        <p class="figcap">Plate stamp.</p>
-      </div>
+  <!-- Fig. 4 — install. .plain: columns 1–8, right third stays open. -->
+  <section class="sec">
+    <div class="split plain">
       <div>
+        <p class="fig">Fig. 4 — install</p>
+        <h2>Two commands, wired in one.</h2>
+        <div class="inst"><b>Install</b><code>npm i -g @cstart/coldstart</code></div>
+        <div class="inst"><b>Wire</b><code>coldstart init</code></div>
         <div class="block"><div class="binner"><dl>
           <div class="brow"><dt>Title</dt><dd>Coldstart — navigation layer</dd></div>
-          <div class="brow"><dt>Drawing</dt><dd>SPECIMEN B · PLATE I</dd></div>
-          <div class="brow"><dt>Scale</dt><dd>40px module · 4:8 spread</dd></div>
-          <div class="brow"><dt>Source</dt><dd>DESIGN.md §2 §5 §12</dd></div>
+          <div class="brow"><dt>Drawing</dt><dd>SPECIMEN B · PLATE II</dd></div>
+          <div class="brow"><dt>Layout</dt><dd>DESIGN.md §4 · 5/7 split</dd></div>
           <div class="brow"><dt>Date</dt><dd>2026-09-04</dd></div>
         </dl></div></div>
       </div>
     </div>
-  </footer>
+  </section>
 
 </main>
 </body>
