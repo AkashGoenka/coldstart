@@ -4,10 +4,11 @@ import SvgDefs from '../../components/SvgDefs.astro';
 import Nav from '../../components/Nav.astro';
 import Footer from '../../components/Footer.astro';
 import '../../styles/landing.css';
+import '../../styles/backdrop.css';
 
-const title = 'Demo — one real session, this repo | coldstart';
+const title = 'Demo — the same question, twice | coldstart';
 const description =
-  'A single continuous session against coldstart\'s own codebase: an agent with no note yet runs find and gs to answer a question, writes what it learned, then a later prompt gets the same answer for zero tool calls.';
+  "Two real sessions against coldstart's own codebase. The first has no note yet and looks things up. The second is handed the answer before it starts. Fully rendered, nothing animated.";
 ---
 <html lang="en">
 <head>
@@ -17,8 +18,8 @@ const description =
     keywords="coldstart demo, coldstart find, coldstart gs, notebook recall, codebase memory demo, AI coding agent navigation"
     canonicalPath="/demo/"
     ogType="website"
-    ogTitle="Demo — one real session, this repo"
-    ogDescription="find + gs answer a question with no note yet. Later, the same question costs zero tool calls. One real session, not a mockup."
+    ogTitle="Demo — the same question, twice"
+    ogDescription="The first session looks it up. The second already knows. One real repo, real command output, nothing animated."
     themeColor="#070a11"
   />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -29,254 +30,216 @@ const description =
 <SvgDefs />
 <Nav variant="demo" />
 
-<header class="hero" style="padding-bottom:24px;">
+<header class="hero demo-hero">
   <div class="wrap hero-in">
-    <div class="kicker">Demo — one real session, captured from this repo</div>
-    <h1 class="title" style="font-size:clamp(32px,5vw,52px);">The first time, it looks things up.<br>The second time, it already knows.</h1>
-    <p class="hero-sub">One continuous session against coldstart's own codebase. Every command, every note, every answer below is real — same repo, same day. Scroll to watch it happen.</p>
+    <div class="kicker">Demo — captured from this repo</div>
+    <h1 class="title">The first time it looks things up.<br>The second time it already knows.</h1>
+    <p class="hero-sub">The same question, asked in two different sessions against coldstart's own codebase. Every command and every line of output below is real and unedited. Nothing here animates — it is all on the page already.</p>
   </div>
 </header>
 
-<!-- ===================== PART 1 — FIRST TIME ===================== -->
-<section id="first-time">
+<!-- ============================ COLD ============================ -->
+<section class="dsec">
   <div class="wrap">
-    <div class="rise in">
-      <div class="eyebrow">01 · first time</div>
-      <h2>No note yet. The agent goes and looks.</h2>
-      <p class="lead">A real question, asked cold. Nothing's been written down about it yet, so the agent reaches for <code>find</code>, then <code>gs</code>, then answers from what it just read.</p>
+    <div class="dhead">
+      <div class="eyebrow">Session one · nothing written down yet</div>
+      <h2>No note exists. So it goes and looks.</h2>
+      <p class="lead">The recall hook searches the notebook first and finds nothing, so the agent falls through to the index: one <code>find</code> to locate the file, one <code>gs</code> to see who uses it, then it answers.</p>
     </div>
 
-    <div class="recall reveal">
-      <div class="rprompt" data-t="0"><span class="who">you</span><span class="q">"why does <code>gs</code> show files edited together — is that from the import graph?"</span></div>
+    <div class="cc">
+      <div class="cc-bar"><span class="cc-file">coldstart-mcp</span><span class="cc-badge">Claude Code</span></div>
+      <div class="cc-body">
 
-      <div class="rflow" data-t="400"><span class="glyph">→</span><span class="rlab"><b>UserPromptSubmit</b> <span class="sub">fires · kb search runs against the notebook</span></span></div>
-      <div class="rflow" data-t="350"><span class="glyph">·</span><span class="rlab"><b>no match</b> <span class="sub">nothing written about this yet — nothing injected</span></span></div>
-      <div class="rflow think" data-t="400"><span class="glyph think"><span class="pdot"></span></span><span class="rlab"><b>Thinking…</b> <span class="sub">no note for this — check the code directly</span></span></div>
-
-      <div class="term live" data-t="2400" role="img" aria-label="Terminal output of coldstart find edited together cochange sidecar handleGetStructure">
-        <div class="term-bar"><span class="term-title">coldstart-mcp</span></div>
-        <div class="term-body">
-<span class="l cmdline"><span class="p-prompt">$&nbsp;</span><span class="typed" data-cmd="coldstart find edited together cochange sidecar"></span><span class="type-cursor"></span></span>
-<div class="out">
-<span class="l" data-t="100"><span class="p-dim">[coldstart] cache hit (19ms, 421 files)</span></span>
-<span class="gap" data-t="0"></span>
-<span class="l" data-t="140"><span class="p-frost">▸ src/server/tools.ts</span>  <span class="p-hit">[4/5]</span></span>
-<span class="l" data-t="90">   <span class="p-ember">Role:</span>  <span class="p-dim">defines</span> symbol, handleGetStructure</span>
-<span class="l" data-t="90">   <span class="p-dim">co-change arrives as an optional</span> <b>third parameter</b><span class="p-dim">, loaded by each caller</span></span>
-<span class="gap" data-t="0"></span>
-<span class="l" data-t="140"><span class="p-frost">▸ src/cli.ts</span>  <span class="p-hit">[5/5]</span></span>
-<span class="l" data-t="90">   <span class="p-ember">Wired:</span>  <span class="p-dim">imports</span> handleGetStructure <span class="p-dim">(from tools.ts)</span></span>
-<span class="l" data-t="90">   <span class="p-dim">in</span> function runGs <span class="p-dim">[L166-191]:</span> <span class="p-dim">loadCoChange(root) → passed as 3rd arg</span><span class="cursor"></span></span>
-</div>
+        <div class="turn">
+          <div class="g">IN</div>
+          <div class="c"><div class="chip">why does <code>gs</code> show files edited together — is that from the import graph?</div></div>
         </div>
-      </div>
 
-      <div class="rflow" data-t="400"><span class="glyph">→</span><span class="rlab"><b>cli.ts</b> <span class="sub">is where it's wired — confirm with a targeted <code>gs</code></span></span></div>
+        <p class="cap">The notebook is searched before anything else. Nothing matches, so nothing is injected.</p>
 
-      <div class="term live" data-t="1900" role="img" aria-label="Terminal output of coldstart gs src/cli.ts --match cochange">
-        <div class="term-bar"><span class="term-title">coldstart-mcp</span></div>
-        <div class="term-body">
-<span class="l cmdline"><span class="p-prompt">$&nbsp;</span><span class="typed" data-cmd="coldstart gs src/cli.ts --match cochange"></span><span class="type-cursor"></span></span>
-<div class="out">
-<span class="l" data-t="120"><span class="p-dim">2 content matches in 1 method (in-tool grep → method body)</span></span>
-<span class="gap" data-t="0"></span>
-<span class="l" data-t="120"><span class="p-ember">function runGs</span> <span class="p-dim">[L166-191]</span></span>
-<span class="l" data-t="100">  180  <span class="p-dim">const</span> &#123; loadCoChange &#125; = <span class="p-dim">await import(</span><span class="p-file">'./indexer/cochange.js'</span><span class="p-dim">)</span></span>
-<span class="l" data-t="100">  186  &#125;, <span class="p-frost">loadCoChange(root, flags.cacheDir)</span>) <span class="p-dim">as HandlerResult;</span><span class="cursor"></span></span>
-</div>
+        <div class="turn">
+          <div class="g"></div>
+          <div class="c"><div class="prose think">Nothing in the notebook covers this. I'll find where the co-change data is produced.</div></div>
         </div>
-      </div>
 
-      <div class="rtag" data-t="400"><span class="d"></span>answered — cites <code>src/server/tools.ts</code> + <code>src/cli.ts</code>, 2 tool calls</div>
-
-      <blockquote class="rquote" data-t="300">"Not the import graph — <code>gs</code> takes co-change as an optional third argument, lazily loaded from <code>cochange.json</code> and passed in by whichever reader is running (<code>cli.ts</code>'s <code>runGs</code> here). No index rebuild involved."</blockquote>
-
-      <div class="rflow" data-t="450"><span class="glyph">→</span><span class="rlab"><b>Stop hook</b> <span class="sub">fires · worklist: 2 files read this turn, both note-worthy</span></span></div>
-
-      <div class="card captured" data-t="350">
-        <div class="card-top">
-          <div class="kick"><span class="pill-t">Flow note</span><span class="pill fresh"><span class="d"></span>captured</span></div>
-          <div class="card-title">how the edited-together signal reaches gs without going through the index</div>
-        </div>
-        <div class="card-body">
-          <p>The "Edited together" pairs <code>gs</code> shows are <b>not part of the code index</b> and never travel through the cache pipeline — they live in a separate keeper-written sidecar (<code>cochange.json</code>) that each reader loads itself and hands to the symbol-page builder as a third argument.</p>
-          <div class="anchors">
-            <div class="lbl">Anchors</div>
-            <div class="arow">
-              <span class="anc fresh"><span class="d"></span>src/index-manager.ts</span>
-              <span class="anc fresh"><span class="d"></span>src/cli.ts</span>
-              <span class="anc fresh"><span class="d"></span>+1 more</span>
+        <div class="turn">
+          <div class="g">OUT</div>
+          <div class="c">
+            <div class="tool">
+              <div class="th"><span class="dot ok"></span><b>Bash</b> <span class="arg">coldstart find edited together cochange sidecar</span></div>
+              <div class="ob"><div>find: edited together cochange sidecar  (4 terms, 69 candidate files)</div><div>&nbsp;</div><div>▸ hooks/cochange-nudge.mjs   [4/4]</div><div>   Role:  defines `edited`, `cochange`</div><div>   Wired: used by `cochange-nudge.test.ts` · near `cochange.ts`</div><div>&nbsp;</div><div>▸ tests/cochange-nudge.test.ts   [3/4]</div><div>   Role:  defines `sidecar`; named for `cochange`</div><div>   Wired: uses `cochange-nudge.mjs`, `cochange.ts`</div><div>&nbsp;</div><div>▸ src/indexer/cochange.ts   [3/4]</div><div>   Role:  named for `cochange`; defines `sidecar`</div><div class="el">… +38 lines</div></div>
             </div>
           </div>
         </div>
-      </div>
-    </div>
 
-    <div class="keynote rise in">
-      <span class="kk">This turn</span>
-      <p><b>2 tool calls</b> to answer — <code>find</code>, then <code>gs</code> — and one note written down, unasked, so the next agent doesn't repeat the trip.</p>
+        <p class="cap">One command, no model call. The third hit is the source file — <code>gs</code> next, to see what actually feeds it.</p>
+
+        <div class="turn">
+          <div class="g">OUT</div>
+          <div class="c">
+            <div class="tool">
+              <div class="th"><span class="dot ok"></span><b>Bash</b> <span class="arg">coldstart gs src/indexer/cochange.ts</span></div>
+              <div class="ob"><div>src/indexer/cochange.ts (275 lines, importedBy: 8)</div><div>&nbsp;</div><div>Symbols:</div><div>constant CO_CHANGE_WINDOW [L38]</div><div>constant CO_CHANGE_MIN_SUPPORT [L46]</div><div>function parseCommits [L77-98]</div><div>function canonicalizeRenames [L114-129]</div><div>function deriveCoChange [L139-210]  ← src/index-manager.ts:233</div><div>function coChangePartnersFor [L257-274]  ← src/server/tools.ts:388</div><div>&nbsp;</div><div>Imports:</div><div>src/cache/disk-cache.ts</div><div>&nbsp;</div><div>Importers (8):</div><div>  Source (5):</div><div>    src/graph/dump.ts</div><div>    src/index-manager.ts</div><div>    src/server/tools.ts</div><div class="el">… +14 lines</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="turn">
+          <div class="g"></div>
+          <div class="c"><div class="prose">No. It comes from git history, not the graph.<br><br><code>parseCommits</code> reads <code>git log --name-status -M</code> and <code>deriveCoChange</code> counts how often two files change in the same commit — a 12,000-commit window, minimum support 2. It never touches <code>Imports</code> or the call edges. <code>coChangePartnersFor</code> is what <code>src/server/tools.ts:388</code> calls to render the section.<br><br>So it is a habit, not a dependency. There is no edge to go looking for.</div></div>
+        </div>
+
+        <p class="cap">Two commands and an answer. What made it expensive was not knowing where to start.</p>
+
+        <div class="turn">
+          <div class="g"></div>
+          <div class="c"><div class="hook"><span class="hl">Stop hook</span> the agent writes down what it just worked out — file, symbols, and the reason, checked against a content hash so it expires when the code moves.</div></div>
+        </div>
+
+      </div>
+      <div class="cc-in"><span>Reply to Claude…</span><span class="send">↑</span></div>
     </div>
   </div>
 </section>
 
-<!-- ===================== PART 2 — SECOND TIME ===================== -->
-<section id="second-time" style="background:var(--ink-1);border-top:1px solid var(--line);border-bottom:1px solid var(--line);">
+<!-- ============================ WARM ============================ -->
+<section class="dsec warm">
   <div class="wrap">
-    <div class="rise in">
-      <div class="eyebrow warm">02 · second time</div>
-      <h2>Same question. Zero tool calls.</h2>
-      <p class="lead">A different session, maybe a different contributor. The note from last time is still there, still checked against the code — so this time the answer doesn't need <code>find</code> or <code>gs</code> at all.</p>
+    <div class="dhead">
+      <div class="eyebrow">Session two · days later, fresh context</div>
+      <h2>Same question. The answer arrives before it starts.</h2>
+      <p class="lead">Different session, no memory of the first. The recall hook matches the note this time and hands it over with the prompt, so there is nothing left to look up.</p>
     </div>
 
-    <div class="recall reveal">
-      <div class="rprompt" data-t="0"><span class="who">you</span><span class="q">"does <code>gs</code>'s 'edited together' come from the import graph?"</span></div>
+    <div class="cc">
+      <div class="cc-bar"><span class="cc-file">coldstart-mcp</span><span class="cc-badge">Claude Code</span></div>
+      <div class="cc-body">
 
-      <div class="rflow" data-t="500"><span class="glyph">→</span><span class="rlab"><b>UserPromptSubmit</b> <span class="sub">fires before the agent ever sees this message</span></span></div>
-      <div class="rflow" data-t="450"><span class="glyph">→</span><span class="rlab"><b>kb search</b> <span class="sub">ranks notebook notes against the prompt — no embeddings, term + title match</span></span></div>
-      <div class="rflow" data-t="450"><span class="glyph">✓</span><span class="rlab"><b>match found</b> <span class="sub">[fresh] · injected as context, unasked</span></span></div>
-
-      <div class="card injected" data-t="400">
-        <div class="card-top">
-          <div class="kick"><span class="pill-t">Flow note</span><span class="pill inj"><span class="d"></span>injected</span></div>
-          <div class="card-title">how the edited-together signal reaches gs without going through the index</div>
+        <div class="turn">
+          <div class="g">IN</div>
+          <div class="c"><div class="chip">is the "edited together" list in <code>gs</code> a dependency edge?</div></div>
         </div>
-        <div class="card-body">
-          <p>The "Edited together" pairs <code>gs</code> shows are <b>not part of the code index</b> and never travel through the cache pipeline — they live in a separate keeper-written sidecar (<code>cochange.json</code>) that each reader loads itself and hands to the symbol-page builder as a third argument.</p>
-          <div class="anchors">
-            <div class="lbl">Anchors</div>
-            <div class="arow">
-              <span class="anc fresh"><span class="d"></span>src/index-manager.ts</span>
-              <span class="anc fresh"><span class="d"></span>src/cli.ts</span>
-              <span class="anc fresh"><span class="d"></span>+1 more</span>
+
+        <div class="turn">
+          <div class="g"></div>
+          <div class="c">
+            <div class="note">
+              <div class="nh"><span class="nlbl">From the notebook</span><span class="fresh">fresh</span></div>
+              <div class="nt">Co-change is git history, not the import graph</div>
+              <div class="nb2">Pairs come from <code>git log --name-status -M</code> counted over a 12k-commit window in <code>deriveCoChange</code>, min support 2. Renames are carried forward over the whole window, because <code>-M</code> only labels the rename commit. It is a habit, NOT a dependency edge — there is no import or call relation behind it.</div>
+              <div class="na">src/indexer/cochange.ts · deriveCoChange, coChangePartnersFor</div>
             </div>
           </div>
         </div>
+
+        <p class="cap">Verified against the file's content hash. <code>fresh</code> means <code>cochange.ts</code> has not changed a byte since this was written, so it can be trusted without re-reading.</p>
+
+        <div class="turn">
+          <div class="g"></div>
+          <div class="c"><div class="prose">No — it is a habit, not a dependency.<br><br>The pairs are counted from git history in <code>deriveCoChange</code>, over a 12,000-commit window with a minimum support of 2. Nothing in it consults the import graph or the call edges, so a file listed there may have no code relation to the one you asked about at all. It is answering "what do people usually change alongside this", which is often the test in another language or the doc that has to stay in sync.</div></div>
+        </div>
+
+        <div class="turn">
+          <div class="g"></div>
+          <div class="c"><div class="tally"><b>Zero tool calls.</b> No <code>find</code>, no <code>gs</code>, no reads. The second session did not pay for the first session's search.</div></div>
+        </div>
+
       </div>
-
-      <div class="rflow think" data-t="700"><span class="glyph think"><span class="pdot"></span></span><span class="rlab"><b>Thinking…</b> <span class="sub">the gist already names the file and the mechanism — no search needed</span></span></div>
-
-      <div class="rtag" data-t="600"><span class="d"></span>answered — cites <code>src/index-manager.ts</code> + <code>cochange.json</code>, zero tool calls</div>
-
-      <blockquote class="rquote" data-t="400">"Not the import graph — <code>cochange.json</code> is a separate sidecar the keeper derives from <code>git log --name-status -M</code>, loaded straight into <code>gs</code>'s symbol-page builder. No index rebuild involved."</blockquote>
+      <div class="cc-in"><span>Reply to Claude…</span><span class="send">↑</span></div>
     </div>
 
-    <div class="keynote cool rise in">
-      <span class="kk">The flywheel</span>
-      <p><b>2 tool calls the first time, 0 the second.</b> The note carried the answer — checked against the code at the moment it was recalled, not trusted blindly.</p>
+    <div class="dclose">
+      <p class="big">The notebook is the difference between the two panels.</p>
+      <p class="sm">Both sessions had the index. Only the second had the note — and it is the note that removed the work.</p>
+      <div class="cta"><a class="btn btn-primary" href="/docs/">Read the docs →</a><a class="btn btn-ghost" href="/docs/notebook/">How the notebook works</a></div>
     </div>
   </div>
 </section>
 
 <Footer />
-
-<style>
-.term.live .cmdline .typed{white-space:pre;}
-.term.live .type-cursor{display:inline-block;width:8px;height:15px;vertical-align:-2px;margin-left:2px;
-  background:var(--frost);animation:blink 1.05s steps(1) infinite;}
-.term.live .type-cursor.done{display:none;}
-.term.live .out .l,.term.live .out .gap{opacity:0;transform:translateY(2px);
-  transition:opacity .22s ease,transform .22s ease;}
-.term.live .out .l.in,.term.live .out .gap.in{opacity:1;transform:none;}
-@keyframes blink{50%{opacity:0;}}
-
-.recall{max-width:760px;margin:44px 0 0;}
-.recall.reveal>*{opacity:0;transform:translateY(5px);transition:opacity .32s ease,transform .32s ease;}
-.recall.reveal>*.in{opacity:1;transform:none;}
-.glyph.think{display:inline-flex;align-items:center;justify-content:center;width:13px;}
-.pdot{width:7px;height:7px;border-radius:50%;background:var(--frost);animation:pdot 1.1s ease-in-out infinite;}
-@keyframes pdot{0%,100%{opacity:.35;transform:scale(.85);}50%{opacity:1;transform:scale(1);}}
-.rquote{padding:16px 20px;border-left:2px solid var(--frost-dim);background:rgba(79,191,224,.05);
-  font-family:var(--display);font-style:italic;font-size:15.5px;line-height:1.65;color:var(--text);
-  border-radius:0 8px 8px 0;}
-.rquote code{font-family:var(--mono);font-style:normal;font-size:13.5px;color:var(--frost);}
-
-.time-gap{text-align:left;margin:0;font-family:var(--mono);font-size:12px;letter-spacing:.08em;
-  color:var(--faint);text-transform:uppercase;}
-.keynote{margin-top:40px;margin-bottom:0;}
-
-@media(prefers-reduced-motion:reduce){
-  .term.live .out .l,.term.live .out .gap{transition:none;}
-  .term.live .type-cursor{animation:none;}
-  .pdot{animation:none;}
-  .recall.reveal>*{transition:none;}
-}
-</style>
-
-<script>
-(function(){
-  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  function typeCommand(term, done){
-    var typed = term.querySelector('.typed');
-    var cmd = typed.getAttribute('data-cmd') || '';
-    var i = 0;
-    (function tick(){
-      typed.textContent = cmd.slice(0, i);
-      i++;
-      if (i <= cmd.length) { setTimeout(tick, 14 + Math.random() * 16); } else { done(); }
-    })();
-  }
-
-  function revealTermInstantly(term){
-    var typed = term.querySelector('.typed');
-    typed.textContent = typed.getAttribute('data-cmd');
-    var cursor = term.querySelector('.type-cursor');
-    if (cursor) cursor.classList.add('done');
-    term.querySelectorAll('.out .l, .out .gap').forEach(function(el){ el.classList.add('in'); });
-  }
-
-  function revealTermOutput(term){
-    var lines = Array.prototype.slice.call(term.querySelectorAll('.out .l, .out .gap'));
-    var t = 0;
-    lines.forEach(function(el){
-      t += parseInt(el.getAttribute('data-t') || '0', 10) || 60;
-      setTimeout(function(){ el.classList.add('in'); }, t);
-    });
-  }
-
-  function runTerm(term){
-    if (term.dataset.ran) return;
-    term.dataset.ran = '1';
-    if (reduce) { revealTermInstantly(term); return; }
-    var cursor = term.querySelector('.type-cursor');
-    typeCommand(term, function(){
-      if (cursor) cursor.classList.add('done');
-      setTimeout(function(){ revealTermOutput(term); }, 240);
-    });
-  }
-
-  var timelines = Array.prototype.slice.call(document.querySelectorAll('.recall.reveal'));
-  if (!timelines.length) return;
-
-  function revealTimelineInstantly(el){
-    Array.prototype.slice.call(el.children).forEach(function(child){
-      child.classList.add('in');
-      if (child.classList.contains('term') && child.classList.contains('live')) revealTermInstantly(child);
-    });
-  }
-
-  function runTimeline(el){
-    if (reduce) { revealTimelineInstantly(el); return; }
-    var t = 0;
-    Array.prototype.slice.call(el.children).forEach(function(child){
-      t += parseInt(child.getAttribute('data-t') || '0', 10) || 0;
-      (function(child, t){
-        setTimeout(function(){
-          child.classList.add('in');
-          if (child.classList.contains('term') && child.classList.contains('live')) runTerm(child);
-        }, t);
-      })(child, t);
-    });
-  }
-
-  if (!('IntersectionObserver' in window)) { timelines.forEach(revealTimelineInstantly); return; }
-  var obs = new IntersectionObserver(function(entries){
-    entries.forEach(function(e){
-      if (e.isIntersecting) { runTimeline(e.target); obs.unobserve(e.target); }
-    });
-  }, { threshold: 0.2 });
-  timelines.forEach(function(el){ obs.observe(el); });
-})();
-</script>
 </body>
 </html>
+
+<style is:global>
+/* ---------- demo page shell ---------- */
+.demo-hero{padding:44px 0 8px;}
+.demo-hero .title{font-size:clamp(30px,4.6vw,48px);}
+.dsec{padding:72px 0;border-top:1px solid var(--line);}
+.dsec.warm{border-top-color:var(--line-warm);}
+.dhead{max-width:640px;margin:0 auto 44px;text-align:center;}
+.dhead h2{margin-top:14px;}
+.dhead .lead{margin-top:16px;max-width:500px;margin-inline:auto;}
+
+/* ---------- the Claude Code panel — a replica, on its own neutral ground ---------- */
+.cc{max-width:880px;margin:0 auto;background:#1f1f1f;border:1px solid #2f2f2f;border-radius:10px;
+  overflow:hidden;text-align:left;box-shadow:0 24px 60px rgba(0,0,0,.42);}
+.cc-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:11px 16px;background:#252525;border-bottom:1px solid #333;}
+.cc-file{font-family:var(--mono);font-size:12px;color:#8a8a8a;}
+.cc-badge{font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;
+  color:#8a8a8a;border:1px solid #3a3a3a;border-radius:4px;padding:3px 7px;}
+.cc-body{padding:22px 20px 8px;}
+
+.turn{display:grid;grid-template-columns:34px 1fr;gap:14px;align-items:start;margin-bottom:18px;}
+.turn > .g{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:#6e6e6e;
+  text-align:right;padding-top:9px;}
+.turn > .c{min-width:0;}
+
+.chip{background:#2e2e2e;border-radius:6px;padding:10px 14px;color:#f2f2f2;font-size:13.5px;line-height:1.55;}
+.prose{color:#e3e3e3;font-size:13.5px;line-height:1.65;padding:2px 2px;}
+.prose.think{color:#9a9a9a;font-style:italic;}
+.cc code{font-family:var(--mono);font-size:12.5px;color:#d9a05b;
+  background:rgba(255,255,255,.06);border-radius:4px;padding:1px 5px;}
+
+.tool{border:1px solid #383838;border-radius:6px;background:#1a1a1a;overflow:hidden;}
+.th{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid #2c2c2c;
+  font-size:13px;color:#f2f2f2;flex-wrap:wrap;}
+.th b{font-weight:600;}
+.th .arg{font-family:var(--mono);font-size:12px;color:#8a8a8a;}
+.dot{width:7px;height:7px;border-radius:50%;flex:none;background:#6b6b6b;}
+.dot.ok{background:#7ec89a;}
+.ob{padding:11px 12px;font-family:var(--mono);font-size:12px;line-height:1.7;color:#cfcfcf;
+  overflow-x:auto;}
+.ob > div{white-space:pre;}
+.ob .el{color:#6e6e6e;}
+
+/* the note, as the recall hook hands it over */
+.note{border:1px solid rgba(239,148,72,.34);border-radius:6px;background:rgba(239,148,72,.05);padding:14px 15px;}
+.nh{display:flex;align-items:center;gap:10px;margin-bottom:9px;}
+.nlbl{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#d9a05b;}
+.fresh{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:#7ec89a;
+  border:1px solid rgba(126,200,154,.4);border-radius:4px;padding:2px 6px;}
+.nt{font-family:var(--display);font-size:17px;color:#f2f2f2;margin-bottom:8px;}
+.nb2{font-size:13px;line-height:1.62;color:#cfcfcf;}
+.na{margin-top:10px;font-family:var(--mono);font-size:11px;color:#8a8a8a;}
+
+.hook{border-left:2px solid #7ec89a;padding:4px 0 4px 12px;font-size:12.5px;color:#9a9a9a;line-height:1.6;}
+.hook .hl{color:#7ec89a;font-family:var(--mono);font-size:11px;letter-spacing:.06em;
+  text-transform:uppercase;margin-right:8px;}
+.tally{border:1px dashed #3a3a3a;border-radius:6px;padding:11px 13px;font-size:13px;color:#cfcfcf;line-height:1.6;}
+.tally b{color:#f2f2f2;font-weight:600;}
+
+.cc-in{display:flex;align-items:center;justify-content:space-between;margin:6px 16px 16px;
+  background:#242424;border:1px solid rgba(239,148,72,.45);border-radius:8px;padding:11px 13px;
+  font-size:13px;color:#6e6e6e;}
+.cc-in .send{width:22px;height:22px;border-radius:5px;background:#a8604a;color:#fff;
+  display:grid;place-items:center;font-size:12px;}
+
+/* captions sit outside the replica so the panel carries no marketing copy */
+.cap{max-width:600px;margin:-4px auto 20px;padding:0 4px;text-align:center;
+  font-size:12.5px;line-height:1.6;color:var(--faint);}
+.cap code{font-family:var(--mono);font-size:11.5px;color:var(--ember);background:none;padding:0;}
+
+.dclose{max-width:600px;margin:56px auto 0;text-align:center;}
+.dclose .big{font-family:var(--display);font-size:clamp(20px,2.6vw,26px);color:var(--text);line-height:1.35;}
+.dclose .sm{margin-top:12px;font-size:15px;color:var(--muted);line-height:1.6;}
+.dclose .cta{margin-top:28px;justify-content:center;}
+
+@media(max-width:720px){
+  .cc-body{padding:18px 12px 6px;}
+  .turn{grid-template-columns:22px 1fr;gap:9px;}
+  .turn > .g{font-size:9px;}
+  .ob{font-size:11px;}
+}
+</style>

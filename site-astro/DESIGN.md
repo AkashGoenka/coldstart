@@ -281,9 +281,12 @@ Motion for **marketing** is a separate artifact, not a page behaviour — see §
 **Static, fully rendered.** The whole session is present on load. No typing, no
 scroll triggers. Screenshot-able, works with JS off, scannable in three seconds.
 
-Layout: one `.split` — transcript left (cols 1–8), commentary rail right (cols
-9–12) with short annotations pointing at specific turns. The argument lives in
-the rail so the panel stays a faithful replica carrying no marketing copy.
+Layout: **one full-width column**, panel centred at 880px. The commentary rail
+this section originally specified is gone with §4's split — the annotations are
+now short centred captions *between* turn groups, outside the panel. The reason
+for putting them outside stands: the panel carries no marketing copy, so it
+stays a faithful replica. Captions collapse naturally on mobile, which a
+cols-9–12 rail did not.
 
 Two panels stacked, the same repo on two different days:
 1. **Cold** — no note yet. `find` → `gs` → answer → the Stop hook writes a note.
