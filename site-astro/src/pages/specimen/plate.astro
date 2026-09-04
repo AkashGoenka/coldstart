@@ -55,19 +55,19 @@ body{
   -webkit-font-smoothing:antialiased;
 }
 
-/* ── DEVICE 1 — the drafting grid ────────────────────────────────────────
-   Environmental depth, not decoration: the 40px cell is the same module
-   the layout measures in, so the page sits ON the grid rather than over a
-   texture. The frost→ember ramp (§12) rides underneath it, unchanged. */
+/* ── DEVICE 1 — the field ────────────────────────────────────────────────
+   NO tiled grid. A repeating background pattern is the web's most common
+   generated-site tell, whatever it is made of — composition.md's "the
+   background must participate" rule is written for a print canvas, and it
+   does not survive the move to a scrolling page. Structure here is carried
+   by DRAWN, NON-REPEATING linework instead: the frame, the rails, the
+   section rules, the dimension lines. The only field is the §12 ramp. */
 body::before{
   content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
-  background-image:
-    linear-gradient(var(--line-soft) 1px,transparent 1px),
-    linear-gradient(90deg,var(--line-soft) 1px,transparent 1px),
+  background:
     linear-gradient(90deg,
       rgba(79,191,224,.17) 0%, transparent 42%,
       transparent 58%, rgba(239,148,72,.16) 100%);
-  background-size:var(--cell) var(--cell),var(--cell) var(--cell),100% 100%;
 }
 
 /* ── DEVICE 2 — the double-rule frame + registration crosses ───────────── */
@@ -83,7 +83,9 @@ body::before{
 
 /* Editorial spread: 4 / 8. composition.md forbids 50:50 — this is 1/3 : 2/3. */
 .spread{display:grid;grid-template-columns:4fr 8fr;gap:0 var(--s4);}
-.rail{border-right:1px solid var(--line-soft);padding-right:var(--s4);}
+/* The rail is now a primary structural device, not a hint — with the tiled
+   grid gone it is what holds the 4:8 split visible. */
+.rail{border-right:1px solid var(--line);padding-right:var(--s4);}
 
 /* Full-bleed hairline separator — the one carried over from /how-it-works/. */
 .sec{border-top:1px solid var(--line);padding:var(--s5) 0;position:relative;}
