@@ -1,0 +1,302 @@
+---
+// COMPOSITION PATTERN: Editorial spread (4 / 8 hard asymmetric split).
+// Scene: "you are looking at an engineering drawing of a codebase."
+//
+// Specimen B. Self-contained on purpose — imports none of the real stylesheets,
+// so it can be approved or thrown away without touching the live site. Not
+// linked from nav; noindex. Sits alongside /specimen/ for direct comparison.
+//
+// Adapted from EpicInfographics `blueprint` + `composition.md`, on coldstart's
+// own dark ground. Deliberately breaks DESIGN.md §12 on ONE point (radius 0,
+// not 6/10px) — that is the experiment. Everything else in §12 is honoured.
+const findCmd = 'coldstart ' + 'find cochange sidecar keeper';
+const gsCmd = 'coldstart ' + 'gs src/cli.ts --match cochange';
+---
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="robots" content="noindex,nofollow" />
+<title>Plate — coldstart specimen B</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&family=IBM+Plex+Sans:wght@400;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style is:global>
+:root{
+  --ground:#0b0e14;
+  --frost:#4fbfe0;
+  --ember:#ef9448;
+  --ok:#7ec89a;
+
+  /* Text. Prose is near-white (DESIGN.md §12). Grey is chrome only. */
+  --ink:#eef3fa;
+  --muted:#a8b6c9;
+  --faint:#7a889d;
+
+  /* Drawing ink — structural linework, never data. */
+  --line:rgba(216,232,248,.17);
+  --line-2:rgba(216,232,248,.30);
+  --line-soft:rgba(216,232,248,.055);
+
+  --display:"Archivo",system-ui,sans-serif;
+  --sans:"IBM Plex Sans",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+
+  --cell:40px;          /* the drafting grid everything snaps to */
+  --wrap:1120px;
+  --s1:8px; --s2:16px; --s3:24px; --s4:40px; --s5:64px;
+}
+
+*{box-sizing:border-box;}
+html{-webkit-text-size-adjust:100%;}
+body{
+  margin:0;background:var(--ground);color:var(--ink);
+  font:400 16px/1.65 var(--sans);
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── DEVICE 1 — the drafting grid ────────────────────────────────────────
+   Environmental depth, not decoration: the 40px cell is the same module
+   the layout measures in, so the page sits ON the grid rather than over a
+   texture. The frost→ember ramp (§12) rides underneath it, unchanged. */
+body::before{
+  content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background-image:
+    linear-gradient(var(--line-soft) 1px,transparent 1px),
+    linear-gradient(90deg,var(--line-soft) 1px,transparent 1px),
+    linear-gradient(90deg,
+      rgba(79,191,224,.17) 0%, transparent 42%,
+      transparent 58%, rgba(239,148,72,.16) 100%);
+  background-size:var(--cell) var(--cell),var(--cell) var(--cell),100% 100%;
+}
+
+/* ── DEVICE 2 — the double-rule frame + registration crosses ───────────── */
+.frame{position:fixed;inset:14px;border:1px solid var(--line);z-index:5;pointer-events:none;}
+.frame::after{content:"";position:absolute;inset:5px;border:1px solid var(--line-soft);}
+.reg{position:fixed;width:13px;height:13px;z-index:5;pointer-events:none;opacity:.75;}
+.reg::before,.reg::after{content:"";position:absolute;background:var(--line-2);}
+.reg::before{left:6px;top:0;width:1px;height:13px;}
+.reg::after{top:6px;left:0;height:1px;width:13px;}
+.reg.tl{left:34px;top:34px;} .reg.tr{right:34px;top:34px;} .reg.bl{left:34px;bottom:34px;}
+
+.wrap{max-width:var(--wrap);margin:0 auto;padding:0 var(--s5);}
+
+/* Editorial spread: 4 / 8. composition.md forbids 50:50 — this is 1/3 : 2/3. */
+.spread{display:grid;grid-template-columns:4fr 8fr;gap:0 var(--s4);}
+.rail{border-right:1px solid var(--line-soft);padding-right:var(--s4);}
+
+/* Full-bleed hairline separator — the one carried over from /how-it-works/. */
+.sec{border-top:1px solid var(--line);padding:var(--s5) 0;position:relative;}
+.sec:first-of-type{border-top:0;}
+
+/* ── DEVICE 3 — Fig. numbering. Every panel is captioned in the outermost
+   column, top-aligned, museum-caption style. Nothing is unlabelled. ───── */
+.fig{font:700 11px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;
+     color:var(--frost);margin:0 0 var(--s2);}
+.fig.warm{color:var(--ember);}
+.figcap{font:400 13px/1.6 var(--mono);color:var(--faint);margin:0;max-width:26ch;}
+
+h1,h2,.d{font-family:var(--display);font-variation-settings:"wdth" 112;
+         font-weight:600;letter-spacing:-.022em;margin:0;}
+h1{font-size:clamp(38px,6.2vw,64px);line-height:1.00;}
+h2{font-size:26px;line-height:1.08;margin:0 0 var(--s2);}
+p{margin:0 0 var(--s3);max-width:62ch;}
+.lead{font-size:18px;line-height:1.6;color:var(--ink);}
+.eyebrow{font:500 11px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;
+         color:var(--faint);margin:0 0 var(--s3);}
+
+/* ── DEVICE 4 — dimension lines. Real values measured on the drawing,
+   with a knockout label breaking the line. Data as annotation. ────────── */
+.dim{position:relative;height:1px;background:var(--line-2);margin:var(--s4) 0;}
+.dim::before,.dim::after{content:"";position:absolute;top:-3px;width:7px;height:7px;
+  border-left:1px solid var(--line-2);border-bottom:1px solid var(--line-2);}
+.dim::before{left:0;transform:rotate(45deg);}
+.dim::after{right:0;transform:rotate(-135deg);}
+.dim > span{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  background:var(--ground);padding:0 12px;white-space:nowrap;
+  font:500 11px/1 var(--mono);letter-spacing:.11em;text-transform:uppercase;color:var(--muted);}
+
+/* Hero. Swiss "massive number, tiny label" living in the thin column, and it
+   CROSSES A BOUNDARY — the numeral overhangs the rail to the left. */
+.hero{padding:var(--s5) 0 var(--s5);}
+.count{font-family:var(--display);font-variation-settings:"wdth" 90;font-weight:600;
+  font-size:clamp(120px,17vw,196px);line-height:.82;letter-spacing:-.05em;
+  color:var(--ink);margin:0 0 var(--s2) -.07em;}
+.count em{font-style:normal;color:var(--frost);}
+.countlab{font:500 11px/1.6 var(--mono);letter-spacing:.14em;text-transform:uppercase;
+  color:var(--faint);margin:0;max-width:20ch;}
+
+/* Command rows — drawn, not carded. Radius 0, hairline, no fill, no shadow. */
+.cmd{display:flex;gap:var(--s3);align-items:baseline;padding:var(--s2) 0;
+     border-top:1px solid var(--line-soft);}
+.cmd:last-child{border-bottom:1px solid var(--line-soft);}
+.cmd b{font:700 11px/1.9 var(--mono);letter-spacing:.14em;text-transform:uppercase;
+       color:var(--frost);min-width:52px;}
+.cmd code{font:400 14px/1.9 var(--mono);color:var(--ink);}
+.cmd i{font-style:normal;font-size:14px;color:var(--muted);margin-left:auto;
+       text-align:right;max-width:30ch;}
+
+/* ── DEVICE 5 — the stage chain. The pipeline drawn as a dimensioned run of
+   cells on the grid, connected by the drawing line, not as five cards. ── */
+.chain{display:grid;grid-template-columns:repeat(5,1fr);align-items:stretch;margin:var(--s3) 0 0;}
+.stage{position:relative;border:1px solid var(--line);border-right:0;padding:var(--s3) var(--s2);}
+.stage:last-child{border-right:1px solid var(--line);}
+.stage b{display:block;font:700 12px/1 var(--mono);letter-spacing:.09em;
+         text-transform:uppercase;color:var(--ink);margin-bottom:var(--s1);}
+.stage span{font:400 11px/1.5 var(--mono);color:var(--faint);}
+.stage::after{content:"";position:absolute;right:-4px;top:50%;width:7px;height:7px;
+  border-top:1px solid var(--line-2);border-right:1px solid var(--line-2);
+  transform:translateY(-50%) rotate(45deg);background:var(--ground);}
+.stage:last-child::after{display:none;}
+/* Hatch fill marks the one stage that is cached, not recomputed. */
+.stage.hatch{background:repeating-linear-gradient(45deg,
+  rgba(79,191,224,.10) 0 1.5px,transparent 1.5px 7px);}
+
+/* Notebook zone — ember. Same drawing rules, different ink. */
+.note{border:1px solid var(--line);border-left:2px solid var(--ember);
+      padding:var(--s3);background:rgba(239,148,72,.045);}
+.note .nmeta{font:500 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;
+      color:var(--ember);margin:0 0 var(--s2);}
+.note p{margin:0;font-size:15px;}
+.note .npath{font:400 12px/1.7 var(--mono);color:var(--faint);margin-top:var(--s2);}
+.tag{display:inline-block;font:500 10px/1 var(--mono);letter-spacing:.1em;
+     text-transform:uppercase;color:var(--ok);border:1px solid rgba(126,200,154,.35);
+     padding:4px 7px;margin-left:var(--s1);}
+
+/* ── DEVICE 6 — the title block. The footer IS the stamp. ──────────────── */
+.block{border:1px solid var(--line-2);margin:var(--s5) 0 0;max-width:520px;}
+.block .binner{border:1px solid var(--line-soft);margin:4px;}
+.brow{display:grid;grid-template-columns:104px 1fr;border-top:1px solid var(--line-soft);}
+.brow:first-child{border-top:0;}
+.brow dt{font:500 10px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;
+   color:var(--faint);padding:10px 12px;border-right:1px solid var(--line-soft);margin:0;}
+.brow dd{font:500 11px/1 var(--mono);color:var(--muted);padding:10px 12px;margin:0;}
+dl{margin:0;}
+
+footer{padding:var(--s5) 0 96px;}
+
+@media(max-width:900px){
+  :root{--cell:32px;}
+  .wrap{padding:0 var(--s3);}
+  .spread{grid-template-columns:1fr;gap:var(--s3);}
+  .rail{border-right:0;padding-right:0;border-bottom:1px solid var(--line-soft);
+        padding-bottom:var(--s3);}
+  .reg,.frame{display:none;}
+  .chain{grid-template-columns:1fr;}
+  .stage{border-right:1px solid var(--line);border-bottom:0;}
+  .stage:last-child{border-bottom:1px solid var(--line);}
+  .stage::after{right:auto;left:50%;top:auto;bottom:-4px;
+                transform:translateX(-50%) rotate(135deg);}
+  .cmd{flex-wrap:wrap;}
+  .cmd i{margin-left:0;text-align:left;flex-basis:100%;}
+  .count{margin-left:0;}
+}
+</style>
+</head>
+<body>
+
+<div class="frame"></div>
+<i class="reg tl"></i><i class="reg tr"></i><i class="reg bl"></i>
+
+<main class="wrap">
+
+  <!-- FIG. 1 — hero. Editorial spread: the thin column carries the biggest
+       type on the canvas, and it overhangs its own rail. -->
+  <section class="sec hero">
+    <div class="spread">
+      <div class="rail">
+        <p class="count"><em>2</em></p>
+        <p class="countlab">Operations. No model call, no network, no embedding.</p>
+      </div>
+      <div>
+        <p class="eyebrow">Coldstart — navigation layer for coding agents</p>
+        <h1>A drawing of the codebase, made before anything is read.</h1>
+        <p class="lead" style="margin-top:24px">
+          An agent dropped into an unfamiliar repo reads its way to the answer, one
+          file at a time. Coldstart answers the question underneath that search —
+          <em>which files are relevant to this task</em> — from a static index of
+          paths, symbols and exports. Two commands, answered locally in milliseconds.
+        </p>
+        <div class="cmd">
+          <b>find</b><code>{findCmd}</code>
+          <i>Ranked paths, with the lines your terms cluster in</i>
+        </div>
+        <div class="cmd">
+          <b>gs</b><code>{gsCmd}</code>
+          <i>One file: symbols, callers, importers, co-edits</i>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FIG. 2 — the pipeline, drawn as a dimensioned run on the grid. -->
+  <section class="sec">
+    <div class="spread">
+      <div class="rail">
+        <p class="fig">Fig. 2</p>
+        <p class="figcap">The index, end to end. Built once by a background keeper,
+          read by every query.</p>
+      </div>
+      <div>
+        <h2>Built once. Read cold.</h2>
+        <p>A single keeper process watches the repo and keeps one on-disk cache
+          fresh. Queries never build — they open the cache, rank, and exit.</p>
+        <div class="chain">
+          <div class="stage"><b>Walk</b><span>respecting ignores</span></div>
+          <div class="stage"><b>Parse</b><span>15 grammars, wasm</span></div>
+          <div class="stage"><b>Resolve</b><span>imports to files</span></div>
+          <div class="stage"><b>Graph</b><span>calls + co-edits</span></div>
+          <div class="stage hatch"><b>Cache</b><span>atomic, on disk</span></div>
+        </div>
+        <div class="dim"><span>One pass · incremental thereafter</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FIG. 3 — the notebook. Same drawing rules, ember ink. -->
+  <section class="sec">
+    <div class="spread">
+      <div class="rail">
+        <p class="fig warm">Fig. 3</p>
+        <p class="figcap">The notebook — what previous agents worked out here, kept
+          next to the code.</p>
+      </div>
+      <div>
+        <h2>The second time is not like the first.</h2>
+        <p>An index says where code lives. It cannot say what was already tried.
+          Agents write notes after real work, anchored to the files they touched,
+          and every note is stamped against those files.</p>
+        <div class="note">
+          <p class="nmeta">Flow · how notebook capture fires<span class="tag">Fresh</span></p>
+          <p>Capture is trigger-timed, not per-stop: every stop quietly updates
+            per-file evidence and a score, and only when the trigger fires is the
+            checklist delivered.</p>
+          <p class="npath">.coldstart/notebook/notes/how-notebook-capture-fires.md</p>
+        </div>
+        <div class="dim"><span>Anchored · versioned · committed with the repo</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FIG. 4 — the title block. The footer IS the device. -->
+  <footer>
+    <div class="spread">
+      <div class="rail">
+        <p class="fig">Fig. 4</p>
+        <p class="figcap">Plate stamp.</p>
+      </div>
+      <div>
+        <div class="block"><div class="binner"><dl>
+          <div class="brow"><dt>Title</dt><dd>Coldstart — navigation layer</dd></div>
+          <div class="brow"><dt>Drawing</dt><dd>SPECIMEN B · PLATE I</dd></div>
+          <div class="brow"><dt>Scale</dt><dd>40px module · 4:8 spread</dd></div>
+          <div class="brow"><dt>Source</dt><dd>DESIGN.md §2 §5 §12</dd></div>
+          <div class="brow"><dt>Date</dt><dd>2026-09-04</dd></div>
+        </dl></div></div>
+      </div>
+    </div>
+  </footer>
+
+</main>
+</body>
+</html>
