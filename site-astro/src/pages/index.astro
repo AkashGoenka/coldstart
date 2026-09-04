@@ -87,10 +87,21 @@ const faqJsonLd = {
 <!-- ===================== HERO ===================== -->
 <header class="hero" id="install">
   <div class="wrap hero-in">
+   <div class="two">
+    <div class="col-a">
     <div class="kicker">Codebase memory — what your agents learned, kept for the next session</div>
     <h1 class="title">Your agent relearns your codebase<br>from <span class="cold">scratch</span> — every<br>session.</h1>
     <p class="hero-sub">coldstart gives it <b>persistent memory of your codebase</b> — a notebook it writes itself, so what one session figures out, the next already knows — plus an exact index to <b>find the right file without three wrong reads</b>. No embeddings, no API key: it runs on the model you already pay for.</p>
 
+    <div class="cta">
+      <a class="btn btn-primary" href="/docs/">Read the docs →</a>
+      <a class="btn btn-ghost" href="/live/">See it live</a>
+      <a class="btn btn-ghost" href="/blog/">Read the blog</a>
+    </div>
+    <p class="meta-line">MIT · Node 18+ · runs offline · no embeddings, no API key</p>
+    </div>
+
+    <div class="col-b">
     <div class="term install-term">
       <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="term-title">your-project</span><button type="button" class="copy-btn" id="copy-install" data-copy="npm install -g @cstart/coldstart&#10;coldstart init" aria-label="Copy install commands">Copy</button></div>
       <div class="term-body">
@@ -102,32 +113,30 @@ const faqJsonLd = {
 <span class="l"><span class="p-hit">✓</span> <span class="p-dim">index warming in the background — your first lookup is instant.</span></span>
       </div>
     </div>
-
-    <div class="cta">
-      <a class="btn btn-primary" href="/docs/">Read the docs →</a>
-      <a class="btn btn-ghost" href="/live/">See it live</a>
-      <a class="btn btn-ghost" href="/blog/">Read the blog</a>
     </div>
-    <p class="meta-line">MIT · Node 18+ · runs offline · no embeddings, no API key</p>
+   </div>
   </div>
 </header>
 
 <!-- ===================== NOTEBOOK (the lead value) ===================== -->
 <section id="notebook" class="nb">
   <div class="wrap">
+    <div class="two">
+    <div class="col-a">
     <div class="rise nb-intro">
       <div class="eyebrow warm">The notebook</div>
       <h2>The second time a question comes up, the answer is <span class="warm">already written down.</span></h2>
       <p class="lead">An agent writes down what it learns while it works. The next one gets it for free, checked against the code so a stale note never passes as fact.</p>
     </div>
 
-    <div class="nb-main rise">
       <ol class="nb-steps">
         <li><b>Written after a real task</b>, by the agent that just did the work, citing the exact file and symbol.</li>
         <li><b>Kept honest by a content hash</b> — the background keeper flags it the moment the code moves.</li>
         <li><b>Injected automatically</b> when a prompt matches, before the agent starts searching.</li>
       </ol>
+    </div>
 
+    <div class="col-b">
       <div class="nb-exhibit">
         <div class="nb-exhibit-label">What step three actually injects</div>
         <div class="card" id="noteCard">
@@ -160,6 +169,7 @@ const faqJsonLd = {
         </div>
       </div>
     </div>
+    </div>
 
     <div class="keynote rise">
       <span class="kk">Shared, it compounds</span>
@@ -173,11 +183,15 @@ const faqJsonLd = {
 <!-- ===================== NAVIGATION SECTION ===================== -->
 <section id="flow" class="navsec">
   <div class="wrap">
+    <div class="two">
+    <div class="col-a">
     <div class="rise">
       <div class="eyebrow">The index · exact, offline, instant</div>
       <h2>Memory compounds over time.<br>Navigation pays off on the first lookup.</h2>
       <p class="lead">No embeddings — just paths, symbols, and the import/call graph, patched in the background as you type. Two cheap lookups instead of three wrong reads.</p>
     </div>
+    </div>
+    <div class="col-b">
     <div class="flow-figure rise">
       <svg class="flow-svg" viewBox="0 0 900 190" role="img" aria-labelledby="flowTitle">
         <title id="flowTitle">Grepping around a codebase wanders through wrong files before landing; find then gs goes straight there.</title>
@@ -208,6 +222,8 @@ const faqJsonLd = {
         <span class="before">grep, then guess — three files before the right one</span>
         <span class="after">find, then gs — straight to it</span>
       </div>
+    </div>
+    </div>
     </div>
 
     <div class="ops rise">
@@ -248,10 +264,14 @@ const faqJsonLd = {
 <!-- ===================== FAQ ===================== -->
 <section id="faq" class="faq">
   <div class="wrap">
+    <div class="two">
+    <div class="col-a">
     <div class="rise faq-head">
       <div class="eyebrow">Common questions</div>
       <h2>Before you install.</h2>
     </div>
+    </div>
+    <div class="col-b">
     <div class="faq-list rise">
       {faqs.map((item) => (
         <details class="faq-item">
@@ -261,6 +281,8 @@ const faqJsonLd = {
           </p>
         </details>
       ))}
+    </div>
+    </div>
     </div>
     <div class="faq-close rise">
       <div class="faq-close-links">
