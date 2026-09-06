@@ -1,3 +1,10 @@
+/* The shared footer rides along here on purpose. Every page shell already
+   imports this file, and a per-page footer import would be a third thing a
+   new page can silently forget - /live/ shipped without this very file once.
+   footer.css defines no tokens, so being hoisted above the :root below is
+   harmless. */
+@import "./footer.css";
+
 /* ============================================================
    Shared page backdrop — the frost→ember field.
    landing.css and docs.css are independent, hand-synced stylesheets

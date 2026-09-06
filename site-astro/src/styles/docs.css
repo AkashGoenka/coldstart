@@ -101,7 +101,7 @@ nav {
   border-radius: var(--radius); overflow: hidden;
 }
 .term-bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,.06); }
-.term-bar .title { margin-left: 10px; font-family: var(--mono); font-size: 12px; color: #7a8aa3; }
+.term-bar .title { margin-left: 10px; font-family: var(--mono); font-size: 12px; color: var(--faint); }
 .term-body { padding: 20px 22px 26px; font-family: var(--mono); font-size: 13.5px; line-height: 1.75; color: var(--term-ink); overflow-x: auto; }
 .term-body .ln { white-space: pre; display: block; }
 .c-prompt { color: #4fd18b; }
@@ -165,22 +165,7 @@ a.fcard:hover { border-color: color-mix(in srgb, var(--frost) 45%, var(--line));
 .doc-sec .fcard h4 { font-size: 15px; margin: 9px 0 7px; }
 .doc-sec .fcard p { font-size: 14px; }
 
-/* ---- FOOTER (shared chrome — same max-width/padding as nav) ---- */
-footer { border-top: 1px solid var(--line); padding: 48px 0; }
-.foot-in { max-width: 1120px; margin: 0 auto; padding: 0 28px; display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; align-items: center; }
-.foot-links { display: flex; gap: 22px; font-family: var(--mono); font-size: 13.5px; }
-.foot-links a { color: var(--muted); text-decoration: none; }
-.foot-links a:hover { color: var(--ink); }
-.foot-id { display: flex; flex-direction: column; gap: 7px; }
-.foot-id .brand { font-size: 15px; gap: 8px; }
-.foot-tagline { font-family: var(--mono); color: var(--muted); font-size: 12.5px; letter-spacing: .02em; }
-@media (max-width: 640px) {
-  footer { padding: 40px 0 48px; }
-  .foot-in { flex-direction: column; align-items: flex-start; gap: 24px; padding: 0 20px; }
-  .foot-id { gap: 8px; }
-  .foot-links { flex-wrap: wrap; gap: 14px 20px; }
-  .foot-links a { display: inline-block; padding: 3px 0; }
-}
+/* footer: moved to styles/footer.css (one definition, shared) */
 
 /* =========================================================
    DOCS PAGE — sidebar + reference layout
@@ -233,7 +218,13 @@ footer { border-top: 1px solid var(--line); padding: 48px 0; }
 .lead-p { font-size: 18px !important; color: var(--muted); margin-top: 18px; }
 .content b, .prose b { color: var(--ink); font-weight: 600; }
 .content em { color: var(--ink); font-style: italic; }
-p code, li code, .prose code { font-size: 13.5px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; color: var(--ink); }
+/* Inline code in prose is EMBER, matching .keynote code in landing.css.
+   Before this, every docs and blog page rendered with zero ember on it —
+   16 frost elements and 0 warm ones on /docs/ — which is what made the
+   docs read as a single-colour site. Frost stays on the navigational
+   chrome (nav, kickers, active states); ember marks the artifacts the
+   text is about. */
+p code, li code, .prose code { font-size: 13.5px; background: rgba(239,148,72,.07); border: 1px solid var(--line-warm); border-radius: 6px; padding: 1px 6px; color: var(--ember); }
 
 .cmd { margin-top: 8px; }
 .cmd .name { font-family: var(--mono); font-size: 24px; font-weight: 700; letter-spacing: -.02em; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
@@ -380,6 +371,12 @@ body.essay-page .term { border-color: var(--term-border); }
 .essay-meta .sep { color: var(--faint); letter-spacing: 0; }
 .essay-meta time,
 .essay-meta .rt { color: var(--muted); letter-spacing: .06em; }
+/* The kicker carries the post topic temperature: frost for the index and
+   measurement posts, ember for the notebook and memory ones. Reading time was
+   dropped from the card - at three segments the longest kicker wrapped to a
+   second line and pushed that one cards title out of alignment with its row. */
+.essay-meta .k { color: var(--frost); }
+.essay-meta .k.warm { color: var(--ember); }
 
 .essay-card h2 {
   font-family: var(--display);
@@ -525,11 +522,11 @@ body.essay-page .term { border-color: var(--term-border); }
 
 .essay-article code {
   font-size: .82em;
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: rgba(239,148,72,.07);
+  border: 1px solid var(--line-warm);
   border-radius: 5px;
   padding: 1.5px 6px;
-  color: var(--ink);
+  color: var(--ember);
   white-space: nowrap;
 }
 

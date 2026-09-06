@@ -143,8 +143,8 @@ h1.title .cold{color:var(--frost);}
 .navsec .term{margin-top:48px;}
 .term-bar{display:flex;align-items:center;gap:8px;padding:12px 15px;
   border-bottom:1px solid rgba(255,255,255,.05);background:rgba(255,255,255,.015);}
-.term-title{margin-left:10px;font-family:var(--mono);font-size:11.5px;color:#7a8aa3;}
-.copy-btn{margin-left:auto;font-family:var(--mono);font-size:11px;color:#8aa0bd;cursor:pointer;
+.term-title{margin-left:10px;font-family:var(--mono);font-size:11.5px;color:var(--faint);}
+.copy-btn{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--faint);cursor:pointer;
   background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:6px;
   padding:4px 10px;transition:color .15s,background .15s,border-color .15s;}
 .copy-btn:hover{color:#eef3fb;background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.16);}
@@ -372,8 +372,10 @@ h1.title .cold{color:var(--frost);}
 .faq-q::marker{color:var(--frost-dim);}
 .faq-item[open] .faq-q{margin-bottom:14px;}
 .faq-a{font-size:15px;color:var(--muted);line-height:1.65;margin:0;padding:0;max-width:62ch;}
-.faq-a code{font-family:var(--mono);font-size:13px;color:var(--frost);background:rgba(79,191,224,.08);
-  border:1px solid var(--line);border-radius:4px;padding:1px 5px;}
+/* Ember, matching p code / li code in docs.css: inline code marks the
+   artifact the sentence is about. Frost stays on navigational chrome. */
+.faq-a code{font-family:var(--mono);font-size:13px;color:var(--ember);background:rgba(239,148,72,.08);
+  border:1px solid var(--line-warm);border-radius:4px;padding:1px 5px;}
 @media(max-width:640px){.faq-item{padding:20px;}.faq-q{font-size:15.5px;}.faq-a{font-size:14px;}}
 
 /* ---------- INSTALL (in hero) / FAQ CLOSE ---------- */
@@ -383,21 +385,7 @@ h1.title .cold{color:var(--frost);}
 .install-langs{margin-top:22px;font-family:var(--mono);font-size:12.5px;color:var(--faint);}
 
 /* ---------- FOOTER ---------- */
-footer{border-top:1px solid var(--line);padding:50px 0;}
-.foot-in{max-width:var(--wrap);margin:0 auto;padding:0 28px;display:flex;justify-content:space-between;
-  gap:24px;flex-wrap:wrap;align-items:center;}
-.foot-links{display:flex;gap:22px;font-family:var(--mono);font-size:13px;}
-.foot-links a{color:var(--muted);}.foot-links a:hover{color:var(--text);}
-.foot-id{display:flex;flex-direction:column;gap:7px;}
-.foot-id .brand{font-size:14px;gap:8px;}
-.foot-tagline{font-family:var(--mono);color:var(--faint);font-size:12.5px;letter-spacing:.02em;}
-@media(max-width:640px){
-  footer{padding:40px 0 48px;}
-  .foot-in{flex-direction:column;align-items:flex-start;gap:24px;padding:0 20px;}
-  .foot-id{gap:8px;}
-  .foot-links{flex-wrap:wrap;gap:14px 20px;}
-  .foot-links a{display:inline-block;padding:3px 0;}
-}
+/* footer: moved to styles/footer.css (one definition, shared) */
 
 @media(prefers-reduced-motion:reduce){
   *{animation:none!important;transition:none!important;}
