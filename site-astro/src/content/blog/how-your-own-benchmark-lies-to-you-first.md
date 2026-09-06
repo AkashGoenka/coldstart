@@ -11,33 +11,17 @@ tags: ["benchmark", "methodology", "cost"]
 next: "what-a-graph-cannot-see"
 ---
 
-[Why most token savings tools lie](/blog/why-most-token-savings-tools-lie/) is about a number someone else is showing you, and what to check before believing it. This one is earlier in the process: how the number gets built at all, and the specific ways a benchmark run in good faith still comes out wrong. All four of these are mistakes I made on coldstart's own eval, caught before the number shipped, not mistakes I'm describing from watching someone else make them.
+A change I was testing came back with 2,136 resolved reference edges against the baseline's 2,131. Five edges missing, same repository, from a change that had no business touching resolution at all. That is exactly the shape of a regression worth an afternoon.
 
-## Don't let the query know the answer
+Before spending the afternoon I ran the unchanged baseline against itself a second time. It came back at 2,135.
 
-A recall number (of the files a correct answer actually needs, how many the tool surfaced) is only honest if the query that produced it could plausibly have come from an agent that hadn't already seen the answer. That sounds obvious and it's easy to violate by accident. Early on, I hand-wrote a test query against a component I'd already found on disk, using a phrase pulled straight from its filename. The tool ranked it first. Of course it did. The query wasn't testing whether the tool could find that file. It was testing whether the tool could match a string against itself, because I'd already done the finding and encoded the result into the question.
+The regression was sitting inside the range the baseline produces on its own, from nothing but being run again. [Why most token savings tools lie](/blog/why-most-token-savings-tools-lie/) is about a number someone else is showing you and what to check before believing it. This one is earlier in the process: how a number goes wrong while you are still building it, in ways that are invisible from inside the run. All four of the guardrails below exist because I broke them on coldstart's own eval and caught it before the number shipped. The one above is simply the cheapest to demonstrate, because the wrong conclusion was sitting there in two integers.
 
-Writing more careful queries doesn't fix this. A query written by someone who already knows the target file can't be trusted as evidence, no matter how careful they are: the leak is in the fact that the answer was already visible when the question was written, not in how the query is worded. The only queries that count are the ones a real agent actually asked while working a task blind, mined from the run's own transcript, not authored afterward to look plausible. If you don't have real transcripts yet, you don't have a recall number yet either.
+## Why the baseline moves when nothing changed
 
-## One arm, one variable
+That first one isn't a discipline problem. It's a fact about the system that's easy not to know until it costs you a wrong conclusion.
 
-A comparison is only informative if exactly one thing differs between the arms being compared (an "arm" here just means one side of the comparison, like a run with coldstart on versus a run with coldstart off). This one breaks less obviously: I ran a no-tool baseline where the agent, left without navigation help, delegated part of the task to a sub-agent. That's a reasonable thing for an agent to do on its own, and it silently corrupted the comparison two different ways.
-
-First, sub-agent delegation is itself a way of managing context, arguably the main alternative to a navigation tool. A baseline that uses it quietly stops being a "no tool" comparison: delegating is a different tool, so the cost difference between arms stopped being attributable to the thing I was actually trying to test. Second, and worse: a sub-agent's reads and greps happen in a separate context that doesn't appear in the main transcript. If you're building your ground-truth file list (the pre-decided list of files a correct answer has to include) from what the transcript shows was read, and part of the real exploration happened somewhere the transcript can't see, your ground truth is quietly missing files, and every recall number computed against it is wrong in a way that doesn't announce itself.
-
-The fix is a flat rule, not a judgment call: forbid sub-agent delegation in both arms, verify from the transcript that neither one used it, and if delegation itself is worth measuring, make it a third arm with its own baseline, never a variable that leaks into an arm meant to isolate something else.
-
-## Lock the environment, or re-run both arms together
-
-The agent's working environment is part of what you're measuring, whether you intend it to be or not. Rules files, IDE and CLI versions, the model checkpoint behind the API: all of it shapes how an agent behaves, and none of it is the variable a token-savings benchmark is trying to isolate. Running the baseline arm one week and the tool-enabled arm the next, with the rules file having changed in between, means the gap between arms is now partly a gap between environments, and there's no way to retroactively separate the two once the earlier state is gone.
-
-The fix costs nothing and is easy to skip anyway because it feels like overhead: pin the rules file for the duration of a benchmark cycle, record the tool and model versions alongside the results, and when you can't be certain the environment held steady, re-run both arms back to back rather than trusting a comparison across drift. Keeping your actual day-to-day environment active during the run is fine, arguably better than a sterile one. The requirement is only that both arms sit inside the same environment, not a clean one.
-
-## Find the noise floor before you trust a delta
-
-This one is different: not a discipline problem, but a fact about the system that's easy to not know until it costs you a wrong conclusion. coldstart's own indexer parses files in parallel batches, and completion order feeds into how its resolver breaks ties. Run the exact same code, on the exact same repository, twice in a row, and the count of resolved reference edges (the links coldstart's index draws between files, "this function calls that one") can come out different both times, not because anything changed, but because parallel completion order isn't guaranteed to replay identically. This is what people mean by a noise floor: how far a measurement moves on its own, from nothing but re-running it, with no real change behind it.
-
-I hit this directly: a change under test showed 2,136 resolved edges against a baseline's 2,131 on the same repository, a five-edge gap that looked exactly like a regression worth chasing. Before chasing it, I ran the unchanged baseline against itself a second time. It came back at 2,135. The "regression" was sitting inside the range the baseline produces on its own, from nothing but rerunning it.
+coldstart's own indexer parses files in parallel batches, and completion order feeds into how its resolver breaks ties. Run the exact same code, on the exact same repository, twice in a row, and the count of resolved reference edges (the links coldstart's index draws between files, "this function calls that one") can come out different both times, not because anything changed, but because parallel completion order isn't guaranteed to replay identically. This is what people mean by a noise floor: how far a measurement moves on its own, from nothing but re-running it.
 
 <figure class="wide essay-fig ">
 <div class="fig-plot">
@@ -74,10 +58,36 @@ I hit this directly: a change under test showed 2,136 resolved edges against a b
 <figcaption>The baseline moved four edges just from being run twice, nothing else changed. The branch's five-edge gap from the first baseline run was inside that same band: a real difference would have had to clear it, not sit one edge past where the baseline's own noise already reaches.</figcaption>
 </figure>
 
-Six of the seven repositories in that sweep came back bit-identical between runs. Only the one that looked like a regression turned out to be the one whose count isn't guaranteed to come out the same twice, which is exactly backwards from what it looked like at first glance. Without the second baseline run, that five-edge gap gets chased as a bug or merged past as a false confirmation, and either way the conclusion is wrong for a reason that has nothing to do with the code. The general rule: before attributing any gap to the change under test, run the baseline against itself and see how far it moves on nothing. A gap smaller than that movement isn't evidence yet.
+Six of the seven repositories in that sweep came back bit-identical between runs. Only the one that looked like a regression turned out to be the one whose count isn't guaranteed to come out the same twice, which is exactly backwards from what it looked like at first glance. Without the second baseline run, that five-edge gap gets chased as a bug or merged past as a false confirmation, and either way the conclusion is wrong for a reason that has nothing to do with the code.
 
-## The checklist
+The general rule: before attributing any gap to the change under test, run the baseline against itself and see how far it moves on nothing. A gap smaller than that movement isn't evidence yet.
 
-Four checks, applied before a number is trusted enough to write into a sentence with a percentage in it. Was every query pulled from a real run where the answer wasn't visible yet, not authored afterward by someone who already knew it? Do both arms differ in exactly one thing, with sub-agent delegation either banned in both or measured as its own arm? Did the environment hold steady across both arms, or get re-run together when it might not have? And has the baseline been run against itself at least once, so a gap has an actual noise floor to clear before it counts as real?
+## The query I wrote from the answer
+
+A recall number (of the files a correct answer actually needs, how many the tool surfaced) is only honest if the query that produced it could plausibly have come from an agent that hadn't already seen the answer. That sounds obvious and it's easy to violate by accident. Early on, I hand-wrote a test query against a component I'd already found on disk, using a phrase pulled straight from its filename. The tool ranked it first. Of course it did. The query wasn't testing whether the tool could find that file. It was testing whether the tool could match a string against itself, because I'd already done the finding and encoded the result into the question.
+
+Writing more careful queries doesn't fix this. A query written by someone who already knows the target file can't be trusted as evidence, no matter how careful they are: the leak is in the fact that the answer was already visible when the question was written, not in how the query is worded. The only queries that count are the ones a real agent actually asked while working a task blind, mined from the run's own transcript, not authored afterward to look plausible. If you don't have real transcripts yet, you don't have a recall number yet either.
+
+## The baseline that quietly used a different tool
+
+A comparison is only informative if exactly one thing differs between the arms being compared (an "arm" here just means one side of the comparison, like a run with coldstart on versus a run with coldstart off). This one breaks less obviously: I ran a no-tool baseline where the agent, left without navigation help, delegated part of the task to a sub-agent. That's a reasonable thing for an agent to do on its own, and it silently corrupted the comparison two different ways.
+
+First, sub-agent delegation is itself a way of managing context, arguably the main alternative to a navigation tool. A baseline that uses it quietly stops being a "no tool" comparison: delegating is a different tool, so the cost difference between arms stopped being attributable to the thing I was actually trying to test. Second, and worse: a sub-agent's reads and greps happen in a separate context that doesn't appear in the main transcript. If you're building your ground-truth file list (the pre-decided list of files a correct answer has to include) from what the transcript shows was read, and part of the real exploration happened somewhere the transcript can't see, your ground truth is quietly missing files, and every recall number computed against it is wrong in a way that doesn't announce itself.
+
+The fix is a flat rule, not a judgment call: forbid sub-agent delegation in both arms, verify from the transcript that neither one used it, and if delegation itself is worth measuring, make it a third arm with its own baseline, never a variable that leaks into an arm meant to isolate something else.
+
+## The environment is an arm too
+
+The agent's working environment is part of what you're measuring, whether you intend it to be or not. Rules files, IDE and CLI versions, the model checkpoint behind the API: all of it shapes how an agent behaves, and none of it is the variable a token-savings benchmark is trying to isolate. Running the baseline arm one week and the tool-enabled arm the next, with the rules file having changed in between, means the gap between arms is now partly a gap between environments, and there's no way to retroactively separate the two once the earlier state is gone.
+
+The fix costs nothing and is easy to skip anyway because it feels like overhead: pin the rules file for the duration of a benchmark cycle, record the tool and model versions alongside the results, and when you can't be certain the environment held steady, re-run both arms back to back rather than trusting a comparison across drift. Keeping your actual day-to-day environment active during the run is fine, arguably better than a sterile one. The requirement is only that both arms sit inside the same environment, not a clean one.
+
+## What was left standing
+
+None of these were rules I had in advance. Each one is the residue of a run that produced a confident number I then had to throw away, which is why they read as questions rather than principles.
+
+Four checks, then, applied before a number is trusted enough to write into a sentence with a percentage in it. Was every query pulled from a real run where the answer wasn't visible yet, not authored afterward by someone who already knew it? Do both arms differ in exactly one thing, with sub-agent delegation either banned in both or measured as its own arm? Did the environment hold steady across both arms, or get re-run together when it might not have? And has the baseline been run against itself at least once, so a gap has an actual noise floor to clear before it counts as real?
 
 Arches's 64% and JMRI's 31%, the two numbers in the post before this one, are the numbers that were left standing after all four. Not because the methodology is exotic (none of these checks require anything more than re-running something you'd otherwise only run once), but because skipping any one of them produces a number that looks exactly as confident as the honest one, right up until someone tries to reproduce it.
+
+What changed for me is smaller than a methodology. I no longer trust a number because I remember being careful when I ran it. I trust it because I can say which of these four it survived, and when I can't remember, it goes back through them.

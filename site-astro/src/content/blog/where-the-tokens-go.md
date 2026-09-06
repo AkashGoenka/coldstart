@@ -6,16 +6,26 @@ keywords: "agent token cost, Claude Code token usage, prompt caching, cache_read
 kicker: "Cost"
 ogDescription: "Most of what a session costs is not the answer. It is the same context, re-sent on every turn."
 publishDate: 2026-07-25
-readingTime: "7 min"
+readingTime: "8 min"
 tags: ["cost", "context-windows", "prompt-caching"]
 next: "an-index-cannot-answer-twice"
 ---
 
 I spent a while building tooling for coding agents while assuming the thing I should optimise was output size. Return fewer lines. Trim the file listing. Compress the search result. It seemed obvious. The tool prints text into the conversation, the conversation costs money, so smaller output costs less.
 
-Then I actually decomposed a session, and the picture was not the one I had in my head.
+Then I took one real session, pulled its usage records off disk, and added them up turn by turn. The picture was not the one I had in my head.
 
-## What a turn actually bills for
+## What one session actually billed for
+
+The session was fifteen turns of ordinary work in a real repository. Decomposed, it looked like this.
+
+Around 90% of the total was cache reads: conversation that had already been sent, being sent again. The fixed base alone, meaning the harness system prompt plus the schema for every tool the agent could call, was roughly 25,000 tokens, resident and unchanged on every one of those fifteen turns. Re-reading that single block came to about half the entire session's bill on its own, and it never contained a word about the task.
+
+The output of my own tool, the part I had spent weeks trimming, was around 2%.
+
+I had been optimising the 2%. The arithmetic that explains why is not complicated, and it is worth doing slowly, because it also names the one term that responds to design.
+
+## Why the same tokens get billed fifteen times
 
 A chat with a model is stateless underneath, meaning the model itself has no memory between calls; it doesn't remember the previous turn on its own. Every time the agent takes an action, the entire conversation so far is sent again: the system prompt, the tool definitions, every file that was read, every command that was run, every result that came back.
 
@@ -49,7 +59,7 @@ The practical consequence is that the resident term is mostly not yours to shrin
 
 ## Output is a rounding error
 
-Here is the part that killed my original assumption.
+That 2% is not a quirk of the session I happened to pick.
 
 What the model writes is a small fraction of what a session bills. Not a modest fraction. Small enough that halving it changes almost nothing. The reason is structural: output is generated once, then it becomes part of the conversation and is re-billed as cached context on every subsequent turn, at a much lower rate. The single largest share of a long session is re-reading context that was already established.
 
@@ -128,15 +138,17 @@ A search that returns eight paths, says which ones define the thing you asked ab
 
 Same logic in the other direction. Ten small precise calls are worse than two calls that each carry more. Batch what you can. Answer the follow-up before it is asked.
 
-## Measuring your own
+## Decomposing your own transcript
 
-None of this needs to be taken on faith. If you use a harness (the program running the agent loop, like Claude Code or Cursor) that writes session transcripts to disk, the numbers are already there.
+None of this needs to be taken on faith, and you should not take mine. If you use a harness (the program running the agent loop, like Claude Code or Cursor) that writes session transcripts to disk, the numbers are already there.
 
-Each assistant message carries a usage record with separate counts for fresh input, cache reads, cache writes, and output. The total billed for that turn is the sum of all four. Two things to be careful about. Dedupe by message id first, because a streamed message can appear more than once and double counting will flatter or wreck your result. And group by turn, so you can watch the resident context climb rather than seeing one aggregate.
+Each assistant message carries a usage record with separate counts for fresh input, cache reads, cache writes, and output. The total billed for that turn is the sum of all four, and the common mistake is to read only the first one, which makes a session look almost free. Dedupe by message id before you add anything up, because a streamed message can appear in the log more than once and double counting will either flatter your result or wreck it. Then group by turn rather than aggregating the whole file, so you can watch the resident context climb instead of seeing one number at the end.
 
-Then plot the per-turn total across the session. You are looking for two things: how fast the line rises, which tells you what is accumulating, and how many turns there are, which is the thing you can act on. Compare the same task done two ways and count turns, not tokens. Turns are the honest metric because tokens follow from them.
+Plot the per-turn total across the session and you are looking for two things. How steeply the line rises tells you what is accumulating: a step change usually means a large file was read and is now being paid for on every remaining turn. How many turns there are tells you the thing you can act on.
 
-I would suggest doing this on your own sessions rather than trusting anyone's published figures, mine included. The shape holds across harnesses. The exact proportions depend on your system prompt, your instruction files, how many tools you have connected, and how large the files in your repository are. A codebase with long files behaves differently from one with short ones.
+Then compare the same task done two ways and count turns, not tokens. Turns are the honest metric because tokens follow from them.
+
+The exact proportions will not be mine. They depend on your system prompt, your instruction files, how many tools you have connected, and how large the files in your repository are: a codebase with long files behaves differently from one with short ones. The shape has held across every harness I have looked at. The specific 90% has not, and I would not expect it to.
 
 ## What I changed
 
@@ -146,4 +158,11 @@ In practice that meant a few things. Ranked results instead of a list, so the ag
 
 That last one is why coldstart is two commands rather than the larger set I started with. `find` locates the files for a concept and ranks them by evidence. `gs` takes one file and returns its shape along with who uses it. There is no third operation, and cutting the others was not a simplification for its own sake. Each one was rent.
 
-The general form of the lesson is short. Work out the cost model of the thing you are building for before you optimise anything, because the obvious target and the real one are often not the same, and in this case they are not even close.
+
+## What the decomposition proves, and what it doesn't
+
+It is one session, on one repository, through one harness. It does not establish that 90% is a constant, and I have not run enough sessions to claim a distribution. Anyone quoting my percentage back at me, including me, is over-reading it.
+
+What it does establish is an ordering, and the ordering is what the design decisions actually rest on. Re-sent context was larger than everything else combined. Fixed overhead that had nothing to do with the task was larger than the task. Tool output was small enough that halving it could not have moved the total. You do not need a second session to see that trimming output was aimed at the wrong term; you need one session, decomposed honestly.
+
+Which is the general form of it. Work out the cost model of the thing you are building for before you optimise anything, because the obvious target and the real one are often not the same, and in this case they were not even close.
