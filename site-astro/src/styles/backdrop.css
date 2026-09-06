@@ -1,20 +1,76 @@
+/* The shared footer rides along here on purpose. Every page shell already
+   imports this file, and a per-page footer import would be a third thing a
+   new page can silently forget - /live/ shipped without this very file once.
+   footer.css defines no tokens, so being hoisted above the :root below is
+   harmless. */
+@import "./footer.css";
+
 /* ============================================================
-   Shared page backdrop — the fading dot grid.
+   Shared page backdrop — the frost→ember field.
    landing.css and docs.css are independent, hand-synced stylesheets
    (see notebook note "site-astro has two independent stylesheets
    that must be hand-kept in sync"). This file exists so a page-wide
    visual like the backdrop has ONE definition instead of two drifting
    copies — every page shell imports it directly, alongside whichever
    of landing.css/docs.css it uses for everything else.
+
+   One page-scale ramp: the cold index on the left edge, the warm
+   notebook on the right, meeting in the middle. It replaces the
+   per-section background bands, so the field runs continuously under
+   the whole document and sections are divided by a hairline instead
+   of by a change of colour.
+
+   This previously held a 30px dot grid. A repeating background
+   pattern is the most common generated-site tell on the web, and it
+   also fought the ramp for the same layer.
    ============================================================ */
+/* ------------------------------------------------------------
+   THE TEXT RAMP — defined here, and ONLY here.
+
+   This file is imported LAST by every page shell, so these :root
+   values win over landing.css / docs.css / how.css. They used to be
+   hand-copied into all three and drifted: the blog got a readable
+   --prose while docs and the landing page kept a 6.9:1 grey.
+
+   Measured against the composited ground (the field above changes
+   what text actually sits on — it cost ~24% of the contrast ratio
+   and the greys were never moved to compensate):
+
+                    frost side   ember side   R-B spread
+     --text          13.4          14.1        -10
+     --muted          9.0           9.4        -13
+     --faint          6.4           6.7        -15
+
+   The old values were --muted 5.3 / --faint 4.3 — and 4.3 is BELOW
+   the 4.5 AA floor for normal text. All three are near-neutral now:
+   DESIGN.md 11 measured that a blue-grey (R-B spread 39) on a
+   blue-black ground has too little hue separation from its own
+   background, which is what read as washed out.
+   ------------------------------------------------------------ */
+:root{
+  --text:#eef2f8;   /* prose. The default for a paragraph. */
+  --muted:#c3c8d0;  /* secondary prose, leads, list bodies */
+  --faint:#a3a9b2;  /* labels, captions, meta, axis ticks */
+  --ink:var(--text);    /* docs.css name for --text */
+  --prose:var(--muted); /* essay name for body prose */
+}
+
 body::before{
   content:"";
   position:fixed;
   inset:0;
   z-index:-1;
   pointer-events:none;
-  background-image:radial-gradient(rgba(255,255,255,.09) 1px,transparent 1.5px);
-  background-size:30px 30px;
-  -webkit-mask-image:radial-gradient(65% 55% at 50% 0%,#000,transparent 72%);
-  mask-image:radial-gradient(65% 55% at 50% 0%,#000,transparent 72%);
+  background:linear-gradient(90deg,
+    rgba(79,191,224,.17) 0%, transparent 42%,
+    transparent 58%, rgba(239,148,72,.16) 100%);
+}
+
+/* Below the two-column breakpoint the axis rotates: frost top, ember bottom. */
+@media(max-width:900px){
+  body::before{
+    background:linear-gradient(180deg,
+      rgba(79,191,224,.17) 0%, transparent 42%,
+      transparent 58%, rgba(239,148,72,.16) 100%);
+  }
 }

@@ -58,7 +58,7 @@ const techArticleJsonLd = {
         <div class="desc"><b>Which files are about this?</b> Ranks files by how many of your query terms each covers — filenames, path segments, exported symbols, plus a repo-wide name-reference pass — and shows <em>why</em> each ranked: which terms it defines vs. imports.</div>
       </div>
       <div class="term">
-        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">coldstart find</span></div>
+        <div class="term-bar"><span class="title">coldstart find</span></div>
         <div class="term-body">
 <span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart find</span> auth session cookie</span>
 <span class="gap"></span>
@@ -84,7 +84,7 @@ const techArticleJsonLd = {
         <div class="desc"><b>What is this file, and who uses it?</b> Returns the file's top-level symbols (with line ranges), its 1-hop internal imports, who imports it, and per-symbol cross-file callers — in one call. This is the answer to "who calls this?", not a grep.</div>
       </div>
       <div class="term">
-        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">coldstart gs</span></div>
+        <div class="term-bar"><span class="title">coldstart gs</span></div>
         <div class="term-body">
 <span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart gs</span> src/auth/service.ts</span>
 <span class="ln"><span class="c-dim">symbols</span>  signCookie <span class="c-dim">L12</span> · verify <span class="c-dim">L34</span> · rotate <span class="c-dim">L61</span></span>
@@ -108,7 +108,7 @@ const techArticleJsonLd = {
       <h2><code>graph</code> — the same data, as a picture</h2>
       <p><code>find</code> and <code>gs</code> answer one question at a time, for an agent. <code>graph</code> is for you: it draws the whole repo as a sphere where every file is one point and latitude is the directory, then lets you click any point to walk the relations outward.</p>
       <div class="term">
-        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">coldstart graph</span></div>
+        <div class="term-bar"><span class="title">coldstart graph</span></div>
         <div class="term-body">
 <span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart graph</span></span>
 <span class="ln"><span class="c-frost">.coldstart/graph.html</span></span>

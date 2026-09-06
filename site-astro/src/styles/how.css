@@ -12,7 +12,6 @@ body.how-page {
   --paper: #e5d9bd;
   --paper-ink: #2a2620;
   --paper-line: #c7b790;
-  --faint: #7a8aa3;
   --ember-dim: #a86a35;
 }
 
@@ -384,7 +383,7 @@ body.how-page {
 .how-page .how-cmds.has-copy { position: relative; padding-right: 84px; }
 .how-page .copy-btn {
   position: absolute; top: 12px; right: 12px;
-  font-family: var(--mono); font-size: 11px; color: #8aa0bd; cursor: pointer;
+  font-family: var(--mono); font-size: 11px; color: var(--faint); cursor: pointer;
   background: rgba(255, 255, 255, .04); border: 1px solid var(--line);
   border-radius: 6px; padding: 5px 10px;
   transition: color .15s, background .15s, border-color .15s;

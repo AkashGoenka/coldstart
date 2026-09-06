@@ -67,7 +67,7 @@ literal and continuous rather than sectioned:
 - **Nothing is opaque.** Every surface is a translucent wash, so panels sit
   *inside* the field instead of on top of it. This is the rule that makes a note
   card match the background rather than punch out of it.
-- The one memorable element is the **seam** (§5).
+- The one memorable element is the **field** (§5).
 
 Everything else stays quiet.
 
@@ -93,18 +93,13 @@ Everything else stays quiet.
 **The field.** One fixed pseudo-element — *not* `background-attachment:fixed`,
 which paints only the first viewport and is unreliable on iOS Safari:
 
-```css
-body::before{
-  content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
-  background:
-    radial-gradient(78% 88% at  -6% 26%, rgba(79,191,224,.20), transparent 66%),
-    radial-gradient(78% 88% at 106% 74%, rgba(239,148,72,.19), transparent 66%),
-    linear-gradient(102deg,#0a1019 0%,#0b0e14 48%,#150f09 100%);
-}
-```
+The shipped definition lives in `src/styles/backdrop.css` and is a **single
+90deg ramp** — see §5, which is the authority. An earlier draft of this section
+specified two radial blobs over a diagonal base; that was rejected in §12 (two
+aurora blobs are a `dark-glass` signature device and read as generated) and the
+CSS here is superseded by §5's.
 
-Below 860px the axis rotates to vertical (frost top, ember bottom) — the same
-two glows at `50% -4%` and `50% 104%`.
+Below 900px the axis rotates to vertical — frost top, ember bottom.
 
 **Text contrast.** Body copy is `--text`. Grey is for labels and captions, never
 for a paragraph. This is the single rule that most changes how the site reads:
@@ -155,62 +150,115 @@ Comparable numbers get `tabular-nums`. Prose is never centered, never past 66ch.
 
 ## 4. Layout system
 
-**The hard left rail.** One text edge for the whole site. Nothing is centered.
+> **Rewritten 2026-09-04 after measuring.** The previous version of this section
+> specified a 5/7 `.split` spine with a sticky argument column and "nothing is
+> ever centered". That was **asserted, never measured** — §11 measured type and
+> colour only, and its credibility silently transferred to an axis it never
+> touched. The spine was built (`43401f3`), looked wrong, and the measurement
+> taken afterwards contradicted it. Reverted in `0867280`.
+
+**Measured, 1440px, six dev-tool landing pages** (identical DOM probe: grids with
+exactly 2 tracks spanning >50% of the viewport; median width of `p`/`li` over 80
+chars; blocks over 30 chars with `text-align:center`):
+
+| Site | 2-col grids | ratios | prose px / chars | centred blocks |
+|---|---|---|---|---|
+| nextjs.org | **0** | — | 535 / 54 | 5 of 14 |
+| vercel.com | **0** | — | (no long prose) | 2 of 6 |
+| railway.com | **0** | — | 502 / 56 | 6 of 23 |
+| resend.com | 2 | 0.50, 0.50 | 450 / 50 | 8 of 27 |
+| linear.app | 10 | 0.18, 0.50, 0.42 | 550 / 79 | 1 of 26 |
+| bun.sh | 8 | 0.27–0.50 | 429 / 48 | 0 of 49 |
+
+Three things follow, and they are observations, not taste:
+
+1. **Half the class uses no two-column grid at all** — including nextjs.org, the
+   stated target. Full-width stacked sections with a constrained prose measure is
+   the dominant shape, not argument-left/artifact-right.
+2. **Nobody repeats an asymmetric split as the page's spine.** Where a 2-col grid
+   exists it is ~0.50 (equal) or extreme (0.18 / 0.27 — a nav rail, a different
+   thing). A 0.41 applied to *every* section is not a pattern any of them use.
+3. **Centred text is normal.** 5 of 6 centre some blocks.
+
+**So: stacked, full-width sections.**
 
 ```
-├── 1120px wrap, 12 columns, 24px gutter ──────────────────────────┤
+├── 1120px wrap ───────────────────────────────────────────────────┤
 
-┌─ col 1 ──────────────── col 5 ┊ col 6 ─────────────── col 12 ─┐
-│ EYEBROW                       ┊                               │
-│ A heading that sits on the    ┊   ┌───────────────────────┐   │
-│ left rail and stops at 5 cols ┊   │  the artifact         │   │
-│                               ┊   │  terminal / note /    │   │
-│ Lead copy, ≤66ch, ragged      ┊   │  panel / diagram      │   │
-│ right, never centered.        ┊   └───────────────────────┘   │
-└───────────────────────────────┴───────────────────────────────┘
-   frost edge                   ┊                     ember edge
-                            the seam
+┌─────────────────────────────────────────────────────────────────┐
+│                          EYEBROW                                │
+│                A heading, ≤ 22ch, centred                       │
+│           Lead copy, 500px measure, ≈ 54 chars/line             │
+│                                                                 │
+│      ┌───────────────────────────────────────────────┐          │
+│      │  the artifact — terminal / note / panel        │          │
+│      └───────────────────────────────────────────────┘          │
+└─────────────────────────────────────────────────────────────────┘
+ frost edge                                            ember edge
+        (the field runs continuously under all of it)
 ```
 
-Two section types, and only two:
+- **Prose measure: 500px, ≈ 54 chars/line.** The measured band is 429–550px /
+  48–79 chars; 500 sits inside it and matches nextjs.org almost exactly. The
+  rejected build ran ~375px / ~44 chars — below the band, which is what "the left
+  column is narrow causing long text" was describing.
+- **Centring is allowed** for headings, lead copy and closing CTAs. It is what
+  the class does. A section may go left-set when it has a reason; uniformity is
+  not the reason.
+- **A two-column grid is a per-section decision, not a spine.** If one is used,
+  it is 50/50. An artifact that needs full width takes full width.
 
-- **`.split`** — 5 / 7. Argument left, artifact right. Left column is
-  `position:sticky; top:56px` on ≥1024px, so the claim holds while a long
-  terminal scrolls past. The default.
-- **`.plain`** — one column, constrained to columns 1–8. FAQ, install, closing
-  CTA. Still on the left rail; the right third stays open for the ember edge.
-  **Not** a centered column.
-
-**Separator.** Sections are divided by a **full-bleed hairline**, lifted from
-`/how-it-works/`, which is the one piece of the current site worth keeping:
+**Separator.** Sections are divided by a **full-bleed hairline**:
 
 ```css
 section{padding:84px 0;}
 section + section{border-top:1px solid var(--line);}
 ```
 
-It marks the boundary without banding the background — the field stays
-continuous underneath. No section ever sets its own background colour.
+It marks the boundary without banding the background. **No section ever sets its
+own background colour** — this is the one rule from the previous version that
+survives, and it shipped in `0867280`: `.navsec`/`.phil`/`.faq` are off
+`--ink-1`, `.nb` has lost its warm ground and two radial blobs, `.hero::before`
+is gone.
 
-**Mobile (<860px).** `.split` collapses to one column, artifact under argument,
-sticky off, seam and ticks hidden, field rotated vertical.
+**Mobile (<860px).** Padding tightens; the field rotates to vertical (frost top,
+ember bottom). Nothing else has to change, which is the point of not having a
+spine.
 
 ---
 
-## 5. Signature device — the seam
+## 5. Signature device — the field
 
-One hairline running the full viewport height at the column-6 gutter,
-`background: var(--seam)` (frost→ember, top to bottom), `opacity: .34`.
+**The seam is retired.** It was a hairline at the column-6 gutter with section
+ticks — a device that only exists if there is a column-6 gutter, which §4 no
+longer has. It was also never built.
 
-- At each section's start it grows a **tick**: an 11px stub, a frost dot on the
-  line, and the section's short label in `label` type, sitting 34px above the
-  content so it rides in the separator gap.
-- The ticks are the page's table of contents, and the only place a section index
-  appears — which retires the `01 ·`/`02 ·` eyebrows, since the landing sections
-  are not a sequence and never were.
-- Hidden below 860px.
+The signature device is **the field itself**: one page-scale frost→ember ramp,
+cold at the left edge, warm at the right, defined once in `styles/backdrop.css`
+and imported by every page shell, so home, docs and blog sit on the same
+continuous ground.
 
-This is the whole flourish budget. Another decorative element means one goes.
+```css
+body::before{
+  content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:linear-gradient(90deg,
+    rgba(79,191,224,.17) 0%, transparent 42%,
+    transparent 58%, rgba(239,148,72,.16) 100%);
+}
+```
+
+Why this and not an added flourish:
+
+- It carries the product's own duality — the cold exact index, the warm
+  notebook — without labelling anything by hue.
+- It is **singular, not repeating.** The tell of a generated site is a *tiled*
+  background (a dot grid, a mesh); one continuous ramp across the whole document
+  is the opposite move. The 30px dot grid that used to live in this file is gone
+  for exactly that reason.
+- It replaces the per-section colour bands, so nothing paints over it.
+- It costs one element and zero JS.
+
+This is the whole flourish budget. Another decorative element means this one goes.
 
 ---
 
@@ -219,8 +267,7 @@ This is the whole flourish budget. Another decorative element means one goes.
 - **Content is never hidden by default.** No `opacity:0` waiting on JS. A reveal
   is CSS-only or it doesn't ship. This is the hard rule §0 violates today, and
   the specimen is verified at zero `opacity:0` elements.
-- Allowed: hover transitions ≤160ms, the scroll progress hairline, seam ticks
-  brightening as their section enters view.
+- Allowed: hover transitions ≤160ms, the scroll progress hairline.
 - Not allowed: typewriter effects, staggered line reveals, cumulative delay
   budgets, parallax, ambient floating shapes.
 - `prefers-reduced-motion: reduce` disables all of it, with identical content.
@@ -234,9 +281,12 @@ Motion for **marketing** is a separate artifact, not a page behaviour — see §
 **Static, fully rendered.** The whole session is present on load. No typing, no
 scroll triggers. Screenshot-able, works with JS off, scannable in three seconds.
 
-Layout: one `.split` — transcript left (cols 1–8), commentary rail right (cols
-9–12) with short annotations pointing at specific turns. The argument lives in
-the rail so the panel stays a faithful replica carrying no marketing copy.
+Layout: **one full-width column**, panel centred at 880px. The commentary rail
+this section originally specified is gone with §4's split — the annotations are
+now short centred captions *between* turn groups, outside the panel. The reason
+for putting them outside stands: the panel carries no marketing copy, so it
+stays a faithful replica. Captions collapse naturally on mobile, which a
+cols-9–12 rail did not.
 
 Two panels stacked, the same repo on two different days:
 1. **Cold** — no note yet. `find` → `gs` → answer → the Stop hook writes a note.
@@ -261,8 +311,19 @@ the real thing sitting on the page, not a themed imitation.
 | Inline code | `#d9a05b` on `rgba(255,255,255,.06)`, radius 4 |
 | Input bar | `#242424`, 1px `rgba(239,148,72,.45)`, send button `#a8604a` |
 
-Output is real, unedited command output from this repo — same rule as today's
-page. **No traffic-light dots anywhere**, on this panel or on any terminal.
+**The repo is invented, and the page says so.** The panels run against a
+fictional Node/Express API and the question is "how does authentication work in
+this codebase?" — the thing every developer asks in their first week. The
+earlier version used a real captured session about coldstart's own co-change
+internals, which only demonstrates the tool to someone who already uses it.
+
+That trades literal provenance for relatability, so the trade is stated on the
+page rather than hidden: a line under the hero says the repo and its output are
+invented, and that only the command shapes and the output format are real. A
+terminal reads as captured output unless the page says otherwise, so the
+disclaimer sits with the hero copy and not in a footnote.
+
+**No traffic-light dots anywhere**, on this panel or on any terminal.
 
 ---
 
@@ -297,7 +358,7 @@ Each step ends with a rendered screenshot check, not a CSS read.
 1. **`tokens.css`** — one `:root` imported by every page shell. Delete the
    duplicate blocks in `landing.css` and `docs.css`; settle `--wrap` at 1120px.
    Nothing looks different; this unblocks everything else.
-2. **The field, the seam, the separator** — and remove per-section backgrounds
+2. **The field and the separator** — and remove per-section backgrounds
    and the dot grid. First visible change, site-wide.
 3. **Contrast pass** — leads and prose to `--text`, grey confined to labels.
    Cheap, and the most immediately noticeable improvement.
@@ -423,7 +484,7 @@ polish comes from — *gradient as an edge treatment, not as atmosphere.*
   except tailwind. → Use the **flat ramp** shape, which puts both temperatures
   in a single gradient, instead of two opposing blobs.
 - **Use gradients freely at component scale** — hairlines, borders, small fills.
-  The seam (§5) is already exactly this move and should be joined by others.
+  The field (§5) is that move. The seam it replaced was never built.
 
 ---
 

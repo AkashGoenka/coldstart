@@ -1,12 +1,57 @@
 ---
+// Styling lives in styles/footer.css, which is pulled in by backdrop.css —
+// so a page gets the footer's chrome from the same import that gives it the
+// background field. See the comment at the top of footer.css.
 interface Props { variant?: 'home' | 'docs' | 'blog' | 'how' | 'live' }
 const { variant = 'docs' } = Astro.props;
+
+// The columns are the site's real IA. Most of these pages were previously
+// reachable only from the nav dropdown.
+const columns = [
+  {
+    title: 'See it work',
+    links: [
+      { href: '/demo/', label: 'Demo session' },
+      { href: '/live/', label: 'See it live' },
+      { href: '/notebook/', label: 'Notebook browser' },
+      { href: '/graph/', label: 'Codebase graph' },
+    ],
+  },
+  {
+    title: 'Understand it',
+    links: [
+      { href: '/how-it-works/', label: 'How it works' },
+      { href: '/how-it-works/navigation/', label: 'The navigation layer' },
+      { href: '/how-it-works/notebook/', label: 'The notebook layer' },
+      { href: '/vs/vector-rag/', label: 'Compared to vector RAG' },
+    ],
+  },
+  {
+    title: 'Reference',
+    links: [
+      { href: '/docs/', label: 'Docs' },
+      { href: '/docs/navigation/', label: 'find and gs' },
+      { href: '/docs/notebook/', label: 'kb commands' },
+      { href: '/docs/under-the-hood/', label: 'Under the hood' },
+    ],
+  },
+  {
+    title: 'Project',
+    links: [
+      { href: '/blog/', label: 'Blog' },
+      { href: 'https://github.com/AkashGoenka/coldstart', label: 'GitHub', ext: true },
+      { href: 'https://www.npmjs.com/package/@cstart/coldstart', label: 'npm', ext: true },
+      { href: 'https://github.com/AkashGoenka/coldstart/blob/main/CHANGELOG.md', label: 'Changelog', ext: true },
+    ],
+  },
+];
+
 const taglines = {
-  home: 'codebase memory for coding agents · MIT',
-  docs: 'docs · MIT',
-  blog: 'blog · MIT',
-  how: 'how it works · MIT',
-  live: 'see it live · MIT',
+  home: 'codebase memory for coding agents',
+  docs: 'docs',
+  blog: 'blog',
+  how: 'how it works',
+  live: 'see it live',
 };
 const tagline = taglines[variant];
 ---
@@ -14,14 +59,19 @@ const tagline = taglines[variant];
   <div class="foot-in">
     <div class="foot-id">
       <a class="brand" href="/"><svg class="mark s2" width="17" height="17" viewBox="0 0 32 32" aria-hidden="true"><circle class="core" cx="16" cy="16" r="8" fill="url(#glow)"/><use href="#flake" class="fl"/><circle class="fl" cx="16" cy="16" r="6" fill="none"/><circle class="core" cx="16" cy="16" r="3" fill="url(#core)"/></svg>coldstart</a>
-      <span class="foot-tagline">{tagline}</span>
+      <p class="foot-blurb">A static index and a written-down notebook, so an agent starts a task knowing where things are.</p>
     </div>
-    <div class="foot-links">
-      <a href="/">Home</a>
-      <a href="/docs/">Docs</a>
-      <a href="/blog/">Blog</a>
-      <a href="https://github.com/AkashGoenka/coldstart">GitHub</a>
-      <a href="https://www.npmjs.com/package/@cstart/coldstart">npm</a>
-    </div>
+    {columns.map((col) => (
+      <div class="foot-col">
+        <h3>{col.title}</h3>
+        {col.links.map((l) => (
+          <a href={l.href} class={l.ext ? 'ext' : undefined} rel={l.ext ? 'noopener' : undefined}>{l.label}</a>
+        ))}
+      </div>
+    ))}
+  </div>
+  <div class="foot-base">
+    <span class="foot-tagline">{tagline} · MIT</span>
+    <span class="foot-temp"><i class="f"></i>index<i class="e"></i>notebook</span>
   </div>
 </footer>

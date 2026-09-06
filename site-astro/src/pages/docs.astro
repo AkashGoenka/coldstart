@@ -58,24 +58,40 @@ const techArticleJsonLd = {
       <h2>Install &amp; setup</h2>
       <p>Requires Node.js 18+. Install globally, then run <code>init</code> once per project.</p>
       <div class="term">
-        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">your-project</span></div>
+        <div class="term-bar"><span class="title">your-project</span></div>
         <div class="term-body">
 <span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">npm install -g @cstart/coldstart</span></span>
 <span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">cd</span> your-project</span>
 <span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart init</span>   <span class="c-dim"># coldstart.md + client wiring + notebook + hooks + warm-up</span></span>
         </div>
       </div>
-      <p style="margin-top:22px"><code>init</code> asks two things — the <b>experience</b> (<code>cli</code>, recommended, or <code>mcp</code>) and the <b>client</b> (<code>claude</code> / <code>cursor</code> / <code>codex</code> / <code>other</code>) — then writes the coldstart guidance into the client's own rules file — imported via <code>coldstart.md</code> for Claude Code, inlined directly into <code>.cursor/rules/coldstart.mdc</code> (Cursor) and <code>AGENTS.md</code> (Codex) — and wires the client. It also creates the notebook and, for Claude Code / Codex / Cursor, registers the navigation and notebook hooks. Pass <code>--experience</code> / <code>--client</code> to skip the prompts; the client is never auto-detected. Finally it <b>indexes the repo and waits for that to finish</b> before exiting, so your very first <code>find</code> is instant rather than racing a half-built index — a few seconds once, at setup.</p>
+      <p style="margin-top:22px"><code>init</code> asks two things — the <b>experience</b> and the <b>client</b> — then writes the coldstart guidance where that client will read it, creates the notebook, and registers the navigation and notebook hooks. It indexes the repo before it exits, so your first <code>find</code> is instant instead of racing a half-built index. A few seconds, once.</p>
+
+      <h3>What it writes, per client</h3>
+      <div class="flags">
+        <div class="flag-row"><span class="fk">claude</span><span class="fv"><code>coldstart.md</code>, imported from <code>CLAUDE.md</code>, plus hooks in <code>.claude/settings.json</code>.</span></div>
+        <div class="flag-row"><span class="fk">cursor</span><span class="fv">The guidance inlined into <code>.cursor/rules/coldstart.mdc</code> — Cursor doesn't resolve file references in rules — plus <code>.cursor/hooks.json</code>.</span></div>
+        <div class="flag-row"><span class="fk">codex</span><span class="fv">The guidance inlined into a marked block in <code>AGENTS.md</code>, plus <code>.codex/hooks.json</code>.</span></div>
+        <div class="flag-row"><span class="fk">other</span><span class="fv"><code>coldstart.md</code> and printed wiring directions for anything else.</span></div>
+      </div>
+
+      <h3>Flags</h3>
       <div class="flags">
         <div class="flag-row"><span class="fk">--experience cli|mcp</span><span class="fv">The surface to wire. <b>cli</b> is the fast path; <b>mcp</b> also writes an MCP server entry.</span></div>
         <div class="flag-row"><span class="fk">--client NAME</span><span class="fv"><b>claude</b>, <b>cursor</b>, <b>codex</b>, or <b>other</b>. Determines which config files get wired.</span></div>
         <div class="flag-row"><span class="fk">--commit-notebook</span><span class="fv">Opt in to committing the notebook <code>.raw</code> logs so the team can share it. Private by default — see <a href="/docs/notebook/#sharing">Sharing</a>.</span></div>
       </div>
-      <div class="flags" style="margin-top:20px">
-        <div class="flag-row"><span class="fk">Upgrading</span><span class="fv"><code>npm install -g @cstart/coldstart@latest</code> — keepers detect the version bump and restart themselves. Re-run <code>init</code> only if a node/nvm change moved the global install; <code>coldstart status</code> flags that.</span></div>
-        <div class="flag-row"><span class="fk">Removing</span><span class="fv"><code>coldstart unwire</code> strips the per-repo wiring (notebook kept by default, <code>--purge</code> deletes it), then <code>npm uninstall -g @cstart/coldstart</code>.</span></div>
-        <div class="flag-row"><span class="fk">Codex hook trust</span><span class="fv">Codex requires approving hooks once — choose <em>"Trust all and continue"</em> when prompted, or launch <code>codex</code> from a terminal if it doesn't appear. Automated runs: pass <code>--dangerously-bypass-hook-trust</code>. Details: <a href="https://github.com/openai/codex/issues/21615">openai/codex#21615</a>.</span></div>
+      <h3>Upgrading and removing</h3>
+      <div class="term">
+        <div class="term-body">
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">npm install -g @cstart/coldstart@latest</span>   <span class="c-dim"># upgrade</span></span>
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart unwire</span>   <span class="c-dim"># unwire this repo, keeping the notebook</span></span>
+<span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">npm uninstall -g @cstart/coldstart</span></span>
+        </div>
       </div>
+      <p>On upgrade, running keepers notice the version bump and restart themselves. Re-run <code>init</code> only if a node or nvm change moved the global install — <code>coldstart status</code> tells you when that has happened. Unwiring keeps your notebook unless you pass <code>--purge</code>.</p>
+
+      <div class="callout"><span class="ct">Codex only</span>Codex asks you to approve hooks the first time — choose <b>Trust all and continue</b>, or launch <code>codex</code> from a terminal if the prompt never appears. For automated runs, pass <code>--dangerously-bypass-hook-trust</code>. <a href="https://github.com/openai/codex/issues/21615">openai/codex#21615</a> has the details.</div>
     </section>
 
     <section id="flow" class="doc-sec">
