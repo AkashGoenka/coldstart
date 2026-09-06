@@ -67,4 +67,12 @@ A smarter graph wouldn't fix this. Some couplings are structurally invisible to 
 
 What ended the pattern was writing the incident down the moment it was understood, as a note attached to the files involved, saying plainly that these three scripts share a convention and any change to the marker shape has to be checked against all three. The next time someone, human or agent, opens one of those files, that note is sitting right there, and the fix starts from the actual failure history instead of from three files that each look complete on their own.
 
-None of this argues against building a graph. coldstart's own `gs` relies on one, and it's exactly the right tool for the relationships it can see: real imports, real calls, real reference edges. The argument is narrower: a graph has an edge it fundamentally cannot draw, and no amount of extra thoroughness fixes that. What fixes it is remembering, in a form attached to the code, the things that broke because the graph didn't know to warn you.
+## The missing edge was a conclusion
+
+None of this argues against building a graph. coldstart's own `gs` relies on one, and it's exactly the right tool for the relationships it can see: real imports, real calls, real reference edges. The argument is narrower than "graphs are insufficient." It's that the edge missing here was never a parsing failure at all.
+
+Nobody could have read that convention off the three files, because at the time it was written it wasn't in them. It came into existence the way most real couplings do: someone changed one script, something broke in another, and the relationship between them was established by that incident rather than by any statement in the code. The edge is the output of an investigation. Regenerating a graph over the same source, however carefully, cannot produce it, because the source is not where it lives.
+
+Which is what the notebook is for here, and the claim is small. It doesn't discover couplings; it stores the ones that someone already paid to discover, attached to the files they concern, so the next change to that marker shape starts from the failure history rather than from three files that each read clean on their own.
+
+The rule I'd take out of this, whatever you're building: static structure will show you the relationships the code states. It will never show you the ones the code only assumes. Those are found by breaking something, and they survive only if whoever broke it wrote them down.

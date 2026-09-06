@@ -11,11 +11,19 @@ tags: ["architecture", "embeddings", "search"]
 next: "why-most-token-savings-tools-lie"
 ---
 
-coldstart is built from two parts. One is a notebook: an agent writes down what it worked out about your code after a real task, so the next session doesn't re-discover the same thing from scratch. Those notes are AI-written, full stop. The other part is a navigation layer (`find` and `gs`) that decides which files are relevant to a question and maps how they connect. This post is about that second part, and the claim is narrower than the title alone tells you: the navigation layer never calls out to an AI model of its own to decide what's relevant, even though the notebook sitting right next to it is nothing but AI-written notes.
+Here is the kind of thing a coding agent actually asks while it is working. Where is the function named `resolveImports`. Who calls this symbol. Which file defines the class this stack trace is pointing at. Which of these three similarly named files is the one the config actually loads.
 
-Some code-search tools build that navigation layer by having a model "understand" your concept instead of matching your words. Ask for "auth" and get back a file called `session_token_validator.py`, even though the word auth never appears in it. That's a real capability, coldstart doesn't have it, and I could have built it in. I chose not to, and it's worth being honest about why.
+Every one of those is answered by something the code already declares about itself: a filename, a path segment, an exported name, an import edge. Not one of them requires anything to work out what the code *means*. I bring this up first because it is the observation the rest of the post rests on, and because it is easy to design past.
 
-## What that trick actually costs
+coldstart is built from two parts. One is a notebook: an agent writes down what it worked out about your code after a real task, so the next session doesn't re-discover the same thing from scratch. Those notes are AI-written, full stop. The other is a navigation layer (`find` and `gs`) that decides which files are relevant to a question and maps how they connect. This post is about that second part, and the claim is narrower than the title alone tells you: the navigation layer never calls out to an AI model of its own to decide what's relevant, even though the notebook sitting right next to it is nothing but AI-written notes.
+
+## Why the semantic version looks like the right answer
+
+Some code-search tools build that navigation layer by having a model "understand" your concept instead of matching your words. Ask for "auth" and get back a file called `session_token_validator.py`, even though the word auth never appears in it.
+
+That is a real capability, coldstart doesn't have it, and when it lands it is plainly the better answer: the query you were able to think of finds the file you were not able to name. I could have built it in. I wanted it to be the answer for a while. It's worth being honest about why I stopped reaching for it.
+
+## What the trick costs after the demo
 
 The way that "auth" match works: a small AI model reads each file and converts it into an *embedding*, a long list of numbers meant to capture what the file is about. Your query gets turned into a list of numbers the same way, and the tool returns whichever files' numbers land closest to yours. That whole system, the model doing the converting plus the database holding all those number-lists, is usually called a vector index or vector store.
 
@@ -62,15 +70,17 @@ The stability problem is quieter but matters more for a tool an agent calls doze
 <figcaption>Declared identity answers the same query with the same file at the same rank, every time. Embedding-based matching has no such guarantee: adding unrelated files anywhere in the repo can push yesterday's rank-one result to rank four, with nothing about the query having changed.</figcaption>
 </figure>
 
-## What coldstart uses instead
+## What it uses instead
 
 Files already declare their own identity: a filename, the segments of its path, the names it exports. Most of the time, the thing you're looking for is named close to what you'd call it, because someone wrote that name for exactly the reason you're now searching for it: so the next person reading the codebase could find it. coldstart ranks files by how many of your query terms they actually cover, using that declared identity plus a real repo-wide text search (backed by [ripgrep](https://github.com/BurntSushi/ripgrep), a fast plain-text search tool, where it's available; plain `git grep` where it isn't).
 
+## Where coldstart is the worse tool
+
 This is a worse tool than an embedding-based search for a genuinely fuzzy conceptual query, one where nothing in your vocabulary overlaps with anything in the file. I don't think that's a gap worth pretending away. If you want that kind of retrieval, point an embedding-based tool at the same repo. coldstart isn't trying to be the same thing done differently, it's trying to be exact where exactness is available, and honest about the rest. ([More on where that line actually falls.](/vs/vector-rag/))
 
-## Why the tradeoff wins for the common case
+## Why the exact half is the common half
 
-The thing I noticed watching real coding sessions is that most navigation questions during an actual task aren't conceptual. They're literal: where's the function named `resolveImports`, who calls this symbol, which file defines the class this error is coming from. The code already answers these definitively, in its names and its structure. Paying for an AI model call, plus the staleness and drift that come with it, to answer a question the filenames already settle is a bad trade, made worse by the fact that it happens on almost every call, not occasionally.
+The questions at the top of this post are not a flattering sample. They are what watching real sessions turns up: most navigation during an actual task isn't conceptual at all, it's literal, and the code already answers the literal kind definitively, in its names and its structure. Paying for an AI model call, plus the staleness and drift that come with it, to answer a question the filenames already settle is a bad trade, made worse by the fact that it happens on almost every call, not occasionally.
 
 There's a second reason that matters less philosophically and more practically: coldstart runs a background process that keeps its index current as you edit, patching just the changed files within a few seconds of a save. That only works cheaply because there's no AI model to call and no number-list to recompute. A patch is a few milliseconds of parsing per changed file. Re-running a model over every file that frequently, for every keystroke-adjacent save across a session, isn't something you'd want to pay for even if you could.
 

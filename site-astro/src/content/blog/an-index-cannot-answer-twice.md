@@ -23,7 +23,7 @@ Asking "what calls this function" without a graph means a text search, then read
 
 The same applies to reverse imports, to inheritance chains, and to the general class of question where the answer is a relationship rather than a location. Text search is bad at those. A graph is good at them. Fine.
 
-## The thing it does not change
+## You cannot traverse a graph until you know where to enter it
 
 What a graph makes cheaper is the individual hop. What it does not touch is how many hops you need.
 
@@ -33,7 +33,7 @@ You cannot traverse a graph until you know where to enter it. Finding the entry 
 
 When I traced what these tools do at that first step, the answer was blunter than I expected. The entry point is found by text search: a grep, essentially, against the repository, with the results then sorted using the graph. In the common case, the graph isn't being traversed at all. It's used only to rank the output of a text search.
 
-## Ranking by popularity has a specific failure
+## The ranking never sees your question
 
 That ranking step is worth looking at closely, because the way it usually works has a consequence people do not expect.
 
@@ -59,7 +59,11 @@ The edge count was several times larger than the one I maintain. Once builtins a
 
 If you are evaluating one of these, the useful question isn't how many edges there are. It's what fraction of call sites (the individual places in the code where a call happens) resolved at all, and of those, how many had exactly one candidate. Those two numbers are the honest ones and they are rarely published.
 
-## The part that actually bothers me
+The same applies to the three-dimensional rendering, since it comes up. It is for you, not for the agent. The agent receives text; it never sees the picture. A beautiful graph view is a fine thing to build and I understand why it demos well, but it is evidence about a presentation layer, not about whether an agent finished a task in fewer steps.
+
+The metric that would settle these arguments is unglamorous: for a fixed set of tasks, how many actions did the agent take before it had the right answer. Steps, not tokens, because tokens follow from steps. I have not seen that number published by anyone, including by me, and I am wary of any comparison that leads with something else.
+
+## The two hours that nothing recorded
 
 Everything so far is a quality argument, and quality arguments can be answered with better engineering. Someone can improve the resolver, add the query to the ranking, expose confidence. The next objection cannot be fixed that way, because it is about what kind of object a graph is.
 
@@ -130,18 +134,14 @@ That is the claim in one line. A graph makes each hop cheaper. It does not reduc
 <figcaption>A graph makes each hop cheaper. It does not reduce how many hops you need, and because everything in it was already in the source, it cannot hold a conclusion, so the second occurrence of a question costs what the first one did.</figcaption>
 </figure>
 
-## A note about the visualisation
+## Why the missing record has to be authored
 
-Since it comes up: the three-dimensional rendering of your codebase is for you, not for the agent. The agent receives text. It never sees the picture. A beautiful graph view is a fine thing to build and I understand why it demos well, but it is evidence about the tool's presentation layer and not about whether an agent finished a task in fewer steps.
+If the missing thing is a conclusion, two properties follow, and neither is negotiable.
 
-The metric that would settle these arguments is unglamorous: for a fixed set of tasks, how many actions did the agent take before it had the right answer. Steps, not tokens, because tokens follow from steps. I have not seen that number published by anyone, including by me, and I am wary of any comparison that leads with something else.
+It has to be written by whoever reached it. A conclusion is not recoverable from the source afterwards: that is exactly what made it a conclusion rather than a lookup. The only party holding the invariant, the hypothesis that was checked and cleared, and the reason two files are coupled is the one that just spent the two hours.
 
-## What has to be different
+And it has to be a separate object from the derived index, because it fails in the opposite direction. A derived index cannot go stale; regenerate it and it is correct by construction. An authored record can, and does, the moment someone edits the file it was about. Keeping both in one structure means either regenerating the notes away or serving them with the index's confidence, and both are worse than keeping them apart.
 
-If the missing thing is a conclusion, then the record has to be written by whoever reached it, and it has to be a separate object from the derived index.
+That is the split coldstart is built around, and it is worth stating briefly because the argument does not depend on it. There is a static index, deliberately ordinary: it ranks files against the words in your question using paths, symbol names, exports, and references, and it can show you the shape of a file and who uses it. It is the cheap-hop layer and I make no larger claim for it. Separately there is a notebook. After a real task, the agent writes down what it worked out, anchored to the files it actually used, and each note carries the state of those files at the time it was written. If they have changed since, the note is not served as truth. It is served as a claim that needs re-checking, which is roughly what a colleague saying "this was true last month" gives you.
 
-That is the split coldstart is built around. There is a static index, and it is deliberately ordinary: it ranks files against the words in your question using paths, symbol names, exports, and references, and it can show you the shape of a file and who uses it. It is the cheap-hop layer and I make no larger claim for it.
-
-Separately there is a notebook. After a real task, the agent writes down what it worked out, anchored to the files it actually used. That record is not derivable from the source, which is the whole point, and it is also the reason it can go stale in a way the index cannot. So each note carries the state of the files it was based on. If those files changed, the note is not served as truth. It is served as a claim that needs re-checking, which is roughly what a colleague saying "this was true last month" gives you.
-
-Fewer notes that are true beat a large derived structure that cannot hold a conclusion. Both layers are useful. They are answering different questions, and the mistake worth avoiding is expecting the first one to do the second one's job.
+Both layers are useful, and the mistake worth avoiding is expecting the first to do the second's job. The general form, whatever you end up building: anything derived from your source can only tell you what is in the source. It cannot tell you what was already checked and ruled out, and on the second occurrence of a hard question, that is most of what you wanted to know.
