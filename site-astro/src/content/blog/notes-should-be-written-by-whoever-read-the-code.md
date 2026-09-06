@@ -7,14 +7,12 @@ ogDescription: "A transcript is not the same thing as context. The agent that di
 lead: "I maintain a tool that keeps notes about a codebase. An agent does a task, and at the end it writes down what it worked out. There is an easier way to build this. I chose not to take it."
 publishDate: 2026-07-25
 readingTime: "6 min"
-wordCount: 1086
+wordCount: 1128
 tags: ["notebook", "agent-memory", "capture"]
 next: "codebase-memory-is-not-agent-memory"
 ---
 
-I maintain a tool that keeps notes about a codebase. An agent does a task, and at the end it writes down what it worked out. There is an easier way to build this. I chose not to take it.
-
-The easier design is a background job. Coding agents already leave transcripts behind, so a tool can wake up later, read the finished sessions, decide whether anything durable happened, and write notes from the log.
+The easier design I turned down is a background job. Coding agents already leave transcripts behind, so a tool can wake up later, read the finished sessions, decide whether anything durable happened, and write notes from the log.
 
 That design has obvious advantages. It never interrupts you. It can backfill old sessions. You can improve the summarizer later and run it again over the whole archive. I understand the appeal. I still think it produces worse notes, for a reason that has nothing to do with how clever the summarizer is.
 
@@ -82,7 +80,7 @@ In practice, long sessions get compacted. The tool notices the conversation is r
 
 That means transcript-based capture loses the most detail on the sessions that probably mattered most: the long ones, where the hard problem was solved.
 
-## What I do instead
+## Write the note while the files are still open
 
 The capture runs at the end of a turn, inside the session that just happened.
 
@@ -92,7 +90,7 @@ Then it hands that list back to the agent that just did the work and asks it to 
 
 The rule I settled on is short: if writing the note needs a read you have not already done, do not write the note. An agent that has to go look something up in order to write a note isn't remembering, it's guessing, and a guess written into a file that another agent will trust later is worse than no file at all.
 
-## Freshness is what makes the note usable
+## A note has to know when the ground moved
 
 Because the note is written by the agent that read the files, the tool knows which files it came from. It records a content hash for each one, a fingerprint of the file's exact contents at that moment, so any later change to the file produces a different fingerprint.
 
@@ -110,8 +108,8 @@ It also does not know anything on day one. There is no bulk import of your git h
 
 I took those costs because fewer notes that are true seem more valuable than a large pile of notes reconstructed from partial context.
 
-## How coldstart fits into this
+## A transcript is not the context that produced it
 
-coldstart's notebook follows this design. Notes are written by agents after real work, stored in the repo, anchored to concrete files and symbols, and surfaced later only as reference data. If the evidence changed, the note says so.
+coldstart's notebook is one implementation of the rule and not a complicated one. Notes are written by agents at the end of real work, stored in the repo, anchored to the files and symbols they actually came from, stamped against the contents of those files, and surfaced later as reference data rather than instructions. If the evidence changed, the note says so.
 
-The point isn't to build a perfect memory: it's to stop pretending that a transcript is the same thing as the working context that produced it.
+The rule is the portable part and it needs none of that machinery. Whoever read the code writes the note, while they are still holding it, or nobody does. A transcript is a record that the reading happened. It is not the reading, and the gap between those two things is most of what you would actually have wanted written down.

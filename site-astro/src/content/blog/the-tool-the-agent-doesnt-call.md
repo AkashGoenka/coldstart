@@ -17,6 +17,26 @@ On a large Java repository, I checked how many of the agent's file reads had bee
 
 That's not a defect report about the model, it's a fact about how tool use actually happens, and it applies to whatever you are building too.
 
+The first thing I did with that number was look for a bug in my own plumbing, on the theory that an agent cannot bypass an intervention that is genuinely in its path. I found one. It is worth describing before anything else, because it is the failure nearest to hand and the cheapest to rule out, and because ruling it out is what forced the rest of this.
+
+## The hook that fired and did nothing
+
+There is a specific engineering error here that I want to describe properly, because I made it and then found the same shape in another project while reading its source, which suggests it is a trap rather than an oversight.
+
+Most agent harnesses (the program actually running the agent loop, like Claude Code or Cursor) let you register a hook that fires before a tool runs. The obvious use is a gentle intervention: when the agent is about to run a search, notice, and point it at the better path first.
+
+So you register the hook on the search tools. The dedicated grep tool, the file glob tool. Reasonable. That is where searching happens.
+
+Then the agent runs a shell command that happens to contain `grep -r`.
+
+Your hook is registered on the search tools. A shell call is not a search tool. Nothing fires. The agent searches the entire repository, pays for it, and your intervention was never in the path. The other project had the same structure, gated on exactly the tools an agent uses when it is being formal, and blind to the shell it uses when it is being quick.
+
+Mine was slightly worse, and I only found it by reading my own code with this question in mind. The pattern that decides which calls to intercept did include the shell. The handler that runs afterwards only recognised one specific command inside it. So the hook fired on every shell call and then declined to act on almost all of them. It looked wired up. It was matching a broader surface than it could handle, which is the kind of bug that survives review because the tests pass and the logs look busy.
+
+The general lesson is worth stating plainly. Instrument the surface the agent actually uses, not the one your tool taxonomy says it should. A general-purpose shell defeats every category-based gate, because anything can happen inside it.
+
+That bug was real and worth fixing. It was not the explanation. With the intervention properly in the path, the agent still reached for the search it already trusted, which meant the assumption underneath had to be the thing that was wrong: that availability, documentation and an instruction add up to use.
+
 ## Three things that look like adoption and are not
 
 The mental model I had was a chain. Make the tool available, describe it clearly, and instruct the agent to use it. Each link seemed necessary and the set seemed sufficient. None of the three does what it appears to.
@@ -36,22 +56,6 @@ Text search is universal, it is understood deeply from training, its failure mod
 A custom tool asks for something extra. It asks the agent to trust a ranking it cannot verify, in a format it has seen far less often, from a source it has no prior about. When your ranked output puts a file first, the agent has to decide whether to believe you. Believing you is a risk. Grepping is not.
 
 The bar people assume is "is my tool better than a text search." The real bar is "is my tool better by enough, at the exact moment of choosing, to overcome a habit that is already working." Those are different bars, and only the second one predicts behaviour.
-
-## The mistake I shipped, and so did someone else
-
-There is a specific engineering error here that I want to describe properly, because I made it and then found the same shape in another project while reading its source, which suggests it is a trap rather than an oversight.
-
-Most agent harnesses (the program actually running the agent loop, like Claude Code or Cursor) let you register a hook that fires before a tool runs. The obvious use is a gentle intervention: when the agent is about to run a search, notice, and point it at the better path first.
-
-So you register the hook on the search tools. The dedicated grep tool, the file glob tool. Reasonable. That is where searching happens.
-
-Then the agent runs a shell command that happens to contain `grep -r`.
-
-Your hook is registered on the search tools. A shell call is not a search tool. Nothing fires. The agent searches the entire repository, pays for it, and your intervention was never in the path. The other project had the same structure, gated on exactly the tools an agent uses when it is being formal, and blind to the shell it uses when it is being quick.
-
-Mine was slightly worse, and I only found it by reading my own code with this question in mind. The pattern that decides which calls to intercept did include the shell. The handler that runs afterwards only recognised one specific command inside it. So the hook fired on every shell call and then declined to act on almost all of them. It looked wired up. It was matching a broader surface than it could handle, which is the kind of bug that survives review because the tests pass and the logs look busy.
-
-The general lesson is worth stating plainly. Instrument the surface the agent actually uses, not the one your tool taxonomy says it should. A general-purpose shell defeats every category-based gate, because anything can happen inside it.
 
 ## Injection is not adoption either
 
@@ -75,10 +79,12 @@ The third is to say when the answer is nothing. A tool that returns an empty res
 
 What I stopped doing is trying to steer. Instructions telling the agent when not to read a file did nothing measurable in my tests. The interventions that worked were all about the quality of what gets surfaced, never about the discipline of the agent receiving it.
 
-## How this shaped coldstart
+## The rule I carried into coldstart
 
 The design follows from the failure rather than from an ideal.
 
 The commands are shell commands first, because the shell is where the agent already is. Results are ranked with the matched lines shown inline, so the common case is answered without opening anything. An empty result is phrased as a finding about the repository. And notes written after previous work are surfaced automatically at the start of a turn, because the note that has to be requested is the note that never gets read.
+
+The rule underneath all of it is one sentence: you cannot instruct your way into being chosen, so the only lever left is making the tool cheaper to choose than the habit it is competing with, at the exact moment of the choice. Everything on the list above is an application of that. Everything I tried that failed was an attempt to argue with the agent instead of out-competing the alternative it already had.
 
 I would not claim this is solved. My own measurement says the agent still bypasses the tool often, and I would rather publish that than a story where instructions worked. If you are building something in this space, measure the bypass rate before you measure anything else. It is the number that tells you whether you have a tool or a feature nobody reaches for.

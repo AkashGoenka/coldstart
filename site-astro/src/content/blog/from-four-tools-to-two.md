@@ -17,7 +17,9 @@ It started with four. There was an overview operation for locating files, a stru
 
 Both traversal operations were deleted. The path there is more instructive than the destination.
 
-## Deletion one: the two tools that were really missing fields
+Four removals follow. They are grouped by what each one turned out to be rather than numbered, because the count was never the point: each was a different wrong assumption I had to be shown, and only one of them was about having too many tools.
+
+## The two tools that were really missing fields
 
 The important thing about removing the traversal tools is what did not get removed. The graph stayed. The import edges, the call edges, the reverse lookups, all of it survived and is still there.
 
@@ -95,7 +97,7 @@ Which leaves two real options. Default it on and accept the cost, or move it to 
 
 The general version: if a capability requires the agent to opt in, and the agent only knows to opt in after seeing the result, it will not get used. Make it the default or fold it into something else. A third option of explaining it more clearly does not exist.
 
-## Deletion three: the labels
+## The labels that were guesses in the costume of facts
 
 The first version tried to tell the agent what each file *was*.
 
@@ -109,7 +111,7 @@ The deeper problem is a division of labour. The agent reading my output is a lan
 
 So the rule I ended up with: return evidence, never classification. Paths, symbol names, exports, references, line numbers, the matched lines themselves. Things I can point at in a file. No role labels, no capability tags, and no generated descriptions of what a file is for. Let the model do the interpreting, since it is better at it than my heuristics and it is going to redo the work anyway.
 
-## Deletion four: the duplicate
+## One operation, two names
 
 A smaller one, included because the lesson is not the obvious one.
 
@@ -123,9 +125,9 @@ So the tools were renamed to match the shell verbs exactly, the duplicate verb w
 
 The cost of an extra name isn't the code: it's that everything you write about your tool now has to be conditional.
 
-## Deletion five: the server that served
+## The daemon that served nothing
 
-The third removal is the one I would not have predicted.
+The last removal is the one I would not have predicted.
 
 The architecture had a background process, a daemon, that held the index in memory and answered queries over a local connection. This is the obvious shape. The index is expensive to build, so build it once, keep it warm, and have the command line be a thin client that asks the running process. There was a bridge layer and an HTTP daemon (a background server, listening for requests the way a website's server does) to do exactly this.
 
