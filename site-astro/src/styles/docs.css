@@ -5,8 +5,7 @@
   --bg: #070a11;
   --surface: #0f1826;
   --surface-2: #0b111c;
-  --ink: #e7eef8;
-  --muted: #8b9ab2;
+  /* --ink / --muted / --faint come from backdrop.css */
   --frost: #4fbfe0;
   --frost-bright: #6fd3ef;
   --ember: #ef9448;
@@ -186,7 +185,9 @@ footer { border-top: 1px solid var(--line); padding: 48px 0; }
 /* =========================================================
    DOCS PAGE — sidebar + reference layout
    ========================================================= */
-.docs { max-width: 1200px; margin: 0 auto; padding: 0 24px; display: grid; grid-template-columns: 236px 1fr; gap: 56px; align-items: start; }
+/* 1120/28 matches .nav-in and .wrap - at 1200/24 the docs content edge sat
+   44px left of the nav's, so the logo looked indented against the sidebar. */
+.docs { max-width: 1120px; margin: 0 auto; padding: 0 28px; display: grid; grid-template-columns: 236px 1fr; gap: 56px; align-items: start; }
 @media (max-width: 860px) { .docs { grid-template-columns: 1fr; gap: 0; } }
 
 .side { position: sticky; top: 64px; align-self: start; max-height: calc(100vh - 64px); overflow-y: auto; padding: 34px 0 60px; }
@@ -292,10 +293,7 @@ body.essay-page {
   --bg: #0b0e14;          /* lifted off pure black — easier for sustained reading */
   --surface: #141a24;
   --surface-2: #10151d;
-  --ink: #eef3fb;
-  --prose: #c9d3e2;       /* 12.8:1 — was #8b9ab2 at 6.9:1 */
-  --muted: #8b9ab2;
-  --faint: #7a8aa3;
+  /* --ink / --prose / --muted / --faint come from backdrop.css */
   --line: #1e2735;
   --line-soft: #182029;
   --frost: #4fbfe0;

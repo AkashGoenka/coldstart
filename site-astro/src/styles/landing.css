@@ -8,9 +8,7 @@
   --ink-2:#0f1826;
   --raised:#121d2d;
   --warm-ground:#12100e;
-  --text:#e7eef8;
-  --muted:#8b9ab2;
-  --faint:#7a8aa3;
+  /* --text / --muted / --faint now come from backdrop.css - see the ramp there */
   --frost:#4fbfe0;
   --frost-dim:#2f89a8;
   --ember:#ef9448;

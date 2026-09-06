@@ -17,6 +17,37 @@
    pattern is the most common generated-site tell on the web, and it
    also fought the ramp for the same layer.
    ============================================================ */
+/* ------------------------------------------------------------
+   THE TEXT RAMP — defined here, and ONLY here.
+
+   This file is imported LAST by every page shell, so these :root
+   values win over landing.css / docs.css / how.css. They used to be
+   hand-copied into all three and drifted: the blog got a readable
+   --prose while docs and the landing page kept a 6.9:1 grey.
+
+   Measured against the composited ground (the field above changes
+   what text actually sits on — it cost ~24% of the contrast ratio
+   and the greys were never moved to compensate):
+
+                    frost side   ember side   R-B spread
+     --text          13.4          14.1        -10
+     --muted          9.0           9.4        -13
+     --faint          6.4           6.7        -15
+
+   The old values were --muted 5.3 / --faint 4.3 — and 4.3 is BELOW
+   the 4.5 AA floor for normal text. All three are near-neutral now:
+   DESIGN.md 11 measured that a blue-grey (R-B spread 39) on a
+   blue-black ground has too little hue separation from its own
+   background, which is what read as washed out.
+   ------------------------------------------------------------ */
+:root{
+  --text:#eef2f8;   /* prose. The default for a paragraph. */
+  --muted:#c3c8d0;  /* secondary prose, leads, list bodies */
+  --faint:#a3a9b2;  /* labels, captions, meta, axis ticks */
+  --ink:var(--text);    /* docs.css name for --text */
+  --prose:var(--muted); /* essay name for body prose */
+}
+
 body::before{
   content:"";
   position:fixed;
