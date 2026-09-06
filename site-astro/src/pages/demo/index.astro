@@ -48,8 +48,8 @@ const readOut = [
   <div class="wrap hero-in">
     <div class="kicker">An example session on a Node/Express codebase</div>
     <h1 class="title">"How does authentication work<br>in this codebase?"</h1>
-    <p class="hero-sub">The question everyone asks in their first week, and the one an agent answers from scratch every single time. Below it is answered twice — once by an agent that has to go looking, and once by an agent that was handed the answer before it started.</p>
-    <p class="disclaim">The repo is invented and so is its output, so that the files mean something to you without knowing coldstart. The command shapes and the output format are the real ones.</p>
+    <p class="hero-sub">Answered twice on the same repo, three days apart.</p>
+    <p class="disclaim">Example repo, example output. The commands and the output format are the real ones.</p>
   </div>
 </header>
 
@@ -59,7 +59,6 @@ const readOut = [
     <div class="dhead">
       <div class="eyebrow">Monday · nobody has written this down</div>
       <h2>It has to go and find out.</h2>
-      <p class="lead">Nothing in the repo explains the auth flow, so the agent locates the files, checks who calls what, and reads enough to answer. Two commands instead of a directory crawl.</p>
     </div>
 
     <div class="cc">
@@ -86,8 +85,6 @@ const readOut = [
           </div>
         </div>
 
-        <p class="cap">One command, no model call. The preview lines already give away that sessions are stored in Redis.</p>
-
         <div class="turn">
           <div class="g">OUT</div>
           <div class="c">
@@ -97,8 +94,6 @@ const readOut = [
             </div>
           </div>
         </div>
-
-        <p class="cap">Who calls each function, and from which line. That is the shape of the flow without opening a file.</p>
 
         <div class="turn">
           <div class="g"></div>
@@ -122,7 +117,6 @@ const readOut = [
     <div class="dhead">
       <div class="eyebrow">Thursday · a different session, a different person</div>
       <h2>It starts at the right file.</h2>
-      <p class="lead">Fresh context, no memory of Monday, and the question is worded differently — it still matches, because the note is matched on what it is about rather than on the words in the prompt. The agent still checks the code before it answers. It just knows which file to open.</p>
     </div>
 
     <div class="cc">
@@ -146,7 +140,7 @@ const readOut = [
           </div>
         </div>
 
-        <p class="cap">Verified against the file's content hash. <code>fresh</code> means <code>session.ts</code> has not changed a byte since this was written, so it can be trusted without re-reading.</p>
+        <p class="cap"><code>fresh</code> = <code>session.ts</code> has not changed a byte since this was written.</p>
 
         <div class="turn">
           <div class="g"></div>
@@ -163,8 +157,6 @@ const readOut = [
           </div>
         </div>
 
-        <p class="cap">One read, and it is the right file first time. This is the part the note actually removes — the search, not the checking.</p>
-
         <div class="turn">
           <div class="g"></div>
           <div class="c"><div class="prose">Confirmed — not JWTs. Session cookies backed by Redis.<br><br>Login stores a random 32-byte token under <code>sess:&lt;token&gt;</code> with a 7-day TTL and sets it as an httpOnly cookie. <code>requireAuth</code> does one Redis lookup per request; nothing is signed or decoded. The <code>token</code> naming is misleading and has caught people out before.<br><br>Practically: sessions can be killed server-side by deleting the key, and auth stops working if Redis is down.</div></div>
@@ -172,7 +164,7 @@ const readOut = [
 
         <div class="turn">
           <div class="g"></div>
-          <div class="c"><div class="tally"><b>One read instead of a search.</b> An agent worth trusting still opens the file before it answers, and this one did. What it skipped is Monday's hunt for <em>which</em> file — and it inherited the warning about the variable name, which nobody had thought to write in a comment.</div></div>
+          <div class="c"><div class="tally"><b>One read instead of a search.</b> It still opened the file — it just knew which one, and it inherited the warning about the variable name.</div></div>
         </div>
 
       </div>
@@ -181,7 +173,7 @@ const readOut = [
 
     <div class="dclose">
       <p class="big">Both sessions had the index. Only the second had the note.</p>
-      <p class="sm">Neither session is free — an agent that skips reading the code is one you should not trust. What changes is how much of the work is spent finding the file rather than answering the question.</p>
+      <p class="sm">Neither is free. What changes is how much of the work goes into finding the file rather than answering the question.</p>
       <div class="cta"><a class="btn btn-primary" href="/docs/">Read the docs →</a><a class="btn btn-ghost" href="/docs/notebook/">How the notebook works</a></div>
     </div>
   </div>
@@ -197,7 +189,7 @@ const readOut = [
 .demo-hero .title{font-size:clamp(30px,4.6vw,48px);}
 .dsec{padding:72px 0;border-top:1px solid var(--line);}
 .dsec.warm{border-top-color:var(--line-warm);}
-.dhead{max-width:640px;margin:0 auto 44px;text-align:center;}
+.dhead{max-width:640px;margin:0 auto 36px;text-align:center;}
 .dhead h2{margin-top:14px;}
 .dhead .lead{margin-top:16px;max-width:500px;margin-inline:auto;}
 
@@ -265,7 +257,7 @@ const readOut = [
 /* Says plainly that the repo below is invented. It sits with the hero copy
    rather than in a footnote, because a terminal reads as captured output
    unless the page says otherwise. */
-.disclaim{margin:20px auto 0;max-width:500px;font-size:13px;line-height:1.6;
+.disclaim{margin:18px auto 0;max-width:620px;font-size:13px;line-height:1.6;
   color:var(--faint);border-top:1px solid var(--line);padding-top:16px;}
 
 .dclose{max-width:660px;margin:56px auto 0;text-align:center;}
