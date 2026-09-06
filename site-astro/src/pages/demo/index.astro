@@ -9,6 +9,20 @@ import '../../styles/backdrop.css';
 const title = 'Demo — how does auth work in this codebase? | coldstart';
 const description =
   "The question every developer asks on day one, answered twice: once by an agent that has to go looking, and once by an agent that was handed the answer. An example session on a Node/Express codebase.";
+// Terminal output lives here, not in the markup: Astro parses `{...}` in the
+// template as an expression and `${...}` as interpolation, so real source text
+// breaks the build. Frontmatter strings are immune to both.
+const readOut = [
+  "  14  const SESSION_TTL = 60 * 60 * 24 * 7;",
+  "  16  const COOKIE_NAME = 'sid';",
+  "  ..",
+  "  24  export async function createSession(user: User) {",
+  "  29    const token = randomBytes(32).toString('hex');",
+  "  31    await redis.set('sess:' + token, JSON.stringify({ uid: user.id }),",
+  "  32                    'EX', SESSION_TTL);",
+  "  35    return { name: COOKIE_NAME, value: token, httpOnly: true };",
+  "  36  }",
+];
 ---
 <html lang="en">
 <head>
@@ -107,8 +121,8 @@ const description =
   <div class="wrap">
     <div class="dhead">
       <div class="eyebrow">Thursday · a different session, a different person</div>
-      <h2>It already has the answer.</h2>
-      <p class="lead">Fresh context, no memory of Monday, and the question is worded differently. It still matches, because the note is matched on what it is about rather than on the words in the prompt.</p>
+      <h2>It starts at the right file.</h2>
+      <p class="lead">Fresh context, no memory of Monday, and the question is worded differently — it still matches, because the note is matched on what it is about rather than on the words in the prompt. The agent still checks the code before it answers. It just knows which file to open.</p>
     </div>
 
     <div class="cc">
@@ -136,12 +150,29 @@ const description =
 
         <div class="turn">
           <div class="g"></div>
-          <div class="c"><div class="prose">Not JWTs — session cookies backed by Redis.<br><br>Login stores a random 32-byte token under <code>sess:&lt;token&gt;</code> with a 7-day TTL and sets it as an httpOnly cookie. <code>requireAuth</code> does one Redis lookup per request; nothing is signed or decoded. The <code>token</code> naming is misleading and has caught people out before.<br><br>Practically: sessions can be killed server-side by deleting the key, and auth stops working if Redis is down.</div></div>
+          <div class="c"><div class="prose think">The note names the file and the two functions. Opening it to confirm before I answer.</div></div>
+        </div>
+
+        <div class="turn">
+          <div class="g">OUT</div>
+          <div class="c">
+            <div class="tool">
+              <div class="th"><span class="dot ok"></span><b>Read</b> <span class="arg">src/auth/session.ts</span></div>
+              <div class="ob">{readOut.map((l) => <div>{l}</div>)}<div class="el">… +72 lines</div></div>
+            </div>
+          </div>
+        </div>
+
+        <p class="cap">One read, and it is the right file first time. This is the part the note actually removes — the search, not the checking.</p>
+
+        <div class="turn">
+          <div class="g"></div>
+          <div class="c"><div class="prose">Confirmed — not JWTs. Session cookies backed by Redis.<br><br>Login stores a random 32-byte token under <code>sess:&lt;token&gt;</code> with a 7-day TTL and sets it as an httpOnly cookie. <code>requireAuth</code> does one Redis lookup per request; nothing is signed or decoded. The <code>token</code> naming is misleading and has caught people out before.<br><br>Practically: sessions can be killed server-side by deleting the key, and auth stops working if Redis is down.</div></div>
         </div>
 
         <div class="turn">
           <div class="g"></div>
-          <div class="c"><div class="tally"><b>Zero tool calls.</b> No <code>find</code>, no <code>gs</code>, no reads. Thursday did not pay for Monday's search — and it inherited the warning about the variable name, which nobody thought to write in a comment.</div></div>
+          <div class="c"><div class="tally"><b>One read instead of a search.</b> An agent worth trusting still opens the file before it answers, and this one did. What it skipped is Monday's hunt for <em>which</em> file — and it inherited the warning about the variable name, which nobody had thought to write in a comment.</div></div>
         </div>
 
       </div>
@@ -150,7 +181,7 @@ const description =
 
     <div class="dclose">
       <p class="big">Both sessions had the index. Only the second had the note.</p>
-      <p class="sm">The index is what makes the first session cheap. The notebook is what makes the second one free.</p>
+      <p class="sm">Neither session is free — an agent that skips reading the code is one you should not trust. What changes is how much of the work is spent finding the file rather than answering the question.</p>
       <div class="cta"><a class="btn btn-primary" href="/docs/">Read the docs →</a><a class="btn btn-ghost" href="/docs/notebook/">How the notebook works</a></div>
     </div>
   </div>
@@ -218,6 +249,7 @@ const description =
   text-transform:uppercase;margin-right:8px;}
 .tally{border:1px dashed #3a3a3a;border-radius:6px;padding:11px 13px;font-size:13px;color:#cfcfcf;line-height:1.6;}
 .tally b{color:#f2f2f2;font-weight:600;}
+.tally em{color:#e3e3e3;font-style:italic;}
 
 .cc-in{display:flex;align-items:center;justify-content:space-between;margin:6px 16px 16px;
   background:#242424;border:1px solid rgba(239,148,72,.45);border-radius:8px;padding:11px 13px;
