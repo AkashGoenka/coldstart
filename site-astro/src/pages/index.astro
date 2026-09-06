@@ -4,8 +4,8 @@ import SvgDefs from '../components/SvgDefs.astro';
 import Nav from '../components/Nav.astro';
 import Footer from '../components/Footer.astro';
 import '../styles/tailwind.css';
+import '../styles/tokens.css';
 import '../styles/landing.css';
-import '../styles/backdrop.css';
 
 const softwareAppJsonLd = {
   '@context': 'https://schema.org',
@@ -92,7 +92,7 @@ const faqJsonLd = {
     <p class="hero-sub">coldstart gives it <b>persistent memory of your codebase</b> — a notebook it writes itself, so what one session figures out, the next already knows — plus an exact index to <b>find the right file without three wrong reads</b>. No embeddings, no API key: it runs on the model you already pay for.</p>
 
     <div class="term install-term">
-      <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="term-title">your-project</span><button type="button" class="copy-btn" id="copy-install" data-copy="npm install -g @cstart/coldstart&#10;coldstart init" aria-label="Copy install commands">Copy</button></div>
+      <div class="term-bar"><span class="term-title">your-project</span><button type="button" class="copy-btn" id="copy-install" data-copy="npm install -g @cstart/coldstart&#10;coldstart init" aria-label="Copy install commands">Copy</button></div>
       <div class="term-body">
 <span class="l"><span class="p-prompt">$</span> <span class="p-cmd">npm install -g @cstart/coldstart</span></span>
 <span class="l"><span class="p-prompt">$</span> <span class="p-cmd">cd</span> your-project</span>
@@ -118,7 +118,7 @@ const faqJsonLd = {
     <div class="rise nb-intro">
       <div class="eyebrow warm">The notebook</div>
       <h2>The second time a question comes up, the answer is <span class="warm">already written down.</span></h2>
-      <p class="lead">An agent writes down what it learns while it works. The next one gets it for free, checked against the code so a stale note never passes as fact.</p>
+      <p class="lead">An agent writes down what it learns while it works. The next one starts where that one finished instead of searching for it again, checked against the code so a stale note never passes as fact.</p>
     </div>
 
     <div class="nb-main rise">
@@ -223,7 +223,7 @@ const faqJsonLd = {
       </div>
     </div>
 
-    <a class="how-link" href="/demo/" style="margin-top:8px;">See it run on a real repo, live <span class="ar" aria-hidden="true">→</span></a>
+    <a class="how-link" href="/demo/" style="margin-top:8px;">A visual representation of how it works <span class="ar" aria-hidden="true">→</span></a>
 
     <div class="keynote cool rise">
       <span class="kk">Measured, not promised</span>

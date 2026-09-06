@@ -3,7 +3,9 @@ import Head from '../../layouts/Head.astro';
 import SvgDefs from '../../components/SvgDefs.astro';
 import Nav from '../../components/Nav.astro';
 import Footer from '../../components/Footer.astro';
+import '../../styles/tokens.css';
 import '../../styles/landing.css';
+import '../../styles/backdrop.css';
 
 const title = 'See it live — coldstart on its own repo';
 const description =
@@ -14,8 +16,8 @@ const cards = [
     href: '/demo/',
     kicker: 'Walkthrough',
     title: 'One real session',
-    body: 'A question asked cold, answered with find and gs — then asked again later and answered for free from a note.',
-    meta: '2 tool calls → 0',
+    body: 'A question asked cold, answered with find and gs — then asked again later, and answered straight from the right file because a note pointed at it.',
+    meta: 'a search, then one read',
   },
   {
     href: '/graph/',
@@ -27,6 +29,7 @@ const cards = [
   {
     href: '/notebook/',
     kicker: 'Notebook',
+    warm: true,
     title: "This repo's real notes",
     body: 'The actual notebook coldstart has written about its own code while working — not a mockup, the live thing.',
     meta: 'real notes, real code',
@@ -66,7 +69,7 @@ const cards = [
     <div class="livegrid">
       {cards.map(c => (
         <a class="livecard" href={c.href}>
-          <div class="lc-kicker">{c.kicker}</div>
+          <div class={c.warm ? "lc-kicker warm" : "lc-kicker"}>{c.kicker}</div>
           <h2>{c.title}</h2>
           <p>{c.body}</p>
           <div class="lc-foot">
@@ -91,6 +94,7 @@ const cards = [
 .livecard:hover{border-color:color-mix(in srgb,var(--frost) 40%,var(--line));
   transform:translateY(-3px);box-shadow:0 26px 54px -30px rgba(0,0,0,.75);}
 .lc-kicker{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--frost);}
+.lc-kicker.warm{color:var(--ember);}
 .livecard h2{font-family:var(--display);font-weight:500;font-size:21px;letter-spacing:-.01em;margin:0;color:var(--text);}
 .livecard p{font-size:14px;line-height:1.65;color:var(--muted);margin:0;flex:1;}
 .lc-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:4px;

@@ -1,0 +1,83 @@
+/* ============================================================
+   The footer — ONE definition, shared by every page.
+
+   It used to be a single row of five links, duplicated in
+   landing.css and docs.css (see the notebook note "site-astro has
+   two independent stylesheets that must be hand-kept in sync").
+   Both copies were deleted; this file is reached through an
+   @import at the top of backdrop.css, which every page shell
+   already imports. That is deliberate: adding a per-page import
+   would be a third thing a new page can silently forget, and the
+   notebook already has a note about /live/ shipping without its
+   backdrop for exactly that reason.
+
+   WHY IT IS BIG. Not for weight. The site ships /demo/, /live/,
+   /notebook/, /graph/, /vs/vector-rag, three how-it-works pages
+   and three docs pages, and most of them were reachable only from
+   the nav dropdown. A footer is where a reader who has finished a
+   page finds the next one, and it is also the site's only
+   internal-linking surface.
+
+   Sentence-case column headings, not tracked-out uppercase — the
+   uppercase eyebrow is the single most common generated-site tell
+   and DESIGN.md rules it out everywhere else on the site too.
+   ============================================================ */
+
+footer{
+  border-top:1px solid var(--line);
+  padding:64px 0 40px;
+  margin-top:0;
+}
+.foot-in{
+  max-width:1120px;margin:0 auto;padding:0 28px;
+  display:grid;grid-template-columns:minmax(220px,1.4fr) repeat(4,minmax(0,1fr));
+  gap:40px 32px;align-items:start;
+}
+
+/* ---- identity block ---- */
+.foot-id{display:flex;flex-direction:column;gap:12px;align-items:flex-start;}
+.foot-id .brand{font-size:16px;gap:9px;}
+.foot-blurb{
+  font-size:13.5px;line-height:1.6;color:var(--muted);max-width:30ch;
+}
+
+/* ---- link columns ---- */
+.foot-col{display:flex;flex-direction:column;gap:11px;min-width:0;}
+.foot-col h3{
+  font-family:var(--mono);font-size:11.5px;font-weight:500;
+  letter-spacing:.02em;color:var(--faint);margin:0 0 2px;
+}
+.foot-col a{
+  font-size:13.5px;line-height:1.35;color:var(--muted);text-decoration:none;
+  transition:color .14s;
+}
+.foot-col a:hover{color:var(--text);}
+.foot-col a.ext::after{content:"↗";margin-left:5px;font-size:11px;opacity:.55;}
+
+/* ---- bottom rule ---- */
+.foot-base{
+  max-width:1120px;margin:48px auto 0;padding:20px 28px 0;
+  border-top:1px solid var(--line);
+  display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;
+}
+.foot-tagline{
+  font-family:var(--mono);color:var(--faint);font-size:12px;letter-spacing:.02em;
+}
+/* The one warm mark down here: the same frost->ember pair the whole
+   page is built on, at the scale of a full stop. */
+.foot-temp{display:flex;align-items:center;gap:7px;
+  font-family:var(--mono);font-size:11.5px;color:var(--faint);}
+.foot-temp i{width:7px;height:7px;border-radius:50%;display:inline-block;}
+.foot-temp i.f{background:var(--frost);}
+.foot-temp i.e{background:var(--ember);}
+
+@media(max-width:1000px){
+  .foot-in{grid-template-columns:repeat(2,minmax(0,1fr));gap:34px 28px;}
+  .foot-id{grid-column:1 / -1;}
+}
+@media(max-width:520px){
+  footer{padding:44px 0 32px;}
+  .foot-in{grid-template-columns:1fr;padding:0 20px;gap:30px;}
+  .foot-base{padding:18px 20px 0;margin-top:36px;}
+  .foot-col a{padding:2px 0;}
+}
