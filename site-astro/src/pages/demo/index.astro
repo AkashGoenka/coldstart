@@ -6,9 +6,9 @@ import Footer from '../../components/Footer.astro';
 import '../../styles/landing.css';
 import '../../styles/backdrop.css';
 
-const title = 'Demo — the same question, twice | coldstart';
+const title = 'Demo — how does auth work in this codebase? | coldstart';
 const description =
-  "Two real sessions against coldstart's own codebase. The first has no note yet and looks things up. The second is handed the answer before it starts. Fully rendered, nothing animated.";
+  "The question every developer asks on day one, answered twice: once by an agent that has to go looking, and once by an agent that was handed the answer. An example session on a Node/Express codebase.";
 ---
 <html lang="en">
 <head>
@@ -18,8 +18,8 @@ const description =
     keywords="coldstart demo, coldstart find, coldstart gs, notebook recall, codebase memory demo, AI coding agent navigation"
     canonicalPath="/demo/"
     ogType="website"
-    ogTitle="Demo — the same question, twice"
-    ogDescription="The first session looks it up. The second already knows. One real repo, real command output, nothing animated."
+    ogTitle="Demo — how does auth work in this codebase?"
+    ogDescription="The first session goes looking. The second is handed the answer. An example session, fully rendered, nothing animated."
     themeColor="#070a11"
   />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -32,9 +32,10 @@ const description =
 
 <header class="hero demo-hero">
   <div class="wrap hero-in">
-    <div class="kicker">Demo — captured from this repo</div>
-    <h1 class="title">The first time it looks things up.<br>The second time it already knows.</h1>
-    <p class="hero-sub">The same question, asked in two different sessions against coldstart's own codebase. Every command and every line of output below is real and unedited. Nothing here animates — it is all on the page already.</p>
+    <div class="kicker">An example session on a Node/Express codebase</div>
+    <h1 class="title">"How does authentication work<br>in this codebase?"</h1>
+    <p class="hero-sub">The question everyone asks in their first week, and the one an agent answers from scratch every single time. Below it is answered twice — once by an agent that has to go looking, and once by an agent that was handed the answer before it started.</p>
+    <p class="disclaim">The repo is invented and so is its output, so that the files mean something to you without knowing coldstart. The command shapes and the output format are the real ones.</p>
   </div>
 </header>
 
@@ -42,59 +43,57 @@ const description =
 <section class="dsec">
   <div class="wrap">
     <div class="dhead">
-      <div class="eyebrow">Session one · nothing written down yet</div>
-      <h2>No note exists. So it goes and looks.</h2>
-      <p class="lead">The recall hook searches the notebook first and finds nothing, so the agent falls through to the index: one <code>find</code> to locate the file, one <code>gs</code> to see who uses it, then it answers.</p>
+      <div class="eyebrow">Monday · nobody has written this down</div>
+      <h2>It has to go and find out.</h2>
+      <p class="lead">Nothing in the repo explains the auth flow, so the agent locates the files, checks who calls what, and reads enough to answer. Two commands instead of a directory crawl.</p>
     </div>
 
     <div class="cc">
-      <div class="cc-bar"><span class="cc-file">coldstart-mcp</span><span class="cc-badge">Claude Code</span></div>
+      <div class="cc-bar"><span class="cc-file">acme-api</span><span class="cc-badge">Claude Code</span></div>
       <div class="cc-body">
 
         <div class="turn">
           <div class="g">IN</div>
-          <div class="c"><div class="chip">why does <code>gs</code> show files edited together — is that from the import graph?</div></div>
+          <div class="c"><div class="chip">how does authentication work in this codebase?</div></div>
         </div>
-
-        <p class="cap">The notebook is searched before anything else. Nothing matches, so nothing is injected.</p>
 
         <div class="turn">
           <div class="g"></div>
-          <div class="c"><div class="prose think">Nothing in the notebook covers this. I'll find where the co-change data is produced.</div></div>
+          <div class="c"><div class="prose think">Nothing written down about auth here. I'll locate the files first.</div></div>
         </div>
 
         <div class="turn">
           <div class="g">OUT</div>
           <div class="c">
             <div class="tool">
-              <div class="th"><span class="dot ok"></span><b>Bash</b> <span class="arg">coldstart find edited together cochange sidecar</span></div>
-              <div class="ob"><div>find: edited together cochange sidecar  (4 terms, 69 candidate files)</div><div>&nbsp;</div><div>▸ hooks/cochange-nudge.mjs   [4/4]</div><div>   Role:  defines `edited`, `cochange`</div><div>   Wired: used by `cochange-nudge.test.ts` · near `cochange.ts`</div><div>&nbsp;</div><div>▸ tests/cochange-nudge.test.ts   [3/4]</div><div>   Role:  defines `sidecar`; named for `cochange`</div><div>   Wired: uses `cochange-nudge.mjs`, `cochange.ts`</div><div>&nbsp;</div><div>▸ src/indexer/cochange.ts   [3/4]</div><div>   Role:  named for `cochange`; defines `sidecar`</div><div class="el">… +38 lines</div></div>
+              <div class="th"><span class="dot ok"></span><b>Bash</b> <span class="arg">coldstart find auth session login middleware</span></div>
+              <div class="ob"><div>find: auth session login middleware  (4 terms, 112 candidate files)</div><div>&nbsp;</div><div>▸ src/auth/session.ts   [4/4]</div><div>   Role:  defines `session`, `login`; imports `auth`</div><div>   Read:  createSession [L24-58], verifySession [L62-91]</div><div>   Wired: used by `requireAuth.ts`, `login.ts` · near `User.ts`</div><div>   near L31:</div><div>     L29: const token = randomBytes(32).toString('hex');</div><div>     L31: await redis.set('sess:' + token, ..., 'EX', SESSION_TTL);</div><div>&nbsp;</div><div>▸ src/middleware/requireAuth.ts   [3/4]</div><div>   Role:  defines `middleware`, `auth`</div><div>   Wired: uses `session.ts` · used by 14 route files</div><div>&nbsp;</div><div>▸ src/routes/login.ts   [3/4]</div><div>   Role:  defines `login`; imports `session`, `auth`</div><div class="el">… +21 lines</div></div>
             </div>
           </div>
         </div>
 
-        <p class="cap">One command, no model call. The third hit is the source file — <code>gs</code> next, to see what actually feeds it.</p>
+        <p class="cap">One command, no model call. The preview lines already give away that sessions are stored in Redis.</p>
 
         <div class="turn">
           <div class="g">OUT</div>
           <div class="c">
             <div class="tool">
-              <div class="th"><span class="dot ok"></span><b>Bash</b> <span class="arg">coldstart gs src/indexer/cochange.ts</span></div>
-              <div class="ob"><div>src/indexer/cochange.ts (275 lines, importedBy: 8)</div><div>&nbsp;</div><div>Symbols:</div><div>constant CO_CHANGE_WINDOW [L38]</div><div>constant CO_CHANGE_MIN_SUPPORT [L46]</div><div>function parseCommits [L77-98]</div><div>function canonicalizeRenames [L114-129]</div><div>function deriveCoChange [L139-210]  ← src/index-manager.ts:233</div><div>function coChangePartnersFor [L257-274]  ← src/server/tools.ts:388</div><div>&nbsp;</div><div>Imports:</div><div>src/cache/disk-cache.ts</div><div>&nbsp;</div><div>Importers (8):</div><div>  Source (5):</div><div>    src/graph/dump.ts</div><div>    src/index-manager.ts</div><div>    src/server/tools.ts</div><div class="el">… +14 lines</div></div>
+              <div class="th"><span class="dot ok"></span><b>Bash</b> <span class="arg">coldstart gs src/auth/session.ts</span></div>
+              <div class="ob"><div>src/auth/session.ts (108 lines, importedBy: 6)</div><div>&nbsp;</div><div>Symbols:</div><div>constant SESSION_TTL [L14]</div><div>constant COOKIE_NAME [L16]</div><div>function createSession  [L24-58]  ← src/routes/login.ts:41</div><div>function verifySession  [L62-91]  ← src/middleware/requireAuth.ts:18</div><div>function destroySession [L95-108] ← src/routes/logout.ts:12</div><div>&nbsp;</div><div>Imports:</div><div>src/db/redis.ts</div><div>src/models/User.ts</div><div>&nbsp;</div><div>Importers (6):</div><div>  Source (4):</div><div>    src/middleware/requireAuth.ts</div><div>    src/routes/login.ts</div><div>    src/routes/logout.ts</div><div>    src/routes/refresh.ts</div><div>  Tests (2):</div><div>    tests/auth.test.ts</div><div>&nbsp;</div><div>Edited together (git history, not a dependency):</div><div>  src/middleware/requireAuth.ts — 14 commits</div><div>  tests/auth.test.ts — 11 commits</div></div>
             </div>
           </div>
         </div>
 
+        <p class="cap">Who calls each function, and from which line. That is the shape of the flow without opening a file.</p>
+
         <div class="turn">
           <div class="g"></div>
-          <div class="c"><div class="prose">No. It comes from git history, not the graph.<br><br><code>parseCommits</code> reads <code>git log --name-status -M</code> and <code>deriveCoChange</code> counts how often two files change in the same commit — a 12,000-commit window, minimum support 2. It never touches <code>Imports</code> or the call edges. <code>coChangePartnersFor</code> is what <code>src/server/tools.ts:388</code> calls to render the section.<br><br>So it is a habit, not a dependency. There is no edge to go looking for.</div></div>
+          <div class="c"><div class="prose">Sessions, not JWTs — despite the variable being called <code>token</code>.<br><br><b>Login:</b> <code>src/routes/login.ts:41</code> checks the password, then calls <code>createSession</code>, which writes a random 32-byte token to Redis under <code>sess:&lt;token&gt;</code> with a 7-day TTL and returns it as an httpOnly cookie.<br><br><b>Every protected route:</b> <code>requireAuth</code> pulls that cookie and calls <code>verifySession</code>, which is a single Redis lookup. Nothing is signed and nothing is decoded — if the key is gone from Redis, the session is over.<br><br><b>Logout:</b> <code>destroySession</code> deletes the key. There is no revocation list because there is nothing to revoke.</div></div>
         </div>
 
-        <p class="cap">Two commands and an answer. What made it expensive was not knowing where to start.</p>
-
         <div class="turn">
           <div class="g"></div>
-          <div class="c"><div class="hook"><span class="hl">Stop hook</span> the agent writes down what it just worked out — file, symbols, and the reason, checked against a content hash so it expires when the code moves.</div></div>
+          <div class="c"><div class="hook"><span class="hl">Stop hook</span> the agent writes this down — the files, the symbols, and the thing that would mislead the next reader — checked against a content hash so it expires when the code moves.</div></div>
         </div>
 
       </div>
@@ -107,18 +106,18 @@ const description =
 <section class="dsec warm">
   <div class="wrap">
     <div class="dhead">
-      <div class="eyebrow">Session two · days later, fresh context</div>
-      <h2>Same question. The answer arrives before it starts.</h2>
-      <p class="lead">Different session, no memory of the first. The recall hook matches the note this time and hands it over with the prompt, so there is nothing left to look up.</p>
+      <div class="eyebrow">Thursday · a different session, a different person</div>
+      <h2>It already has the answer.</h2>
+      <p class="lead">Fresh context, no memory of Monday, and the question is worded differently. It still matches, because the note is matched on what it is about rather than on the words in the prompt.</p>
     </div>
 
     <div class="cc">
-      <div class="cc-bar"><span class="cc-file">coldstart-mcp</span><span class="cc-badge">Claude Code</span></div>
+      <div class="cc-bar"><span class="cc-file">acme-api</span><span class="cc-badge">Claude Code</span></div>
       <div class="cc-body">
 
         <div class="turn">
           <div class="g">IN</div>
-          <div class="c"><div class="chip">is the "edited together" list in <code>gs</code> a dependency edge?</div></div>
+          <div class="c"><div class="chip">are we using JWTs for login, or something else?</div></div>
         </div>
 
         <div class="turn">
@@ -126,23 +125,23 @@ const description =
           <div class="c">
             <div class="note">
               <div class="nh"><span class="nlbl">From the notebook</span><span class="fresh">fresh</span></div>
-              <div class="nt">Co-change is git history, not the import graph</div>
-              <div class="nb2">Pairs come from <code>git log --name-status -M</code> counted over a 12k-commit window in <code>deriveCoChange</code>, min support 2. Renames are carried forward over the whole window, because <code>-M</code> only labels the rename commit. It is a habit, NOT a dependency edge — there is no import or call relation behind it.</div>
-              <div class="na">src/indexer/cochange.ts · deriveCoChange, coChangePartnersFor</div>
+              <div class="nt">Auth is session cookies in Redis, not JWTs</div>
+              <div class="nb2"><code>createSession</code> writes a random 32-byte token to Redis under <code>sess:&lt;token&gt;</code> with a 7-day TTL and returns an httpOnly cookie. <code>requireAuth</code> calls <code>verifySession</code>, a single Redis lookup, on every protected route. Nothing is signed or decoded. The variable is named <code>token</code>, which reads as a JWT and is not one — check Redis before assuming stateless auth.</div>
+              <div class="na">src/auth/session.ts · createSession, verifySession</div>
             </div>
           </div>
         </div>
 
-        <p class="cap">Verified against the file's content hash. <code>fresh</code> means <code>cochange.ts</code> has not changed a byte since this was written, so it can be trusted without re-reading.</p>
+        <p class="cap">Verified against the file's content hash. <code>fresh</code> means <code>session.ts</code> has not changed a byte since this was written, so it can be trusted without re-reading.</p>
 
         <div class="turn">
           <div class="g"></div>
-          <div class="c"><div class="prose">No — it is a habit, not a dependency.<br><br>The pairs are counted from git history in <code>deriveCoChange</code>, over a 12,000-commit window with a minimum support of 2. Nothing in it consults the import graph or the call edges, so a file listed there may have no code relation to the one you asked about at all. It is answering "what do people usually change alongside this", which is often the test in another language or the doc that has to stay in sync.</div></div>
+          <div class="c"><div class="prose">Not JWTs — session cookies backed by Redis.<br><br>Login stores a random 32-byte token under <code>sess:&lt;token&gt;</code> with a 7-day TTL and sets it as an httpOnly cookie. <code>requireAuth</code> does one Redis lookup per request; nothing is signed or decoded. The <code>token</code> naming is misleading and has caught people out before.<br><br>Practically: sessions can be killed server-side by deleting the key, and auth stops working if Redis is down.</div></div>
         </div>
 
         <div class="turn">
           <div class="g"></div>
-          <div class="c"><div class="tally"><b>Zero tool calls.</b> No <code>find</code>, no <code>gs</code>, no reads. The second session did not pay for the first session's search.</div></div>
+          <div class="c"><div class="tally"><b>Zero tool calls.</b> No <code>find</code>, no <code>gs</code>, no reads. Thursday did not pay for Monday's search — and it inherited the warning about the variable name, which nobody thought to write in a comment.</div></div>
         </div>
 
       </div>
@@ -150,8 +149,8 @@ const description =
     </div>
 
     <div class="dclose">
-      <p class="big">The notebook is the difference between the two panels.</p>
-      <p class="sm">Both sessions had the index. Only the second had the note — and it is the note that removed the work.</p>
+      <p class="big">Both sessions had the index. Only the second had the note.</p>
+      <p class="sm">The index is what makes the first session cheap. The notebook is what makes the second one free.</p>
       <div class="cta"><a class="btn btn-primary" href="/docs/">Read the docs →</a><a class="btn btn-ghost" href="/docs/notebook/">How the notebook works</a></div>
     </div>
   </div>
@@ -231,7 +230,13 @@ const description =
   font-size:12.5px;line-height:1.6;color:var(--faint);}
 .cap code{font-family:var(--mono);font-size:11.5px;color:var(--ember);background:none;padding:0;}
 
-.dclose{max-width:600px;margin:56px auto 0;text-align:center;}
+/* Says plainly that the repo below is invented. It sits with the hero copy
+   rather than in a footnote, because a terminal reads as captured output
+   unless the page says otherwise. */
+.disclaim{margin:20px auto 0;max-width:500px;font-size:13px;line-height:1.6;
+  color:var(--faint);border-top:1px solid var(--line);padding-top:16px;}
+
+.dclose{max-width:660px;margin:56px auto 0;text-align:center;}
 .dclose .big{font-family:var(--display);font-size:clamp(20px,2.6vw,26px);color:var(--text);line-height:1.35;}
 .dclose .sm{margin-top:12px;font-size:15px;color:var(--muted);line-height:1.6;}
 .dclose .cta{margin-top:28px;justify-content:center;}

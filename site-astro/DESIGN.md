@@ -311,8 +311,19 @@ the real thing sitting on the page, not a themed imitation.
 | Inline code | `#d9a05b` on `rgba(255,255,255,.06)`, radius 4 |
 | Input bar | `#242424`, 1px `rgba(239,148,72,.45)`, send button `#a8604a` |
 
-Output is real, unedited command output from this repo — same rule as today's
-page. **No traffic-light dots anywhere**, on this panel or on any terminal.
+**The repo is invented, and the page says so.** The panels run against a
+fictional Node/Express API and the question is "how does authentication work in
+this codebase?" — the thing every developer asks in their first week. The
+earlier version used a real captured session about coldstart's own co-change
+internals, which only demonstrates the tool to someone who already uses it.
+
+That trades literal provenance for relatability, so the trade is stated on the
+page rather than hidden: a line under the hero says the repo and its output are
+invented, and that only the command shapes and the output format are real. A
+terminal reads as captured output unless the page says otherwise, so the
+disclaimer sits with the hero copy and not in a footnote.
+
+**No traffic-light dots anywhere**, on this panel or on any terminal.
 
 ---
 
