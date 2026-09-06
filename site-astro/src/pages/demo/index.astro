@@ -6,9 +6,9 @@ import Footer from '../../components/Footer.astro';
 import '../../styles/landing.css';
 import '../../styles/backdrop.css';
 
-const title = 'Demo — how does auth work in this codebase? | coldstart';
+const title = 'Demo — a visual walkthrough of how coldstart works | coldstart';
 const description =
-  "The question every developer asks on day one, answered twice: once by an agent that has to go looking, and once by an agent that was handed the answer. An example session on a Node/Express codebase.";
+  "Watch the same question run twice on one repo: once by an agent that has to go looking for the file, and once by an agent that starts at the right one because a past session wrote it down.";
 // Terminal output lives here, not in the markup: Astro parses `{...}` in the
 // template as an expression and `${...}` as interpolation, so real source text
 // breaks the build. Frontmatter strings are immune to both.
@@ -32,8 +32,8 @@ const readOut = [
     keywords="coldstart demo, coldstart find, coldstart gs, notebook recall, codebase memory demo, AI coding agent navigation"
     canonicalPath="/demo/"
     ogType="website"
-    ogTitle="Demo — how does auth work in this codebase?"
-    ogDescription="The first session goes looking. The second is handed the answer. An example session, fully rendered, nothing animated."
+    ogTitle="Demo — a visual walkthrough of how coldstart works"
+    ogDescription="The first session goes looking. The second starts at the right file. A walkthrough of what coldstart changes inside a real agent session."
     themeColor="#070a11"
   />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -46,10 +46,8 @@ const readOut = [
 
 <header class="hero demo-hero">
   <div class="wrap hero-in">
-    <div class="kicker">An example session on a Node/Express codebase</div>
-    <h1 class="title">"How does authentication work<br>in this codebase?"</h1>
-    <p class="hero-sub">Answered twice on the same repo, three days apart.</p>
-    <p class="disclaim">Example repo, example output. The commands and the output format are the real ones.</p>
+    <h1 class="title">What coldstart changes,<br>inside the session</h1>
+    <p class="hero-sub">Below is a walkthrough of one agent answering the same question twice on the same example repo, three days apart. The commands and the output format are the real ones.</p>
   </div>
 </header>
 
@@ -254,11 +252,9 @@ const readOut = [
   font-size:12.5px;line-height:1.6;color:var(--faint);}
 .cap code{font-family:var(--mono);font-size:11.5px;color:var(--ember);background:none;padding:0;}
 
-/* Says plainly that the repo below is invented. It sits with the hero copy
-   rather than in a footnote, because a terminal reads as captured output
-   unless the page says otherwise. */
-.disclaim{margin:18px auto 0;max-width:620px;font-size:13px;line-height:1.6;
-  color:var(--faint);border-top:1px solid var(--line);padding-top:16px;}
+/* The hero sub is the page's only framing line - it says the repo is an
+   example, so a reader does not take the terminal for captured output. */
+.demo-hero .hero-sub{max-width:600px;margin-inline:auto;}
 
 .dclose{max-width:660px;margin:56px auto 0;text-align:center;}
 .dclose .big{font-family:var(--display);font-size:clamp(20px,2.6vw,26px);color:var(--text);line-height:1.35;}
