@@ -5,8 +5,8 @@ import SvgDefs from '../../components/SvgDefs.astro';
 import Nav from '../../components/Nav.astro';
 import Footer from '../../components/Footer.astro';
 import '../../styles/tailwind.css';
+import '../../styles/tokens.css';
 import '../../styles/docs.css';
-import '../../styles/backdrop.css';
 
 const posts = (await getCollection('blog')).sort(
   (a, b) => b.data.publishDate.valueOf() - a.data.publishDate.valueOf()
@@ -28,6 +28,11 @@ const jsonLd = {
     author: { '@type': 'Person', name: 'Akash Goenka' },
   })),
 };
+
+// Kicker temperature. The site colours the notebook/memory layer ember and the
+// index/measurement layer frost; the blog index was the last surface where the
+// topic was rendered in one colour regardless of what the post was about.
+const warmKickers = new Set(['Memory', 'Codebase memory', 'Codebase notes', 'Design']);
 ---
 <html lang="en">
 <head>
@@ -58,7 +63,7 @@ const jsonLd = {
   <section class="essay-list" aria-label="Blog">
     {posts.map((post) => (
       <a class="essay-card" href={`/blog/${post.slug}/`}>
-        <span class="essay-meta">{post.data.kicker} <span class="sep">·</span> <time datetime={post.data.publishDate.toISOString().slice(0,10)}>{post.data.publishDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</time> <span class="sep">·</span> <span class="rt">{post.data.readingTime}</span></span>
+        <span class="essay-meta"><span class={warmKickers.has(post.data.kicker) ? "k warm" : "k"}>{post.data.kicker}</span> <span class="sep">·</span> <time datetime={post.data.publishDate.toISOString().slice(0,10)}>{post.data.publishDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</time></span>
         <h2>{post.data.title}</h2>
         <p>{post.data.description}</p>
       </a>

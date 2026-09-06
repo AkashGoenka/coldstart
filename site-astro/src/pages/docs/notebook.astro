@@ -5,8 +5,8 @@ import Nav from '../../components/Nav.astro';
 import Footer from '../../components/Footer.astro';
 import DocsSidebar from '../../components/DocsSidebar.astro';
 import '../../styles/tailwind.css';
+import '../../styles/tokens.css';
 import '../../styles/docs.css';
-import '../../styles/backdrop.css';
 
 const techArticleJsonLd = {
   '@context': 'https://schema.org',
@@ -84,7 +84,7 @@ const techArticleJsonLd = {
       <p>Sometimes you know a moment is worth recording before the automatic score crosses — a hard-won insight, a confirmed absence, a decision that didn't touch many files. <code>/capture-notes</code> fires the capture flow immediately, with the same worklist and gate. It never forces a write.</p>
       <p style="margin-top:12px"><code>coldstart init</code> wires it for your client: <b>Claude Code</b> and <b>Cursor</b> get a <code>/capture-notes</code> slash command; <b>Codex</b> gets a <code>capture-notes</code> skill. All three run the same one-liner, so it also works by hand:</p>
       <div class="term">
-        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">capture on demand</span></div>
+        <div class="term-bar"><span class="title">capture on demand</span></div>
         <div class="term-body">
 <span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">node &lt;install&gt;/hooks/kb-elicit.mjs</span> <span class="c-flag">--manual</span>   <span class="c-dim"># prints the capture checklist for this session</span></span>
         </div>
@@ -93,7 +93,7 @@ const techArticleJsonLd = {
       <h4 class="subhead"><code>.coldstartignore</code> — files that never get notes</h4>
       <p><code>coldstart init</code> scaffolds <code>.coldstart/.coldstartignore</code> (gitignore syntax). Built-in defaults are <code>*.json</code>, lockfiles, <code>dist/</code>/<code>build/</code>/<code>coverage/</code>, minified files, binaries and images, and <code>.env*</code> (notes are committed; secrets must never enter them). Every collaborator gets that baseline; lines you add extend it on your machine.</p>
       <div class="term" style="margin-top:14px">
-        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">.coldstart/.coldstartignore</span></div>
+        <div class="term-bar"><span class="title">.coldstart/.coldstartignore</span></div>
         <div class="term-body">
 <span class="ln"><span class="c-dim"># add your own</span></span>
 <span class="ln">*.generated.ts</span>
@@ -112,7 +112,7 @@ const techArticleJsonLd = {
         <div class="desc">Search the notebook with plain task words, symbols, or file names. Returns ranked notes — the mid-task tool when your vocabulary shifts.</div>
       </div>
       <div class="term">
-        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">coldstart kb search</span></div>
+        <div class="term-bar"><span class="title">coldstart kb search</span></div>
         <div class="term-body">
 <span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart kb search</span> tile save lifecycle</span>
 <span class="gap"></span>
@@ -129,7 +129,7 @@ const techArticleJsonLd = {
         <div class="desc">Everything known at one exact address. Run it before editing a file to pull the note (and per-symbol facets) that apply to exactly that path.</div>
       </div>
       <div class="term">
-        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">coldstart kb lookup</span></div>
+        <div class="term-bar"><span class="title">coldstart kb lookup</span></div>
         <div class="term-body">
 <span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart kb lookup</span> src/models.py Tile</span>
         </div>
@@ -168,7 +168,7 @@ const techArticleJsonLd = {
         <div class="desc">Generate a single self-contained HTML browser of the whole notebook and open it in your default browser. No server — one file, freshness stamped at generation time.</div>
       </div>
       <div class="term">
-        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">coldstart kb view</span></div>
+        <div class="term-bar"><span class="title">coldstart kb view</span></div>
         <div class="term-body">
 <span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart kb view</span></span>
 <span class="ln"><span class="c-hit">✓</span> <span class="c-dim">kb view: wrote .coldstart/notebook/index.html — opening in browser</span></span>
@@ -199,7 +199,7 @@ const techArticleJsonLd = {
       <h2>Sharing with a team</h2>
       <p>The notebook is <b>private by default</b> — <code>.coldstart/</code> is gitignored. Opt in to sharing and the whole team's agents contribute to one growing corpus.</p>
       <div class="term">
-        <div class="term-bar"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="title">share the notebook</span></div>
+        <div class="term-bar"><span class="title">share the notebook</span></div>
         <div class="term-body">
 <span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart init</span> <span class="c-flag">--commit-notebook</span>   <span class="c-dim"># make .raw committable</span></span>
 <span class="ln"><span class="c-prompt">$</span> <span class="c-cmd">coldstart kb commit</span>              <span class="c-dim"># publish notes to git</span></span>
