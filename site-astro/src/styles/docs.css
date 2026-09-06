@@ -212,6 +212,16 @@ a.fcard:hover { border-color: color-mix(in srgb, var(--frost) 45%, var(--line));
 .content h1 { font-family: var(--display); font-weight: 500; font-size: clamp(30px, 5vw, 40px); letter-spacing: -.01em; line-height: 1.1; }
 .content h2 { font-family: var(--display); font-weight: 500; font-size: clamp(21px, 3vw, 26px); letter-spacing: -.01em; }
 .content > p, .doc-sec > p, .prose p { color: var(--muted); font-size: 16px; margin-top: 14px; }
+/* Subsection heads inside a doc section. Sans, not the Newsreader display
+   face the h2s use - an h3 here is a shelf label, not another headline, and
+   the weight change alone is enough to rank it under the h2. This exists
+   because the install section was one 130-word paragraph plus two visually
+   identical flag tables, the second of which was not flags at all. */
+.doc-sec h3 { font-family: var(--sans); font-weight: 600; font-size: 15px; color: var(--ink); margin-top: 30px; }
+.doc-sec h3 + .flags { margin-top: 12px; }
+.doc-sec h3 + .term { margin-top: 12px; }
+.doc-sec h3 + p { margin-top: 10px; }
+
 .content p a, .doc-sec p a, .prose p a, .doc-sec li a { color: var(--frost); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--frost) 35%, transparent); text-underline-offset: 2px; }
 .content p a:hover, .doc-sec p a:hover, .prose p a:hover, .doc-sec li a:hover { text-decoration-color: currentColor; }
 .prose p + p { margin-top: 12px; }
