@@ -1,8 +1,10 @@
-/* The shared footer rides along here on purpose. Every page shell already
-   imports this file, and a per-page footer import would be a third thing a
-   new page can silently forget - /live/ shipped without this very file once.
-   footer.css defines no tokens, so being hoisted above the :root below is
-   harmless. */
+/* footer.css is ALSO imported directly by landing.css and docs.css, the
+   two page-shell stylesheets that DON'T import this file — this file
+   alone was not the universal footer carrier the original comment here
+   claimed: only demo/, live/, and BlogPostLayout import it, while every
+   page renders <Footer/>. A page that imports both this file and
+   landing.css/docs.css (demo, live, blog posts) gets footer.css twice;
+   harmless since the rules are identical, just redundant parsing. */
 @import "./footer.css";
 
 /* ============================================================

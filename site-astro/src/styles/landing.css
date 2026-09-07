@@ -3,6 +3,7 @@
    temperature = concept: frost = the cold exact index, ember = the warm memory.
    ============================================================ */
 @import './tokens.css';
+@import './footer.css';
 
 /* ============================================================
    THE FIELD — frost bleeding from left, ember from right, over dark ramp.
