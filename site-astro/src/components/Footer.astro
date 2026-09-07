@@ -1,7 +1,7 @@
 ---
-// Styling lives in styles/footer.css, which is pulled in by backdrop.css —
-// so a page gets the footer's chrome from the same import that gives it the
-// background field. See the comment at the top of footer.css.
+// Styling lives in styles/footer.css, imported by all three page-shell
+// stylesheets (landing.css, docs.css, backdrop.css) so every page that
+// renders this component gets it without a fourth per-page import.
 interface Props { variant?: 'home' | 'docs' | 'blog' | 'how' | 'live' }
 const { variant = 'docs' } = Astro.props;
 
