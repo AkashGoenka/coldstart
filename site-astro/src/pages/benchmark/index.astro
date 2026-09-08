@@ -321,6 +321,16 @@ const jsonLd = {
   .how-sec > .wrap > p { color: var(--muted); font-size: 16.5px; }
   /* The closing line of a section: quieter than body copy, no rule above it. */
   .sec-tail { margin-top: 26px; color: var(--muted); font-size: 16.5px; max-width: 680px; }
+
+  /* ONE body measure. how.css stacks several - .wrap 940, .flags 892,
+     .how-sec-head/.how-aside 680 - which is fine on /vs/vector-rag/ where wide
+     figures fill the container, but this page is prose plus six table blocks,
+     so every paragraph ended ~210px short of the rule beneath it and the column
+     read as a phone layout stranded in a desktop window. Bring the tables to the
+     prose measure rather than narrowing .wrap: the wrap is what puts this page's
+     left edge in the same place as /how-it-works/ and /vs/vector-rag/, so a
+     reader moving between them doesn't see the text jump sideways. */
+  .how-sec .flags, .how-sec .flag-row { max-width: 680px; }
 </style>
 </body>
 </html>
