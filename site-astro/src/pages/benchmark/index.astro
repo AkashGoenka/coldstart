@@ -1,0 +1,326 @@
+---
+import Head from '../../layouts/Head.astro';
+import SvgDefs from '../../components/SvgDefs.astro';
+import Nav from '../../components/Nav.astro';
+import Footer from '../../components/Footer.astro';
+import '../../styles/tailwind.css';
+import '../../styles/tokens.css';
+import '../../styles/docs.css';
+import '../../styles/how.css';
+
+const title = 'How we benchmark codebase memory, and how you can | coldstart';
+const description =
+  'The method behind our numbers: where the questions come from, how ground truth is derived, and the training-data bias that made us throw our first benchmark away. Reusable for any skill, rules file, or tool.';
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'TechArticle',
+  headline: 'How we benchmark codebase memory, and how you can',
+  description,
+  url: 'https://coldstartmcp.dev/benchmark/',
+  author: { '@type': 'Person', name: 'Akash Goenka' },
+  publisher: { '@type': 'Organization', name: 'coldstart' },
+  about: 'Benchmarking AI coding agent tools',
+  proficiencyLevel: 'Beginner',
+};
+---
+<html lang="en">
+<head>
+  <Head
+    title={title}
+    description={description}
+    keywords="benchmark AI coding agent, token usage benchmark, codebase memory, measuring agent tools, training data contamination, benchmark methodology, agent token savings"
+    canonicalPath="/benchmark/"
+    ogType="article"
+    ogTitle="How we benchmark codebase memory, and how you can"
+    ogDescription="Where the questions come from, how ground truth is derived, and the training-data bias that made us throw our first benchmark away."
+    themeColor="#070a11"
+  />
+  <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+</head>
+<body class="how-page">
+<SvgDefs />
+<Nav variant="how" />
+
+<!-- ===================== HERO ===================== -->
+<header class="how-hero">
+  <div class="wrap">
+    <div class="how-eyebrow">Benchmark method</div>
+    <h1>We threw our first benchmark away. Here's the one that replaced it.</h1>
+    <p class="lead">
+      Every tool in this category publishes a percentage. Almost none of them publish the questions,
+      the answers, or the runs those percentages came from, which makes the percentage
+      unfalsifiable and therefore worthless. This page is the method behind ours: where the
+      questions come from, how the right answer is decided, what we throw out, and the measurement
+      problem that invalidated our own first set of numbers. It works on any skill, rules file, or
+      tool, not just this one.
+    </p>
+    <a class="how-back" href="/">← back to the overview</a>
+  </div>
+</header>
+
+<!-- ===================== 1. WHAT IS MEASURED ===================== -->
+<section class="how-sec">
+  <div class="wrap">
+    <div class="how-sec-head">
+      <h2>What gets measured: finding the files, not finishing the job</h2>
+      <p>
+        An agent's session splits into two phases. First it works out <i>which files matter</i>.
+        Then it reads, reasons and edits. Only the first phase is what a navigation or memory tool
+        changes. The second is the same work in both arms, so including it adds cost to both sides
+        equally and dilutes the thing being measured.
+      </p>
+    </div>
+
+    <div class="flags">
+      <div class="flag-row">
+        <span class="fk">The task</span>
+        <span class="fv">Every prompt is an exploration question. The deliverable is a list of file
+        paths, never a code change, and the output contract says so.</span>
+      </div>
+      <div class="flag-row">
+        <span class="fk">Ground truth</span>
+        <span class="fv">The source files touched by the pull request that closed the issue, filtered
+        to extensions the tool can parse. Mechanical, so scoring is reproducible rather than
+        hand-graded.</span>
+      </div>
+      <div class="flag-row">
+        <span class="fk">Reported</span>
+        <span class="fv">Whole-session token usage and turn count for the arm, alongside how many
+        gold files it actually named. Cost without a correctness number rewards a tool for giving
+        up early.</span>
+      </div>
+    </div>
+
+    <div class="how-aside">
+      <b>Why whole-session, not per-call.</b> Roughly 90% of what a session costs is cached context
+      replayed on every turn, so a tool that trims one tool result while adding a turn can make its
+      own output smaller and your bill larger. The only honest denominator is the whole session.
+      <a href="/blog/why-most-token-savings-tools-lie/">The long version is here.</a>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 2. WHERE THE QUESTIONS COME FROM ===================== -->
+<section class="how-sec">
+  <div class="wrap">
+    <div class="how-sec-head">
+      <h2>The questions have to be written by someone who didn't know the answer</h2>
+      <p>
+        This is the part that decides whether a benchmark measures anything. If the prompt names the
+        file, both arms find it instantly and the experiment is over before it starts. Commit
+        messages and PR descriptions are written <i>afterwards, by the person who did the work</i>,
+        so they name classes and paths as a matter of course. We tried mining them and threw the
+        approach out.
+      </p>
+      <p>
+        Issue bodies have the opposite property. They are written by someone describing a symptom
+        before anyone knows where the cause lives, so they carry the domain vocabulary without the
+        map. That structural fact, not careful editing, is what keeps the prompts honest.
+      </p>
+    </div>
+
+    <div class="flags">
+      <div class="flag-row">
+        <span class="fk">1 · select</span>
+        <span class="fv">Closed issues with a linked merged PR. The PR must touch at least 2 and at
+        most 8 source files: one-file fixes reward grep rather than navigation, and mass refactors
+        make the overlap score meaningless.</span>
+      </div>
+      <div class="flag-row">
+        <span class="fk">2 · scrub</span>
+        <span class="fv">Strip file paths, stack frames, code blocks, image embeds and issue
+        references from the body. What survives should still say what is broken, and not where.</span>
+      </div>
+      <div class="flag-row">
+        <span class="fk">3 · reshape</span>
+        <span class="fv">Rewrite the report as an exploration question, preserving the author's own
+        vocabulary and introducing no new terms. Both the original and the rewrite are saved so the
+        pass is auditable.</span>
+      </div>
+      <div class="flag-row">
+        <span class="fk">4 · drop</span>
+        <span class="fv">Discard anything too vague to navigate from, or that lost too much of its
+        body to scrubbing, which is the signature of an issue that was over-specific to begin
+        with.</span>
+      </div>
+    </div>
+
+    <p class="sec-tail">
+      Roughly a third of candidates do not survive. The dropped ones are published with their
+      reasons, because an exclusion log you can read is the only evidence that the surviving set
+      wasn't chosen to flatter the result.
+    </p>
+  </div>
+</section>
+
+<!-- ===================== 3. THE BIAS FINDING ===================== -->
+<section class="how-sec">
+  <div class="wrap">
+    <div class="how-sec-head">
+      <h2>The problem that invalidated our first benchmark</h2>
+      <p>
+        Our first set of numbers came from Kafka, Django and Mastodon. Reasonable choices: large,
+        real, well-structured. They are also three of the most-discussed codebases on the internet,
+        which turns out to matter more than any of their engineering properties.
+      </p>
+      <p>
+        The test is simple and anyone can run it. Take the baseline arm, the one with no tool
+        installed, and look at its <i>first</i> move, before it has read a single file. Extract the
+        internal class names it used. Subtract anything the prompt itself supplied. Whatever is left
+        did not come from the codebase, because the agent hadn't looked at the codebase yet. It came
+        from the model's memory of that project.
+      </p>
+    </div>
+
+    <div class="flags">
+      <div class="flag-row">
+        <span class="fk">Kafka</span>
+        <span class="fv"><b>21 of 25 sessions (84%)</b> named internal class names before opening a
+        file.</span>
+      </div>
+      <div class="flag-row">
+        <span class="fk">Django</span>
+        <span class="fv"><b>7 of 14 (50%)</b>.</span>
+      </div>
+      <div class="flag-row">
+        <span class="fk">Mastodon</span>
+        <span class="fv"><b>6 of 18 (33%)</b>.</span>
+      </div>
+    </div>
+
+    <p>
+      This does not merely add noise. It bends the result in a specific direction. Prior knowledge
+      makes the <i>baseline</i> cheaper, because an agent that already knows where to look skips the
+      exploration it would otherwise pay for. So the better the model knows your benchmark repo, the
+      smaller any tool's improvement appears.
+    </p>
+    <p>
+      Our own savings ranked Mastodon 43%, Django 28%, Kafka 15%, which is the exact inverse of the
+      leak rates above. The ranking we had been reading as a fact about languages and codebase
+      structure was substantially a fact about what the model had already read.
+    </p>
+
+    <div class="how-aside">
+      <b>What we did about it.</b> Renaming the repos to defeat recognition needs AST-consistent
+      rewrites across declarations, imports, build config and tests, and a surface-level rename
+      corrupts the baseline instead of cleaning it. So we retired those three repos and rebuilt the
+      benchmark on four less-discussed codebases. The old numbers are not on this site because we no
+      longer believe them.
+    </div>
+
+    <p class="sec-tail">
+      If you are reading someone else's benchmark, this is the first question to ask, and it applies
+      to every tool in this category including ours. A result measured on a famous repository is
+      measuring the model's memory as much as the tool.
+    </p>
+  </div>
+</section>
+
+<!-- ===================== 4. THE NUMBERS ===================== -->
+<section class="how-sec">
+  <div class="wrap">
+    <div class="how-sec-head">
+      <h2>What it says about coldstart</h2>
+      <p>
+        Two repositories, JMRI (Java) and Arches (Python), run under the method above. These are not
+        large improvements, and publishing them next to the method that produced them is the point.
+      </p>
+    </div>
+
+    <!-- TODO(numbers): fill from the run summaries before publishing. Do not
+         estimate these. Each row needs the arm definitions, n, and the run count. -->
+    <div class="flags">
+      <div class="flag-row"><span class="fk">JMRI · Java</span><span class="fv">__ prompts, __ runs per arm. Exploration cost __%, gold-file recall __%.</span></div>
+      <div class="flag-row"><span class="fk">Arches · Python</span><span class="fv">__ prompts, __ runs per arm. Exploration cost __%, gold-file recall __%.</span></div>
+    </div>
+
+    <p class="sec-tail">
+      Both sets of prompts, their gold files, and the dropped candidates with reasons are published
+      alongside the tooling, so the run is repeatable against our own artifacts.
+    </p>
+  </div>
+</section>
+
+<!-- ===================== 5. RUN IT YOURSELF ===================== -->
+<section class="how-sec">
+  <div class="wrap">
+    <div class="how-sec-head">
+      <h2>Run it on something that isn't ours</h2>
+      <p>
+        Nothing here is specific to coldstart. The same setup measures a skill, a rules file, an MCP
+        server, or a change to your own prompt. Two copies of one repository, the thing under test
+        installed in exactly one of them, the same questions asked in both, one session per question
+        so that a later prompt never rides on an earlier one's context.
+      </p>
+    </div>
+
+    <div class="flags">
+      <div class="flag-row">
+        <span class="fk">Measuring</span>
+        <span class="fv"><a href="https://github.com/AkashGoenka/convotokens">convotokens</a> reads
+        your own local transcripts and reports whole-session tokens and turns, including subagents.
+        No network calls, no dollar estimates.</span>
+      </div>
+      <div class="flag-row">
+        <span class="fk">One prompt, one session</span>
+        <span class="fv">Otherwise the third question is cheap because the first two already loaded
+        the context, and you are measuring conversation order.</span>
+      </div>
+      <div class="flag-row">
+        <span class="fk">Same model, both arms</span>
+        <span class="fv">Including subagents. A mixed-model arm compared against a single-model arm
+        is measuring the models.</span>
+      </div>
+      <div class="flag-row">
+        <span class="fk">Repeat before believing</span>
+        <span class="fv">Agent runs vary. Run one arm several times unchanged and look at the spread
+        before treating any difference between arms as real.</span>
+      </div>
+    </div>
+
+    <div class="how-aside">
+      <b>A private codebase is the best substrate available.</b> The bias above cannot exist in a
+      repository the model has never seen. If you are evaluating a tool for your team, running it on
+      your own closed code gives you a cleaner experiment than any public benchmark can.
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 6. WHAT WE DON'T CLAIM ===================== -->
+<section class="how-sec">
+  <div class="wrap">
+    <div class="how-sec-head">
+      <h2>What this does not tell you</h2>
+    </div>
+    <div class="flags">
+      <div class="flag-row"><span class="fk">Not task completion</span><span class="fv">It measures locating the right files. Whether the eventual patch was good is a different experiment.</span></div>
+      <div class="flag-row"><span class="fk">Not your codebase</span><span class="fv">Two repositories in two languages. Your layout, conventions and history will move the number in either direction.</span></div>
+      <div class="flag-row"><span class="fk">Not a dollar figure</span><span class="fv">Token counts are usage, not billing. Subscription pricing makes any dollar conversion an invention.</span></div>
+    </div>
+
+    <p class="sec-tail">
+      The two essays this method came out of go further into how a benchmark misleads its own author:
+      <a href="/blog/why-most-token-savings-tools-lie/">why most token-savings numbers lie</a> and
+      <a href="/blog/how-your-own-benchmark-lies-to-you-first/">how your own benchmark lies to you first</a>.
+    </p>
+  </div>
+</section>
+
+<hr class="thread" />
+<Footer variant="how" />
+
+<style>
+  /* how.css only ever styled single-paragraph section heads, so consecutive
+     paragraphs collapse into one block. Page-scoped rather than edited into
+     how.css, which four other pages depend on. */
+  .how-sec-head p + p, .how-sec > .wrap > p + p { margin-top: 14px; }
+  .how-sec > .wrap > p { color: var(--muted); font-size: 16.5px; }
+  /* The closing line of a section: quieter than body copy, no rule above it. */
+  .sec-tail { margin-top: 26px; color: var(--muted); font-size: 16.5px; max-width: 680px; }
+</style>
+</body>
+</html>
