@@ -54,7 +54,9 @@
   --muted:#ccd2da;  /* secondary prose, leads, list bodies */
   --faint:#a3a9b2;  /* labels, captions, meta, axis ticks */
   --ink:var(--text);    /* docs.css name for --text */
-  --prose:var(--muted); /* essay name for body prose */
+  --prose:var(--text);  /* essay body prose. Was --muted, which left every
+                           blog post's body grey while the rest of the site
+                           went white. Diagram line art uses --muted directly. */
 }
 
 body::before{

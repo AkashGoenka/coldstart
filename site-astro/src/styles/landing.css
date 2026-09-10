@@ -338,7 +338,7 @@ h1.title .cold{color:var(--frost);}
 @media(max-width:640px){.keynote{flex-direction:column;gap:10px;}}
 .nb-foot{margin-top:40px;max-width:64ch;margin-inline:auto;text-align:center;}
 .nb-foot .big{font-family:var(--mono);font-size:clamp(17px,2.2vw,21px);letter-spacing:-.02em;line-height:1.4;color:var(--text);}
-.nb-foot .sm{margin-top:13px;font-size:14.5px;color:var(--muted);}
+.nb-foot .sm{margin-top:13px;font-size:14.5px;color:var(--text);}
 .nb-foot b{color:var(--ember);font-weight:600;}
 
 /* ---------- PHILOSOPHY / why it works ---------- */
