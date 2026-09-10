@@ -265,7 +265,7 @@ p code, li code, .prose code { font-size: 13.5px; background: rgba(239,148,72,.0
 .tcard { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 18px; }
 .tcard .tt { font-family: var(--mono); font-size: 13px; font-weight: 700; }
 .tcard.file .tt { color: var(--ember); } .tcard.flow .tt { color: var(--frost); } .tcard.lesson .tt { color: var(--ink); }
-.tcard p { font-size: 13.5px; color: var(--muted); margin-top: 7px; }
+.tcard p { font-size: 13.5px; color: var(--text); margin-top: 7px; }
 
 ul.tight { margin: 14px 0 0; padding-left: 20px; color: var(--text); font-size: 15px; }
 ul.tight li { margin-top: 8px; }
@@ -591,7 +591,7 @@ body.essay-page .term { border-color: var(--term-border); }
   font-family: var(--sans);
   font-size: 15px;
   line-height: 1.55;
-  color: var(--muted);
+  color: var(--text);
   text-align: left;
   /* tied to --measure, never a literal: the caption must share the prose
      left edge, and a fixed width silently indents it whenever --measure moves */
