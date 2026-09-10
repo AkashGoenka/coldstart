@@ -10,7 +10,7 @@ import '../../styles/how.css';
 
 const title = 'How I benchmark codebase memory, and how you can | coldstart';
 const description =
-  'The method behind my numbers: where the questions come from, how the right answer gets decided, and the training-data problem that made me throw my first benchmark away. Run it on any skill, rules file, or tool.';
+  'The method behind my numbers: questions taken from issue reports, right answers taken from the commits that closed them, and the training-data problem that made me throw my first benchmark away. Run it on any skill, rules file, or tool.';
 
 const jsonLd = {
   '@context': 'https://schema.org',
@@ -33,7 +33,7 @@ const jsonLd = {
     canonicalPath="/benchmark/"
     ogType="article"
     ogTitle="How I benchmark codebase memory, and how you can"
-    ogDescription="Where the questions come from, how the right answer gets decided, and the training-data problem that made me throw my first benchmark away."
+    ogDescription="Questions from issue reports, answers from the commits that closed them, and the training-data problem that made me throw my first benchmark away."
     themeColor="#070a11"
   />
   <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
@@ -51,14 +51,13 @@ const jsonLd = {
     <div class="how-eyebrow">Benchmark method</div>
     <h1>I threw my first benchmark away. This is the one that replaced it.</h1>
     <p class="lead">
-      My first set of numbers came from Kafka, Django and Mastodon, and they were wrong in a way I
-      couldn't see until I went looking for it. Not wrong by a little. Wrong because the model had
-      already read those codebases, so the arm with no tool installed was being helped by something
-      I wasn't measuring. This page is the method I rebuilt after that: where the questions come
-      from, how the right answer gets decided, what I throw away, and how you can run the same thing
-      on a skill or a rules file or a tool that has nothing to do with mine.
+      This page is the method I used to measure whether coldstart actually saves tokens, and the
+      things that went wrong on the way. My first attempt ran on Kafka, Django and Mastodon, and the
+      numbers it produced were wrong in a way I couldn't see until I went looking. The rebuild is now
+      a separate tool you can point at your own repository, so you can check a skill, a rules file or
+      an MCP server without taking my word for anything.
     </p>
-    <a class="how-back" href="/">← back to the overview</a>
+    <a class="how-back" href="/">&#8592; back to the overview</a>
   </div>
 </header>
 
@@ -68,11 +67,11 @@ const jsonLd = {
     <div class="how-sec-head">
       <h2>What gets measured: finding the files, not finishing the job</h2>
       <p>
-        A session has two halves. The agent works out which files matter, and then it reads,
-        reasons and edits them. Only the first half is what a navigation or memory tool touches. The
-        second half is the same work whichever setup you're running, so measuring it adds the same
-        cost to both sides and makes the difference between them look smaller than it is. So every
-        question here asks the agent to find files, and stops there.
+        A session has two halves. The agent works out which files matter, and then it reads, reasons
+        and edits them. Only the first half is what a navigation tool touches. The second half is the
+        same work whichever setup you're running, so measuring it adds the same cost to both sides
+        and makes the difference between them look smaller than it is. So every question here asks
+        the agent to find files, and stops there.
       </p>
     </div>
 
@@ -80,7 +79,7 @@ const jsonLd = {
       <div class="flag-row">
         <span class="fk">The task</span>
         <span class="fv">Every prompt asks where something lives, not for a fix. The answer is a
-        list of file paths, and the instructions say so, because an agent handed a bug report will
+        list of file paths, written to a known location, because an agent handed a bug report will
         start editing if you let it.</span>
       </div>
       <div class="flag-row">
@@ -107,76 +106,31 @@ const jsonLd = {
   </div>
 </section>
 
-<!-- ===================== 2. WHERE THE QUESTIONS COME FROM ===================== -->
+<!-- ===================== 2. THE FIRST ATTEMPT ===================== -->
 <section class="how-sec">
   <div class="wrap">
     <div class="how-sec-head">
-      <h2>The questions have to be written by someone who didn't know the answer</h2>
+      <h2>The first attempt, and why the numbers were fiction</h2>
       <p>
-        This is the part that decides whether the whole thing measures anything. If the prompt names
-        the file, both setups find it straight away and there is nothing left to compare. I tried
-        generating questions from commit messages and pull request descriptions first, and threw that
-        out. They're written afterwards by the person who did the work, so they name classes and
-        paths without thinking about it.
+        The first version was straightforward. I pointed an agent at a repository, let it skim the
+        code and read commit messages, and had it write questions from what it found. Then I ran those
+        questions on Kafka, Django and Mastodon. Large, real, well organised codebases. They are also
+        three of the most written-about projects on the internet, and that turned out to matter more
+        than anything about how they're built.
       </p>
       <p>
-        Issue reports are the opposite. Someone writes them while describing a symptom, before
-        anyone knows where the cause lives, so they use the project's own vocabulary without pointing
-        at a file. That's why they work. It isn't careful editing on my part, it's who was holding
-        the pen.
-      </p>
-    </div>
-
-    <div class="flags">
-      <div class="flag-row">
-        <span class="fk">1 · select</span>
-        <span class="fv">Closed issues whose pull request was merged, touching between two and eight
-        source files. One-file fixes are just a grep. Fifty-file refactors make the overlap score
-        meaningless.</span>
-      </div>
-      <div class="flag-row">
-        <span class="fk">2 · scrub</span>
-        <span class="fv">Take out file paths, stack frames, code blocks, screenshots and issue
-        numbers. What's left should still say what's broken, and not where it lives.</span>
-      </div>
-      <div class="flag-row">
-        <span class="fk">3 · reshape</span>
-        <span class="fv">Turn the report into a question about where something lives, keeping the
-        author's words and adding none of my own. The original and the rewrite are both saved, so
-        anyone can check what changed.</span>
-      </div>
-      <div class="flag-row">
-        <span class="fk">4 · drop</span>
-        <span class="fv">Throw away anything too vague to navigate from, and anything that lost most
-        of itself in the previous step, which is what happens when an issue was really just a
-        pointer to a file.</span>
-      </div>
-    </div>
-
-    <p class="sec-tail">
-      A lot of candidates don't survive that, and on one repository more were thrown out than kept.
-      The discarded ones get published with the reason attached, because a list of what I removed is
-      the only way you can tell that what's left wasn't picked to make the result look good.
-    </p>
-  </div>
-</section>
-
-<!-- ===================== 3. THE BIAS FINDING ===================== -->
-<section class="how-sec">
-  <div class="wrap">
-    <div class="how-sec-head">
-      <h2>The problem that invalidated my first benchmark</h2>
-      <p>
-        Kafka, Django and Mastodon looked like good choices. Large, real, well organised. They are
-        also three of the most written-about codebases on the internet, and that turned out to matter
-        more than anything about how they're built.
+        Claude has read all three. So the agent would take a question, already know roughly where the
+        answer lived, and go straight to coldstart with the exact identifiers that happen to match the
+        real filenames. It would get the right files back, read them, read the neighbours to be sure,
+        and produce a correct answer. That looks like the tool working. It isn't. The agent was using
+        the tool to confirm what it already remembered, and the questions themselves had been written
+        by an agent that had read the code, so they pointed at the answer too.
       </p>
       <p>
-        The test is simple enough that you can run it on your own results. Take the arm with no tool
-        installed and look at its first move, before it has opened a single file. Pull out the
-        internal class names it used. Subtract anything the prompt gave it. Whatever is left didn't
-        come from the codebase, because the agent hadn't looked at the codebase yet. It came from the
-        model already knowing the project.
+        You can test for this in your own results without rerunning anything. Take the arm with no
+        tool installed, look at its very first move, before it has opened a single file, and pull out
+        the internal class names it used. Subtract anything the prompt handed it. Whatever is left
+        didn't come from the codebase, because the agent hadn't looked at the codebase yet.
       </p>
     </div>
 
@@ -197,30 +151,80 @@ const jsonLd = {
     </div>
 
     <p>
-      This isn't noise that averages out. It pushes the result one way. Knowing the codebase makes
-      the no-tool arm cheaper, because an agent that already knows where to look skips the searching
-      it would otherwise pay for. The better the model knows your benchmark repository, the smaller
-      any tool's improvement is going to look.
-    </p>
-    <p>
-      My savings on those three ranked Mastodon 43%, Django 28%, Kafka 15%, which is the leak rates
-      above in reverse. I had been reading that ranking as something about languages and codebase
-      structure. Most of it was about what the model had already read.
+      This isn't noise that averages out. It pushes the result one way. Knowing the codebase makes the
+      no-tool arm cheaper, because an agent that already knows where to look skips the searching it
+      would otherwise pay for. My savings on those three ranked Mastodon 43%, Django 28%, Kafka 15%,
+      which is the leak rates above in reverse. I had been reading that ranking as something about
+      languages and codebase structure. Most of it was about what the model had already read.
     </p>
 
     <div class="how-aside">
-      <b>What I did about it.</b> Renaming everything to stop the model recognising it needs
-      consistent rewrites across declarations, imports, build config and tests, and a half-done
-      rename leaves the no-tool arm grepping for names that no longer match, which corrupts the
-      measurement rather than cleaning it. So I retired those three repositories and rebuilt on four
-      that get written about less. The old numbers aren't anywhere on this site, because I don't
-      believe them.
+      <b>Renaming the codebase doesn't fix it.</b> Stopping the model recognising a project needs
+      consistent rewrites across declarations, imports, build config and tests, and a half-done rename
+      leaves the no-tool arm grepping for names that no longer match, which corrupts the measurement
+      rather than cleaning it. So I retired those three repositories. The old numbers aren't anywhere
+      on this site, because I don't believe them.
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 3. THE REBUILD ===================== -->
+<section class="how-sec">
+  <div class="wrap">
+    <div class="how-sec-head">
+      <h2>The rebuild: questions from issues, answers from commits</h2>
+      <p>
+        Two things had to change. Smaller, less written-about repositories, so the model isn't
+        recalling instead of searching. And questions written by someone who didn't know the answer.
+      </p>
+      <p>
+        Issue reports solve the second one on their own. An issue is filed before a solution exists,
+        by someone describing a symptom, so it uses the project's own vocabulary without pointing at a
+        file. Nobody had to be careful about it. It's just who was holding the pen and when. Commit
+        messages and pull request descriptions are the opposite: written afterwards, by the person who
+        did the work, naming classes and paths without thinking about it. That's what my first version
+        was built on.
+      </p>
+      <p>
+        The answer comes from the same place the question does. Every issue I use is closed by a
+        merged pull request, and the source files that pull request changed are the files a correct
+        answer had to name. That's ground truth taken from the repository's own history rather than
+        from my judgement, and it works on any repository with git history, including a private one.
+      </p>
+    </div>
+
+    <div class="flags">
+      <div class="flag-row">
+        <span class="fk">1 &#183; select</span>
+        <span class="fv">Closed issues whose pull request was merged, touching between two and eight
+        source files. One-file fixes are just a grep. Fifty-file refactors make the overlap score
+        meaningless.</span>
+      </div>
+      <div class="flag-row">
+        <span class="fk">2 &#183; scrub</span>
+        <span class="fv">Take out file paths, stack frames, code blocks, screenshots and issue
+        numbers. What's left should still say what's broken, and not where it lives.</span>
+      </div>
+      <div class="flag-row">
+        <span class="fk">3 &#183; reshape</span>
+        <span class="fv">Turn the report into a question about where something lives, keeping the
+        author's words and adding none of my own. The original and the rewrite are both saved, so
+        anyone can check what changed.</span>
+      </div>
+      <div class="flag-row">
+        <span class="fk">4 &#183; drop</span>
+        <span class="fv">Throw away anything too vague to navigate from, and anything that lost most
+        of itself in the scrub, which is what happens when an issue was really just a pointer to a
+        file.</span>
+      </div>
     </div>
 
     <p class="sec-tail">
-      If you're reading someone else's benchmark, this is the first thing to ask about it, and it
-      applies to mine as much as anyone's. A result measured on a famous repository is measuring what
-      the model remembers as much as what the tool does.
+      A lot of candidates don't survive that, and on one repository more were thrown out than kept.
+      The discarded ones get published with the reason attached, because a list of what I removed is
+      the only way you can tell that what's left wasn't picked to make the result look good. The whole
+      procedure is now its own repository, <a href="https://github.com/AkashGoenka/coldbench">coldbench</a>,
+      because it has nothing to do with coldstart and shouldn't live inside it.
     </p>
   </div>
 </section>
@@ -232,24 +236,30 @@ const jsonLd = {
       <h2>What it says about coldstart</h2>
       <p>
         Two repositories run under the method above. Arches is a Python and Django application. JMRI
-        is Java, considerably more verbose per file and with a heavier build surface. Same method,
-        same tool, same day.
+        is Java, considerably more verbose per file and with a heavier build surface. Two arms each:
+        one plain Claude Code with the search tools it ships with, one with coldstart installed and
+        nothing else changed. Same questions, same model, one fresh session per question.
       </p>
     </div>
 
     <div class="flags">
-      <div class="flag-row"><span class="fk">Arches · Python</span><span class="fv"><b>64% fewer tokens</b> than the no-tool baseline across 27 queries, with recall two points better, because the baseline sometimes ran out of turns before finding the right file at all.</span></div>
-      <div class="flag-row"><span class="fk">JMRI · Java</span><span class="fv"><b>31% fewer tokens</b> across 25 queries, with recall at parity. The first run said 39%, on a machine that was doing other work at the time. Rerun in isolation it came out eight points lower, and 31% is the number.</span></div>
+      <div class="flag-row"><span class="fk">Arches &#183; Python</span><span class="fv"><b>64% fewer tokens</b> than the no-tool baseline across 27 queries, with recall two points better, because the baseline sometimes ran out of turns before finding the right file at all.</span></div>
+      <div class="flag-row"><span class="fk">JMRI &#183; Java</span><span class="fv"><b>31% fewer tokens</b> across 25 queries, with recall at parity. The first run said 39%, on a machine that was doing other work at the time. Rerun in isolation it came out eight points lower, and 31% is the number.</span></div>
     </div>
 
-    <p class="sec-tail">
+    <p>
       Those two disagree, and I'm not going to average them. One tidier figure would hide the only
       interesting thing here, which is that Java's verbosity and build tooling change what a single
-      turn costs, and that changes how much a tool which reduces turns can save you. Both query
-      lists, the files a correct answer needed, and the candidates I threw out are published, so the
-      run can be repeated against my own material.
+      turn costs, and that changes how much a tool which reduces turns can save you.
     </p>
 
+    <div class="how-aside">
+      <b>This is a number about turns.</b> Cost compounds across turns, because every turn replays
+      everything before it. So the saving lives in questions that would have taken an agent a long
+      search to answer. On something it can settle in two or three turns there is very little to take
+      away, and coldstart won't show you much. That mechanism is the subject of
+      <a href="/blog/where-the-tokens-go/">where the tokens actually go</a>.
+    </div>
   </div>
 </section>
 
@@ -261,15 +271,22 @@ const jsonLd = {
       <p>
         None of this is specific to coldstart. The same setup measures a skill, a rules file, an MCP
         server, or a change you made to your own prompt. Take two copies of one repository, install
-        the thing you're testing in exactly one of them, ask the same questions in both, and use a
-        fresh session for every question so a later prompt never rides on what an earlier one already
-        loaded.
+        the thing you're testing in exactly one of them, ask the same questions in both, and score
+        what comes back against the commits.
       </p>
     </div>
 
     <div class="flags">
       <div class="flag-row">
-        <span class="fk">Measuring</span>
+        <span class="fk">The harness</span>
+        <span class="fv"><a href="https://github.com/AkashGoenka/coldbench">coldbench</a> holds the
+        method and the scoring. It takes the answers from both arms plus your session transcripts and
+        reports recall and tokens together, along with flags for the three things that quietly ruin a
+        comparison. It's still being filled in, and the question-generation half is written up before
+        it's automated.</span>
+      </div>
+      <div class="flag-row">
+        <span class="fk">The token count</span>
         <span class="fv"><a href="https://github.com/AkashGoenka/convotokens">convotokens</a> reads
         your own transcripts off your own disk and reports tokens and turns for the whole session,
         subagents included. It makes no network calls and won't invent a dollar figure for you.</span>
@@ -280,11 +297,6 @@ const jsonLd = {
         the context, and what you've measured is the order you asked things in.</span>
       </div>
       <div class="flag-row">
-        <span class="fk">Same model, both arms</span>
-        <span class="fv">Subagents included. If one side ran a mix of models and the other didn't,
-        you've measured the models.</span>
-      </div>
-      <div class="flag-row">
         <span class="fk">Repeat before believing</span>
         <span class="fv">Agent runs vary on their own. Run one side several times without changing
         anything and look at how much it moves, before you believe a difference between the two
@@ -293,10 +305,10 @@ const jsonLd = {
     </div>
 
     <div class="how-aside">
-      <b>Your own private codebase is the best thing to run this on.</b> The problem in the section
-      above can't happen in a repository the model has never seen. If you're deciding whether a tool
-      is worth it for your team, your own closed code gives you a cleaner answer than any public
-      benchmark will.
+      <b>Your own private codebase is the best thing to run this on.</b> The problem in the first
+      section can't happen in a repository the model has never seen, and the ground truth is sitting
+      in your git history already. If you're deciding whether a tool is worth it for your team, your
+      own closed code gives you a cleaner answer than any public benchmark will.
     </div>
   </div>
 </section>
@@ -309,6 +321,7 @@ const jsonLd = {
     </div>
     <div class="flags">
       <div class="flag-row"><span class="fk">Not whether the fix was good</span><span class="fv">This measures finding the right files. Whether the patch that followed was any good is a different experiment, and I haven't run it.</span></div>
+      <div class="flag-row"><span class="fk">Not every file in a commit</span><span class="fv">A pull request can touch files that weren't really part of the answer. That costs both arms the same, so it moves the scores without moving the gap between them.</span></div>
       <div class="flag-row"><span class="fk">Not your codebase</span><span class="fv">Two repositories, two languages, and they already disagree by 33 points. Your layout and conventions will move the number again, in either direction.</span></div>
       <div class="flag-row"><span class="fk">Not a bill</span><span class="fv">These are token counts, not dollars. On a subscription any conversion to money is something I'd be making up.</span></div>
     </div>
@@ -321,7 +334,6 @@ const jsonLd = {
     </p>
   </div>
 </section>
-
 <hr class="thread" />
 <Footer variant="how" />
 
