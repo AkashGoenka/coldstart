@@ -1,19 +1,19 @@
 ---
 title: "The tool the agent does not call"
-description: "You can ship a tool, document it, and inject an instruction telling the agent to prefer it, and the agent will still reach for grep. Why availability is not adoption, with the mistake I shipped myself."
+description: "You can ship a tool, document it, and inject an instruction telling the agent to prefer it, and the agent will still reach for grep. Why availability is not adoption, why the detector I built to catch it caught nothing, and the rule that survived: surface, don't steer."
 keywords: "agent tool adoption, MCP tools ignored, Claude Code hooks, agent tool use, coding agent instructions, tool design for agents"
 kicker: "Adoption"
 ogDescription: "Availability, documentation, and an explicit instruction still do not add up to adoption."
 lead: "You can install a tool, document it, and add an explicit instruction telling the agent to prefer it over searching. Then you watch the session and the agent runs a text search anyway. This is the most consistent result I have from building agent tooling, and it took me a long time to stop treating it as a bug."
 publishDate: 2026-07-25
-readingTime: "8 min"
+readingTime: "9 min"
 tags: ["tool-design", "adoption", "mcp"]
 next: "from-four-tools-to-two"
 ---
 
 I will start with my own numbers, because the argument is worthless coming from someone who only ever measured a competitor.
 
-On a large Java repository, I checked how many of the agent's file reads had been preceded by the command I built specifically to tell it which files to read. The majority had not. The agent opened files without asking the tool that exists to rank them, in a repository where the tool was installed, working, and mentioned in the project instructions.
+On a large Java repository, I checked how many of the agent's file reads had been preceded by the command I built specifically to tell it which files to read. 62% had not. The agent opened nearly two files in three without asking the tool that exists to rank them, in a repository where the tool was installed, working, and mentioned in the project instructions.
 
 That's not a defect report about the model, it's a fact about how tool use actually happens, and it applies to whatever you are building too.
 
@@ -67,9 +67,21 @@ Injection only fires on a trigger you can compute in advance, from the user's wo
 
 So injection covers the case where the vocabulary happened to match, and misses the case where the vocabulary changed under you. Useful, partial, and not a way to compel use of a tool.
 
-## What actually moves the needle
+## The detector that caught nothing
 
-I have ended up with three things that work, none of which involve trying harder to persuade the agent.
+The last thing I tried before giving up on persuasion was to catch the agent in the act.
+
+The idea seemed sound. My tool surfaces a ranked list of files. Sometimes the right one is on that list and the agent reads three others instead. That is a detectable moment: I know what I surfaced, I can see what got read, so in principle I can notice the gap while the session is still running and say something about it.
+
+I built it and ran it over a corpus of real sessions where I already knew which files a correct answer needed. In 24 cases the agent finished without a file it should have had. The detector caught zero of them. I loosened the threshold until it was firing about seven times per session, and at that setting it caught one. Firing seven times a session to be right once is not detection. That is the base rate expressing itself, and I would have got the same hit count by picking a moment at random.
+
+The reason it cannot work is structural, and I needed the null result to see it. A ranked list of eight files is doing its job when the agent reads one of them. The other seven are *supposed* to go unread. Counting across the corpus, the agent correctly ignores something like 98% of what gets surfaced to it, which is not a failure mode, it is what ranking is for. So any mechanism that treats an unread surfaced file as a mistake begins wrong on roughly 98% of the cases it inspects, and no threshold repairs a prior that bad. It is unauditable from the other direction too: ask an agent why it skipped a file and you get a fluent, plausible reason, with no way to tell one it actually acted on from one composed on the spot.
+
+So I stopped building anything that questions a read decision. No read-forcing, no asking why a file was skipped, no checklist of what should have been opened. The rule I work by now is four words: **surface, don't steer.** The quality of what I put in front of the agent is mine. What it does with it is not, and the ~2% of genuine misses is the price of not owning the other 98%.
+
+## What survived that
+
+Three things work, and none of them involve trying harder to persuade the agent.
 
 The first is to lose gracefully. If the agent is going to reach for a text search regardless, the tool should be useful in that world rather than sulking about it. Make the output good enough that when the agent does call it, the call ends the question, so the tool has earned a little more trust the next time the same situation comes up. Adoption is earned per call and it compounds.
 
@@ -77,7 +89,7 @@ The second is to make the output final. Most of the times my tool got called and
 
 The third is to say when the answer is nothing. A tool that returns an empty result is nearly useless, because the agent cannot tell "not present" from "your tool failed" and will grep to find out. A tool that says the identifier does not appear anywhere in this repository has actually ended a line of inquiry. Negative results are answers if you state them as answers.
 
-What I stopped doing is trying to steer. Instructions telling the agent when not to read a file did nothing measurable in my tests. The interventions that worked were all about the quality of what gets surfaced, never about the discipline of the agent receiving it.
+All three sit on the surfacing side of that line. Not one of them asks the agent to be more disciplined, because the detector is what happens when you try that, and it caught nothing.
 
 ## The rule I carried into coldstart
 
@@ -85,6 +97,6 @@ The design follows from the failure rather than from an ideal.
 
 The commands are shell commands first, because the shell is where the agent already is. Results are ranked with the matched lines shown inline, so the common case is answered without opening anything. An empty result is phrased as a finding about the repository. And notes written after previous work are surfaced automatically at the start of a turn, because the note that has to be requested is the note that never gets read.
 
-The rule underneath all of it is one sentence: you cannot instruct your way into being chosen, so the only lever left is making the tool cheaper to choose than the habit it is competing with, at the exact moment of the choice. Everything on the list above is an application of that. Everything I tried that failed was an attempt to argue with the agent instead of out-competing the alternative it already had.
+Underneath all of it is the same rule, and it is worth separating the two halves. You cannot instruct your way into being chosen, so the only lever left is making the tool cheaper to choose than the habit it competes with, at the exact moment of the choice. And once it has been chosen, the job ends at the quality of what comes back. Surface, don't steer. Everything above is an application of that; everything I tried that failed was an attempt to argue with the agent instead of out-competing the alternative it already had.
 
-I would not claim this is solved. My own measurement says the agent still bypasses the tool often, and I would rather publish that than a story where instructions worked. If you are building something in this space, measure the bypass rate before you measure anything else. It is the number that tells you whether you have a tool or a feature nobody reaches for.
+I would not claim this is solved. That 62% is current, not a number from before the fixes, and I would rather publish it than a story where instructions worked. If you are building something in this space, measure the bypass rate before you measure anything else. It is the number that tells you whether you have a tool or a feature nobody reaches for.

@@ -38,20 +38,20 @@ footer{
 .foot-id{display:flex;flex-direction:column;gap:12px;align-items:flex-start;}
 .foot-id .brand{font-size:16px;gap:9px;}
 .foot-blurb{
-  font-size:13.5px;line-height:1.6;color:var(--muted);max-width:30ch;
+  font-size:13.5px;line-height:1.6;color:var(--text);max-width:30ch;
 }
 
 /* ---- link columns ---- */
 .foot-col{display:flex;flex-direction:column;gap:11px;min-width:0;}
 .foot-col h3{
   font-family:var(--mono);font-size:11.5px;font-weight:500;
-  letter-spacing:.02em;color:var(--faint);margin:0 0 2px;
+  letter-spacing:.02em;color:var(--muted);margin:0 0 2px;
 }
 .foot-col a{
-  font-size:13.5px;line-height:1.35;color:var(--muted);text-decoration:none;
+  font-size:13.5px;line-height:1.35;color:var(--text);text-decoration:none;
   transition:color .14s;
 }
-.foot-col a:hover{color:var(--text);}
+.foot-col a:hover{color:var(--frost);}
 .foot-col a.ext::after{content:"↗";margin-left:5px;font-size:11px;opacity:.55;}
 
 /* ---- bottom rule ---- */
@@ -61,12 +61,12 @@ footer{
   display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;
 }
 .foot-tagline{
-  font-family:var(--mono);color:var(--faint);font-size:12px;letter-spacing:.02em;
+  font-family:var(--mono);color:var(--muted);font-size:12px;letter-spacing:.02em;
 }
 /* The one warm mark down here: the same frost->ember pair the whole
    page is built on, at the scale of a full stop. */
 .foot-temp{display:flex;align-items:center;gap:7px;
-  font-family:var(--mono);font-size:11.5px;color:var(--faint);}
+  font-family:var(--mono);font-size:11.5px;color:var(--muted);}
 .foot-temp i{width:7px;height:7px;border-radius:50%;display:inline-block;}
 .foot-temp i.f{background:var(--frost);}
 .foot-temp i.e{background:var(--ember);}

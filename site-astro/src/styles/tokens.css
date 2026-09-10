@@ -6,9 +6,9 @@
   --frost: #4fbfe0;
   --ember: #ef9448;
   --ok: #7ec89a;
-  --text: #eef3fa;
-  --muted: #a8b6c9;
-  --faint: #7f8da2;
+  --text: #ffffff;
+  --muted: #ccd2da;
+  --faint: #a3a9b2;
   --surface: rgba(255,255,255,.035);
   --line: rgba(255,255,255,.09);
   --wash-frost: rgba(79,191,224,.07);
@@ -52,7 +52,7 @@
   --paper-line: #c7b790;
   --bg: #070a11;
   --surface-2: #0f1826;
-  --ink: #e7eef8;
+  --ink: #ffffff;
   --frost-bright: #6fd3ef;
   --ember-bright: #ffb267;
   --term-bg: #05080e;

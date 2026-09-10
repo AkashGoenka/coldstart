@@ -1,0 +1,433 @@
+---
+import Head from '../../layouts/Head.astro';
+import SvgDefs from '../../components/SvgDefs.astro';
+import Nav from '../../components/Nav.astro';
+import Footer from '../../components/Footer.astro';
+import '../../styles/tailwind.css';
+import '../../styles/tokens.css';
+import '../../styles/docs.css';
+import '../../styles/how.css';
+
+const title = 'How I benchmark codebase memory, and how you can | coldstart';
+const description =
+  'The method behind my numbers: questions taken from issue reports, right answers taken from the commits that closed them, and the training-data problem that made me throw my first benchmark away. Run it on any skill, rules file, or tool.';
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'TechArticle',
+  headline: 'How I benchmark codebase memory, and how you can',
+  description,
+  url: 'https://coldstartmcp.dev/benchmark/',
+  author: { '@type': 'Person', name: 'Akash Goenka' },
+  publisher: { '@type': 'Organization', name: 'coldstart' },
+  about: 'Benchmarking AI coding agent tools',
+  proficiencyLevel: 'Beginner',
+};
+---
+<html lang="en">
+<head>
+  <Head
+    title={title}
+    description={description}
+    keywords="benchmark AI coding agent, token usage benchmark, codebase memory, measuring agent tools, training data contamination, benchmark methodology, agent token savings"
+    canonicalPath="/benchmark/"
+    ogType="article"
+    ogTitle="How I benchmark codebase memory, and how you can"
+    ogDescription="Questions from issue reports, answers from the commits that closed them, and the training-data problem that made me throw my first benchmark away."
+    themeColor="#070a11"
+  />
+  <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+</head>
+<body class="how-page">
+<SvgDefs />
+<Nav variant="how" />
+
+<!-- ===================== HERO ===================== -->
+<header class="how-hero">
+  <div class="wrap">
+    <div class="how-eyebrow">Benchmark method</div>
+    <h1>I threw my first benchmark away. This is the one that replaced it.</h1>
+    <p class="lead">
+      This page is the method I used to measure whether coldstart actually saves tokens, and the
+      things that went wrong on the way. My first attempt ran on Kafka, Django and Mastodon, and the
+      numbers it produced were wrong in a way I couldn't see until I went looking. The rebuild is now
+      a separate tool you can point at your own repository, so you can check a skill, a rules file or
+      an MCP server without taking my word for anything.
+    </p>
+    <a class="how-back" href="/">&#8592; back to the overview</a>
+  </div>
+</header>
+
+<!-- ===================== 1. WHAT IS MEASURED ===================== -->
+<section class="how-sec">
+  <div class="wrap">
+    <div class="how-sec-head">
+      <h2>What gets measured: finding the files, not finishing the job</h2>
+      <p>
+        A session has two halves. The agent works out which files matter, and then it reads, reasons
+        and edits them. Only the first half is what a navigation tool touches. The second half is the
+        same work whichever setup you're running, so measuring it adds the same cost to both sides
+        and makes the difference between them look smaller than it is. So every question here asks
+        the agent to find files, and stops there.
+      </p>
+    </div>
+
+    <div class="flags">
+      <div class="flag-row">
+        <span class="fk">The task</span>
+        <span class="fv">Every prompt asks where something lives, not for a fix. The answer is a
+        list of file paths, written to a known location, because an agent handed a bug report will
+        start editing if you let it.</span>
+      </div>
+      <div class="flag-row">
+        <span class="fk">Ground truth</span>
+        <span class="fv">The source files the pull request actually changed, written down before
+        either arm runs. Nothing is graded by hand afterwards, so I can't decide what counted once I
+        know which side did better.</span>
+      </div>
+      <div class="flag-row">
+        <span class="fk">Reported</span>
+        <span class="fv">Tokens and turns across the whole session, and how many of the right files
+        the agent named. Both, always. A tool that reports only cost is rewarded for making the agent
+        give up sooner.</span>
+      </div>
+    </div>
+
+    <div class="how-aside">
+      <b>Why the whole session.</b> Around 90% of what a session costs is cached context replayed on
+      every turn. Shrink what one command returns and the agent can just ask for more of it, so a
+      tool can make its own output smaller and your bill bigger at the same time. I wrote about that
+      at length in <a href="/blog/why-most-token-savings-tools-lie/">why most token savings tools
+      lie</a>.
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 2. THE FIRST ATTEMPT ===================== -->
+<section class="how-sec">
+  <div class="wrap">
+    <div class="how-sec-head">
+      <h2>The first attempt, and why the numbers were fiction</h2>
+      <p>
+        The first version was straightforward. I pointed an agent at a repository, let it skim the
+        code and read commit messages, and had it write questions from what it found. Then I ran those
+        questions on Kafka, Django and Mastodon. Large, real, well organised codebases. They are also
+        three of the most written-about projects on the internet, and that turned out to matter more
+        than anything about how they're built.
+      </p>
+      <p>
+        Claude has read all three. So the agent would take a question, already know roughly where the
+        answer lived, and go straight to coldstart with the exact identifiers that happen to match the
+        real filenames. It would get the right files back, read them, read the neighbours to be sure,
+        and produce a correct answer. That looks like the tool working. It isn't. The agent was using
+        the tool to confirm what it already remembered, and the questions themselves had been written
+        by an agent that had read the code, so they pointed at the answer too.
+      </p>
+      <p>
+        You can test for this in your own results without rerunning anything. Take the arm with no
+        tool installed, look at its very first move, before it has opened a single file, and pull out
+        the internal class names it used. Subtract anything the prompt handed it. Whatever is left
+        didn't come from the codebase, because the agent hadn't looked at the codebase yet.
+      </p>
+    </div>
+
+    <div class="flags">
+      <div class="flag-row">
+        <span class="fk">Kafka</span>
+        <span class="fv"><b>21 of 25 sessions (84%)</b> named internal class names before opening a
+        file.</span>
+      </div>
+      <div class="flag-row">
+        <span class="fk">Django</span>
+        <span class="fv"><b>7 of 14 (50%)</b>.</span>
+      </div>
+      <div class="flag-row">
+        <span class="fk">Mastodon</span>
+        <span class="fv"><b>6 of 18 (33%)</b>.</span>
+      </div>
+    </div>
+
+    <p>
+      This isn't noise that averages out. It pushes the result one way. Knowing the codebase makes the
+      no-tool arm cheaper, because an agent that already knows where to look skips the searching it
+      would otherwise pay for. My savings on those three ranked Mastodon 43%, Django 28%, Kafka 15%,
+      which is the leak rates above in reverse. I had been reading that ranking as something about
+      languages and codebase structure. Most of it was about what the model had already read.
+    </p>
+
+    <div class="how-aside">
+      <b>Renaming the codebase doesn't fix it.</b> Stopping the model recognising a project needs
+      consistent rewrites across declarations, imports, build config and tests, and a half-done rename
+      leaves the no-tool arm grepping for names that no longer match, which corrupts the measurement
+      rather than cleaning it. So I retired those three repositories. The old numbers aren't anywhere
+      on this site, because I don't believe them.
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 3. THE REBUILD ===================== -->
+<section class="how-sec">
+  <div class="wrap">
+    <div class="how-sec-head">
+      <h2>The rebuild: questions from issues, answers from commits</h2>
+      <p>
+        Two things had to change. Smaller, less written-about repositories, so the model isn't
+        recalling instead of searching. And questions written by someone who didn't know the answer.
+      </p>
+      <p>
+        Issue reports solve the second one on their own. An issue is filed before a solution exists,
+        by someone describing a symptom, so it uses the project's own vocabulary without pointing at a
+        file. Nobody had to be careful about it. It's just who was holding the pen and when. Commit
+        messages and pull request descriptions are the opposite: written afterwards, by the person who
+        did the work, naming classes and paths without thinking about it. That's what my first version
+        was built on.
+      </p>
+      <p>
+        The answer comes from the same place the question does. Every issue I use is closed by a
+        merged pull request, and the source files that pull request changed are the files a correct
+        answer had to name. That's ground truth taken from the repository's own history rather than
+        from my judgement, and it works on any repository with git history, including a private one.
+      </p>
+    </div>
+
+    <div class="flags">
+      <div class="flag-row">
+        <span class="fk">1 &#183; select</span>
+        <span class="fv">Closed issues whose pull request was merged, touching between two and eight
+        source files. One-file fixes are just a grep. Fifty-file refactors make the overlap score
+        meaningless.</span>
+      </div>
+      <div class="flag-row">
+        <span class="fk">2 &#183; scrub</span>
+        <span class="fv">Take out file paths, stack frames, code blocks, screenshots and issue
+        numbers. What's left should still say what's broken, and not where it lives.</span>
+      </div>
+      <div class="flag-row">
+        <span class="fk">3 &#183; reshape</span>
+        <span class="fv">Turn the report into a question about where something lives, keeping the
+        author's words and adding none of my own. The original and the rewrite are both saved, so
+        anyone can check what changed.</span>
+      </div>
+      <div class="flag-row">
+        <span class="fk">4 &#183; drop</span>
+        <span class="fv">Throw away anything too vague to navigate from, and anything that lost most
+        of itself in the scrub, which is what happens when an issue was really just a pointer to a
+        file.</span>
+      </div>
+    </div>
+
+    <p class="sec-tail">
+      A lot of candidates don't survive that, and on one repository more were thrown out than kept.
+      Each one I drop is recorded with the reason, because a list of what was removed is the only way
+      you can tell that what's left wasn't picked to make the result look good. The whole procedure is
+      now its own repository, <a href="https://github.com/AkashGoenka/coldbench">coldbench</a>, since it
+      has nothing to do with coldstart and shouldn't live inside it.
+    </p>
+  </div>
+</section>
+
+<!-- ===================== 4. THE NUMBERS ===================== -->
+<section class="how-sec">
+  <div class="wrap">
+    <div class="how-sec-head">
+      <h2>The result</h2>
+      <p>
+        Two repositories, run more than once each. Arches is a Python and Django application. JMRI is
+        Java, considerably more verbose per file and with a heavier build surface. Two arms in each:
+        plain Claude Code with the search tools it ships with, and the same thing with coldstart
+        installed and nothing else changed. Same questions both sides, Sonnet 5 throughout, one fresh
+        session per question.
+      </p>
+    </div>
+
+    <div class="result">
+      <div class="res">
+        <div class="res-repo">Arches <span>Python / Django</span></div>
+        <div class="res-fig">&#8722;64<i>%</i></div>
+        <div class="res-say">
+          tokens against the no-tool baseline, over 27 questions. Recall came out two points
+          <b>better</b>, because the baseline sometimes ran out of turns before it found the file at
+          all.
+        </div>
+      </div>
+      <div class="res">
+        <div class="res-repo">JMRI <span>Java</span></div>
+        <div class="res-fig">&#8722;31<i>%</i></div>
+        <div class="res-say">
+          tokens over 25 questions, recall level with the baseline. The first run said 39%, on a
+          machine that was busy with other work. Rerun in isolation it came out eight points lower,
+          so 31% is the number.
+        </div>
+      </div>
+    </div>
+
+    <p class="sec-tail">
+      Both figures are the CLI, which is how coldstart is meant to be run. Those two also disagree,
+      and I'm not going to average them. One tidier number would hide the only interesting thing
+      here, which is that Java's verbosity and build tooling change what a single turn costs, and
+      that changes how much a tool which cuts turns can save you.
+    </p>
+
+    <div class="grab">
+      <div class="grab-k">Both question sets, and the files a correct answer had to name</div>
+      <ul>
+        <li>
+          <a href="https://github.com/AkashGoenka/coldbench/tree/main/examples/arches">arches</a>
+          &#183; 32 questions, 123 gold files. The figure above is q01 to q27; the last five were
+          generated by the same pass and never run.
+        </li>
+        <li>
+          <a href="https://github.com/AkashGoenka/coldbench/tree/main/examples/jmri">jmri</a>
+          &#183; 25 questions, 93 gold files.
+        </li>
+      </ul>
+      <p>
+        Every question is one file of plain text with the issue number recorded beside its gold set,
+        so you can open the original report and check the rewrite against it. Each is tagged by how
+        far the fix spread, from one area to across subsystems, because a tool that helps on the
+        narrow ones and not the wide ones is making a different claim than its average suggests.
+      </p>
+    </div>
+
+    <div class="how-aside">
+      <b>This is a claim about turns.</b> Cost compounds across turns, because every turn replays
+      everything before it. So the saving lives in questions that would otherwise have taken a long
+      search. On something an agent can settle in two or three turns there is very little to take
+      away, and coldstart won't show you much. That mechanism is the subject of
+      <a href="/blog/where-the-tokens-go/">where the tokens actually go</a>.
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 5. RUN IT YOURSELF ===================== -->
+<section class="how-sec">
+  <div class="wrap">
+    <div class="how-sec-head">
+      <h2>Run it on something that isn't mine</h2>
+      <p>
+        None of this is specific to coldstart. The same setup measures a skill, a rules file, an MCP
+        server, or a change you made to your own prompt. Take two copies of one repository, install
+        the thing you're testing in exactly one of them, ask the same questions in both, and score
+        what comes back against the commits.
+      </p>
+    </div>
+
+    <div class="flags">
+      <div class="flag-row">
+        <span class="fk">The harness</span>
+        <span class="fv"><a href="https://github.com/AkashGoenka/coldbench">coldbench</a> holds the
+        method and the scoring. It takes the answers from both arms plus your session transcripts and
+        reports recall and tokens together, along with flags for the three things that quietly ruin a
+        comparison. Generating questions from your own repository is written up as a procedure and not
+        yet automated, so the quickest start is to borrow one of the two sets above.</span>
+      </div>
+      <div class="flag-row">
+        <span class="fk">The token count</span>
+        <span class="fv"><a href="https://github.com/AkashGoenka/convotokens">convotokens</a> reads
+        your own transcripts off your own disk and reports tokens and turns for the whole session,
+        subagents included. It makes no network calls and won't invent a dollar figure for you.</span>
+      </div>
+      <div class="flag-row">
+        <span class="fk">One prompt, one session</span>
+        <span class="fv">Otherwise your third question is cheap because the first two already loaded
+        the context, and what you've measured is the order you asked things in.</span>
+      </div>
+      <div class="flag-row">
+        <span class="fk">Repeat before believing</span>
+        <span class="fv">Agent runs vary on their own. Run one side several times without changing
+        anything and look at how much it moves, before you believe a difference between the two
+        sides.</span>
+      </div>
+    </div>
+
+    <div class="how-aside">
+      <b>Your own private codebase is the best thing to run this on.</b> The problem in the first
+      section can't happen in a repository the model has never seen, and the ground truth is sitting
+      in your git history already. If you're deciding whether a tool is worth it for your team, your
+      own closed code gives you a cleaner answer than any public benchmark will.
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 6. WHAT WE DON'T CLAIM ===================== -->
+<section class="how-sec">
+  <div class="wrap">
+    <div class="how-sec-head">
+      <h2>What this does not tell you</h2>
+    </div>
+    <div class="flags">
+      <div class="flag-row"><span class="fk">Not whether the fix was good</span><span class="fv">This measures finding the right files. Whether the patch that followed was any good is a different experiment, and I haven't run it.</span></div>
+      <div class="flag-row"><span class="fk">Not every file in a commit</span><span class="fv">A pull request can touch files that weren't really part of the answer. That costs both arms the same, so it moves the scores without moving the gap between them.</span></div>
+      <div class="flag-row"><span class="fk">Not your codebase</span><span class="fv">Two repositories, two languages, and they already disagree by 33 points. Your layout and conventions will move the number again, in either direction.</span></div>
+      <div class="flag-row"><span class="fk">Not a bill</span><span class="fv">These are token counts, not dollars. On a subscription any conversion to money is something I'd be making up.</span></div>
+    </div>
+
+    <p class="sec-tail">
+      Two longer pieces sit behind this method, both about the ways a benchmark misleads the person
+      running it: <a href="/blog/why-most-token-savings-tools-lie/">why most token savings tools
+      lie</a> and <a href="/blog/how-your-own-benchmark-lies-to-you-first/">how your own benchmark
+      lies to you first</a>.
+    </p>
+  </div>
+</section>
+<hr class="thread" />
+<Footer variant="how" />
+
+<style>
+  /* how.css only ever styled single-paragraph section heads, so consecutive
+     paragraphs collapse into one block. Page-scoped rather than edited into
+     how.css, which four other pages depend on. */
+  .how-sec-head p + p, .how-sec > .wrap > p + p { margin-top: 14px; }
+  .how-sec > .wrap > p { color: var(--text); font-size: 16.5px; }
+  /* The closing line of a section. Same colour as body copy - DESIGN.md keeps
+     grey for labels and captions, never for a sentence. */
+  .sec-tail { margin-top: 26px; color: var(--text); font-size: 16.5px; max-width: 680px; }
+
+  /* ONE body measure. how.css stacks several - .wrap 940, .flags 892,
+     .how-sec-head/.how-aside 680 - which is fine on /vs/vector-rag/ where wide
+     figures fill the container, but this page is prose plus six table blocks,
+     so every paragraph ended ~210px short of the rule beneath it and the column
+     read as a phone layout stranded in a desktop window. Bring the tables to the
+     prose measure rather than narrowing .wrap: the wrap is what puts this page's
+     left edge in the same place as /how-it-works/ and /vs/vector-rag/, so a
+     reader moving between them doesn't see the text jump sideways. */
+  .how-sec .flags, .how-sec .flag-row, .result, .grab { max-width: 680px; }
+
+  /* The material itself, offered rather than mentioned. Sits apart from the
+     flag tables because it is the one block a reader is meant to leave from. */
+  .grab { margin-top: 30px; padding: 22px 26px; border: 1px solid var(--line);
+          border-radius: 12px; background: var(--surface); }
+  .grab-k { font-family: var(--mono); font-size: 11.5px; letter-spacing: .1em;
+            text-transform: uppercase; color: var(--frost); margin-bottom: 14px; }
+  .grab ul { list-style: none; padding-left: 0; display: grid; gap: 10px; }
+  .grab li { color: var(--text); font-size: 15.5px; line-height: 1.6; }
+  .grab p { color: var(--text); font-size: 15px; line-height: 1.65; margin-top: 16px;
+            padding-top: 16px; border-top: 1px solid var(--line); }
+
+  /* The one place on the page that isn't a flag table. Six identical key/value
+     blocks make every section weigh the same; the result is the thing a reader
+     came for, so it gets the only display-size figures here. */
+  .result { margin-top: 30px; display: grid; gap: 1px; background: var(--line);
+            border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .res { background: var(--ground); padding: 26px 28px; display: grid;
+         grid-template-columns: auto 1fr; column-gap: 28px; row-gap: 10px;
+         align-items: baseline; }
+  .res-repo { grid-column: 1 / -1; font-family: var(--mono); font-size: 12.5px;
+              letter-spacing: .04em; color: var(--frost); }
+  .res-repo span { color: var(--faint); margin-left: 10px; letter-spacing: .02em; }
+  .res-fig { font-family: var(--display); font-weight: 400; font-size: 54px;
+             line-height: .9; letter-spacing: -.02em; color: var(--text);
+             font-variant-numeric: tabular-nums; }
+  .res-fig i { font-style: normal; font-size: 26px; color: var(--faint);
+               margin-left: 2px; }
+  .res-say { color: var(--text); font-size: 15.5px; line-height: 1.6; }
+  .res-say b { font-weight: 500; }
+  @media (max-width: 620px) {
+    .res { grid-template-columns: 1fr; row-gap: 14px; }
+  }
+</style>
+</body>
+</html>

@@ -296,6 +296,32 @@ See [PHILOSOPHY.md](./PHILOSOPHY.md) for why coldstart computes no semantics of 
 5. The keeper is per-repo and per-machine — no sharing across projects or hosts. The notebook _does_ travel: its `.raw` logs are committed and union-merge across branches and machines.
 6. Notebook quality is bounded by what writing agents actually read — notes are accurate about what they state, but a note is not a proof of completeness.
 
+## Measured
+
+Two repositories, each run more than once, with the CLI. Each question is asked in two arms that
+differ only in whether coldstart is installed: the baseline is plain Claude Code using the search
+tools it ships with. Sonnet 5 on both sides, one fresh session per question.
+
+| Repository | Language | Tokens vs. baseline | Recall | Questions |
+| --- | --- | --- | --- | --- |
+| Arches | Python / Django | −64% | +2 pts | 27 |
+| JMRI | Java | −31% | parity | 25 |
+
+The questions come from closed issue reports, which are written before anyone knows where the
+fault lives, so they describe a symptom rather than naming a file. The correct answer is the set
+of source files in the commit that closed the issue, so ground truth comes from git history rather
+than from anyone's judgement.
+
+Those two numbers are not averaged. Per-turn cost differs by language, and the saving comes from
+removing turns, so a question an agent can settle in two or three turns has little to give back.
+An earlier benchmark on Kafka, Django and Mastodon was discarded: the model has read all three, and
+that contaminated both arms. The full method, including what was thrown out and why, is at
+[coldstartmcp.dev/benchmark](https://coldstartmcp.dev/benchmark/). The harness itself is a separate
+project, [coldbench](https://github.com/AkashGoenka/coldbench), and works on any repository with
+git history, including private ones. Both question sets are published with their gold file lists
+and the issue number behind each question, at
+[coldbench/examples](https://github.com/AkashGoenka/coldbench/tree/main/examples).
+
 ## Writing
 
 Longer pieces on the problems behind this tool — what agent sessions actually cost, and what

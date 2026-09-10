@@ -4,7 +4,7 @@ description: "coldstart is two parts: a notebook of AI-written notes, and a navi
 lead: "coldstart has two parts: a notebook where an agent writes down what it worked out about your code, and a navigation layer that finds which files matter for a question. This is about the second part. The obvious way to build it is to have an AI model read every file and match by meaning instead of exact words. I wanted that to be the answer for a while. It kept failing in ways that were hard to explain to whoever was watching it fail, so I stopped reaching for it."
 keywords: "embeddings for code search, semantic code search, AI coding agent architecture, no LLM calls, code index without embeddings"
 kicker: "Architecture"
-ogDescription: "Embeddings buy you fuzzy conceptual matches. They also buy you a store that goes stale and a ranking that isn't stable turn to turn. Most navigation questions don't need either."
+ogDescription: "Embeddings buy you fuzzy conceptual matches. They also buy you a second store that lags the code and an answer with no evidence attached. Most navigation questions need neither."
 publishDate: 2026-08-08
 readingTime: "6 min"
 tags: ["architecture", "embeddings", "search"]
@@ -31,13 +31,17 @@ It's a neat trick, and it costs more than the price of the model call. It costs 
 
 The sync problem is not exotic. A file gets renamed, moved, or rewritten, and its number-list is now describing something that no longer exists that way, until the model runs over it again. Doing that on every save is too expensive at the rate a coding agent edits files, so in practice most tools batch it, which means there's a window, sometimes a long one, where the index is answering questions about a version of the code that's already gone.
 
-The stability problem is quieter but matters more for a tool an agent calls dozens of times per session. Comparing those number-lists doesn't give you a fixed ranking as the codebase grows. It shifts as unrelated files get added anywhere in the repo. Add ten files elsewhere in the repo and a query that used to surface the right file first can drift to fourth place, with nothing about your query or the target file having changed. An agent that got the right answer yesterday can get a worse one today for reasons that have nothing to do with today's question. That's a hard thing to trust, and a harder thing to debug when it goes wrong, because there's no line of code you can point to and say that's where it went wrong. It's just an emergent side effect of everything else in the number-space shifting around.
+The second cost is that you cannot check the answer.
+
+An embedding search hands back a similarity score. A score is not evidence. There is no line you can point at and say *that* is why this file ranked, so when the answer is wrong there is nothing to debug, and when it is right you cannot tell whether it was right for a reason or by luck. That matters more than it sounds for a tool an agent calls dozens of times a session, because the agent is in the same position I am. Given a file with a number attached, it either trusts the number or spends turns re-verifying, and a good agent re-verifies. Given a file with "these three terms from your query are defined here, at these lines," it can judge on the spot and move on.
+
+I want to be careful about what I am not claiming. I have not built an embedding index over these repositories and raced it against `find`, so I have no measurement saying one retrieves better than the other, and I am not going to imply one. The staleness window above is mechanical and I will defend it as stated. This second one is a design judgment about what an agent can act on, and it should be read as that.
 
 <figure class="wide essay-fig ">
 <div class="fig-plot">
-<svg viewBox="0 0 920 360" role="img" aria-labelledby="r7t r7d">
-<title id="r7t">Rank of the right file as the repo grows</title>
-<desc id="r7d">Two lines against the same query over time. Declared identity stays flat at rank one. Embedding similarity zigzags between rank one and rank four as unrelated files are added elsewhere in the repo, with nothing about the query itself changing.</desc>
+<svg viewBox="0 0 920 340" role="img" aria-labelledby="r7t r7d">
+<title id="r7t">A score you cannot check, and evidence you can</title>
+<desc id="r7d">Two panels naming the same candidate file. On the left it arrives with a similarity score and nothing underneath it, so the only options are to trust the number or go and read the file. On the right the same file arrives with the query terms it declares and the lines they sit on, which can be judged without opening it.</desc>
 <defs>
 <filter id="r7" x="-6%" y="-6%" width="112%" height="112%">
 <feTurbulence type="fractalNoise" baseFrequency="0.028" numOctaves="2" seed="19" result="n"/>
@@ -45,29 +49,27 @@ The stability problem is quieter but matters more for a tool an agent calls doze
 </filter>
 </defs>
 <g filter="url(#r7)">
-<path class="f-pen" d="M70 20 L100 20"/>
-<path class="f-mark" d="M470 20 L500 20"/>
-<path class="f-axis" d="M90 300 L860 300"/>
-<path class="f-axis" d="M90 60 L90 300"/>
-<path class="f-tick" d="M90 160 L860 160"/>
-<path class="f-tick" d="M90 220 L860 220"/>
-<path class="f-tick" d="M90 280 L860 280"/>
-<path class="f-pen" d="M100 100 L820 100"/>
-<path class="f-mark" d="M100 100 L200 100 L260 180 L340 140 L420 240 L500 160 L580 260 L660 180 L740 220 L820 150"/>
-<circle class="f-pin" cx="420" cy="240" r="6"/>
-<circle class="f-pin" cx="580" cy="260" r="6"/>
+<rect class="f-box" x="70" y="76" width="360" height="164" rx="8"/>
+<path class="f-tick" d="M92 128 L408 128"/>
+<rect class="f-box-ok" x="490" y="76" width="360" height="164" rx="8"/>
+<path class="f-tick" d="M512 128 L828 128"/>
 </g>
-<text class="f-key" x="110" y="25" text-anchor="start">declared identity: same file, same rank, always</text>
-<text class="f-key" x="510" y="25" text-anchor="start">embedding similarity: drifts as the corpus grows</text>
-<text class="f-lab" x="80" y="105" text-anchor="end">1</text>
-<text class="f-lab" x="80" y="165" text-anchor="end">2</text>
-<text class="f-lab" x="80" y="225" text-anchor="end">3</text>
-<text class="f-lab" x="80" y="285" text-anchor="end">4+</text>
-<text class="f-lab" x="90" y="332" text-anchor="start">files added to the repo →</text>
-<text class="f-note" x="420" y="270" text-anchor="middle">nothing about the query changed</text>
+<text class="f-head" x="70" y="52" text-anchor="start">a score</text>
+<text class="f-head" x="490" y="52" text-anchor="start">evidence</text>
+<text class="f-key" x="92" y="114" text-anchor="start">src/auth/session.py</text>
+<text class="f-key" x="408" y="114" text-anchor="end">0.83</text>
+<text class="f-sub" x="92" y="160" text-anchor="start">nothing underneath it to inspect</text>
+<text class="f-sub" x="92" y="188" text-anchor="start">trust the number, or open the file</text>
+<text class="f-sub" x="92" y="216" text-anchor="start">wrong answers have nothing to debug</text>
+<text class="f-key" x="512" y="114" text-anchor="start">src/auth/session.py</text>
+<text class="f-key" x="828" y="114" text-anchor="end">3 of 3 terms</text>
+<text class="f-sub" x="512" y="160" text-anchor="start">defines validate_token, line 41</text>
+<text class="f-sub" x="512" y="188" text-anchor="start">defines refresh_session, line 88</text>
+<text class="f-sub" x="512" y="216" text-anchor="start">imports session_store</text>
+<text class="f-note" x="460" y="300" text-anchor="middle">both name the same file: only one of them can be checked without opening it</text>
 </svg>
 </div>
-<figcaption>Declared identity answers the same query with the same file at the same rank, every time. Embedding-based matching has no such guarantee: adding unrelated files anywhere in the repo can push yesterday's rank-one result to rank four, with nothing about the query having changed.</figcaption>
+<figcaption>Not a claim about which one retrieves better, which I have not measured. A claim about what the agent receiving the answer can do with it: a score can only be trusted or re-verified, while the terms and lines behind a ranking can be judged in place.</figcaption>
 </figure>
 
 ## What it uses instead
@@ -80,7 +82,7 @@ This is a worse tool than an embedding-based search for a genuinely fuzzy concep
 
 ## Why the exact half is the common half
 
-The questions at the top of this post are not a flattering sample. They are what watching real sessions turns up: most navigation during an actual task isn't conceptual at all, it's literal, and the code already answers the literal kind definitively, in its names and its structure. Paying for an AI model call, plus the staleness and drift that come with it, to answer a question the filenames already settle is a bad trade, made worse by the fact that it happens on almost every call, not occasionally.
+The questions at the top of this post are not a flattering sample. They are what watching real sessions turns up: most navigation during an actual task isn't conceptual at all, it's literal, and the code already answers the literal kind definitively, in its names and its structure. Paying for an AI model call, plus the staleness window that comes with it, to answer a question the filenames already settle is a bad trade, made worse by the fact that it happens on almost every call, not occasionally.
 
 There's a second reason that matters less philosophically and more practically: coldstart runs a background process that keeps its index current as you edit, patching just the changed files within a few seconds of a save. That only works cheaply because there's no AI model to call and no number-list to recompute. A patch is a few milliseconds of parsing per changed file. Re-running a model over every file that frequently, for every keystroke-adjacent save across a session, isn't something you'd want to pay for even if you could.
 

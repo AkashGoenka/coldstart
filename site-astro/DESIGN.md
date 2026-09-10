@@ -81,9 +81,9 @@ Everything else stays quiet.
 | `--frost` | `#4fbfe0` | **cold accent** — the index, `find`/`gs` |
 | `--ember` | `#ef9448` | **warm accent** — the notebook, notes, inline code |
 | `--ok` | `#7ec89a` | state only: `[fresh]`, shell prompt, tool-call dots |
-| `--text` | `#eef3fa` | **all prose**, 17:1 |
-| `--muted` | `#a8b6c9` | secondary metadata and captions, 9.5:1 |
-| `--faint` | `#7f8da2` | mono labels and eyebrows only — **never a sentence** |
+| `--text` | `#ffffff` | **all prose**, 19.3:1 |
+| `--muted` | `#ccd2da` | secondary metadata and captions, 13.1:1 |
+| `--faint` | `#a3a9b2` | mono labels and eyebrows only, 6.7:1 — **never a sentence** |
 | `--surface` | `rgba(255,255,255,.035)` | cards, terminals, panels |
 | `--line` | `rgba(255,255,255,.09)` | hairlines, borders, separators |
 | `--wash-frost` | `rgba(79,191,224,.07)` | index-flavoured surfaces |
@@ -435,7 +435,8 @@ they are engineered to be generic, which is the opposite of the brief.
 ### The grey-text finding, quantified
 
 **Seven of eight reference sites use grey body copy.** The specimen's near-white
-`#eef3fa` is now the outlier in the other direction.
+`#eef3fa` was the outlier in the other direction, and prose is now plain
+`#ffffff` — a deliberate move past the reference class, not a miss.
 
 The problem with the live site's grey was never that it was grey — it's that
 it's **blue**:
@@ -456,9 +457,18 @@ Second contributing factor: the live site sets **leads and body both to muted**
 with no brighter tier above. Linear runs a four-step ramp topped by `#f7f8f8`
 carrying emphasis. Without that top step nothing anchors the scale.
 
-**Rule:** near-white body copy is the committed default (§2). Grey body copy is
+**Rule:** white body copy is the committed default (§2). Grey body copy is
 permitted only if (a) the grey is near-neutral — R−B spread under ~15 — and (b)
 a brighter tier exists above it doing emphasis.
+
+**Correction, and why the rule kept failing.** The ramp was written down twice:
+once in `tokens.css` (the saturated blue-grey set) and once in `backdrop.css`
+(the corrected near-neutral set). Only blog post pages import `backdrop.css`
+late enough for the correction to win, so on the home page, docs, how-it-works,
+`/vs/` and `/benchmark/` the *uncorrected* values were live the whole time. A
+token fix that lands in one of two competing definitions is not a fix. Both
+files now carry identical values; if the ramp changes again, both change or
+neither does.
 
 ### Gradients — the corrected finding
 
@@ -497,7 +507,7 @@ These are decided. Do not re-open them, re-derive them, or offer alternatives.
 | **Field shape** | Single `linear-gradient(90deg, …)` ramp — **one** page-scale gradient, never two blobs |
 | Field frost | `rgba(79,191,224,.20)` at 0%, transparent by 42% |
 | Field ember | `rgba(239,148,72,.19)` at 100%, transparent by 58% |
-| **Body copy** | Near-white `--text #eef3fa`. Grey body copy is NOT adopted. |
+| **Body copy** | White `--text #ffffff`. Grey body copy is NOT adopted. |
 | **Radii — exactly two** | `6px` components (buttons, chips, inline code, small boxes) · `10px` panels (cards, terminals, the Claude Code panel) |
 | **Font weights — exactly two** | `400` body · `600` display. No 500, no 700. |
 | **Display** | Archivo, `wdth 112`, **d1 line-height `1.00`** |

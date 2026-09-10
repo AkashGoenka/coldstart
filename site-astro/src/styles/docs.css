@@ -162,7 +162,7 @@ nav {
 a.fcard:hover { border-color: color-mix(in srgb, var(--frost) 45%, var(--line)); transform: translateY(-2px); }
 .fcard .fnum { font-family: var(--mono); font-size: 12px; color: var(--frost); letter-spacing: .1em; }
 .fcard h4 { font-family: var(--mono); font-size: 16px; margin: 10px 0 8px; letter-spacing: -.01em; }
-.fcard p { font-size: 14.5px; color: var(--muted); }
+.fcard p { font-size: 14.5px; color: var(--text); }
 .doc-sec .fgrid { gap: 16px; margin-top: 20px; }
 .doc-sec .fcard { padding: 20px; }
 .doc-sec .fcard .fnum { font-size: 11.5px; }
@@ -215,7 +215,7 @@ a.fcard:hover { border-color: color-mix(in srgb, var(--frost) 45%, var(--line));
 .kicker { font-family: var(--mono); font-size: 11.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--frost); margin-bottom: 12px; }
 .content h1 { font-family: var(--display); font-weight: 500; font-size: clamp(30px, 5vw, 40px); letter-spacing: -.01em; line-height: 1.1; }
 .content h2 { font-family: var(--display); font-weight: 500; font-size: clamp(21px, 3vw, 26px); letter-spacing: -.01em; }
-.content > p, .doc-sec > p, .prose p { color: var(--muted); font-size: 16px; margin-top: 14px; }
+.content > p, .doc-sec > p, .prose p { color: var(--text); font-size: 16px; margin-top: 14px; }
 /* Subsection heads inside a doc section. Sans, not the Newsreader display
    face the h2s use - an h3 here is a shelf label, not another headline, and
    the weight change alone is enough to rank it under the h2. This exists
@@ -229,7 +229,7 @@ a.fcard:hover { border-color: color-mix(in srgb, var(--frost) 45%, var(--line));
 .content p a, .doc-sec p a, .prose p a, .doc-sec li a { color: var(--frost); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--frost) 35%, transparent); text-underline-offset: 2px; }
 .content p a:hover, .doc-sec p a:hover, .prose p a:hover, .doc-sec li a:hover { text-decoration-color: currentColor; }
 .prose p + p { margin-top: 12px; }
-.lead-p { font-size: 18px !important; color: var(--muted); margin-top: 18px; }
+.lead-p { font-size: 18px !important; color: var(--text); margin-top: 18px; }
 .content b, .prose b { color: var(--ink); font-weight: 600; }
 .content em { color: var(--ink); font-style: italic; }
 /* Inline code in prose is EMBER, matching .keynote code in landing.css.
@@ -252,7 +252,7 @@ p code, li code, .prose code { font-size: 13.5px; background: rgba(239,148,72,.0
 .flag-row { display: grid; grid-template-columns: 190px 1fr; gap: 16px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
 .flag-row:first-child { border-top: 0; padding-top: 0; }
 .flag-row .fk { font-family: var(--mono); font-size: 12.5px; color: var(--frost); }
-.flag-row .fv { color: var(--muted); }
+.flag-row .fv { color: var(--text); }
 .flag-row .fv b { color: var(--ink); }
 @media (max-width: 560px) { .flag-row { grid-template-columns: 1fr; gap: 4px; } }
 
@@ -265,9 +265,9 @@ p code, li code, .prose code { font-size: 13.5px; background: rgba(239,148,72,.0
 .tcard { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 18px; }
 .tcard .tt { font-family: var(--mono); font-size: 13px; font-weight: 700; }
 .tcard.file .tt { color: var(--ember); } .tcard.flow .tt { color: var(--frost); } .tcard.lesson .tt { color: var(--ink); }
-.tcard p { font-size: 13.5px; color: var(--muted); margin-top: 7px; }
+.tcard p { font-size: 13.5px; color: var(--text); margin-top: 7px; }
 
-ul.tight { margin: 14px 0 0; padding-left: 20px; color: var(--muted); font-size: 15px; }
+ul.tight { margin: 14px 0 0; padding-left: 20px; color: var(--text); font-size: 15px; }
 ul.tight li { margin-top: 8px; }
 ul.tight li b { color: var(--ink); }
 
@@ -328,7 +328,7 @@ body.essay-page .term { border-color: var(--term-border); }
 }
 
 .essay-hero .lead-p {
-  color: var(--muted);
+  color: var(--text);
   font-size: clamp(17px, 2vw, 19px) !important;
   line-height: 1.6;
   margin-top: 16px;
@@ -400,7 +400,7 @@ body.essay-page .term { border-color: var(--term-border); }
 .essay-card:hover h2 { color: var(--frost); }
 
 .essay-card p {
-  color: var(--muted);
+  color: var(--text);
   margin-top: 10px;
   font-size: 14.5px;
   line-height: 1.6;
@@ -591,7 +591,7 @@ body.essay-page .term { border-color: var(--term-border); }
   font-family: var(--sans);
   font-size: 15px;
   line-height: 1.55;
-  color: var(--muted);
+  color: var(--text);
   text-align: left;
   /* tied to --measure, never a literal: the caption must share the prose
      left edge, and a fixed width silently indents it whenever --measure moves */
@@ -608,21 +608,21 @@ body.essay-page .term { border-color: var(--term-border); }
 .f-base { fill: var(--muted); fill-opacity: .22; stroke: var(--muted); stroke-width: 1.7; }
 .f-grow { fill: var(--frost); fill-opacity: .38; stroke: var(--frost); stroke-width: 1.7; }
 .f-out  { fill: var(--ember); fill-opacity: .85; stroke: var(--ember); stroke-width: 1.7; }
-.f-box    { fill: var(--surface); stroke: var(--prose); stroke-width: 1.9; }
+.f-box    { fill: var(--surface); stroke: var(--muted); stroke-width: 1.9; }
 .f-box-ok { fill: var(--frost); fill-opacity: .16; stroke: var(--frost); stroke-width: 1.9; }
-.f-hop    { fill: var(--surface); stroke: var(--prose); stroke-width: 1.9; }
+.f-hop    { fill: var(--surface); stroke: var(--muted); stroke-width: 1.9; }
 .f-pin    { fill: var(--ember); stroke: var(--ember); stroke-width: 1.9; }
 .f-area-a { fill: var(--frost); fill-opacity: .34; stroke: var(--frost); stroke-width: 1.8; }
 .f-area-b { fill: var(--ember); fill-opacity: .5;  stroke: var(--ember); stroke-width: 1.8; }
 .f-axis { fill: none; stroke: var(--faint); stroke-width: 1.5; }
-.f-pen  { fill: none; stroke: var(--prose); stroke-width: 1.9; }
+.f-pen  { fill: none; stroke: var(--muted); stroke-width: 1.9; }
 .f-div  { fill: none; stroke: var(--line);  stroke-width: 1.5; stroke-dasharray: 2 9; }
 .f-tick { fill: none; stroke: var(--faint); stroke-width: 1.5; stroke-dasharray: 5 5; }
 .f-mark { fill: none; stroke: var(--ember); stroke-width: 1.6; stroke-dasharray: 5 5; }
 
 .f-head { fill: var(--ink);   font-family: var(--sans); font-size: 13px; font-weight: 700;
           letter-spacing: .07em; text-transform: uppercase; }
-.f-key  { fill: var(--prose); font-family: var(--sans); font-size: 13.5px; }
+.f-key  { fill: var(--muted); font-family: var(--sans); font-size: 13.5px; }
 .f-sub  { fill: var(--muted); font-family: var(--sans); font-size: 12px; }
 .f-lab  { fill: var(--faint); font-family: var(--mono); font-size: 12px; }
 .f-note { fill: var(--ember); font-family: var(--sans); font-size: 13px; font-weight: 600; }
