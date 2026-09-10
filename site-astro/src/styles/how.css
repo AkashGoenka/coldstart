@@ -43,7 +43,7 @@ body.how-page {
 }
 .how-hero h1 em { font-style: italic; color: var(--ember); }
 .how-hero h1 .cold { color: var(--frost); font-style: normal; }
-.how-lead { font-size: clamp(17px, 2vw, 19.5px); color: var(--muted); max-width: 640px; }
+.how-lead { font-size: clamp(17px, 2vw, 19.5px); color: var(--text); max-width: 640px; }
 .how-lead b { color: var(--ink); font-weight: 500; }
 
 .how-back {
@@ -63,7 +63,7 @@ body.how-page {
   font-size: clamp(26px, 3.4vw, 36px); line-height: 1.18;
   letter-spacing: -.015em; margin-bottom: 16px;
 }
-.how-sec-head p { color: var(--muted); font-size: 16.5px; }
+.how-sec-head p { color: var(--text); font-size: 16.5px; }
 .how-sec-head p b { color: var(--ink); font-weight: 500; }
 
 /* ============================================================
@@ -119,7 +119,7 @@ body.how-page {
 }
 .beat.warm .beat-n { color: var(--ember); }
 .beat h3 { font-family: var(--sans); font-size: 17px; font-weight: 600; margin-bottom: 8px; }
-.beat p { color: var(--muted); font-size: 15.5px; }
+.beat p { color: var(--text); font-size: 15.5px; }
 .beat p b { color: var(--ink); font-weight: 500; }
 .beat code {
   font-size: 13px; background: var(--surface); border: 1px solid var(--line);
@@ -129,7 +129,7 @@ body.how-page {
 .loop-close {
   margin-top: 34px; padding: 22px 26px; border-radius: 12px;
   border: 1px solid var(--line-warm); background: linear-gradient(180deg, rgba(239, 148, 72, .06), transparent);
-  font-size: 16px; color: var(--muted);
+  font-size: 16px; color: var(--text);
 }
 .loop-close b { color: var(--ember); font-weight: 500; }
 
@@ -162,20 +162,21 @@ body.how-page {
   word-break: break-word;
 }
 .state h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
-.state p { color: var(--muted); font-size: 15px; }
+.state p { color: var(--text); font-size: 15px; }
 
 .state-note {
   margin-top: 26px; display: flex; gap: 16px; align-items: flex-start;
   padding: 20px 24px; border: 1px dashed var(--line); border-radius: 12px;
-  color: var(--muted); font-size: 15.5px;
+  color: var(--text); font-size: 15.5px;
 }
 .state-note .mk { font-family: var(--mono); color: var(--frost); flex: none; font-size: 13px; padding-top: 2px; }
 .state-note b { color: var(--ink); font-weight: 500; }
 
 /* a secondary point that doesn't earn a whole section */
-.how-aside { margin-top: 40px; padding-top: 30px; border-top: 1px solid var(--line); max-width: 680px; }
+.how-aside { color: var(--text); font-size: 15.5px;
+  margin-top: 40px; padding-top: 30px; border-top: 1px solid var(--line); max-width: 680px; }
 .how-aside h3 { font-family: var(--display); font-weight: 400; font-size: 21px; letter-spacing: -.01em; margin-bottom: 10px; }
-.how-aside p { color: var(--muted); font-size: 15.5px; }
+.how-aside p { color: var(--text); font-size: 15.5px; }
 
 /* ============================================================
    NOTEBOOK MOCK — a built (not screenshotted) recreation of `kb view`
@@ -249,7 +250,7 @@ body.how-page {
 .temp-col.cold .temp-kick { color: var(--frost); }
 .temp-col.warm .temp-kick { color: var(--ember); }
 .temp-col h3 { font-family: var(--display); font-weight: 400; font-size: 22px; margin-bottom: 8px; letter-spacing: -.01em; }
-.temp-col > p { color: var(--muted); font-size: 15px; margin-bottom: 20px; }
+.temp-col > p { color: var(--text); font-size: 15px; margin-bottom: 20px; }
 .temp-items { display: grid; gap: 9px; align-content: start; }
 .temp-item {
   font-family: var(--mono); font-size: 13.5px; padding: 10px 14px; border-radius: 8px;
@@ -346,7 +347,7 @@ body.how-page {
   text-transform: uppercase; color: var(--faint); margin-bottom: 14px;
 }
 .how-index .flow-tile h3 { font-family: var(--sans); font-size: 16px; font-weight: 600; margin-bottom: 10px; }
-.how-index .flow-tile p { color: var(--muted); font-size: 15px; }
+.how-index .flow-tile p { color: var(--text); font-size: 15px; }
 .how-index .flow-tile code {
   font-size: 13px; background: var(--surface); border: 1px solid var(--line);
   border-radius: 5px; padding: 1px 6px; color: var(--frost);
@@ -371,7 +372,7 @@ body.how-page {
 .how-close { padding: 66px 0 90px; border-top: 1px solid var(--line); margin-top: 34px; }
 .how-close p, .how-close .how-cmds { max-width: 680px; }
 .how-close h2 { font-family: var(--display); font-weight: 400; font-size: clamp(26px, 3.4vw, 34px); margin-bottom: 14px; letter-spacing: -.015em; }
-.how-close p { color: var(--muted); font-size: 16.5px; margin-bottom: 28px; }
+.how-close p { color: var(--text); font-size: 16.5px; margin-bottom: 28px; }
 .how-cmds {
   font-family: var(--mono); font-size: 14px; background: var(--term-bg);
   border: 1px solid var(--line); border-radius: 10px; padding: 18px 22px;

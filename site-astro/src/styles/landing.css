@@ -108,7 +108,7 @@ section{padding:76px 0;position:relative;}
 .eyebrow.warm{color:var(--ember);}
 h2{font-family:var(--display);font-weight:500;font-size:clamp(28px,4vw,42px);
   letter-spacing:-.01em;line-height:1.18;}
-.lead{margin-top:20px;font-size:clamp(16px,2vw,19px);color:var(--muted);max-width:60ch;}
+.lead{margin-top:20px;font-size:clamp(16px,2vw,19px);color:var(--text);max-width:60ch;}
 .lead b,.lead strong{color:var(--text);font-weight:600;}
 
 /* Content must remain present when the page is captured, printed, or restored
@@ -126,7 +126,7 @@ h2{font-family:var(--display);font-weight:500;font-size:clamp(28px,4vw,42px);
 h1.title{font-family:var(--display);font-weight:500;margin:0 auto;
   font-size:clamp(28px,4.4vw,44px);line-height:1.2;letter-spacing:-.01em;max-width:36ch;}
 h1.title .cold{color:var(--frost);}
-.hero-sub{margin:26px auto 0;font-size:clamp(16px,2vw,18px);color:var(--muted);max-width:50ch;line-height:1.65;}
+.hero-sub{margin:26px auto 0;font-size:clamp(16px,2vw,18px);color:var(--text);max-width:50ch;line-height:1.65;}
 .hero-sub b{color:var(--text);font-weight:500;}
 .cta{margin-top:34px;display:flex;gap:14px;align-items:center;justify-content:center;flex-wrap:wrap;}
 .cmdline{margin:36px auto 0;display:inline-flex;align-items:center;gap:10px;
@@ -201,7 +201,7 @@ h1.title .cold{color:var(--frost);}
 .op .on{font-family:var(--mono);font-weight:700;font-size:20px;color:var(--frost);}
 .op .on .sig{color:var(--faint);font-weight:400;font-size:14px;}
 .op h3{font-family:var(--display);font-weight:500;font-size:19px;margin:14px 0 8px;letter-spacing:-.01em;color:var(--text);}
-.op p{color:var(--muted);font-size:14.5px;}
+.op p{color:var(--text);font-size:14.5px;}
 .op p em{color:var(--text);font-style:normal;border-bottom:1px solid var(--frost-dim);}
 
 /* ---------- NOTEBOOK (the lead value, warm) ---------- */
@@ -218,7 +218,7 @@ h1.title .cold{color:var(--frost);}
 .nb-main{display:flex;flex-direction:column;align-items:center;margin-top:52px;}
 .nb-steps{list-style:none;margin:0 auto;padding:0;max-width:560px;width:100%;
   display:flex;flex-direction:column;gap:26px;text-align:left;}
-.nb-steps li{position:relative;padding-left:28px;font-size:15.5px;color:var(--muted);line-height:1.55;}
+.nb-steps li{position:relative;padding-left:28px;font-size:15.5px;color:var(--text);line-height:1.55;}
 .nb-steps li::before{content:"—";position:absolute;left:0;top:0;
   font-family:var(--mono);font-size:15px;color:var(--ember);}
 .nb-steps b{color:var(--text);font-weight:600;}
@@ -243,7 +243,7 @@ h1.title .cold{color:var(--frost);}
 .pill.chg{background:rgba(239,148,72,.14);color:var(--ember);}.pill.chg .d{background:var(--ember);}
 .card-title{font-family:var(--display);font-weight:500;font-size:18px;letter-spacing:-.01em;margin-top:12px;color:var(--text);}
 .card-body{padding:16px 22px 20px;}
-.card-body p{font-size:14px;line-height:1.7;color:var(--muted);}
+.card-body p{font-size:14px;line-height:1.7;color:var(--text);}
 .card-body p+p{margin-top:9px;}
 .mono-link{color:var(--frost-dim);font-family:var(--mono);font-size:13px;}
 .warnbar{margin-top:11px;font-family:var(--mono);font-size:11.5px;color:var(--ember);
@@ -326,6 +326,14 @@ h1.title .cold{color:var(--frost);}
   color:var(--ember);white-space:nowrap;flex:none;}
 .keynote p{font-size:15px;color:var(--text);line-height:1.65;}
 .keynote b{font-weight:600;}
+/* The keynote's trailing link is the only route to the benchmark page from
+   the home page; without a rule it inherits body colour and reads as prose. */
+.keynote a{color:var(--ember);text-decoration:underline;text-underline-offset:3px;
+  text-decoration-color:color-mix(in srgb,var(--ember) 45%,transparent);}
+.keynote a:hover{text-decoration-color:var(--ember);}
+.keynote.cool a{color:var(--frost);
+  text-decoration-color:color-mix(in srgb,var(--frost) 45%,transparent);}
+.keynote.cool a:hover{text-decoration-color:var(--frost);}
 .keynote code{font-family:var(--mono);font-size:13px;background:rgba(0,0,0,.35);border:1px solid var(--line-warm);border-radius:6px;padding:2px 7px;color:var(--ember);}
 @media(max-width:640px){.keynote{flex-direction:column;gap:10px;}}
 .nb-foot{margin-top:40px;max-width:64ch;margin-inline:auto;text-align:center;}
@@ -342,7 +350,7 @@ h1.title .cold{color:var(--frost);}
 .col h4{font-family:var(--mono);font-size:14px;margin:0 0 16px;letter-spacing:.02em;}
 .col.them h4{color:var(--muted);}.col.us h4{color:var(--frost);}
 .col ul{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:13px;}
-.col li{display:flex;gap:11px;font-size:14px;color:var(--muted);}
+.col li{display:flex;gap:11px;font-size:14px;color:var(--text);}
 .col li b{color:var(--text);font-weight:600;}
 .mk{font-family:var(--mono);flex:none;}
 .them .mk{color:#c46a60;}.us .mk{color:var(--ok);}
@@ -369,7 +377,7 @@ h1.title .cold{color:var(--frost);}
   text-transform:uppercase;color:var(--frost);margin-bottom:13px;}
 .article-card h3{font-family:var(--mono);font-size:clamp(18px,2.4vw,23px);line-height:1.16;
   letter-spacing:-.025em;color:var(--text);}
-.article-card p{margin-top:12px;color:var(--muted);font-size:14.5px;}
+.article-card p{margin-top:12px;color:var(--text);font-size:14.5px;}
 
 /* ---------- FAQ ---------- */
 .faq{border-top:1px solid var(--line);}
@@ -396,7 +404,7 @@ h1.title .cold{color:var(--frost);}
 .install-term{max-width:760px;margin:36px auto 0;text-align:left;}
 .faq-close{margin-top:52px;text-align:center;}
 .faq-close-links{display:flex;gap:14px;justify-content:center;}
-.install-langs{margin-top:22px;font-family:var(--mono);font-size:12.5px;color:var(--faint);}
+.install-langs{margin-top:22px;font-family:var(--mono);font-size:12.5px;color:var(--muted);}
 
 /* ---------- FOOTER ---------- */
 /* footer: moved to styles/footer.css (one definition, shared) */

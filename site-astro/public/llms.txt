@@ -17,10 +17,15 @@ coldstart ships as an npm package (`@cstart/coldstart`) providing the `coldstart
 - [Home](https://coldstartmcp.dev/): pitch, the two-layer model (index + notebook), how the notebook works, install.
 - [Docs](https://coldstartmcp.dev/docs/): full command reference for `find`, `gs`, and the `kb` family; sharing a notebook with a team; how the index stays fresh.
 - [Blog](https://coldstartmcp.dev/blog/): engineering notes on token cost, codebase graphs, tool adoption, and the notebook's design.
+- [Benchmark method](https://coldstartmcp.dev/benchmark/): how the token numbers were produced — questions generated from closed issue reports (written before a fix existed, so they name the symptom, not the file), correct answers taken from the source files in the commit that closed each issue, two arms differing only in whether coldstart is installed, Sonnet 5 in both, one fresh session per question. Also documents the first benchmark, which was discarded: run on Kafka/Django/Mastodon, where the model's pretraining on those codebases contaminated both arms.
 - [README](https://github.com/AkashGoenka/coldstart/blob/main/README.md): authoritative reference — every flag, install details, limitations.
 - [PHILOSOPHY.md](https://github.com/AkashGoenka/coldstart/blob/main/PHILOSOPHY.md): why coldstart has no embeddings or generated semantics — the consuming agent is the semantic layer.
 - [ARCHITECTURE.md](https://github.com/AkashGoenka/coldstart/blob/main/ARCHITECTURE.md): the index pipeline, keeper/reader process model, and notebook internals.
 - [TROUBLESHOOTING.md](https://github.com/AkashGoenka/coldstart/blob/main/TROUBLESHOOTING.md): recovery procedures.
+
+## Measured results
+
+Measured with the CLI, against a baseline of Claude Code's own search tools with no navigation tool installed. Arches (Python/Django): 64% fewer tokens over 27 questions, recall two points higher. JMRI (Java): 31% fewer tokens over 25 questions, recall at parity. The two disagree by design and are not averaged; per-turn cost differs by language, and the saving comes from removing turns, so questions an agent can settle in two or three turns show little benefit. Token counts only, never dollar figures. Method and caveats: https://coldstartmcp.dev/benchmark/. The benchmark harness is a separate project: https://github.com/AkashGoenka/coldbench
 
 ## For agents evaluating or using coldstart
 

@@ -221,10 +221,11 @@ const jsonLd = {
 
     <p class="sec-tail">
       A lot of candidates don't survive that, and on one repository more were thrown out than kept.
-      The discarded ones get published with the reason attached, because a list of what I removed is
-      the only way you can tell that what's left wasn't picked to make the result look good. The whole
-      procedure is now its own repository, <a href="https://github.com/AkashGoenka/coldbench">coldbench</a>,
-      because it has nothing to do with coldstart and shouldn't live inside it.
+      Each one I drop is recorded with the reason, because a list of what was removed is the only way
+      you can tell that what's left wasn't picked to make the result look good. The whole procedure is
+      now its own repository, <a href="https://github.com/AkashGoenka/coldbench">coldbench</a>, since it
+      has nothing to do with coldstart and shouldn't live inside it. The question sets and the file
+      lists a correct answer needed are going there too, and this page will link them once they land.
     </p>
   </div>
 </section>
@@ -233,30 +234,48 @@ const jsonLd = {
 <section class="how-sec">
   <div class="wrap">
     <div class="how-sec-head">
-      <h2>What it says about coldstart</h2>
+      <h2>The result</h2>
       <p>
-        Two repositories run under the method above. Arches is a Python and Django application. JMRI
-        is Java, considerably more verbose per file and with a heavier build surface. Two arms each:
-        one plain Claude Code with the search tools it ships with, one with coldstart installed and
-        nothing else changed. Same questions, same model, one fresh session per question.
+        Two repositories, run more than once each. Arches is a Python and Django application. JMRI is
+        Java, considerably more verbose per file and with a heavier build surface. Two arms in each:
+        plain Claude Code with the search tools it ships with, and the same thing with coldstart
+        installed and nothing else changed. Same questions both sides, Sonnet 5 throughout, one fresh
+        session per question.
       </p>
     </div>
 
-    <div class="flags">
-      <div class="flag-row"><span class="fk">Arches &#183; Python</span><span class="fv"><b>64% fewer tokens</b> than the no-tool baseline across 27 queries, with recall two points better, because the baseline sometimes ran out of turns before finding the right file at all.</span></div>
-      <div class="flag-row"><span class="fk">JMRI &#183; Java</span><span class="fv"><b>31% fewer tokens</b> across 25 queries, with recall at parity. The first run said 39%, on a machine that was doing other work at the time. Rerun in isolation it came out eight points lower, and 31% is the number.</span></div>
+    <div class="result">
+      <div class="res">
+        <div class="res-repo">Arches <span>Python / Django</span></div>
+        <div class="res-fig">&#8722;64<i>%</i></div>
+        <div class="res-say">
+          tokens against the no-tool baseline, over 27 questions. Recall came out two points
+          <b>better</b>, because the baseline sometimes ran out of turns before it found the file at
+          all.
+        </div>
+      </div>
+      <div class="res">
+        <div class="res-repo">JMRI <span>Java</span></div>
+        <div class="res-fig">&#8722;31<i>%</i></div>
+        <div class="res-say">
+          tokens over 25 questions, recall level with the baseline. The first run said 39%, on a
+          machine that was busy with other work. Rerun in isolation it came out eight points lower,
+          so 31% is the number.
+        </div>
+      </div>
     </div>
 
-    <p>
-      Those two disagree, and I'm not going to average them. One tidier figure would hide the only
-      interesting thing here, which is that Java's verbosity and build tooling change what a single
-      turn costs, and that changes how much a tool which reduces turns can save you.
+    <p class="sec-tail">
+      Both figures are the CLI, which is how coldstart is meant to be run. Those two also disagree,
+      and I'm not going to average them. One tidier number would hide the only interesting thing
+      here, which is that Java's verbosity and build tooling change what a single turn costs, and
+      that changes how much a tool which cuts turns can save you.
     </p>
 
     <div class="how-aside">
-      <b>This is a number about turns.</b> Cost compounds across turns, because every turn replays
-      everything before it. So the saving lives in questions that would have taken an agent a long
-      search to answer. On something it can settle in two or three turns there is very little to take
+      <b>This is a claim about turns.</b> Cost compounds across turns, because every turn replays
+      everything before it. So the saving lives in questions that would otherwise have taken a long
+      search. On something an agent can settle in two or three turns there is very little to take
       away, and coldstart won't show you much. That mechanism is the subject of
       <a href="/blog/where-the-tokens-go/">where the tokens actually go</a>.
     </div>
@@ -342,9 +361,10 @@ const jsonLd = {
      paragraphs collapse into one block. Page-scoped rather than edited into
      how.css, which four other pages depend on. */
   .how-sec-head p + p, .how-sec > .wrap > p + p { margin-top: 14px; }
-  .how-sec > .wrap > p { color: var(--muted); font-size: 16.5px; }
-  /* The closing line of a section: quieter than body copy, no rule above it. */
-  .sec-tail { margin-top: 26px; color: var(--muted); font-size: 16.5px; max-width: 680px; }
+  .how-sec > .wrap > p { color: var(--text); font-size: 16.5px; }
+  /* The closing line of a section. Same colour as body copy - DESIGN.md keeps
+     grey for labels and captions, never for a sentence. */
+  .sec-tail { margin-top: 26px; color: var(--text); font-size: 16.5px; max-width: 680px; }
 
   /* ONE body measure. how.css stacks several - .wrap 940, .flags 892,
      .how-sec-head/.how-aside 680 - which is fine on /vs/vector-rag/ where wide
@@ -354,7 +374,29 @@ const jsonLd = {
      prose measure rather than narrowing .wrap: the wrap is what puts this page's
      left edge in the same place as /how-it-works/ and /vs/vector-rag/, so a
      reader moving between them doesn't see the text jump sideways. */
-  .how-sec .flags, .how-sec .flag-row { max-width: 680px; }
+  .how-sec .flags, .how-sec .flag-row, .result { max-width: 680px; }
+
+  /* The one place on the page that isn't a flag table. Six identical key/value
+     blocks make every section weigh the same; the result is the thing a reader
+     came for, so it gets the only display-size figures here. */
+  .result { margin-top: 30px; display: grid; gap: 1px; background: var(--line);
+            border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .res { background: var(--ground); padding: 26px 28px; display: grid;
+         grid-template-columns: auto 1fr; column-gap: 28px; row-gap: 10px;
+         align-items: baseline; }
+  .res-repo { grid-column: 1 / -1; font-family: var(--mono); font-size: 12.5px;
+              letter-spacing: .04em; color: var(--frost); }
+  .res-repo span { color: var(--faint); margin-left: 10px; letter-spacing: .02em; }
+  .res-fig { font-family: var(--display); font-weight: 400; font-size: 54px;
+             line-height: .9; letter-spacing: -.02em; color: var(--text);
+             font-variant-numeric: tabular-nums; }
+  .res-fig i { font-style: normal; font-size: 26px; color: var(--faint);
+               margin-left: 2px; }
+  .res-say { color: var(--text); font-size: 15.5px; line-height: 1.6; }
+  .res-say b { font-weight: 500; }
+  @media (max-width: 620px) {
+    .res { grid-template-columns: 1fr; row-gap: 14px; }
+  }
 </style>
 </body>
 </html>
