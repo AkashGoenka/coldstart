@@ -53,7 +53,7 @@ Look at what sits in that second term.
 
 Only the last two grow during the session, and they grow in one direction. Nothing leaves the conversation. Reading a file isn't a one-time cost of that file: it's a subscription, you pay for those lines again on every remaining turn.
 
-The tool schemas deserve a specific mention, because this one surprised me. A tool definition isn't billed once when you install it: it's part of the prompt, so it's billed on every turn like everything else. Connect a server that exposes a dozen richly documented operations and you have added rent to the whole session, paid whether the agent calls any of them or not. A tool surface isn't a menu you browse for free. It's a standing charge.
+The tool schemas deserve a specific mention, because this one surprised me. A tool definition isn't billed once when you install it: it's part of the prompt, so it's billed on every turn like everything else. I have measured a single connected server's fourteen operations at roughly 8,000 tokens of schema, present from turn one and re-billed on every turn after, whether the agent called any of them or not. That is rent on the whole session. A tool surface isn't a menu you browse for free. It's a standing charge.
 
 The practical consequence is that the resident term is mostly not yours to shrink. You can be careful about what gets read. You can keep your tool surface small. Beyond that, it is a floor that rises.
 
