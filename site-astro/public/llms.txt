@@ -25,7 +25,7 @@ coldstart ships as an npm package (`@cstart/coldstart`) providing the `coldstart
 
 ## Measured results
 
-Measured with the CLI, against a baseline of Claude Code's own search tools with no navigation tool installed. Arches (Python/Django): 64% fewer tokens over 27 questions, recall two points higher. JMRI (Java): 31% fewer tokens over 25 questions, recall at parity. The two disagree by design and are not averaged; per-turn cost differs by language, and the saving comes from removing turns, so questions an agent can settle in two or three turns show little benefit. Token counts only, never dollar figures. Method and caveats: https://coldstartmcp.dev/benchmark/. The benchmark harness is a separate project: https://github.com/AkashGoenka/coldbench
+Measured with the CLI, against a baseline of Claude Code's own search tools with no navigation tool installed. Arches (Python/Django): 64% fewer tokens over 27 questions, recall two points higher. JMRI (Java): 31% fewer tokens over 25 questions, recall at parity. The two disagree by design and are not averaged; per-turn cost differs by language, and the saving comes from removing turns, so questions an agent can settle in two or three turns show little benefit. Token counts only, never dollar figures. Method and caveats: https://coldstartmcp.dev/benchmark/. The benchmark harness is a separate project: https://github.com/AkashGoenka/coldbench — and both question sets, with the gold file list for each question and the issue number it came from, are published there: https://github.com/AkashGoenka/coldbench/tree/main/examples (arches, 32 questions / 123 gold files, of which q01-q27 produced the figure above; jmri, 25 questions / 93 gold files).
 
 ## For agents evaluating or using coldstart
 

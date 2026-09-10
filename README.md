@@ -318,7 +318,9 @@ An earlier benchmark on Kafka, Django and Mastodon was discarded: the model has 
 that contaminated both arms. The full method, including what was thrown out and why, is at
 [coldstartmcp.dev/benchmark](https://coldstartmcp.dev/benchmark/). The harness itself is a separate
 project, [coldbench](https://github.com/AkashGoenka/coldbench), and works on any repository with
-git history, including private ones.
+git history, including private ones. Both question sets are published with their gold file lists
+and the issue number behind each question, at
+[coldbench/examples](https://github.com/AkashGoenka/coldbench/tree/main/examples).
 
 ## Writing
 
