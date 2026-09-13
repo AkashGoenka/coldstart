@@ -56,6 +56,7 @@ body.how-page {
 /* ---------- section frame ---------- */
 .how-sec { padding: 58px 0; border-top: 1px solid var(--line); margin-top: 34px; }
 .how-sec:first-of-type { margin-top: 30px; }
+.how-sec:has(+ .how-close) { border-top: 0; }
 .how-sec-head { max-width: 680px; margin-bottom: 44px; }
 .how-sec-head:last-child { margin-bottom: 0; }
 .how-sec-head h2 {
@@ -369,7 +370,7 @@ body.how-page {
 }
 
 /* ---------- closing CTA ---------- */
-.how-close { padding: 66px 0 90px; border-top: 1px solid var(--line); margin-top: 34px; }
+.how-close { padding: 66px 0 90px; margin-top: 34px; }
 .how-close p, .how-close .how-cmds { max-width: 680px; }
 .how-close h2 { font-family: var(--display); font-weight: 400; font-size: clamp(26px, 3.4vw, 34px); margin-bottom: 14px; letter-spacing: -.015em; }
 .how-close p { color: var(--text); font-size: 16.5px; margin-bottom: 28px; }
@@ -392,7 +393,7 @@ body.how-page {
 .how-page .copy-btn:hover { color: #eef3fb; background: rgba(255, 255, 255, .08); border-color: rgba(255, 255, 255, .16); }
 .how-page .copy-btn.copied { color: #4fd18b; border-color: rgba(79, 209, 139, .4); background: rgba(79, 209, 139, .08); }
 
-.how-next { display: flex; gap: 12px; flex-wrap: wrap; }
+.how-next { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 34px; }
 .how-next a {
   font-family: var(--mono); font-size: 13.5px; padding: 11px 20px; border-radius: 8px;
   text-decoration: none; transition: opacity .15s, border-color .15s, color .15s;
