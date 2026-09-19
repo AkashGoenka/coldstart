@@ -45,6 +45,27 @@ function turn(tools: Array<{ name: string; input: Record<string, unknown> }>): s
   ];
 }
 
+/** Like turn(), but stamped — the hook places the resume boundary by timestamp. */
+function turnAt(ts: string, tools: Array<{ name: string; input: Record<string, unknown> }>): string[] {
+  const uses = tools.map((t) => ({ type: 'tool_use', id: `t${++toolId}`, name: t.name, input: t.input }));
+  return [
+    JSON.stringify({ type: 'assistant', timestamp: ts, message: { content: uses } }),
+    ...uses.map((u) => JSON.stringify({
+      type: 'user',
+      timestamp: ts,
+      message: { content: [{ type: 'tool_result', tool_use_id: u.id, is_error: false }] },
+    })),
+  ];
+}
+
+/** Stamp a past fire in the durable metrics log (the marker's twin). */
+function recordFire(ts: string): void {
+  const dir = path.join(root, '.coldstart', 'notebook', '.metrics');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.appendFileSync(path.join(dir, 'capture.jsonl'),
+    JSON.stringify({ ts, event: 'fire', reason: 'descent', mode: 'inject', session: sid, files: 3 }) + '\n');
+}
+
 /** Append lines to the session transcript and invoke one Stop. */
 function stop(lines: string[], opts: { event?: string; aid?: string; transcriptPath?: string; cwd?: string } = {}): string {
   const tp = opts.transcriptPath ?? transcript;
@@ -188,11 +209,14 @@ describe('kb-elicit v5 trigger', () => {
     expect(marker.files['src/after.py']?.edits).toBe(1);
   });
 
-  it('a fresh marker meeting a LARGE pre-existing transcript baselines instead of cap-firing a blob', () => {
-    // Resume scenario: the OS cleared the tmp marker between days, but the on-disk
-    // transcript still holds the whole prior session. A fresh marker reprocessing
-    // it from line 0 would treat all history as this-turn work and cap-fire a blob.
-    seed(['src/hist0.py']); // only the file edited after attach needs to exist
+  it('a fresh marker meeting a LARGE transcript with NO fire on record replays it in full', () => {
+    // The 2026-09-19 fix. The tmp marker is swept every few days; the transcript
+    // survives. The old rule read "> 400 lines" as "already accounted for" and
+    // snapped the offset to the END, discarding every read since the sweep — which
+    // is a LONG SINGLE TASK, not stale history (62 of 121 transcripts in this repo
+    // pass 400 lines in one sitting). Nothing was ever offered for this session, so
+    // nothing may be skipped.
+    seed(Array.from({ length: 210 }, (_, i) => `src/hist${i}.py`));
     const histTurns = Array.from({ length: 210 }, (_, i) =>
       turn([{ name: 'Read', input: { file_path: path.join(root, `src/hist${i}.py`) } }])).flat();
     fs.writeFileSync(transcript, histTurns.join('\n') + '\n');
@@ -200,19 +224,41 @@ describe('kb-elicit v5 trigger', () => {
     const markerPath = path.join(os.tmpdir(), `coldstart-kb-${sid}-main.json`);
     expect(fs.existsSync(markerPath)).toBe(false); // fresh: no marker on disk
 
-    const out = stop([]); // process the already-large transcript
-    expect(out.trim()).toBe('');                    // baseline → silent, NO blob fire
-    expect(fs.existsSync(pendingFile())).toBe(false);
-    const baselined = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
-    expect(baselined.lineCount).toBeGreaterThan(400); // offset snapped to the end
-    expect(Object.keys(baselined.files)).toEqual([]); // nothing recorded — watch from here
+    stop([]); // process the already-large transcript
+    const m = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+    expect(m.files['src/hist0.py']?.reads).toBe(1);   // recorded, NOT discarded
+    expect(m.files['src/hist209.py']?.reads).toBe(1);
+    expect(m.lineCount).toBe(histTurns.length);
+  });
 
-    // Real work AFTER the attach is captured normally (baseline didn't wedge it).
-    fs.appendFileSync(transcript,
-      turn([{ name: 'Edit', input: { file_path: path.join(root, 'src/hist0.py') } }]).join('\n') + '\n');
+  it('a fresh marker resumes from the last FIRE on record, not from the top', () => {
+    // capture.jsonl survives the sweep that ate the marker, and a fire is the one
+    // event meaning "these files were put in front of the agent". Work before that
+    // stamp was offered; work after it never was.
+    seed(['src/before.py', 'src/after.py']);
+    recordFire('2026-09-10T12:00:00.000Z');
+    fs.writeFileSync(transcript, [
+      ...turnAt('2026-09-10T11:00:00.000Z', [{ name: 'Read', input: { file_path: path.join(root, 'src/before.py') } }]),
+      ...turnAt('2026-09-11T09:00:00.000Z', [{ name: 'Read', input: { file_path: path.join(root, 'src/after.py') } }]),
+    ].join('\n') + '\n');
+
     stop([]);
-    const after = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
-    expect(after.files['src/hist0.py']?.edits).toBe(1);
+    const m = JSON.parse(fs.readFileSync(path.join(os.tmpdir(), `coldstart-kb-${sid}-main.json`), 'utf8'));
+    expect(m.files['src/after.py']?.reads).toBe(1);  // never offered → captured
+    expect(m.files['src/before.py']).toBeUndefined(); // already offered → skipped
+  });
+
+  it('a fire on record but NO timestamps to place it replays rather than skipping', () => {
+    // Fail-safe direction: if the boundary cannot be located, losing unasked work
+    // is the worse error, so replay.
+    seed(['src/notime.py']);
+    recordFire('2026-09-10T12:00:00.000Z');
+    fs.writeFileSync(transcript,
+      turn([{ name: 'Read', input: { file_path: path.join(root, 'src/notime.py') } }]).join('\n') + '\n');
+
+    stop([]);
+    const m = JSON.parse(fs.readFileSync(path.join(os.tmpdir(), `coldstart-kb-${sid}-main.json`), 'utf8'));
+    expect(m.files['src/notime.py']?.reads).toBe(1);
   });
 
   it('a genuine first Stop with a small transcript still records evidence (not baselined)', () => {
