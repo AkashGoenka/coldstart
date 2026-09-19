@@ -39,6 +39,7 @@ import { loadIgnore } from "./ignore.mjs";
 import { buildCapturePayload, worklistJsonPath } from "./capture-payload.mjs";
 import {
   worklistEntries, freshNotedSet, gitHead, logCaptureEvent, writePendingCapture, MAX_WORKLIST,
+  lastFireAt, lineIndexAfter,
 } from "./elicit-core.mjs";
 
 // hooks/ sits beside dist/ in both the repo and the published package.
@@ -352,24 +353,39 @@ if (process.argv.includes("--manual")) {
     // line count grows back. Reset to reprocess the new transcript from its start.
     if (state.lineCount > lines.length) state.lineCount = 0;
 
-    // Fresh attach to an ALREADY-LARGE transcript → baseline, fire NOTHING.
-    // When the OS clears the tmp marker between days, the next Stop starts fresh
-    // but the on-disk transcript still holds the WHOLE session. Reprocessing it
-    // from line 0 treats all of history as this turn's work and dumps the entire
-    // file set into one cap "blob" (the stop=1 cap fires we saw on resumed
-    // sessions). A genuine first Stop, by contrast, has a tiny transcript (this
-    // turn only) and must still be processed so its evidence can build toward
-    // arming. So baseline ONLY when a fresh marker meets a large transcript:
-    // snapshot the offset + HEAD and start watching from here. Subagents keep
-    // their own one-shot path below (a fresh aid-marker is normal — never baseline).
-    const RESUMED_ATTACH_LINES = 400; // a first turn is tens of lines; a resume is thousands
-    if (freshMarker && !isSubagent && lines.length > RESUMED_ATTACH_LINES) {
-      state.lineCount = lines.length;
-      state.head = gitHead(root) || state.head;
-      writeFileSync(marker, JSON.stringify(state));
-      logCaptureEvent(root, { event: "baseline", session: sid, lines: lines.length });
-      log(`BASELINE fresh-marker-large-transcript session=${sid} lines=${lines.length}`);
-      process.exit(0);
+    // Fresh marker + a transcript that predates it: RECOVER the offset, don't guess it.
+    //
+    // The marker lives in the OS temp dir and is swept every few days, so a session
+    // resumed across days keeps losing its read offset while the transcript keeps the
+    // whole history. Until 2026-09-19 this was handled by "transcript > 400 lines ⇒
+    // assume already accounted for ⇒ snap the offset to the END", which threw away
+    // every read and edit since the last sweep. Line count cannot answer that
+    // question: 62 of 121 transcripts in this repo pass 400 lines in ONE sitting, so
+    // an ordinary long task was read as stale history and silently dropped (the
+    // reported symptom: a long single-prompt task finishes, /capture-notes says it
+    // was never asked to write anything).
+    //
+    // So ask the durable record instead of a proxy. capture.jsonl survives the sweep
+    // and stamps every fire with session + ts, so the last fire marks the exact point
+    // up to which this session was already asked for notes. Resume THERE: everything
+    // before it was offered, everything after it never was. No fire on record ⇒ this
+    // session has never been asked for anything ⇒ replay in full, however large,
+    // because losing unasked work is the failure that matters.
+    //
+    // Known gap: files that a fire ranked past MAX_CAPTURE_FILES were read before
+    // that fire, so a sweep still forgets them. Bounded and far smaller than
+    // dropping the whole span; revisit only with evidence it bites.
+    // Subagents keep their own one-shot path below (a fresh aid-marker is normal).
+    if (freshMarker && !isSubagent) {
+      const since = lastFireAt(root, sid);
+      const resumeAt = since ? lineIndexAfter(lines, since) : 0;
+      if (resumeAt > 0) {
+        state.lineCount = resumeAt;
+        logCaptureEvent(root, { event: "reattach", session: sid, lines: lines.length, resumeAt, since });
+        log(`REATTACH session=${sid} lines=${lines.length} resumeAt=${resumeAt} since=${since}`);
+      } else {
+        log(`REPLAY session=${sid} lines=${lines.length} (no fire on record for this session)`);
+      }
     }
 
     const segment = lines.slice(state.lineCount).join("\n");
