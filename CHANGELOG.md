@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.3] - 2026-09-19
+
+### Fixed
+- **A single prompt that ran the agent through a lot of turns was captured as nothing at all.**
+  The task would finish, you would run `/capture-notes`, and it would tell you it was never asked
+  to write anything up, even though the agent had just read and edited a pile of files. The
+  capture hook keeps a marker in the OS temp directory holding how far it has read into the
+  conversation transcript, so each stop only processes new lines. Temp gets swept every few days
+  and the transcript does not, so a session picked back up across days keeps losing that offset
+  while the full history stays on disk. The guard for that read "transcript over 400 lines" as
+  "already accounted for", jumped the offset to the end of the file and recorded nothing. Line
+  count cannot answer that question. Every tool call writes a couple of transcript lines, so an
+  ordinary busy session crosses 400 in one sitting, and 62 of 121 transcripts in this repo are
+  over that line. The result was that long tasks got mistaken for stale history and everything
+  they touched was dropped. Measured footprint before the fix: 24 discards across 8 sessions, all
+  spanning 5 to 11 days of calendar time, one of them hit six separate times. The hook now asks
+  the durable record instead of guessing from size. `capture.jsonl` lives in the repo, is append
+  only, and stamps every fire with a session id and timestamp, so it survives the sweep that eats
+  the marker. When the marker is missing it finds the newest fire for that session, finds the
+  first transcript line stamped after it, and resumes there: everything before that point was
+  already put in front of the agent, everything after it never was. Fire events only, since a stop
+  that merely processed evidence banked it in the marker that just got swept. Both unknowns fail
+  towards replay rather than skipping, so a session with no fire on record replays in full however
+  large, and so does one whose boundary cannot be placed. Costs 0.6ms to read the record plus 25ms
+  to find the line on the largest transcript here (39k lines, 126MB), and it skips roughly 25k
+  already-offered lines, so it does less work than the replay it replaces. (#173)
+
 ## [2.3.2] - 2026-09-01
 
 ### Fixed
