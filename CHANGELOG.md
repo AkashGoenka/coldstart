@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.4] - 2026-09-29
+
+### Fixed
+- **Files an agent edited with an inline script were invisible to the edit tracking.** Newer
+  models often write `p='x.json'` on one line and `open(p, 'w')` on the next instead of putting
+  the path inside the call. The hooks only recognised a literal path inside the call itself, so
+  such an edit was treated as touching a computed path and claimed nothing: no capture evidence,
+  and no co-change nudge for the files that usually change with it. A variable that holds a
+  literal is now followed one step back to its last assignment, and each open call in a script is
+  judged on its own, so a script that reads one file and writes another marks each correctly.
+  Loops, `sys.argv` and built-up paths still claim nothing, on purpose. (#176, #177)
+- **A read-only open was reported as an edit when the file name began with `w`, `a` or `x`.**
+  The write check matched the quote plus the first letter of the path, so
+  `open('app.json')` looked like mode `'a'`. It now looks only at the mode string after the first
+  argument. (#177)
+- **Nested Java generics broke same-package edges.** `Repo extends Base<Map<K, V>>` had its
+  generics stripped only one level deep, leaving a stray `>` in the recorded parent name so it
+  never resolved to a file. Stripping now repeats until nothing is left, which also removes junk
+  names from the unresolved count. On kafka this added 153 edges; jmri gained 1. (#178)
+- **Quotes were not escaped in the notebook viewer's `esc()`**, so a note title or path
+  containing `"` or `'` could break out of an HTML attribute. (#178)
+- **A Vue/Svelte `<script>` block closed with `</script >` or `</script bar>` was not recognised**
+  as ended, so the rest of the file was read as script. HTML allows whitespace and attributes in
+  an end tag; extraction now does too. (#178)
+
+### Changed
+- **Graph viewer search matches across separators and works from the keyboard.** A query like
+  `kb elicit` now finds `kb-elicit.mjs` (hyphen, underscore, dot and slash count as spaces), and
+  the arrow keys move a highlighted result that Enter picks instead of always taking the first.
+  (#175)
+
 ## [2.3.3] - 2026-09-19
 
 ### Fixed
