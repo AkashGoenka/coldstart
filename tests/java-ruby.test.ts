@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseFile } from '../src/indexer/parser.js';
-import { parseJavaContent } from '../src/indexer/extractors/java.js';
+import { parseJavaContent, stripGenerics } from '../src/indexer/extractors/java.js';
 import { parseRubyContent } from '../src/indexer/extractors/ruby.js';
 import { parseKotlinContent } from '../src/indexer/extractors/kotlin.js';
 import { ensureParsersReady } from '../src/indexer/extractors/parser-factory.js';
@@ -111,6 +111,27 @@ describe('java-parser — symbol extraction (direct)', () => {
     const cls = result.symbols.find(s => s.name === 'AdminService');
     expect(cls).toBeDefined();
     expect(cls!.extendsName).toBe('AuthService');
+  });
+
+  // CodeQL-driven fix: one `<[^>]*>` pass turned `Map<String, List<String>>` into
+  // `Map>` — a name that matches no class, so the edge was silently lost.
+  it('stripGenerics removes NESTED generic arguments', () => {
+    expect(stripGenerics('List<String>')).toBe('List');
+    expect(stripGenerics('Map<String, List<String>>')).toBe('Map');
+    expect(stripGenerics('Foo<A<B<C>>>')).toBe('Foo');
+    expect(stripGenerics('Outer<T>.Inner')).toBe('Outer.Inner'); // qualified names stay qualified
+    expect(stripGenerics('Plain')).toBe('Plain');
+  });
+
+  it('extends / implements names survive nested generics', () => {
+    const src = `
+      public class Repo extends Base<Map<String, List<String>>> implements Comparable<Repo>, Handler<Map<K, V>> {
+        public void run() {}
+      }
+    `;
+    const cls = parseJavaContent(src, AUTH_FILE_ID).symbols.find(s => s.name === 'Repo');
+    expect(cls!.extendsName).toBe('Base');
+    expect(cls!.implementsNames).toEqual(['Comparable', 'Handler']);
   });
 
   it('extracts method symbols from class body', () => {

@@ -32,12 +32,14 @@ const MAX_FILE_SIZE = 1_000_000; // 1 MB
  */
 function extractSfcScripts(content: string): string | null {
   const blocks: string[] = [];
-  const re = /<script(?:\s[^>]*)?>[\s\S]*?<\/script>/gi;
+  // HTML parsers accept whitespace and even junk attributes in an end tag
+  // (`</script >`, `</script\t\n bar>`), hence `(?:\s[^>]*)?`.
+  const re = /<script(?:\s[^>]*)?>[\s\S]*?<\/script(?:\s[^>]*)?>/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(content)) !== null) {
     const inner = m[0]
       .replace(/<script(?:\s[^>]*)?>/i, '')
-      .replace(/<\/script>/i, '');
+      .replace(/<\/script(?:\s[^>]*)?>/i, '');
     blocks.push(inner);
   }
   return blocks.length > 0 ? blocks.join('\n') : null;

@@ -87,6 +87,23 @@ describe('kb view — buildViewData', () => {
   });
 });
 
+describe('kb view — esc (attribute-safe)', () => {
+  // The template's `esc` feeds double-quoted attributes (data-dir="${esc(path)}").
+  // Escaping only & < > let a path or title containing `"` break out of the
+  // attribute (CodeQL js/incomplete-html-attribute-sanitization).
+  const esc = new Function(`${VIEW_TEMPLATE.match(/const esc = [^\n]*;/)![0]}; return esc;`)() as (s: unknown) => string;
+
+  it('escapes quotes so a value cannot close an attribute', () => {
+    const out = esc(`a" onmouseover="x' y`);
+    expect(out).not.toMatch(/["']/);
+    expect(out).toBe('a&quot; onmouseover=&quot;x&#39; y');
+  });
+
+  it('still escapes the text-node characters', () => {
+    expect(esc('<b>&')).toBe('&lt;b&gt;&amp;');
+  });
+});
+
 describe('kb view — renderViewHtml', () => {
   it('injects data and neutralizes </script> so note text cannot break out', () => {
     const html = renderViewHtml(VIEW_TEMPLATE, { summary: { total: 1 }, notes: [{ body: 'evil </script> text' }] });

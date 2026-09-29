@@ -44,9 +44,17 @@ function callsFromMap(calls: Map<string, number>, exclude?: string): CallSite[] 
   return out;
 }
 
-/** Strip generic type parameters: List<String> → List */
-function stripGenerics(name: string): string {
-  return name.replace(/<[^>]*>/g, '').trim();
+/** Strip generic type parameters: List<String> → List. Removes the innermost
+ *  `<...>` repeatedly so nesting works — a single `<[^>]*>` pass turned
+ *  `Map<String, List<String>>` into `Map>`, a name that matches no class. */
+export function stripGenerics(name: string): string {
+  let s = name;
+  let prev: string;
+  do {
+    prev = s;
+    s = s.replace(/<[^<>]*>/g, '');
+  } while (s !== prev);
+  return s.trim();
 }
 
 /** Extract modifiers from a node's modifier children.
