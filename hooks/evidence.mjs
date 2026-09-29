@@ -108,18 +108,59 @@ const READ_API_RE = new RegExp(
 const WRITE_API_RE = new RegExp(
   [
     "writeFileSync", "appendFileSync", "writeFile\\s*\\(", "createWriteStream", "Deno\\.writeTextFile",
-    "\\bopen\\s*\\([^)]*['\"][wax]", "\\.write_text\\b", "json\\.dump\\s*\\(",
+    // A mode string AFTER the first argument. The old `[^)]*['"][wax]` also matched
+    // the first letter of the PATH, so open('assets/x.json') was reported as an edit.
+    "\\b(?:f?open)\\s*\\([^,)]*,\\s*(?:mode\\s*=\\s*)?['\"][wax]", "\\.write_text\\b", "json\\.dump\\s*\\(",
     "File\\.write", "os\\.WriteFile", "ioutil\\.WriteFile", "file_put_contents",
     "Files\\.write", "\\bwriteText\\s*\\(",
   ].join("|"),
 );
 
-// The quoted first argument of a file-open call — WHICH file the script named.
-// Detection (above) answers "is this a read"; this answers "a read of what", and
-// the two are deliberately separate: the nudge only needs the first, the capture
+// A file-open call and the text after its opening paren. Detection (above) answers
+// "is this a read"; inlineCalls answers "a read of WHAT, and is THIS call a write",
+// and the two are deliberately separate: the nudge only needs the first, the capture
 // worklist needs the second or it anchors notes to the wrong file.
-const API_ARG_RE =
-  /(?:readFileSync|readFile|createReadStream|readTextFile|writeFileSync|appendFileSync|writeFile|writeTextFile|read_text|write_text|file_get_contents|file_put_contents|fopen|open|load|ReadFile|WriteFile|readString|readAllLines|readAllBytes|readText|writeText|File\.(?:read|readlines|write|foreach)|IO\.read)\s*\(\s*(['"`])([^'"`\n]+)\1/g;
+const OPEN_CALL_RE =
+  /(readFileSync|readFile|createReadStream|readTextFile|writeFileSync|appendFileSync|writeFile|writeTextFile|read_text|write_text|file_get_contents|file_put_contents|fopen|open|load|ReadFile|WriteFile|readString|readAllLines|readAllBytes|readText|writeText|File\.(?:read|readlines|write|foreach)|IO\.read)\s*\(\s*/g;
+const WRITE_CALL_NAMES = /^(?:writeFileSync|appendFileSync|writeFile|writeTextFile|write_text|file_put_contents|WriteFile|writeText|File\.write)$/;
+
+/** The file each open call in an inline script names, with that call's OWN tier.
+ *
+ *  The path is a quoted literal, OR a bare identifier resolved ONE hop to the last
+ *  literal assignment before the call (`p='a.json'` then `open(p)`) — the shape
+ *  newer models write, 38% of inline opens. That is data flow of a single
+ *  assignment, not a guess. Loops, argv, f-strings, globs and reassignment from a
+ *  computed value stay unattributed: silence is the safe failure.
+ *
+ *  Tier is per call, not per command: a script that reads a.json and writes b.json
+ *  reads one and edits the other. */
+function inlineCalls(body) {
+  const out = [];
+  for (const m of body.matchAll(OPEN_CALL_RE)) {
+    const rest = body.slice(m.index + m[0].length);
+    let path = null;
+    let after = "";
+    const lit = rest.match(/^(['"`])([^'"`\n]+)\1/);
+    if (lit) {
+      path = lit[2];
+      after = rest.slice(lit[0].length);
+    } else {
+      const id = rest.match(/^([A-Za-z_]\w*)(?=\s*[,)])/);
+      if (id) {
+        const asg = new RegExp(`(?:^|[\\s;(,])(?:const |let |var )?${id[1]}\\s*=\\s*(['"\`])([^'"\`\\n]+)\\1`, "g");
+        let last = null;
+        for (const a of body.slice(0, m.index).matchAll(asg)) last = a;
+        if (last) { path = last[2]; after = rest.slice(id[0].length); }
+      }
+    }
+    if (!path || path.includes("${")) continue;
+    const opensWithMode = m[1] === "open" || m[1] === "fopen";
+    const mode = opensWithMode ? after.match(/^\s*,\s*(?:mode\s*=\s*)?(['"])([^'"]*)\1/) : null;
+    const write = WRITE_CALL_NAMES.test(m[1]) || (mode !== null && /^[wax]/.test(mode[2]));
+    out.push({ path, tier: write ? TIER.edit : TIER.read });
+  }
+  return out;
+}
 
 /** Files a shell fragment REDIRECTS into. `cat > x <<EOF` is a write even though
  *  its verb is a read verb, so this has to override the verb table — otherwise
@@ -192,10 +233,12 @@ function classifyBash(cmd) {
     // being invoked, a path in an adjacent `&&` clause. Tiering the whole
     // command would promote every one of them to "read", which is precisely the
     // mention-promoted-to-read pollution this file's header warns about.
-    // A read whose path comes from a variable, argv or a glob (58% of them)
-    // targets nothing we can name, so it attributes nothing — correct, not a gap.
-    const targets = [...whole.matchAll(API_ARG_RE)].map((m) => m[2]);
-    for (const t of targets.slice(0, 12)) out.push({ token: t, tier: scriptTier });
+    // A path from argv, a loop or a glob targets nothing we can name, so it
+    // attributes nothing — correct, not a gap. A variable holding a literal IS
+    // nameable; inlineCalls resolves that one hop.
+    const calls = inlineCalls(whole).slice(0, 12);
+    const targets = calls.map((c) => c.path);
+    for (const c of calls) out.push({ token: c.path, tier: c.tier });
     let sn = 0;
     for (const m of whole.matchAll(BASH_PATH_RE)) {
       if (++sn > 12) break;

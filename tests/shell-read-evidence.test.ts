@@ -32,7 +32,7 @@ let root: string;
 beforeAll(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'coldstart-shellread-'));
   fs.mkdirSync(path.join(root, 'src'), { recursive: true });
-  for (const f of ['src/a.ts', 'src/b.ts', 'src/c.ts', 'package.json', 'lock.json', 'out.json'])
+  for (const f of ['src/a.ts', 'src/b.ts', 'src/c.ts', 'package.json', 'lock.json', 'out.json', 'app.json'])
     fs.writeFileSync(path.join(root, f), '{}\n');
 });
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -115,6 +115,42 @@ describe('attribution — which file did the script actually name (capture)', ()
   it('running a script is not reading it, and grep hits are not reads', () => {
     expect(tiers('node src/a.ts')['src/a.ts']).toBe('mention');
     expect(tiers('grep -rn TIER src/b.ts')['src/b.ts']).toBe('mention');
+  });
+
+  // #176 — the shape newer models write: `p='x.json'` then `open(p)`.
+  it('a variable holding a literal path is resolved one hop', () => {
+    const t = tiers(`python3 - <<'E'\nimport json\np='src/a.ts'\ns=open(p).read()\nopen(p,'w').write(s)\nE`);
+    expect(t['src/a.ts']).toBe('edit');
+  });
+
+  it('a reassigned variable resolves to the LAST assignment before each call', () => {
+    const t = tiers(`python3 - <<'E'\np='src/a.ts'\ns=open(p).read()\np='src/b.ts'\nopen(p,'w').write(s)\nE`);
+    expect(t['src/a.ts']).toBe('read');
+    expect(t['src/b.ts']).toBe('edit');
+  });
+
+  it('JS const + readFileSync(p) resolves too', () => {
+    const t = tiers(`node - <<'EOF'\nimport { readFileSync } from 'node:fs'\nconst p = 'lock.json'\nconsole.log(readFileSync(p, 'utf8'))\nEOF`);
+    expect(t['lock.json']).toBe('read');
+  });
+
+  it('CONTROL — loops, argv and computed paths still attribute nothing', () => {
+    expect(tiers(`python3 - <<'E'\nfor p in ['src/a.ts']:\n    open(p).read()\nE`)['src/a.ts']).toBe('mention');
+    expect(tiers(`python3 - <<'E'\np=sys.argv[1]\nopen(p).read()\nE`)['src/a.ts']).toBeUndefined();
+    expect(tiers(`python3 - <<'E'\np='src/'+name\nopen(p).read()\nE`)['src/a.ts']).toBeUndefined();
+  });
+
+  it('a read-only open is a read even when the path starts with w, a or x', () => {
+    // WRITE_API_RE used to match the quote + first letter of the path: `'a`.
+    expect(tiers(`python3 -c "print(open('app.json').read())"`)['app.json']).toBe('read');
+    expect(tiers(`python3 -c "print(open('app.json', 'r').read())"`)['app.json']).toBe('read');
+    expect(tiers(`python3 -c "open('out.json', mode='a').write('x')"`)['out.json']).toBe('edit');
+  });
+
+  it('a script that reads one file and writes another tiers each on its own', () => {
+    const t = tiers(`python3 - <<'E'\ns=open('src/a.ts').read()\nopen('out.json','w').write(s)\nE`);
+    expect(t['src/a.ts']).toBe('read');
+    expect(t['out.json']).toBe('edit');
   });
 
   it('a script body full of ; and | is not shattered into shell segments', () => {

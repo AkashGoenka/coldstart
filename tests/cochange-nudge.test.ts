@@ -185,10 +185,22 @@ describe('co-change edit nudge', () => {
     expect(shellEdit('sed -i "" "s/x/y/" src/a.ts')).toBeNull();
   });
 
+  it('a write through a variable holding a literal path is an edit of THAT file (#176)', () => {
+    sidecar({ 'src/a.ts': [['src/c.ts', 4]], 'src/b.ts': [['src/c.ts', 3]] }, { 'src/a.ts': 5, 'src/b.ts': 5 });
+    expect(shellEdit('sed -i "" "s/x/y/" src/a.ts')).toBeNull();
+    expect(shellEdit(`node -e 'const f="src/b.ts"; writeFileSync(f, s)'`)).toContain('src/c.ts');
+  });
+
   it('a write to a COMPUTED path claims nothing rather than guessing', () => {
     sidecar({ 'src/a.ts': [['src/c.ts', 4]], 'src/b.ts': [['src/c.ts', 3]] }, { 'src/a.ts': 5, 'src/b.ts': 5 });
     expect(shellEdit('sed -i "" "s/x/y/" src/a.ts')).toBeNull();
-    // src/b.ts appears only as a string the script reads into a variable.
-    expect(shellEdit(`node -e 'const f="src/b.ts"; writeFileSync(f, s)'`)).toBeNull();
+    // The write target is built at runtime; src/b.ts is only a prefix in the script.
+    expect(shellEdit(`node -e 'const f="src/b.ts"; const o=dir+"/out"; writeFileSync(o, readFileSync(f))'`)).toBeNull();
+  });
+
+  it('a file the script only READS into a variable is never claimed as an edit', () => {
+    sidecar({ 'src/a.ts': [['src/c.ts', 4]], 'src/b.ts': [['src/c.ts', 3]] }, { 'src/a.ts': 5, 'src/b.ts': 5 });
+    expect(shellEdit('sed -i "" "s/x/y/" src/a.ts')).toBeNull();
+    expect(shellEdit(`python3 -c "f='src/b.ts'; s=open(f).read(); open(out,'w').write(s)"`)).toBeNull();
   });
 });
