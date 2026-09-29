@@ -72,7 +72,8 @@
   #hits{max-height:46vh;overflow-y:auto;border-top:1px solid var(--line)}
   #hits:empty{display:none}
   .hit{padding:7px 14px;cursor:pointer;font-size:12px;display:flex;align-items:baseline;gap:8px}
-  .hit:hover{background:rgba(255,212,121,.1)}
+  .hit:hover,.hit.sel{background:rgba(255,212,121,.1)}
+  .hit.sel{box-shadow:inset 2px 0 0 var(--accent)}
   .hit b{font-family:var(--mono);font-weight:500}
   .hit i{font-style:normal;color:var(--fg-faint);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
@@ -846,15 +847,34 @@ document.getElementById('back').onclick = exitMap;
 document.getElementById('repo').onclick = () => { repoAt = (repoAt + 1) % repoKeys.length; load(repoKeys[repoAt]); };
 
 const q = document.getElementById('q'), hits = document.getElementById('hits');
+// Separators (-, _, ., /) don't mean anything to a human typing a search —
+// "kb elicit" should find "kb-elicit.mjs" — so token matching normalizes
+// them all to spaces before comparing, on top of the plain substring tiers.
+const normSep = s => s.toLowerCase().replace(/[-_./]+/g, ' ');
+let selIdx = -1;
+function hitEls() { return Array.from(hits.children); }
+function setSel(idx) {
+  const els = hitEls();
+  if (!els.length) { selIdx = -1; return; }
+  selIdx = ((idx % els.length) + els.length) % els.length;
+  els.forEach((el, j) => el.classList.toggle('sel', j === selIdx));
+  els[selIdx].scrollIntoView({ block: 'nearest' });
+}
 q.addEventListener('input', () => {
   const v = q.value.trim().toLowerCase();
   hits.innerHTML = '';
+  selIdx = -1;
   if (!v) return;
+  const tokens = v.split(/\s+/).filter(Boolean);
   const out = [];
   for (let i = 0; i < M.n; i++) {
     const f = M.nodes[i][0].toLowerCase(), p = M.nodes[i][1].toLowerCase();
     let s = -1;
-    if (f.startsWith(v)) s = 0; else if (f.includes(v)) s = 1; else if (p.includes(v)) s = 2;
+    if (f.startsWith(v)) s = 0;
+    else if (f.includes(v)) s = 1;
+    else if (p.includes(v)) s = 2;
+    else if (tokens.length > 1 && tokens.every(t => normSep(f).includes(t))) s = 3;
+    else if (tokens.every(t => normSep(p).includes(t))) s = 4;
     if (s >= 0) out.push([s, -M.deg[i], i]);
   }
   out.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
@@ -865,10 +885,13 @@ q.addEventListener('input', () => {
     el.onclick = () => { openFile(i); q.value = ''; hits.innerHTML = ''; q.blur(); };
     hits.appendChild(el);
   }
+  if (hits.children.length) setSel(0);
 });
 q.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { const f = hits.querySelector('.hit'); if (f) f.click(); }
-  if (e.key === 'Escape') { q.value = ''; hits.innerHTML = ''; q.blur(); }
+  if (e.key === 'ArrowDown') { if (hits.children.length) { e.preventDefault(); setSel(selIdx < 0 ? 0 : selIdx + 1); } }
+  else if (e.key === 'ArrowUp') { if (hits.children.length) { e.preventDefault(); setSel(selIdx < 0 ? hits.children.length - 1 : selIdx - 1); } }
+  else if (e.key === 'Enter') { const f = hitEls()[selIdx] || hits.querySelector('.hit'); if (f) f.click(); }
+  else if (e.key === 'Escape') { q.value = ''; hits.innerHTML = ''; selIdx = -1; q.blur(); }
 });
 addEventListener('keydown', (e) => { if (e.key === 'Escape' && mode === 'map') exitMap(); });
 
