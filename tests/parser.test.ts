@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { join, dirname } from 'node:path';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { parseFile } from '../src/indexer/parser.js';
 import { parseTsContent } from '../src/indexer/ts-parser.js';
@@ -1268,5 +1270,21 @@ describe('Groovy / Gradle / Jenkinsfile extractor', () => {
     const gradle = 'dependencies { implementation \'no-colons\' }';
     const result = parseGroovyContent(gradle, 'build.gradle');
     expect(result.exports).not.toContain('no-colons');
+  });
+});
+
+describe('parser — Vue SFC script extraction', () => {
+  // HTML parsers accept whitespace and junk attributes in an end tag; a script
+  // block closed that way must not swallow the rest of the file.
+  it.each(['</script>', '</script >', '</script\t\n bar>'])('ends a script block at %j', async (close) => {
+    const dir = mkdtempSync(join(tmpdir(), 'coldstart-sfc-'));
+    try {
+      const f = join(dir, 'A.vue');
+      writeFileSync(f, `<template><div/></template>\n<script>\nexport const first = 1;\n${close}\n<script>\nexport const second = 2;\n</script>\n`);
+      const r = await parseFile(f, 'vue');
+      expect(r!.exports).toEqual(expect.arrayContaining(['first', 'second']));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
