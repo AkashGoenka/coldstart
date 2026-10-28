@@ -147,6 +147,29 @@ describe('extractContentTokens', () => {
     expect(tokens['term_filter']).toBeDefined();
   });
 
+  it('a quote that never closes, followed by many backslashes, is linear (STRING_SPAN hang regression)', () => {
+    // The shape that hung a real build: a validation regex in a Ruby config
+    // file, whose `'` inside a character class opens a "string" that never
+    // closes, followed by a long run of `\x..` escapes. The old STRING_SPAN
+    // read each backslash as either an escape or a plain char, so 44 of them
+    // were ~2^44 steps and the keeper span forever on one line. (Synthetic —
+    // same shape as the incident, not its code.)
+    const line = String.raw`  HOST_PATTERN = /\A(?:[\w!$&'()*+,;=~.-]+|\[(?:[\x30-\x39\x41-\x46\x61-\x66:]+|v[\x30-\x39\x41-\x46]+\.[\x21-\x7e]+)\])(?::\d{1,5})?(?:\/(?:[\x21\x24-\x3b\x3d\x40-\x5a\x5f\x61-\x7a\x7e]|%[\x30-\x39\x41-\x46]{2}|\\[\x20-\x7e])*)*(?:\?(?:[\x21-\x7e&&[^\x23]]|%[\x30-\x39\x41-\x46]{2})*)?\z/x`;
+    let t0 = performance.now();
+    extractContentTokens(line, 'config/initializers/host_validation.rb');
+    expect(performance.now() - t0).toBeLessThan(50);
+
+    t0 = performance.now();
+    extractContentTokens("x = '" + '\\x'.repeat(5000) + '\n', 'a.rb');
+    expect(performance.now() - t0).toBeLessThan(50);
+  });
+
+  it('escaped quotes stay inside the string span', () => {
+    const tokens = extractContentTokens(`msg = "say \\"user_name\\" here"; other_thing = 1\n`, 'a.rb')!;
+    expect(tokens['user_name']).toBe(TOKEN_IN_STRING);
+    expect(tokens['other_thing']).toBe(TOKEN_IN_CODE);
+  });
+
   it('returns undefined for vendored/minified assets and markdown', () => {
     expect(extractContentTokens('var jquery_thing = 1;', 'media/js/jquery.min.js')).toBeUndefined();
     expect(extractContentTokens('shared_token_here', 'docs/notes.md')).toBeUndefined();

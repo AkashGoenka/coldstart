@@ -22,7 +22,8 @@ import {
   type DaemonLockListing,
 } from './daemon-lock.js';
 import { getCacheDir } from './cache/disk-cache.js';
-import { readInflight, describeInflight } from './inflight.js';
+import { readInflight, describeInflight, slowFileMs } from './inflight.js';
+import type { Inflight } from './inflight.js';
 import { readKeeperState, readRepairTail, type KeeperEventStamp } from './keeper-state.js';
 import { loadCoChange } from './indexer/cochange.js';
 
@@ -202,6 +203,10 @@ export async function runStatus(): Promise<void> {
   // Per-root keeper activity: why the index is (or isn't) fresh, without
   // digging through the daemon log. Sourced from keeper-state.json +
   // repair.jsonl beside the cache segments.
+  const slowNote = (f: Inflight): string => {
+    const ms = slowFileMs(f);
+    return ms === null ? '' : ` — SLOW: ${Math.round(ms / 1000)}s on this one file`;
+  };
   const stampLine = (label: string, s: KeeperEventStamp | undefined): string | null =>
     s ? `${label} ${relativeAge(Date.now() - s.at)} (${s.detail})` : null;
   const detailLines: string[] = [];
@@ -224,7 +229,7 @@ export async function runStatus(): Promise<void> {
     const flight = readInflight(root);
     const flightLine = flight
       ? isDaemonAlive(flight.pid)
-        ? `working on: ${describeInflight(flight)} (${relativeAge(Date.now() - flight.at)})`
+        ? `working on: ${describeInflight(flight)} (${relativeAge(Date.now() - flight.at)})${slowNote(flight)}`
         : `LAST SEEN: PID ${flight.pid} died during ${describeInflight(flight)} — ${relativeAge(Date.now() - flight.at)}, never finished`
       : null;
     const parts = [

@@ -160,7 +160,7 @@ function matchAllGroup(re, s, group) {
  *  after the grep/rg invocation. Empty when nothing sensible is extractable. */
 function grepPattern(cmd) {
   const m = String(cmd || "").match(
-    /(?:^|[;&|]\s*|\s)(?:grep|egrep|fgrep|rg|git\s+grep)\s+(?:-{1,2}[\w=-]+\s+)*(?:"([^"]+)"|'([^']+)'|([^\s'"|;&-]\S*))/,
+    /(?:^|[;&|]\s*|\s)(?:grep|egrep|fgrep|rg|git\s+grep)\s+(?:-[\w=-]+\s+)*(?:"([^"]+)"|'([^']+)'|([^\s'"|;&-]\S*))/,
   );
   return m ? (m[1] || m[2] || m[3] || "").replace(/[\\^$.*+?()[\]{}]/g, " ").trim() : "";
 }

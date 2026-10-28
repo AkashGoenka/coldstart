@@ -11,8 +11,9 @@ import * as path from 'node:path';
 
 import {
   markInflight, clearInflight, readInflight, readStaleInflight,
-  describeInflight, inflightPath,
+  describeInflight, inflightPath, slowFileMs, SLOW_FILE_MS,
 } from '../src/inflight.js';
+import { buildProgressLine } from '../src/keeper.js';
 import { parseFile } from '../src/indexer/parser.js';
 
 const DEAD_PID = 0x7ffffff0; // above any real pid on either platform
@@ -74,6 +75,44 @@ describe('inflight record', () => {
     const died = readStaleInflight(root);
     expect(died).not.toBeNull();
     expect(describeInflight(died!)).toBe('parse app/models/poison.rb');
+  });
+
+  it('carries the build percentage, so status and init can show it', () => {
+    markInflight(root, 'parse', 'config/x.rb', { done: 4000, total: 12512 });
+    const rec = readInflight(root)!;
+    expect(describeInflight(rec)).toBe('parse 4,000 / 12,512 (31%) config/x.rb');
+    // A death names how far it got, too.
+    expect(describeInflight({ ...rec, pid: DEAD_PID })).toContain('4,000 / 12,512');
+  });
+
+  it('times a file from its FIRST mark — a second mark on the same file must not reset the clock', () => {
+    markInflight(root, 'parse', 'slow.rb', { done: 1, total: 2 });
+    const first = readInflight(root)!.fileSince!;
+    markInflight(root, 'parse', 'slow.rb', { done: 1, total: 2 }); // content-token pass
+    expect(readInflight(root)!.fileSince).toBe(first);
+    markInflight(root, 'parse', 'next.rb', { done: 2, total: 2 });
+    expect(readInflight(root)!.fileSince).toBeGreaterThanOrEqual(first);
+    expect(readInflight(root)!.file).toBe('next.rb');
+  });
+
+  it('a file is only called slow past SLOW_FILE_MS', () => {
+    const rec = { pid: process.pid, phase: 'parse' as const, file: 'a.rb', at: 0, fileSince: 1_000 };
+    expect(slowFileMs(rec, 1_000 + SLOW_FILE_MS - 1)).toBeNull();
+    expect(slowFileMs(rec, 1_000 + SLOW_FILE_MS)).toBe(SLOW_FILE_MS);
+    expect(slowFileMs({ ...rec, file: undefined }, 1e12)).toBeNull();
+  });
+
+  it('init prints count, file and elapsed time, and flags a stuck file', () => {
+    const rec = { pid: process.pid, phase: 'parse' as const, file: 'config/x.rb', at: 0, fileSince: 0, done: 4000, total: 12512 };
+    expect(buildProgressLine(rec, 41_000, 5_000))
+      .toBe('[coldstart] parsing 4,000 / 12,512 (31%) · config/x.rb · 41s');
+    expect(buildProgressLine(rec, 41_000, 12_000))
+      .toBe('[coldstart] parsing 4,000 / 12,512 (31%) · config/x.rb · 41s (slow: 12s on this file)');
+    expect(buildProgressLine({ pid: process.pid, phase: 'resolve', at: 0 }, 50_000))
+      .toBe('[coldstart] resolving imports · 50s');
+    // No record, or one left by a dead process, is not progress.
+    expect(buildProgressLine(null, 5_000)).toBe('[coldstart] keeper is building the index… · 5s');
+    expect(buildProgressLine({ ...rec, pid: DEAD_PID }, 5_000)).toBe('[coldstart] keeper is building the index… · 5s');
   });
 
   it('survives a corrupt record rather than taking the caller down', () => {

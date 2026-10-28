@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **The first index build hung forever on a Ruby file with an email-validation regex.** The
+  scanner that finds quoted strings in every file read a backslash as either an escape or a plain
+  character, so a quote that never closed, followed by n backslashes, cost about 2^n steps. A
+  validation regex in a Ruby config file had a `'` inside a character class followed by dozens of
+  `\x..` escapes, and the keeper sat at 100% CPU on that one line. A backslash can now only start an escape pair, so the scan is linear. Side effect: a
+  string ending in a lone backslash (`'C:\'`) is no longer treated as a string.
+- **The same class of bug in two more places**, found by the new check below and fixed before
+  anyone hit them: the Vue/Svelte/Astro `<script>` extractor was cubic on a file full of unclosed
+  `<script ` tags (1.5 s at 20 KB, effectively forever at the 1 MB file cap; now a linear scan
+  matching exactly the same tags), and the nudge hooks' grep detector was exponential in the
+  number of `--flags` in a shell command (now linear, same matches).
+
+### Added
+- **A build-time check for runaway regexes.** `tests/regex-safety.test.ts` runs every regex
+  literal in `src/` and `hooks/` through the [recheck](https://makenowjust-labs.github.io/recheck/)
+  analyser. An exponential or cubic-or-worse regex fails the build with an example input that
+  triggers it; a quadratic one must stay under a time budget on that input at 20 KB. It would have
+  caught both indexing hangs so far before release.
+- **Indexing progress in `coldstart init` and `coldstart status`.** `init` now prints
+  `parsing 4,000 / 12,512 (31%) · <file> · 41s` every 5 s instead of only the elapsed time, and
+  adds `(slow: 12s on this file)` once one file has taken over 10 s, so a hang is named while you
+  are still watching. `status` shows the same count, and after a crash it shows how far the build
+  got.
+
 ## [2.3.4] - 2026-09-29
 
 ### Fixed

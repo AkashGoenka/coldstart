@@ -30,19 +30,55 @@ const MAX_FILE_SIZE = 1_000_000; // 1 MB
  * concatenated. Handles both <script> and <script setup>, with any lang attr.
  * Returns null if no script block is found.
  */
-function extractSfcScripts(content: string): string | null {
+export function extractSfcScripts(content: string): string | null {
+  // A forward scan, not the regex it replaced:
+  // /<script(?:\s[^>]*)?>[\s\S]*?<\/script(?:\s[^>]*)?>/gi
+  // was cubic — its three loose spans overlap, so a .vue file full of
+  // `<script ` with no close cost ~n³ (1.5s at 20KB, effectively forever at
+  // the 1MB file cap). Same tags matched: HTML parsers accept whitespace and
+  // even junk attributes in a tag (`</script >`, `</script\t\n bar>`), so
+  // after the name comes `>` directly, or whitespace and then anything up to
+  // the first `>`. tests/sfc-scripts.test.ts pins it to the old regex.
   const blocks: string[] = [];
-  // HTML parsers accept whitespace and even junk attributes in an end tag
-  // (`</script >`, `</script\t\n bar>`), hence `(?:\s[^>]*)?`.
-  const re = /<script(?:\s[^>]*)?>[\s\S]*?<\/script(?:\s[^>]*)?>/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(content)) !== null) {
-    const inner = m[0]
-      .replace(/<script(?:\s[^>]*)?>/i, '')
-      .replace(/<\/script(?:\s[^>]*)?>/i, '');
-    blocks.push(inner);
+  const open = /<script/gi;
+  const close = /<\/script/gi;
+  let from = 0;
+  for (;;) {
+    open.lastIndex = from;
+    const o = open.exec(content);
+    if (!o) break;
+    const bodyStart = tagEnd(content, o.index + o[0].length);
+    if (bodyStart === NO_GT) break; // no `>` left anywhere → nothing more can match
+    if (bodyStart === NOT_A_TAG) { from = o.index + 1; continue; } // `<scripts>` etc.
+    close.lastIndex = bodyStart;
+    let found = false;
+    let c: RegExpExecArray | null;
+    while ((c = close.exec(content)) !== null) {
+      const end = tagEnd(content, c.index + c[0].length);
+      if (end === NO_GT) break;
+      if (end === NOT_A_TAG) continue;
+      blocks.push(content.slice(bodyStart, c.index));
+      from = end;
+      found = true;
+      break;
+    }
+    // No close after this open means none after any later open either.
+    if (!found) break;
   }
   return blocks.length > 0 ? blocks.join('\n') : null;
+}
+
+const NOT_A_TAG = -1;
+const NO_GT = -2;
+
+/** Index just past the `>` ending a tag whose name ends at `i`: `>` directly,
+ *  or whitespace then everything up to the first `>`. */
+function tagEnd(s: string, i: number): number {
+  const ch = s[i];
+  if (ch === '>') return i + 1;
+  if (ch === undefined || !/\s/.test(ch)) return NOT_A_TAG;
+  const gt = s.indexOf('>', i);
+  return gt === -1 ? NO_GT : gt + 1;
 }
 
 /**
