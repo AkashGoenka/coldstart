@@ -168,7 +168,8 @@ export async function buildIndex(
           // batch is in flight at once, so a mark set at this line names the
           // last file started, not the one burning the CPU. See parseFile.
           const parsed = await parseFile(wf.absolutePath, wf.language, id,
-            () => markInflight(rootDir, 'parse', wf.relativePath));
+            () => markInflight(rootDir, 'parse', wf.relativePath,
+              { done: parsed_count, total: walkedFiles.length }));
           if (!parsed) return;
 
           const file: IndexedFile = {
@@ -533,11 +534,16 @@ async function buildManager(
     try {
       index = await buildIndex(finalRoot, excludes, includes, quiet);
       if (!noCache) {
+        // Named so `init`'s progress line says "saving" rather than going
+        // generic for the seconds a large first save takes.
+        markInflight(finalRoot, 'save', undefined, { baseCacheDir: cacheDir });
         try {
           await saveCachedIndex(index, cacheDir);
           log(quiet, '[coldstart] Index saved to cache');
         } catch (err) {
           log(quiet, `[coldstart] Warning: could not save cache: ${err}`);
+        } finally {
+          clearInflight(finalRoot, cacheDir);
         }
       }
     } finally {

@@ -21,6 +21,8 @@ import {
 } from './daemon-lock.js';
 import { getCacheDir } from './cache/disk-cache.js';
 import { readKeeperState } from './keeper-state.js';
+import { readInflight, slowFileMs } from './inflight.js';
+import type { Inflight } from './inflight.js';
 
 /**
  * Ensure a background keeper is running for `finalRoot`. Spawns one (detached)
@@ -68,6 +70,37 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 
 export type CacheWait = 'ready' | 'no-keeper' | 'timeout';
 
+const PHASE_LABEL: Record<Inflight['phase'], string> = {
+  walk: 'scanning files',
+  parse: 'parsing',
+  resolve: 'resolving imports',
+  graph: 'building the graph',
+  save: 'saving',
+  cochange: 'reading git history',
+};
+
+/**
+ * The line `init` prints every 5s while it waits:
+ *   [coldstart] parsing 4,000 / 12,512 (32%) · app/models/user.rb · 41s
+ * plus `(slow: 12s on this file)` once one file has held the build for
+ * SLOW_FILE_MS — so a hang is named while the user is still watching, not
+ * three minutes later. A record from a dead process is not progress.
+ */
+export function buildProgressLine(record: Inflight | null, elapsedMs: number, now = Date.now()): string {
+  const elapsed = `${Math.round(elapsedMs / 1000)}s`;
+  if (!record || !isDaemonAlive(record.pid)) return `[coldstart] keeper is building the index… · ${elapsed}`;
+  const parts = [PHASE_LABEL[record.phase] ?? record.phase];
+  if (record.total) {
+    const done = record.done ?? 0;
+    parts[0] += ` ${done.toLocaleString('en-US')} / ${record.total.toLocaleString('en-US')} (${Math.floor((done / record.total) * 100)}%)`;
+  }
+  if (record.file) parts.push(record.file);
+  parts.push(elapsed);
+  const slow = slowFileMs(record, now);
+  const tail = slow === null ? '' : ` (slow: ${Math.round(slow / 1000)}s on this file)`;
+  return `[coldstart] ${parts.join(' · ')}${tail}`;
+}
+
 /**
  * Wait for the keeper's cache to exist. 'no-keeper' = no live keeper after a
  * spawn grace period (caller may build in-process as a last resort);
@@ -90,7 +123,7 @@ export async function waitForKeeperCache(
       if (!lock || !isDaemonAlive(lock.pid)) return 'no-keeper';
     }
     if (note && Date.now() - lastNote >= 5_000) {
-      note(`[coldstart] keeper is building the index… (${Math.round((Date.now() - start) / 1000)}s)`);
+      note(buildProgressLine(readInflight(rootDir, cacheDir), Date.now() - start));
       lastNote = Date.now();
     }
     await sleep(250);

@@ -37,7 +37,29 @@ export interface Inflight {
   /** Repo-relative path, when the phase works file-by-file. */
   file?: string;
   at: number;
+  /** When work on `file` began. `at` moves on every mark, and a file is marked
+   *  more than once (language parse, then content tokens), so `at` alone would
+   *  understate how long one file has held the CPU. */
+  fileSince?: number;
+  /** Files finished so far / files in this phase — the build's percentage. */
+  done?: number;
+  total?: number;
 }
+
+export interface InflightOptions {
+  done?: number;
+  total?: number;
+  baseCacheDir?: string;
+}
+
+/** A file this slow is worth naming while the build is still running: the
+ *  normal cost is milliseconds, so 10s means something is wrong with it. */
+export const SLOW_FILE_MS = 10_000;
+
+// Per-process memory of the file being marked, for `fileSince`. Reading the
+// record back to compare would add a read syscall to every mark.
+let lastFile: string | undefined;
+let lastFileSince = 0;
 
 export function inflightPath(rootDir: string, baseCacheDir?: string): string {
   return join(getCacheDir(rootDir, baseCacheDir), INFLIGHT_FILE);
@@ -53,11 +75,19 @@ export function markInflight(
   rootDir: string,
   phase: IndexPhase,
   file?: string,
-  baseCacheDir?: string,
+  opts: InflightOptions = {},
 ): void {
-  const record: Inflight = { pid: process.pid, phase, at: Date.now() };
-  if (file !== undefined) record.file = file;
-  const path = inflightPath(rootDir, baseCacheDir);
+  const now = Date.now();
+  const record: Inflight = { pid: process.pid, phase, at: now };
+  if (file !== undefined) {
+    if (file !== lastFile) { lastFile = file; lastFileSince = now; }
+    record.file = file;
+    record.fileSince = lastFileSince;
+  } else {
+    lastFile = undefined;
+  }
+  if (opts.total !== undefined) { record.done = opts.done ?? 0; record.total = opts.total; }
+  const path = inflightPath(rootDir, opts.baseCacheDir);
   const body = JSON.stringify(record);
   try {
     writeFileSync(path, body);
@@ -99,7 +129,22 @@ export function readStaleInflight(rootDir: string, baseCacheDir?: string): Infli
   return isDaemonAlive(record.pid) ? null : record;
 }
 
-/** One-line human summary, shared by the keeper log and `coldstart status`. */
+/** One-line human summary, shared by the keeper log, `coldstart status` and
+ *  the `init` wait: `parse 4,000 / 12,512 (32%) app/models/user.rb`. */
 export function describeInflight(record: Inflight): string {
-  return record.file ? `${record.phase} ${record.file}` : record.phase;
+  const parts: string[] = [record.phase];
+  if (record.total) {
+    const done = record.done ?? 0;
+    parts.push(`${done.toLocaleString('en-US')} / ${record.total.toLocaleString('en-US')} (${Math.floor((done / record.total) * 100)}%)`);
+  }
+  if (record.file) parts.push(record.file);
+  return parts.join(' ');
+}
+
+/** How long the current file has held the build, when that is long enough to
+ *  mention (≥ SLOW_FILE_MS); null otherwise. */
+export function slowFileMs(record: Inflight, now = Date.now()): number | null {
+  if (!record.file || record.fileSince === undefined) return null;
+  const ms = now - record.fileSince;
+  return ms >= SLOW_FILE_MS ? ms : null;
 }

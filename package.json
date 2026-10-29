@@ -1,6 +1,6 @@
 {
   "name": "@cstart/coldstart",
-  "version": "2.3.4",
+  "version": "2.3.5",
   "mcpName": "io.github.AkashGoenka/coldstart",
   "publishConfig": {
     "access": "public"
@@ -61,6 +61,7 @@
   },
   "devDependencies": {
     "@types/node": "^22",
+    "recheck": "^4.6.2",
     "typescript": "^5",
     "vitest": "^3"
   },

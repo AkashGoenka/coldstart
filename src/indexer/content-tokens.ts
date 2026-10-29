@@ -82,8 +82,16 @@ export function isVendoredAssetPath(relativePath: string): boolean {
 // Line-based comment handling is deliberately heuristic-generic (no
 // per-language tree-sitter pass in v1); the shape gate kills most prose that
 // slips through (e.g. multi-line docstrings).
+//
+// STRING_SPAN's ordinary-character branch is `[^\\]`, not `.`: with `.` a
+// backslash matched BOTH branches (escape pair, or plain char), so n
+// backslashes after a quote that never closes split ~2^n ways and the
+// backtracking engine tried every one — a validation regex in a Ruby file,
+// ~45 backslashes after a stray `'`, hung the keeper forever. Now a backslash
+// can only start an escape pair. tests/regex-safety.test.ts fails the build on
+// this shape.
 // ---------------------------------------------------------------------------
-const STRING_SPAN = /(["'`])(?:\\.|(?!\1).)*?\1/g;
+const STRING_SPAN = /(["'`])(?:\\.|(?!\1)[^\\])*?\1/g;
 const WORD = /[A-Za-z_][A-Za-z0-9_]*/g;
 
 function commentStart(line: string): number {
