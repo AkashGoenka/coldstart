@@ -7,12 +7,17 @@
 import { describe, it, expect } from 'vitest';
 import { extractSfcScripts } from '../src/indexer/parser.js';
 
+// The old implementation stripped the tags off each match with two
+// `.replace`s; capturing the body is the same result (the open tag always
+// starts the match, the lazy body ends at the first valid close tag) and
+// avoids a one-pass `<script` removal, which code scanning reads as an
+// incomplete HTML sanitizer.
 function viaOldRegex(content: string): string | null {
   const blocks: string[] = [];
-  const re = /<script(?:\s[^>]*)?>[\s\S]*?<\/script(?:\s[^>]*)?>/gi;
+  const re = /<script(?:\s[^>]*)?>([\s\S]*?)<\/script(?:\s[^>]*)?>/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(content)) !== null) {
-    blocks.push(m[0].replace(/<script(?:\s[^>]*)?>/i, '').replace(/<\/script(?:\s[^>]*)?>/i, ''));
+    blocks.push(m[1]);
   }
   return blocks.length > 0 ? blocks.join('\n') : null;
 }
