@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { kbSearch, renderSearchPage, renderCompactPage, shouldImplantTop } from '../src/kb/search.js';
+import { kbSearch, renderSearchPage, renderCompactPage } from '../src/kb/search.js';
 import { kbWrite } from '../src/kb/write.js';
 import { kbLint } from '../src/kb/lint.js';
 import { hashFile } from '../src/kb/freshness.js';
@@ -72,20 +72,6 @@ describe('kb search', () => {
     expect(strong.hits).toHaveLength(1);
   });
 
-  it('strongOnly: several body-graze words still do not make a hit (long-prompt noise)', async () => {
-    writeRepoFile('app/models/graph.py', 'class Graph: pass\n');
-    seedLesson();
-    // "rows" and "creates" both appear in the note BODY but nowhere in its
-    // title/aliases/anchors — the arches phase-1 failure mode, where every
-    // ~900-char benchmark prompt cleared a ≥2-covered-terms bar on shared
-    // domain vocabulary and injected 3 unrelated notes per session.
-    const graze = await kbSearch(root, 'which migration creates the identifier rows for a resource', { strongOnly: true, noMissLog: true });
-    expect(graze.hits).toHaveLength(0);
-    // the same query without strongOnly (explicit tool call) may match — the agent chose its terms
-    const loose = await kbSearch(root, 'which migration creates the identifier rows for a resource', { noMissLog: true });
-    expect(loose.hits.length).toBeGreaterThan(0);
-  });
-
   it('strongOnly shape rule: English words need whole-word name hits; code-shaped terms substring-match', async () => {
     writeRepoFile('app/models/graph.py', 'class Graph: pass\n');
     seedLesson();
@@ -98,7 +84,7 @@ describe('kb search', () => {
     expect(codeish.hits.map((h) => h.note.id)).toContain('load-errors-note');
   });
 
-  it('code-shape rule: sentence-initial "Add" is NOT code-shaped; interior caps like "AddAddress" ARE', async () => {
+  it('identifiers are split into words on both sides: AddAddress and max_files reach their notes', async () => {
     appendRecord(root, {
       id: 'add-address-note',
       type: 'lesson',
@@ -107,12 +93,6 @@ describe('kb search', () => {
       title: 'AddAddress utility for resolving user info',
       body: 'looks up addresses and resolves them',
     });
-
-    // "Add" from "Add new functionality" is sentence-initial capital — NOT code-shaped.
-    // Should NOT substring-match the title containing "AddAddress".
-    // (The old regex would wrongly match "Add" as code-shaped, causing a false positive.)
-    const sentenceInitial = await kbSearch(root, 'Add new functionality', { strongOnly: true, noMissLog: true });
-    expect(sentenceInitial.hits).toHaveLength(0);
 
     // "AddAddress" has interior capitals — genuinely code-shaped.
     // Should substring-match the title.
@@ -136,9 +116,8 @@ describe('kb search', () => {
       body: 'restore_state never re-creates functions_x_graphs rows. '.repeat(30),
     });
     const res = await kbSearch(root, 'functions disappear after graph restore', { noMissLog: true });
-    expect(shouldImplantTop(res)).toBe(true); // the gate still computes (kept for a future A/B)…
     const page = renderCompactPage('functions disappear after graph restore', res);
-    expect(page).not.toContain('## '); // …but the page never implants (structural ruling 2026-07-06)
+    expect(page).not.toContain('## '); // the page never implants (structural ruling 2026-07-06)
     expect(page).toContain('- **Version restore silently drops function assignments**');
     expect(page).toContain('→ open: .coldstart/notebook/notes/'); // depth is one Read away
     // kb-search-shape preview (≤340 chars + ellipsis, wrapped), NOT the 1.7KB body:
@@ -151,7 +130,7 @@ describe('kb search', () => {
     expect(renderCompactPage('nope', { hits: [], terms: [], warnings: [] })).toContain('No notebook notes match');
   });
 
-  it('implant gate: two near-equal hits without convergence stay gist-only (no bodies)', async () => {
+  it('two near-equal hits both render gist-only (no bodies) for the agent to pick from', async () => {
     writeRepoFile('app/a.py', 'pass\n');
     writeRepoFile('app/b.py', 'pass\n');
     appendRecord(root, {
@@ -169,47 +148,12 @@ describe('kb search', () => {
       appendRecord(root, { id: t.replace(/ /g, '-'), type: 'lesson', op: 'put', kind: 'absence', title: t, body: t });
     }
     const res = await kbSearch(root, 'why does spatialview restore fail', { strongOnly: true, noMissLog: true });
-    expect(res.hits.length).toBe(2);
-    expect(res.hits[0].score).toBeLessThan(1.8 * res.hits[1].score); // near-equal → ambiguous
-    expect(shouldImplantTop(res)).toBe(false);
+    expect(res.hits.length).toBe(2); // young notebook (< 30 notes): no margin gate
     const page = renderCompactPage('why does spatialview restore fail', res);
     expect(page).not.toContain('## '); // no full-note section — scent trail only
     expect(page).not.toContain('id: spatialview-restore-breaks'); // implant header absent
     expect(page).toContain('- **spatialview restore breaks silently**');
     expect(page).toContain('- **spatialview restore timeout on large graphs**');
-  });
-
-  it('implant gate: symbol convergence (keeper notes index) opens the gate when dominance alone would not', async () => {
-    writeRepoFile('app/models/graph.py', 'class TileHelperRegistry: pass\n');
-    writeRepoFile('app/graph_utils.py', 'pass\n');
-    // The top note names the symbol ITSELF (own-text match); the inventory
-    // confirming it's declared in the note's anchor = the second channel.
-    appendRecord(root, {
-      id: 'graph-restore-note', type: 'lesson', op: 'put', kind: 'absence',
-      title: 'TileHelperRegistry graph restore drops rows',
-      body: 'anchored where the symbol lives.', anchors: [{ path: 'app/models/graph.py' }],
-    });
-    appendRecord(root, {
-      id: 'graph-restore-perf', type: 'lesson', op: 'put', kind: 'absence',
-      title: 'graph restore perf cliff',
-      body: 'a competing note.', anchors: [{ path: 'app/graph_utils.py' }],
-    });
-    for (const t of ['auth cookie parsing', 'webpack bundle size', 'csv importer quoting']) {
-      appendRecord(root, { id: t.replace(/ /g, '-'), type: 'lesson', op: 'put', kind: 'absence', title: t, body: t });
-    }
-    const notesIndex = await buildKbNotesIndex(fakeIndex({
-      'app/models/graph.py': ['TileHelperRegistry'], 'app/graph_utils.py': [],
-    }), root);
-    const res = await kbSearch(root, 'TileHelperRegistry graph restore', { strongOnly: true, notesIndex, noMissLog: true });
-    expect(res.hits[0].note.id).toBe('graph-restore-note');
-    expect(res.hits.length).toBe(2);
-    expect(res.hits[0].score).toBeLessThan(1.8 * res.hits[1].score); // dominance alone would NOT implant
-    expect(res.hits[0].convergence).toBe(true); // code index agrees with the text match
-    expect(shouldImplantTop(res)).toBe(true);
-    // without the notes index the same query has no convergence channel → gate stays shut
-    const blind = await kbSearch(root, 'TileHelperRegistry graph restore', { strongOnly: true, noMissLog: true });
-    expect(blind.hits[0].convergence).toBe(false);
-    expect(shouldImplantTop(blind)).toBe(false);
   });
 
   it('lane 2: a symbol name resolves via the keeper notes index to the anchored note', async () => {
