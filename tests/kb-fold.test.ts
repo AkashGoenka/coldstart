@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ALIAS_MAX, capAliases, fold, stableStringify } from '../src/kb/fold.js';
+import { fold, stableStringify } from '../src/kb/fold.js';
 import type { RawRecord } from '../src/kb/types.js';
 
 // Shorthand: a valid put record with overrides.
@@ -19,9 +19,9 @@ function put(over: Partial<RawRecord> = {}): RawRecord {
 describe('kb fold — determinism', () => {
   it('is order-independent: shuffled input folds identically (ts sort)', () => {
     const records = [
-      put({ title: 'first', identityAliases: ['a'] }),
-      put({ title: 'second', identityAliases: ['b'] }),
-      put({ body: 'the body', identityAliases: ['c'] }),
+      put({ title: 'first', invariants: ['a'] }),
+      put({ title: 'second', invariants: ['b'] }),
+      put({ body: 'the body', invariants: ['c'] }),
     ];
     const forward = fold('n1', records).note;
     const reversed = fold('n1', [...records].reverse()).note;
@@ -29,8 +29,7 @@ describe('kb fold — determinism', () => {
     expect(stableStringify(reversed)).toEqual(stableStringify(forward));
     expect(stableStringify(shuffled)).toEqual(stableStringify(forward));
     expect(forward!.title).toBe('second');
-    // 'first' was demoted to an identity alias when 'second' replaced it
-    expect(forward!.identityAliases.sort()).toEqual(['a', 'b', 'c', 'first']);
+    expect(forward!.invariants.sort()).toEqual(['a', 'b', 'c']);
   });
 
   it('cross-branch union interleave: A+B and B+A fold identically', () => {
@@ -52,60 +51,24 @@ describe('kb fold — determinism', () => {
 });
 
 describe('kb fold — per-field merge rules', () => {
-  it('summary/title LWW; identityAliases + invariants union', () => {
+  it('summary/title LWW; invariants union', () => {
     const note = fold('n1', [
-      put({ type: 'flow', title: 'one', summary: 's1', identityAliases: ['x'], invariants: ['i1'] }),
-      put({ type: 'flow', summary: 's2', identityAliases: ['x', 'y'], invariants: ['i1', 'i2'] }),
+      put({ type: 'flow', title: 'one', summary: 's1', invariants: ['i1'] }),
+      put({ type: 'flow', summary: 's2', invariants: ['i1', 'i2'] }),
     ]).note!;
     expect(note.title).toBe('one'); // second put had no title — LWW keeps last SET value
     expect(note.summary).toBe('s2');
-    expect(note.identityAliases).toEqual(['x', 'y']);
     expect(note.invariants).toEqual(['i1', 'i2']);
   });
 
-  it('legacy "aliases" (pre-split raw records) fold into identityAliases, not lost to extra', () => {
+  it('search-alias keys in older records are dropped — not folded, not leaked into extra', () => {
     const note = fold('n1', [
-      put({ type: 'flow', title: 'one', summary: 's1', aliases: ['old-shape word'] } as Partial<RawRecord>),
+      put({ type: 'flow', title: 'one', summary: 's1', aliases: ['legacy'], identityAliases: ['id'],
+        incidentAliases: ['inc'], aliasesVerified: true } as Partial<RawRecord>),
     ]).note!;
-    expect(note.identityAliases).toEqual(['old-shape word']);
-    expect(note.extra['aliases']).toBeUndefined();
-  });
-
-  it('incidentAliases REPLACE (not union) on a write that also carries summary/body', () => {
-    const note = fold('n1', [
-      put({ type: 'flow', title: 'one', summary: 's1', incidentAliases: ['symptom-a', 'symptom-b'] }),
-      put({ type: 'flow', summary: 's2', incidentAliases: ['symptom-c'] }),
-    ]).note!;
-    expect(note.summary).toBe('s2');
-    expect(note.incidentAliases).toEqual(['symptom-c']);
-  });
-
-  it('incidentAliases are wiped, not carried, when a summary-write omits them', () => {
-    const note = fold('n1', [
-      put({ type: 'flow', title: 'one', summary: 's1', incidentAliases: ['symptom-a'] }),
-      put({ type: 'flow', summary: 's2' }), // rewrites the narrative, says nothing new
-    ]).note!;
-    expect(note.incidentAliases).toEqual([]);
-  });
-
-  it('incidentAliases survive a write that touches neither summary nor body', () => {
-    const note = fold('n1', [
-      put({ type: 'flow', title: 'one', summary: 's1', incidentAliases: ['symptom-a'] }),
-      put({ type: 'flow', identityAliases: ['unrelated identity word'] }), // no summary/body
-    ]).note!;
-    expect(note.incidentAliases).toEqual(['symptom-a']);
-  });
-
-  it('a replaced title is demoted to an identity alias — old retrieval keys survive merges', () => {
-    const note = fold('n1', [
-      put({ type: 'flow', title: 'Auth token flow' }),
-      put({ type: 'flow', title: 'token minting on login' }),
-    ]).note!;
-    expect(note.title).toBe('token minting on login');
-    expect(note.identityAliases).toContain('Auth token flow');
-    // idempotent: re-putting the same title doesn't self-alias
-    const again = fold('n1', [put({ type: 'flow', title: 'same' }), put({ type: 'flow', title: 'same' })]).note!;
-    expect(again.identityAliases).toEqual([]);
+    expect(note.summary).toBe('s1');
+    expect(note.extra).toEqual({});
+    expect(JSON.stringify(note)).not.toMatch(/legacy|"inc"|Aliases|"aliases/);
   });
 
   it('behaviors replace by concept_id, keep the others, add new', () => {
@@ -181,25 +144,16 @@ describe('kb fold — tombstones', () => {
     expect(revived.behaviors[0].detail).toBe('re-learned');
   });
 
-  it('retract kinds: anchor by path, alias/invariant by exact text', () => {
-    const note = fold('w1', [
-      put({ id: 'w1', type: 'flow', identityAliases: ['keep', 'drop'], invariants: ['inv'], anchors: [{ path: 'a.ts' }, { path: 'b.ts' }] }),
+  it('retract kinds: anchor by path, invariant by exact text; a retired alias retract is a no-op', () => {
+    const { note, warnings } = fold('w1', [
+      put({ id: 'w1', type: 'flow', invariants: ['inv'], anchors: [{ path: 'a.ts' }, { path: 'b.ts' }] }),
       put({ id: 'w1', type: 'flow', op: 'retract', target: { kind: 'alias', key: 'drop' } }),
       put({ id: 'w1', type: 'flow', op: 'retract', target: { kind: 'anchor', key: 'b.ts' } }),
       put({ id: 'w1', type: 'flow', op: 'retract', target: { kind: 'invariant', key: 'inv' } }),
-    ]).note!;
-    expect(note.identityAliases).toEqual(['keep']);
-    expect(note.anchors.map((a) => a.path)).toEqual(['a.ts']);
-    expect(note.invariants).toEqual([]);
-  });
-
-  it('alias retract reaches into whichever bucket the text is actually in', () => {
-    const note = fold('w1', [
-      put({ id: 'w1', type: 'flow', summary: 's', identityAliases: ['stable'], incidentAliases: ['symptom'] }),
-      put({ id: 'w1', type: 'flow', op: 'retract', target: { kind: 'alias', key: 'symptom' } }),
-    ]).note!;
-    expect(note.identityAliases).toEqual(['stable']);
-    expect(note.incidentAliases).toEqual([]);
+    ]);
+    expect(warnings).toEqual([]);
+    expect(note!.anchors.map((a) => a.path)).toEqual(['a.ts']);
+    expect(note!.invariants).toEqual([]);
   });
 
   it('note retract → status retracted; later put revives; supersede is sticky', () => {
@@ -261,47 +215,4 @@ describe('kb fold — tolerant reader', () => {
     expect(note.title).toBe('src/x.ts');
   });
 
-  // The union is what makes alias bloat a FOLD problem, not a writing problem:
-  // every individual write here obeys the 6-10 guidance and the note still ends
-  // up at 30. Capping anywhere else cannot work.
-  it('caps the identity-alias union newest-first — compliant writes still accumulate', () => {
-    const writes = Array.from({ length: 5 }, (_, w) =>
-      put({ identityAliases: Array.from({ length: 6 }, (_, i) => `w${w}alias${i}`) }));
-    const uncapped = writes.flatMap((r) => (r as { identityAliases: string[] }).identityAliases);
-    expect(uncapped).toHaveLength(30);
-
-    const note = fold('n1', writes).note!;
-    expect(note.identityAliases.length).toBeLessThanOrEqual(ALIAS_MAX);
-    // Newest survive, oldest are dropped — the most recent writer saw the file
-    // in its current shape.
-    expect(note.identityAliases).toContain('w4alias5');
-    expect(note.identityAliases).not.toContain('w0alias0');
-    // Nothing is lost: the log is untouched, so a wider cap restores them.
-    expect(capAliases(uncapped)).toEqual(note.identityAliases);
-  });
-
-  // kb repair-aliases needs the full history to show an agent what a blind
-  // retract would resurface — capIdentity:false is its only consumer.
-  it('capIdentity:false returns the full historical union, uncapped', () => {
-    const writes = Array.from({ length: 5 }, (_, w) =>
-      put({ identityAliases: Array.from({ length: 6 }, (_, i) => `w${w}alias${i}`) }));
-    const capped = fold('n1', writes).note!;
-    const uncapped = fold('n1', writes, { capIdentity: false }).note!;
-    expect(uncapped.identityAliases).toHaveLength(30);
-    expect(uncapped.identityAliases).toContain('w0alias0'); // dropped by the cap, present here
-    expect(capped.identityAliases.length).toBeLessThan(uncapped.identityAliases.length);
-    // Every capped alias is still in the uncapped set — it's a superset, not a different fold.
-    for (const a of capped.identityAliases) expect(uncapped.identityAliases).toContain(a);
-  });
-
-  it('the word budget binds before the count cap, but never below the floor', () => {
-    const wordy = Array.from({ length: 12 }, (_, i) => `long winded alias number ${i}`); // 5 words each
-    const kept = capAliases(wordy);
-    expect(kept.length).toBeLessThan(ALIAS_MAX);
-    expect(kept.join(' ').split(/\s+/)).toHaveLength(kept.length * 5);
-
-    // A single alias longer than the whole budget must not trim to nothing.
-    const huge = Array.from({ length: 5 }, (_, i) => `${'word '.repeat(30)}${i}`.trim());
-    expect(capAliases(huge).length).toBeGreaterThanOrEqual(4);
-  });
 });

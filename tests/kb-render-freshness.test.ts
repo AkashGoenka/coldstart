@@ -8,7 +8,7 @@ import type { FoldedNote } from '../src/kb/types.js';
 
 function baseNote(over: Partial<FoldedNote>): FoldedNote {
   return {
-    id: 'n1', type: 'lesson', title: 'Title', identityAliases: [], incidentAliases: [], anchors: [],
+    id: 'n1', type: 'lesson', title: 'Title', anchors: [],
     status: 'active', updated: '2026-07-02T10:00:00.000Z', edits: 1,
     facets: [], behaviors: [], features: [], steps: [], invariants: [], extra: {},
     ...over,
@@ -21,7 +21,6 @@ describe('kb render — golden shapes', () => {
       id: 'graph-restore-drops-functions',
       kind: 'absence',
       title: 'Version restore silently drops function assignments',
-      identityAliases: ['functions disappear after graph restore'],
       anchors: [{ path: 'arches/app/models/graph.py', symbols: ['restore_state'], hash: 'sha256:ab12cd34ef56' }],
       body: 'restore never re-creates functions_x_graphs — see [[graph-publication-flow]].',
       scope: { terms: ['functions_x_graphs restore'], globs: ['arches/**'] },
@@ -30,7 +29,7 @@ describe('kb render — golden shapes', () => {
     expect(md).toContain('id: graph-restore-drops-functions');
     expect(md).toContain('type: lesson');
     expect(md).toContain('kind: absence');
-    expect(md).toContain('aliases: ["functions disappear after graph restore"]');
+    expect(md).not.toContain('aliases');
     // anchors render as one JSON object per line — machine-readable back
     const anchorLine = md.split('\n').find((l) => l.trim().startsWith('- {'));
     expect(JSON.parse(anchorLine!.trim().slice(2)).path).toBe('arches/app/models/graph.py');

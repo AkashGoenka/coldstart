@@ -146,7 +146,7 @@ const techArticleJsonLd = {
         <li><b>Batch is the capture path.</b> The spec file may be a JSON array of notes, written in one call: well-formed notes land, malformed ones are reported together, and the call ends naming any worked file still without a note.</li>
         <li>A single new flow/lesson exits 3 with candidate matches. Resolve it with <code>--into &lt;id&gt;</code> (merge) or <code>--new</code> (declare it new).</li>
         <li>Reads a spec file, or <code>-</code> to stream from stdin.</li>
-        <li>Correct a note: <code>&#123;"op":"retract","id":"&lt;id&gt;","target":&#123;"kind":"note"&#125;&#125;</code> removes it, or target one part with <code>target:&#123;kind:"anchor"|"alias"…, key:"…"&#125;</code>.</li>
+        <li>Correct a note: <code>&#123;"op":"retract","id":"&lt;id&gt;","target":&#123;"kind":"note"&#125;&#125;</code> removes it, or target one part with <code>target:&#123;kind:"anchor"|"facet"…, key:"…"&#125;</code>.</li>
         <li>Freshly-coined ids are created exclusively — a same-moment duplicate becomes two notes, never a silent merge.</li>
       </ul>
       <div class="callout"><span class="ct">Agent-facing</span>This is the command the capture hook drives. You rarely type it by hand.</div>
@@ -182,13 +182,12 @@ const techArticleJsonLd = {
 
     <section id="kb-maint" class="doc-sec">
       <div class="cmd">
-        <div class="name"><span class="c">coldstart kb status / lint / repair / repair-aliases / render</span> <span class="badge">notebook</span></div>
+        <div class="name"><span class="c">coldstart kb status / lint / repair / render</span> <span class="badge">notebook</span></div>
       </div>
       <div class="flags">
         <div class="flag-row"><span class="fk">kb status</span><span class="fv">Notebook health: note counts and per-note freshness at a glance.</span></div>
         <div class="flag-row"><span class="fk">kb lint</span><span class="fv">Check the notebook for structural problems (broken anchors, malformed notes).</span></div>
-        <div class="flag-row"><span class="fk">kb repair</span><span class="fv">List the notes that are written but unfindable — missing fields a note can't be retrieved without (search aliases, anchor symbols, a flow's verified paths). It prints a worklist and changes nothing: your agent opens each note and the code it names and completes it with an ordinary <code>kb write</code>.</span></div>
-        <div class="flag-row"><span class="fk">kb repair-aliases</span><span class="fv">Notes whose <code>identityAliases</code> may no longer describe the file/flow (stale words from an earlier write) — not notes missing aliases entirely. Shows each note's current aliases, 10 per page, and changes nothing itself.</span></div>
+        <div class="flag-row"><span class="fk">kb repair</span><span class="fv">List the notes that are written but unfindable — missing fields a note can't be retrieved without (anchor symbols, a flow's verified paths). It prints a worklist and changes nothing: your agent opens each note and the code it names and completes it with an ordinary <code>kb write</code>.</span></div>
         <div class="flag-row"><span class="fk">kb render</span><span class="fv">Regenerate the derived Markdown notes from the <code>.raw</code> logs.</span></div>
         <div class="flag-row"><span class="fk">kb init</span><span class="fv">Notebook-only setup. Redundant if you ran <code>coldstart init</code>, which already does this.</span></div>
         <div class="flag-row"><span class="fk">kb migrate</span><span class="fv">Upgrade an older notebook's on-disk format.</span></div>

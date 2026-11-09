@@ -118,12 +118,10 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'kb_write',
     description:
-      'Save or correct NOTEBOOK notes after finishing real work here — you have the files in context, so no future agent is better placed to record what you learned. Write a file note (what a file is for), a flow note (how a task spans files), or an absence lesson (a confirmed "there is no X"). Pass `specs` (an ARRAY of specs) to write ALL your notes in ONE call — malformed notes are reported together instead of one hiding the rest, and the result ends with a coverage line naming any worked files still without a note; pass `spec` (a single object) for a one-off. Also the tool to FIX or RETRACT a note you used that proved wrong: `op: "put"` replaces; `op: "retract"` with `target: {kind: "note"}` removes the whole note (or `target: {kind: "anchor"|"alias"|"facet"|"invariant"|"behavior"|"feature", key: "<value>"}` removes one part).\n\n' +
+      'Save or correct NOTEBOOK notes after finishing real work here — you have the files in context, so no future agent is better placed to record what you learned. Write a file note (what a file is for), a flow note (how a task spans files), or an absence lesson (a confirmed "there is no X"). Pass `specs` (an ARRAY of specs) to write ALL your notes in ONE call — malformed notes are reported together instead of one hiding the rest, and the result ends with a coverage line naming any worked files still without a note; pass `spec` (a single object) for a one-off. Also the tool to FIX or RETRACT a note you used that proved wrong: `op: "put"` replaces; `op: "retract"` with `target: {kind: "note"}` removes the whole note (or `target: {kind: "anchor"|"facet"|"invariant"|"behavior"|"feature", key: "<value>"}` removes one part).\n\n' +
       'TWO-PHASE reuse gate: a flow/lesson `spec` sent WITHOUT an `id` first searches the notebook for the same concept. If plausible matches exist, kb_write returns `{status:"candidates", candidates:[...]}` INSTEAD of writing — re-call with `into: "<id>"` to merge into an existing note, or `is_new: true` to declare a genuinely new one. This makes note identity reliable (matching, not guessing an exact title). File notes skip the gate (id derives from the path).\n\n' +
       'The `spec` shape: `type` ("file"|"flow"|"lesson", or sugar "file-hub"/"file-single"), `title`, `summary`, `anchors` ([{path, symbols?}] — the addresses the note is about, which drive freshness), plus type-specific fields (file: facets/character; flow: steps/verified; lesson: kind:"absence"/scope/body). Call with NO arguments to get the full spec guide.\n\n' +
-      // Rendered, not restated. This description going years without ever
-      // naming `aliases` is why notebooks driven by no-shell clients are the
-      // ones worst hit by unfindable notes.
+      // Rendered from hooks/note-shape.mjs, not restated, so it cannot drift.
       `${requiredFieldsLine()}\n\n` +
       'This tool WRITES to the repo notebook; it never commits to git — publishing notes is a human-only step (`coldstart kb commit`).',
     inputSchema: {
@@ -131,7 +129,7 @@ export const TOOL_DEFINITIONS = [
       properties: {
         spec: {
           type: 'object',
-          description: `A single note spec (JSON object). Fields: type, title, summary, identityAliases (stable — unions forever), incidentAliases (this write's symptom words — replaced by the next write that changes summary/body, omit if this write isn't about an incident), anchors:[{path,symbols?}], and type-specific fields (facets/character for file; steps/verified for flow; kind/scope/body for lesson). ${requiredFieldsLine()} Omit \`id\` on a new flow/lesson to trigger the reuse gate. Use \`specs\` instead to write several notes at once.`,
+          description: `A single note spec (JSON object). Fields: type, title, summary, anchors:[{path,symbols?}], and type-specific fields (facets/character for file; steps/verified for flow; kind/scope/body for lesson). ${requiredFieldsLine()} Omit \`id\` on a new flow/lesson to trigger the reuse gate. Use \`specs\` instead to write several notes at once.`,
         },
         specs: {
           type: 'array',
@@ -176,24 +174,10 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'kb_repair',
     description:
-      'List the notebook notes that are WRITTEN BUT UNFINDABLE — missing the fields a note cannot be retrieved without (identityAliases, anchor symbols, a flow\'s verified paths). Notes written before those fields were required are correct but unreachable, and this is how they get found.\n\n' +
+      'List the notebook notes that are WRITTEN BUT UNFINDABLE — missing the fields a note cannot be retrieved without (anchor symbols, a flow\'s verified paths). Notes written before those fields were required are correct but unreachable, and this is how they get found.\n\n' +
       'Returns a worklist, never a change: repairing is your work, because every gap needs a judgement about the code (which words a reader would search for, which symbols the note is actually about, which files you can honestly claim to have read). Fix each one with kb_write, passing the note\'s `id` — fields merge, so nothing already in the note is lost.\n\n' +
       'A clean notebook returns "Nothing to repair here." Run it when the user asks to repair, fix, or clean up the notebook.',
     inputSchema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'kb_repair_aliases',
-    description:
-      'List file/flow notes whose identityAliases may no longer describe them — a DIFFERENT problem from kb_repair: that one finds notes with NO aliases at all, this one is for aliases that exist but have gone stale (a note rewritten several times can carry words that were really symptoms of an earlier write, not stable facts). Paginated 10 notes at a time.\n\n' +
-      'Each entry shows the current (capped) identityAliases AND the full historical union hidden past the render cap — read both before retracting anything, because dropping a visible alias can resurface an older hidden one on the next fold. Re-read the note\'s code, then reconcile via kb_write (retract stale entries, re-put the rest) — never mechanically, every judgement needs the current code. End every note\'s kb_write with `aliasesVerified:true` on it, even when nothing changed — that is what stops it reappearing; without it the same note resurfaces on your next call.\n\n' +
-      'Returns "No file/flow notes to reconcile." when done. Once a batch is marked aliasesVerified, call again with NO offset (or offset 0) — verified notes drop out of the list on their own. Do not increment offset yourself across a reconciling pass: the list shrinks as notes get marked, so a fixed offset (including a stale `more.nextOffset`) silently skips whatever shifted into that position. `offset`/`more.nextOffset` still work for browsing the list WITHOUT marking anything — just not as a way to advance while reconciling.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        offset: { type: 'number', description: 'Pagination offset (0-based). For browsing only — do NOT increment this across calls once you start marking notes aliasesVerified, since the eligible list shrinks as you go. Leave at 0 (or omit) and just call again; reviewed notes fall out automatically.' },
-        limit: { type: 'number', description: 'Notes per page. Defaults to 10.' },
-      },
-    },
   },
 ] as const;
 
@@ -351,16 +335,6 @@ export function registerToolHandlers(
             + mechanical.fixed.map((f) => `  - ${f.note} (${f.path}): ${f.symbols.join(', ')}`).join('\n') + '\n\n'
           : '';
         result = { __rawText: prefix + repairWorklist(report) };
-        break;
-      }
-      // Parity with `coldstart kb repair-aliases`: same worklist text and
-      // pagination shape, so all surfaces say the same thing.
-      case 'kb_repair_aliases': {
-        const { planAliasRepair, aliasRepairWorklist } = await import('../kb/alias-repair.js');
-        const offset = Number(params['offset']) || 0;
-        const limit = Number(params['limit']) || 10;
-        const page = planAliasRepair(index.rootDir, offset, limit);
-        result = { __rawText: aliasRepairWorklist(page) };
         break;
       }
       case 'kb_status': {
