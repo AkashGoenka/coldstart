@@ -5,7 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.3.5] - 2026-10-29
+## [2.4.0] - 2026-11-09
+
+2.3.5 was tagged on GitHub but never reached npm (the publish failed on an expired token), so
+its fixes, listed under 2.3.5 below, ship to npm users for the first time in this release.
+
+### Fixed
+- **One file that hung the parser broke coldstart for the whole repo.** Every `find` waited
+  180 s and returned nothing, the keeper sat at 100% CPU forever, `coldstart restart` hung again
+  on the same file, and the no-keeper fallback hung with no limit. Each file's parse now runs
+  under a 5 s limit (`COLDSTART_PARSE_TIMEOUT_MS` overrides it). A file that hits it is indexed
+  by path only, logged, shown by `status` as a `parse-timeout` repair, and retried only when it
+  changes. The limit works even while the event loop is blocked, because Node checks it from a
+  separate thread. (#184)
+- **A regex that backtracks out of control no longer costs the file its index entry.** Every
+  coldstart process and hook now turns on V8's linear-time regex fallback, so such a regex is
+  re-run in milliseconds with the same answer and the file is fully indexed. The two indexing
+  hangs reported so far were both of this kind. Index output is identical with the fallback on
+  or off, at the same speed. Regexes the linear engine can't run (backreferences, lookarounds)
+  still rely on the 5 s limit. (#184)
+- **The repeated-search nudge's state on Windows** was written to a literal `/tmp`, which
+  doesn't exist there, so the nudge never fired on Windows. It now uses the
+  system temp directory. (#183)
+
+### Changed
+- **`kb search` ranks with BM25** over a note's title, prose and anchors, with identifiers split
+  into words (camelCase, snake_case, paths). In a local eval of 80 real prompts it found the
+  right note first 17 times out of 36, up from 10. (#182)
+- **Notes surfaced at the start of a turn** now show up to 3 notes, and only when the top one
+  clearly beats the runner-up. Otherwise nothing is shown. Notebooks under 30 notes always show.
+  In the same eval the right note was shown 17 times out of 36 (up from 8), and nothing was shown
+  correctly 27 times out of 44 (up from 19). (#182)
+- **Notes no longer carry search aliases.** Search never reads them, so the capture prompt no
+  longer asks for them, and aliases in older notes are ignored when a note is rebuilt. Nothing in
+  your notebook history is rewritten. A note whose title was replaced is no longer found by its
+  old title. (#183)
+
+### Removed
+- `coldstart kb repair-aliases`, the `kb_repair_aliases` MCP tool and the `/repair-aliases`
+  command. `coldstart init` deletes the command files it wrote earlier. (#183)
+
+## [2.3.5] - 2026-10-29 (not published to npm)
 
 ### Fixed
 - **The first index build hung forever on a Ruby file with an email-validation regex.** The
