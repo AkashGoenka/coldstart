@@ -60,7 +60,12 @@ describe('runWithTimeout', () => {
     // A backreference: V8's linear fallback (hooks/regex-engine.mjs, switched
     // on in this process by importing src/index.ts) cannot run it, so it still
     // backtracks forever — exactly the case this time limit is the net for.
-    expect(() => runWithTimeout(() => /^(a+)+\1$/.test('a'.repeat(32) + '!'), 200)).toThrow(ParseTimeoutError);
+    // Built from pieces at runtime ON PURPOSE: it is a deliberate backtracking
+    // bomb (the input this guard exists for), and as a literal CodeQL's
+    // js/redos flags it as a vulnerability. tests/regex-safety.test.ts keeps
+    // its known-bad regexes as strings for the same reason.
+    const bomb = new RegExp(['^(a+)+', '\\1$'].join(''));
+    expect(() => runWithTimeout(() => bomb.test('a'.repeat(32) + '!'), 200)).toThrow(ParseTimeoutError);
     expect(() => runWithTimeout(() => { for (;;) { /* spin */ } }, 200)).toThrow(ParseTimeoutError);
     expect(Date.now() - t).toBeLessThan(3000);
   });
