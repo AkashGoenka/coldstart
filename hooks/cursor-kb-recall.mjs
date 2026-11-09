@@ -36,6 +36,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { cursorRoot } from "./cursor-input.mjs";
+import { findNudgeStatePath } from "./nudge-state-path.mjs";
 // Pending-capture delivery (v5 trigger): a descent/cap fire at a previous
 // stop wrote its worklist payload to a pending file instead of blocking; it
 // rides this same next-prompt channel — capture first, then the user's request.
@@ -200,7 +201,7 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     try {
       const sid = String(input.session_id || "");
       if (sid && /^[\w-]+$/.test(sid)) {
-        const sf = `/tmp/find_nudge_${sid}.json`;
+        const sf = findNudgeStatePath(sid);
         let st = {};
         try { st = JSON.parse(readFileSync(sf, "utf8")); } catch { /* fresh */ }
         st.seen_find = true;

@@ -27,6 +27,7 @@ import { existsSync, appendFileSync, readFileSync, writeFileSync } from "node:fs
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { findNudgeStatePath } from "./nudge-state-path.mjs";
 
 // Pending-capture delivery (v5 trigger): a descent fire at the previous
 // Stop wrote its worklist payload to a pending file instead of blocking the
@@ -182,7 +183,7 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     // file: literal /tmp + main-agent key = session_id.
     try {
       if (sid && /^[\w-]+$/.test(sid)) {
-        const sf = `/tmp/find_nudge_${sid}.json`;
+        const sf = findNudgeStatePath(sid);
         let st = {};
         try { st = JSON.parse(readFileSync(sf, "utf8")); } catch { /* fresh */ }
         st.seen_find = true;

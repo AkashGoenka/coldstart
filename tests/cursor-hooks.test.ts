@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { findNudgeStatePath } from "../hooks/nudge-state-path.mjs";
 // @ts-expect-error plain-JS hook module, no types
 import nudge from '../hooks/cursor-nudge-handler.mjs';
 // @ts-expect-error plain-JS hook module, no types
@@ -18,7 +19,7 @@ const FIXTURES = fileURLToPath(new URL('./fixtures/cursor-hooks/', import.meta.u
 let root: string;
 let sid: string;
 let seq = 0;
-const stateFile = () => `/tmp/find_nudge_${sid}.json`;
+const stateFile = () => findNudgeStatePath(sid);
 const gen = () => `gen-${process.pid}-${seq}-${Math.random().toString(36).slice(2, 8)}`;
 
 beforeEach(() => {

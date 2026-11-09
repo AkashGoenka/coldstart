@@ -47,6 +47,7 @@ import { canonicalFindKey } from "./canonical-find-key.mjs";
 import { normalizeColdstartCall } from "./coldstart-call.mjs";
 import { coChangeNudge } from "./cochange-nudge.mjs";
 import { bashContentRead } from "./evidence.mjs";
+import { findNudgeStatePath } from "./nudge-state-path.mjs";
 
 // hooks/ sits beside dist/ in both the repo and the published package.
 const KB_CLI = fileURLToPath(new URL("../dist/index.js", import.meta.url));
@@ -198,7 +199,7 @@ export default function handle(input) {
   const out = resultText(input);
 
   const key = aid ? `${sid}_${aid}` : sid;
-  const stateFile = `/tmp/find_nudge_${key}.json`;
+  const stateFile = findNudgeStatePath(key);
   const st = {
     seen_find: false,
     total: 0,

@@ -19,7 +19,7 @@
  *     falls back to the PostToolUse late-catch; a false block is the error we avoid.
  *   - Fail-open: any error → return null and the call proceeds (runHook swallows).
  *
- * State is shared with find-nudge: /tmp/find_nudge_{session}_{agent}.json,
+ * State is shared with find-nudge: <os.tmpdir()>/find_nudge_{session}_{agent}.json,
  * list key `seen_find_queries`.
  *
  * Ported 1:1 from find-preguard.py.
@@ -28,6 +28,7 @@
 import { readFileSync } from "node:fs";
 import { canonicalFindKey } from "./canonical-find-key.mjs";
 import { normalizeColdstartCall } from "./coldstart-call.mjs";
+import { findNudgeStatePath } from "./nudge-state-path.mjs";
 
 const REASON =
   "You have ALREADY run this exact `coldstart find` earlier in this session — same " +
@@ -54,7 +55,7 @@ export default function handle(input) {
   const sid = input.session_id || "default";
   const aid = input.agent_id || "";
   const skey = aid ? `${sid}_${aid}` : sid;
-  const stateFile = `/tmp/find_nudge_${skey}.json`;
+  const stateFile = findNudgeStatePath(skey);
 
   let st = {};
   try {

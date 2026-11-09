@@ -12,7 +12,7 @@
  *   - OUTPUT : Cursor's preToolUse envelope is `{permission:"deny", agent_message}`,
  *              not Codex's `hookSpecificOutput.permissionDecision`. We re-wrap.
  *
- * State (seen_find_queries in /tmp/find_nudge_<session>.json) is shared with the
+ * State (seen_find_queries in <os.tmpdir()>/find_nudge_<session>.json) is shared with the
  * nudge, exactly as on the other platforms. Fail-open: null → the call proceeds.
  */
 
