@@ -18,6 +18,9 @@
  * Internal (spawned automatically by readers):
  *   coldstart --root . --daemon       # background keeper (keeps cache fresh)
  */
+// MUST stay the first import: V8's linear regex fallback only covers regexes
+// created after it is set, i.e. every module imported below. See the file.
+import '../hooks/regex-engine.mjs';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { statSync } from 'node:fs';

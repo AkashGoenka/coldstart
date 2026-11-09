@@ -31,6 +31,8 @@
  * Self-contained + fail-open: ANY error → exit 0 → the stop is allowed.
  */
 
+// MUST stay the first import: it only covers regexes created after it.
+import "./regex-engine.mjs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";

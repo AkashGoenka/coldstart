@@ -57,7 +57,10 @@ function write(rel: string, body: string): string {
 describe('runWithTimeout', () => {
   it('stops a catastrophic regex and a plain spin', () => {
     const t = Date.now();
-    expect(() => runWithTimeout(() => /^(a+)+$/.test('a'.repeat(40) + '!'), 200)).toThrow(ParseTimeoutError);
+    // A backreference: V8's linear fallback (hooks/regex-engine.mjs, switched
+    // on in this process by importing src/index.ts) cannot run it, so it still
+    // backtracks forever — exactly the case this time limit is the net for.
+    expect(() => runWithTimeout(() => /^(a+)+\1$/.test('a'.repeat(32) + '!'), 200)).toThrow(ParseTimeoutError);
     expect(() => runWithTimeout(() => { for (;;) { /* spin */ } }, 200)).toThrow(ParseTimeoutError);
     expect(Date.now() - t).toBeLessThan(3000);
   });
