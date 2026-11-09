@@ -8,7 +8,7 @@
  * Cursor-specific work is only at the boundary:
  *   - INPUT  : adaptCursorInput renames Shell→Bash, normalizes the MCP tool name,
  *              and sets cwd from workspace_roots — so every regex/threshold and the
- *              shared state file (/tmp/find_nudge_<session>.json) work unchanged.
+ *              shared state file (<os.tmpdir()>/find_nudge_<session>.json) work unchanged.
  *   - OUTPUT : Cursor's postToolUse envelope is a top-level `{additional_context}`,
  *              not Codex's `hookSpecificOutput.additionalContext`. We re-wrap.
  *

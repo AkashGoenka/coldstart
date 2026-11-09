@@ -79,11 +79,6 @@ export interface RetractTarget {
 export interface RecordPayload {
   // ---- op: "put" payload ----
   title?: string;
-  /** Stable — the file/flow's name, role, terms that don't change across writes. Unioned forever. */
-  identityAliases?: string[];
-  /** Symptom words tied to THIS write's summary/body. Replaced wholesale by the
-   *  next write that also carries a summary/body change — see fold.ts. */
-  incidentAliases?: string[];
   anchors?: Anchor[];
   /** Paths the agent re-inspected this session; the tool hashes exactly these. */
   verified?: string[];
@@ -134,19 +129,11 @@ export interface FoldedNote {
   id: string;
   type: NoteType;
   title: string;
-  identityAliases: string[];
-  incidentAliases: string[];
   anchors: Anchor[];
   status: NoteStatus;
   supersededBy?: string;
   updated: string; // max ts folded
   edits: number; // count of applied records
-  /** `edits` at the moment a `kb write` last carried `aliasesVerified:true` —
-   *  i.e. an agent explicitly confirmed identityAliases against the current
-   *  code (whether or not it changed any). `edits > aliasesVerifiedAtEdit`
-   *  means something has landed since — `kb repair-aliases` uses this to stop
-   *  resurfacing a note nothing has touched since it was last reconciled. */
-  aliasesVerifiedAtEdit?: number;
 
   summary?: string;
   character?: FileCharacter;

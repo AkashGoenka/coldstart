@@ -23,7 +23,7 @@ ${shapesBlock()}
   update an existing note: same spec + its "id" (fields merge; yours win).
   retract a wrong claim:   {"op":"retract","id":"<id>","target":{"kind":"note"}}
                            (retract a PART of a note, not the whole thing:
-                            {"op":"retract","id":"<id>","target":{"kind":"anchor|alias|facet|invariant|behavior|feature","key":"<the exact value>"}})
+                            {"op":"retract","id":"<id>","target":{"kind":"anchor|facet|invariant|behavior|feature","key":"<the exact value>"}})
 
 ${requiredFieldsLine()}
 
@@ -100,7 +100,7 @@ export function flowEvidenceCount(spec: WriteSpec, session: string): { read: num
  *
  *  `after` is the note as it stands AFTER the write, and it is what makes this
  *  accurate rather than merely suspicious. The spec alone cannot tell the two
- *  cases apart: an UPDATE that touches only aliases legitimately omits `steps`
+ *  cases apart: an UPDATE that touches only other fields legitimately omits `steps`
  *  and the fold keeps the ones already there — judging by the spec fired at
  *  notes that were perfectly fine. Pass the folded result and the claim is
  *  checked instead of guessed.
@@ -133,9 +133,8 @@ export function flowStepsWarning(spec: WriteSpec, after?: { steps?: unknown[] } 
  *
  * `after` is the note AS FOLDED, and passing it is what makes this correct on an
  * UPDATE. `op: 'put'` is not a document overwrite — it appends one record and
- * the note is the fold of the whole log, where identityAliases and anchors
- * UNION (incidentAliases don't — see fold.ts). So a spec that touches only
- * `verified` legitimately omits `identityAliases`, and judging
+ * the note is the fold of the whole log, where anchors UNION. So a spec that
+ * touches only `verified` legitimately omits anchor symbols, and judging
  * the record alone reported every such note as missing fields it already had.
  * A field is missing only when the agent did not send it AND the folded note
  * does not have it. Omit `after` (no folded note to hand) and this falls back to

@@ -3,9 +3,7 @@
  * them to an agent as a worklist.
  *
  * WHY MOST OF IT DOES NOT FIX ANYTHING ITSELF: most gaps need a judgement only
- * a warm agent can make. Aliases are the words a future reader would type —
- * nothing on disk knows them, and deriving them from the title produces the
- * bloat that made recall worse in the first place. And `verified` is a claim —
+ * a warm agent can make. `verified` is a claim —
  * "I opened this file" — so auto-filing a flow at its step paths would make the
  * note assert freshness against bytes nobody read.
  *
@@ -29,9 +27,7 @@
  * mechanicalSymbolRepair for why a secondary anchor cannot be written.
  *
  * WHY IT EXISTS AT ALL: notes written before the shape was frozen are missing
- * fields their writer was never asked for. The MCP kb_write description never
- * mentioned `aliases`, so notebooks driven by no-shell clients are the worst
- * affected. Those notes are correct — just unreachable — and there are too many
+ * fields their writer was never asked for. Those notes are correct — just unreachable — and there are too many
  * to find by hand.
  *
  * The checks live in hooks/note-shape.mjs, next to the write-time warnings that
@@ -45,10 +41,8 @@ import { fileNoteId } from './ids.js';
 import { loadKbNotesIndex, type KbNotesIndex } from './notes-index.js';
 import { kbWrite } from './write.js';
 
-/** Mirrors the alias-surface-area caution (fold.ts's ALIAS_MAX): a file
- *  declaring far more than this is probably hub-shaped even if mislabeled
- *  "single" — dumping all of it would dilute the anchor channel the same way
- *  an uncapped alias union did. Cap, don't refuse; the rest stays reachable via
+/** A file declaring far more than this is probably hub-shaped even if
+ *  mislabeled "single" — dumping all of it would dilute the anchor channel. Cap, don't refuse; the rest stays reachable via
  *  `gs` even if not anchored on the note. */
 export const SYMBOL_BACKFILL_CAP = 15;
 
@@ -59,7 +53,7 @@ export interface MechanicalRepairResult {
 /**
  * Backfill anchors[].symbols on single-character file notes from the
  * kb-notes-index sidecar — the one check in this file that WRITES, because
- * unlike aliases/verified this data is already fully derived, not judged. See
+ * unlike `verified` this data is already fully derived, not judged. See
  * the file header for why this is safe where the earlier mechanical pass
  * wasn't, and why hub notes stay excluded.
  *
@@ -100,12 +94,6 @@ export async function mechanicalSymbolRepair(
 
     const res = await kbWrite(root, {
       type: 'file', path: own.path, anchors: [{ path: own.path, symbols }],
-      // This write provably does not touch aliases, so it must not un-review
-      // them: without carrying the stamp forward, `edits` advances past
-      // `aliasesVerifiedAtEdit` and the note resurfaces in `kb repair-aliases`
-      // as if a human judgement had gone stale. Only ever carried when the note
-      // was ALREADY verified as of its current edit — never asserted fresh.
-      ...(n.aliasesVerifiedAtEdit === n.edits ? { aliasesVerified: true } : {}),
     });
     if (res.status === 'written') fixed.push({ note: n.id, path: own.path, symbols });
   }
@@ -182,7 +170,7 @@ export function planRepairs(root: string): RepairReport {
     }
   }
   // Group by check so the agent works one KIND of gap at a time — the fix for
-  // twelve alias-less notes is one mental mode, not twelve.
+  // twelve symbol-less notes is one mental mode, not twelve.
   const order = NOTE_CHECKS.map((c) => c.check);
   findings.sort((a, b) => (order.indexOf(a.check) - order.indexOf(b.check)) || a.note.localeCompare(b.note));
 
@@ -216,7 +204,7 @@ export function repairWorklist(report: RepairReport): string {
     + 'and fields merge, so nothing already in the note is lost; replace the placeholder values '
     + 'with real ones.',
     '',
-    'Never invent an alias from the title, and never add a path to "verified" unless you opened '
+    'Never add a path to "verified" unless you opened '
     + 'it. Skip a finding that genuinely is not worth fixing (a config file that declares no '
     + 'symbols) and say why.',
   ];

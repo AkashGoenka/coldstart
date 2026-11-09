@@ -10,8 +10,6 @@ export interface ShapeNote {
   id: string;
   type?: string;
   title?: string;
-  identityAliases?: string[];
-  incidentAliases?: string[];
   anchors?: { path: string; symbols?: string[] }[];
   steps?: { path?: string; symbols?: string[]; role?: string }[];
   scope?: { terms?: string[] };
@@ -22,8 +20,6 @@ export interface ShapeSpec {
   op?: string;
   type?: string;
   path?: string;
-  identityAliases?: unknown;
-  incidentAliases?: unknown;
   anchors?: { path?: string; symbols?: unknown }[];
   steps?: unknown[];
   scope?: { terms?: unknown };

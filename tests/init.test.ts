@@ -19,13 +19,13 @@ import {
   wireCodexCaptureSkill,
   REPAIR_COMMAND,
   REPAIR_ALIASES_COMMAND,
+  removeRetiredCommand,
   USER_COMMANDS,
   wireClaudeCommand,
   wireCursorCommand,
   wireCodexSkill,
 } from '../src/init.js';
 import { repairWorklist } from '../src/kb/repair.js';
-import { aliasRepairWorklist } from '../src/kb/alias-repair.js';
 
 // We can't easily test runInit interactively, but we can test that the
 // MCP entry structure is correct when it's generated. This is a basic
@@ -540,10 +540,9 @@ describe('/repair-notes command', () => {
   });
 });
 
-/** repair-aliases is the THIRD user-invoked command — a different problem from
- *  repair-notes (stale aliases vs missing ones), but the same asymmetry risk:
- *  a host that gets repair-notes and not repair-aliases is a defect. */
-describe('/repair-aliases command', () => {
+/** /repair-aliases is RETIRED (notes carry no search aliases). init no longer
+ *  wires it, and deletes the files an older version wrote. */
+describe('/repair-aliases command (retired)', () => {
   let tempDir: string;
   beforeEach(() => { tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coldstart-repair-aliases-cmd-')); });
   afterEach(() => { fs.rmSync(tempDir, { recursive: true, force: true }); });
@@ -554,45 +553,16 @@ describe('/repair-aliases command', () => {
     codex: path.join(tempDir, '.agents', 'skills', REPAIR_ALIASES_COMMAND, 'SKILL.md'),
   });
 
-  it('reaches all three hosts, each in that host\'s own format', () => {
-    wireClaudeCommand(tempDir, USER_COMMANDS.repairAliases);
-    wireCursorCommand(tempDir, USER_COMMANDS.repairAliases);
-    wireCodexSkill(tempDir, USER_COMMANDS.repairAliases);
-    const f = files();
-
-    expect(fs.readFileSync(f.claude, 'utf8')).toContain('!`node ');
-    expect(fs.readFileSync(f.cursor, 'utf8')).not.toContain('!`');
-    expect(fs.readFileSync(f.codex, 'utf8')).toContain(`name: ${REPAIR_ALIASES_COMMAND}`);
-
-    for (const body of Object.values(f).map((p) => fs.readFileSync(p, 'utf8'))) {
-      expect(body).toContain('kb repair-aliases');
-      expect(body).toContain('--offset');
-      // Same drift guard as repair-notes: the wrapper doesn't restate the
-      // reconciliation judgement — that lives in aliasRepairWorklist.
-      expect(body).not.toContain('reading the current code');
-    }
+  it('is no longer a user command', () => {
+    expect(Object.values(USER_COMMANDS).map((c) => c.name)).not.toContain(REPAIR_ALIASES_COMMAND);
   });
 
-  it('leaves the reconciliation judgement to the worklist itself', () => {
-    expect(USER_COMMANDS.repairAliases.instructions).not.toContain('reading the current code');
-    expect(aliasRepairWorklist({
-      total: 1, offset: 0,
-      entries: [{
-        note: 'n', type: 'file', title: 't', notePath: 'notes/n.md', paths: ['src/a.ts'],
-        identityAliases: ['a'], hiddenIdentityAliases: [], incidentAliases: [],
-      }],
-    })).toContain('reading the current code');
-  });
-
-  it('is idempotent — a re-run updates in place', () => {
-    for (const wire of [wireClaudeCommand, wireCursorCommand, wireCodexSkill]) {
-      expect(wire(tempDir, USER_COMMANDS.repairAliases)).toBe('created');
-      expect(wire(tempDir, USER_COMMANDS.repairAliases)).toBe('updated');
-    }
-  });
-
-  it('bakes no repo-specific path, so the command works from any cwd', () => {
-    wireClaudeCommand(tempDir, USER_COMMANDS.repairAliases);
-    expect(fs.readFileSync(files().claude, 'utf8')).not.toContain(tempDir);
+  it('removeRetiredCommand deletes the old files and the emptied skill dir, and tolerates absence', () => {
+    for (const f of Object.values(files())) { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, 'old'); }
+    for (const f of Object.values(files())) removeRetiredCommand(f);
+    for (const f of Object.values(files())) expect(fs.existsSync(f)).toBe(false);
+    expect(fs.existsSync(path.dirname(files().codex))).toBe(false);
+    expect(fs.existsSync(path.join(tempDir, '.claude', 'commands'))).toBe(true);
+    expect(() => removeRetiredCommand(files().claude)).not.toThrow();
   });
 });

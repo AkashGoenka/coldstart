@@ -1,7 +1,7 @@
 /**
  * Note ids — opaque join keys. Coined once, then only ever reused; never
  * searched, never re-derived (so they cannot rot). Retrieval runs over
- * title/aliases/prose/anchors, not ids.
+ * title/prose/anchors, not ids.
  *
  * - File notes: id derived from the repo-relative path, collision-safe
  *   (`a/b_c.py` and `a/b/c.py` slug identically — the sha1 suffix disambiguates).

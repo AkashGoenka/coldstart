@@ -162,7 +162,7 @@ export async function kbWrite(root: string, spec: WriteSpec, opts: WriteOptions 
         }
       } else {
         const queryWords = [
-          spec.title, ...(spec.identityAliases ?? []), ...(spec.incidentAliases ?? []), spec.summary ?? '',
+          spec.title, spec.summary ?? '',
         ].join(' ');
         const { hits } = await kbSearch(root, queryWords, { maxResults: 5, noMissLog: true });
         // Same-type only: a lesson about a flow's file always word-overlaps that

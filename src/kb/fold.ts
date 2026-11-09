@@ -11,15 +11,10 @@
  *   title/summary/kind/body/scope  last-writer-wins
  *   character                      last-writer-wins (a file's character is a
  *                                  revisable judgment, hence a field not a type)
- *   identityAliases                union by exact text (retractable), then
- *                                  CAPPED newest-first — see capAliases. Stable
- *                                  facts about the note (name, role) that don't
- *                                  change across writes.
- *   incidentAliases                tied to the write that carries a summary/body
- *                                  change: REPLACED wholesale by that write, not
- *                                  unioned — a symptom word only outlives the
- *                                  narrative it describes. Untouched by writes
- *                                  that don't touch summary/body.
+ *   search aliases                 IGNORED. identityAliases / incidentAliases /
+ *                                  aliases / aliasesVerified in older records are
+ *                                  recognized (so they never land in `extra`) and
+ *                                  dropped: kb search ranks title + prose.
  *   invariants                     union by exact text (retractable)
  *   facets                         keyed by symbol: detail replaces, flows
  *                                  union, head stamped from the writing record
@@ -46,14 +41,11 @@ import { KB_RAW_VERSION } from './raw-log.js';
 
 const ENVELOPE_KEYS = new Set(['v', 'ts', 'head', 'id', 'type', 'op']);
 const PUT_KEYS = new Set([
-  // 'aliases' is the pre-split legacy key (see applyPut) — recognized here so
-  // it lands in identityAliases, not in `extra` (which would double-render it).
-  'title', 'aliases', 'identityAliases', 'incidentAliases', 'anchors', 'verified', 'summary', 'character', 'facets',
+  'title', 'anchors', 'verified', 'summary', 'character', 'facets',
   'behaviors', 'features', 'steps', 'invariants', 'kind', 'body', 'scope',
-  // 'aliasesVerified' is a transient signal, not stored content — handled in
-  // the main fold loop (needs the post-increment edit count), recognized here
-  // only so it isn't dumped into `extra`.
-  'aliasesVerified',
+  // Retired search-alias keys: older records carry them. Recognized only so
+  // they are dropped instead of dumped into `extra`.
+  'aliases', 'identityAliases', 'incidentAliases', 'aliasesVerified',
 ]);
 const OP_KEYS = new Set(['target', 'by']);
 const NOTE_TYPES = new Set<string>(['file', 'flow', 'lesson']);
@@ -86,18 +78,7 @@ interface Rec {
 const isStr = (x: unknown): x is string => typeof x === 'string';
 const strArr = (x: unknown): string[] => (Array.isArray(x) ? x.filter(isStr) : []);
 
-export interface FoldOptions {
-  /** false = skip the identityAliases cap, returning the full historical
-   *  union instead of the newest-N render. Used only by `kb repair-aliases`
-   *  to show an agent what's hidden past the cap before it retracts anything
-   *  — retracting blind is what causes older aliases to resurface into the
-   *  cap window on the next fold (capAliases operates on the union minus
-   *  retractions, not "the visible 12 minus what was removed"). Every other
-   *  caller wants the capped render and omits this. */
-  capIdentity?: boolean;
-}
-
-export function fold(id: string, rawRecords: unknown[], opts: FoldOptions = {}): FoldResult {
+export function fold(id: string, rawRecords: unknown[]): FoldResult {
   const warnings: string[] = [];
 
   // ---- validate + order -----------------------------------------------------
@@ -122,7 +103,7 @@ export function fold(id: string, rawRecords: unknown[], opts: FoldOptions = {}):
   const type = usable[0].rec.type as NoteType;
   const note: FoldedNote = {
     id, type,
-    title: '', identityAliases: [], incidentAliases: [], anchors: [],
+    title: '', anchors: [],
     status: 'active', updated: usable[0].ts, edits: 0,
     facets: [], behaviors: [], features: [], steps: [], invariants: [],
     extra: {},
@@ -142,90 +123,20 @@ export function fold(id: string, rawRecords: unknown[], opts: FoldOptions = {}):
       note.supersededBy = rec.by;
     }
     note.edits++;
-    // Stamped AFTER the increment, so it reads as "verified as of this edit" —
-    // an agent explicitly confirmed identityAliases against the current code
-    // in THIS record, whether or not it changed anything. Only a put can set
-    // it; any later record (put, retract, or supersede) pushes edits past it
-    // again with no extra bookkeeping, which is what makes the note reappear.
-    if (op === 'put' && rec.aliasesVerified === true) note.aliasesVerifiedAtEdit = note.edits;
     if (ts > note.updated) note.updated = ts;
   }
 
   if (!note.title) {
     note.title = type === 'file' && note.anchors[0] ? note.anchors[0].path : id;
   }
-  if (opts.capIdentity !== false) note.identityAliases = capAliases(note.identityAliases);
   return { note, warnings };
-}
-
-/** Identity-alias budget. The union above is unbounded, and that was a recall
- *  bug when every alias unioned forever: a note's alias list grew with how many
- *  times it had been written. Measured on this repo 2026-07-30 — every
- *  individual write obeyed the capture prompt's 6-10 rule (median 6 aliases /
- *  20 words per put record), yet src/kb/search.ts's note reached 57 aliases
- *  across nine compliant writes. incidentAliases no longer unions (see
- *  applyPut) so this cap now only bounds identityAliases, which grow far more
- *  slowly — but it stays as the backstop, at the union, since that is the only
- *  place a bound can actually hold.
- *
- *  Why it matters: `hookNameNorm` (search.ts) divides the name channel by its
- *  own token count, so the channel is ZERO-SUM — every accumulated alias taxes
- *  every other one. WORDS are the real currency, hence the word budget; the
- *  count cap is the secondary guard against many short aliases.
- *
- *  Nothing is lost. The fold is a pure function of the append-only `.raw` log,
- *  which still holds every alias ever written — widening or removing these
- *  constants and re-rendering restores them exactly. */
-export const ALIAS_MAX = 12;
-export const ALIAS_MAX_WORDS = 40;
-/** Never trim below this, however long the individual aliases are. */
-const ALIAS_KEEP_MIN = 4;
-
-/** Keep the NEWEST aliases within budget. `applyPut` appends in fold order, so
- *  this array is oldest-first and the tail is what the most recent writers —
- *  the ones who saw the file in its current shape — chose as its search keys. */
-export function capAliases(aliases: string[]): string[] {
-  if (aliases.length <= ALIAS_KEEP_MIN) return aliases;
-  const kept: string[] = [];
-  let words = 0;
-  for (let i = aliases.length - 1; i >= 0; i--) {
-    const w = aliases[i].split(/\s+/).filter(Boolean).length;
-    const overBudget = kept.length >= ALIAS_MAX || words + w > ALIAS_MAX_WORDS;
-    if (overBudget && kept.length >= ALIAS_KEEP_MIN) break;
-    kept.push(aliases[i]);
-    words += w;
-  }
-  return kept.reverse();
 }
 
 function applyPut(note: FoldedNote, rec: Rec, warnings: string[]): void {
   // A put revives a retracted note (agent re-learned it); a supersede is sticky.
   if (note.status === 'retracted') { note.status = 'active'; }
 
-  if (isStr(rec.title) && rec.title.trim()) {
-    const incoming = rec.title.trim();
-    // A replaced title stays searchable: demote the old one to an identity
-    // alias — a former name is a stable fact about the note, not an incident.
-    // (Titles are retrieval keys; --into merges must not erase them.)
-    if (note.title && note.title !== incoming && !note.identityAliases.includes(note.title)) {
-      note.identityAliases.push(note.title);
-    }
-    note.title = incoming;
-  }
-  for (const a of strArr(rec.identityAliases)) if (!note.identityAliases.includes(a)) note.identityAliases.push(a);
-  // Legacy compat: every record written before the identity/incident split
-  // (2026-08-02) used the flat "aliases" key. The raw log is forever — old
-  // records must stay interpretable by new code — so a bare `rec.aliases`
-  // folds as identityAliases (the safe bucket: matches its old union-forever
-  // behavior exactly, no incident/identity judgment risked on data the writing
-  // agent never made that distinction for). `kb repair` can later resplit these
-  // into incidentAliases where a note's history shows they should be.
-  for (const a of strArr(rec.aliases)) if (!note.identityAliases.includes(a)) note.identityAliases.push(a);
-  // incidentAliases are tied to the write that owns the current narrative: a
-  // write that touches summary/body REPLACES them wholesale (even with []),
-  // rather than unioning — an old symptom word must not outlive the summary
-  // it described. A write that doesn't touch summary/body leaves them alone.
-  if (isStr(rec.summary) || isStr(rec.body)) note.incidentAliases = strArr(rec.incidentAliases);
+  if (isStr(rec.title) && rec.title.trim()) note.title = rec.title.trim();
   if (isStr(rec.summary)) note.summary = rec.summary;
   if (isStr(rec.body)) note.body = rec.body;
   if (isStr(rec.kind)) {
@@ -346,10 +257,7 @@ function applyRetract(note: FoldedNote, rec: Rec, warnings: string[], at: string
     case 'feature': note.features = note.features.filter((f) => f.concept_id !== key); return true;
     case 'anchor': note.anchors = note.anchors.filter((a) => a.path !== key); return true;
     case 'invariant': note.invariants = note.invariants.filter((t) => t !== key); return true;
-    case 'alias':
-      note.identityAliases = note.identityAliases.filter((t) => t !== key);
-      note.incidentAliases = note.incidentAliases.filter((t) => t !== key);
-      return true;
+    case 'alias': return true; // retired: aliases are no longer folded
     case 'note': note.status = 'retracted'; return true;
     default:
       warnings.push(`${at}: unknown retract kind ${JSON.stringify(target.kind)} — skipped`);

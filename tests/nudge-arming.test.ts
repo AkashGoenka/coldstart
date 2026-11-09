@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { findNudgeStatePath } from "../hooks/nudge-state-path.mjs";
 // @ts-expect-error plain-JS hook module, no types
 import handle from '../hooks/nudge-handler.mjs';
 import { appendRecord } from '../src/kb/raw-log.js';
@@ -17,7 +18,7 @@ import { appendRecord } from '../src/kb/raw-log.js';
  * greps with the detectors dark in q23.
  */
 let sid: string;
-const stateFile = () => `/tmp/find_nudge_${sid}.json`;
+const stateFile = () => findNudgeStatePath(sid);
 
 beforeEach(() => {
   sid = `nudge-arm-${process.pid}-${Math.floor(performance.now() * 1000)}`;

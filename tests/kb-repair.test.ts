@@ -16,7 +16,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { NOTE_CHECKS } from '../hooks/note-shape.mjs';
 import { planRepairs, repairWorklist, mechanicalSymbolRepair, SYMBOL_BACKFILL_CAP } from '../src/kb/repair.js';
-import { planAliasRepair } from '../src/kb/alias-repair.js';
 import { kbWrite } from '../src/kb/write.js';
 import { initSkeleton, notebookDir } from '../src/kb/store.js';
 import { saveKbNotesIndex } from '../src/kb/notes-index.js';
@@ -50,7 +49,7 @@ function rawSnapshot(): string {
 
 const complete = {
   type: 'file-single', path: 'src/done.ts', summary: 'does the thing',
-  identityAliases: ['the thing'], anchors: [{ path: 'src/done.ts', symbols: ['doThing'] }],
+  anchors: [{ path: 'src/done.ts', symbols: ['doThing'] }],
 } as never;
 
 describe('kb repair — detection', () => {
@@ -62,17 +61,17 @@ describe('kb repair — detection', () => {
     expect(repairWorklist(report)).toBe('Nothing to repair here.');
   });
 
-  it('flags a file note with no aliases and no anchor symbols', async () => {
+  it('flags a file note with no anchor symbols, and never asks for search aliases', async () => {
     await kbWrite(root, { type: 'file-single', path: 'src/a.ts', summary: 's' } as never, { force: true });
 
     const checks = planRepairs(root).findings.map((f) => f.check);
-    expect(checks).toContain('missing-identity-aliases');
+    expect(checks).not.toContain('missing-identity-aliases');
     expect(checks).toContain('file-no-symbols');
   });
 
   it('counts a hub note\'s facet symbols as symbols — the fold unions them into the anchor', async () => {
     await kbWrite(root, {
-      type: 'file-hub', path: 'src/hub.ts', identityAliases: ['grab bag'],
+      type: 'file-hub', path: 'src/hub.ts',
       facets: [{ symbol: 'alpha', detail: 'the non-obvious thing' }],
     } as never, { force: true });
 
@@ -81,7 +80,7 @@ describe('kb repair — detection', () => {
 
   it('flags step files a flow is not filed at, and names exactly those paths', async () => {
     await kbWrite(root, {
-      type: 'flow', title: 'how X happens', identityAliases: ['x happening'], summary: 'the product fact',
+      type: 'flow', title: 'how X happens', summary: 'the product fact',
       steps: [{ path: 'src/a.ts', role: 'entry' }, { path: 'src/b.ts', role: 'middle' },
         { path: 'src/c.ts', role: 'end' }],
       verified: ['src/a.ts'],
@@ -99,7 +98,7 @@ describe('kb repair — detection', () => {
 
   it('is silent on a flow whose verified list covers every step', async () => {
     await kbWrite(root, {
-      type: 'flow', title: 'fully filed', identityAliases: ['filed'], summary: 'the fact',
+      type: 'flow', title: 'fully filed', summary: 'the fact',
       steps: [{ path: 'src/a.ts', role: 'entry' }, { path: 'src/b.ts', role: 'end' }],
       verified: ['src/a.ts', 'src/b.ts'],
     } as never, { force: true, isNew: true });
@@ -107,7 +106,7 @@ describe('kb repair — detection', () => {
     expect(planRepairs(root).findings.map((f) => f.check)).not.toContain('flow-steps-unanchored');
   });
 
-  it('never asks a lesson for aliases — its scope terms are the retrieval surface', async () => {
+  it('is silent on a lesson with scope terms — they are its retrieval surface', async () => {
     await kbWrite(root, {
       type: 'lesson', kind: 'absence', title: 'no retry logic here', body: 'looked, absent',
       scope: { terms: ['retry', 'backoff'] },
@@ -161,7 +160,6 @@ describe('kb repair — the worklist', () => {
     await kbWrite(root, { type: 'file-single', path: 'src/a.ts', summary: 's' } as never, { force: true });
     const page = repairWorklist(planRepairs(root));
 
-    expect(page).toContain('## missing-identity-aliases');
     expect(page).toContain('## file-no-symbols');
     expect(page).toContain('.coldstart/notebook/notes/');
     expect(page).toContain('src/a.ts');
@@ -187,7 +185,7 @@ describe('mechanicalSymbolRepair — the one mechanical exception', () => {
 
   it('never touches a hub note — facets stay agent-curated', async () => {
     await kbWrite(root, {
-      type: 'file-hub', path: 'src/hub.ts', identityAliases: ['grab bag'],
+      type: 'file-hub', path: 'src/hub.ts',
       facets: [{ symbol: 'alpha', detail: 'the thing' }],
     } as never, { force: true });
     await seedSidecar({ 'src/hub.ts': ['alpha', 'beta', 'gamma'] });
@@ -241,21 +239,6 @@ describe('mechanicalSymbolRepair — the one mechanical exception', () => {
     // Converges: the second pass finds nothing, so the keeper's streak resets
     // rather than climbing to the cap it never comes back from.
     expect(await mechanicalSymbolRepair(root, cacheDir)).toEqual({ fixed: [] });
-  });
-
-  it('does not un-review a note whose aliases were already verified at this edit', async () => {
-    // The backfill provably does not touch aliases; if it let `edits` advance
-    // past `aliasesVerifiedAtEdit`, the note would resurface in kb repair-aliases
-    // as though a human judgement had gone stale.
-    const w = await kbWrite(root, {
-      type: 'file-single', path: 'src/a.ts', summary: 's', identityAliases: ['the a file'],
-      aliasesVerified: true,
-    } as never, { force: true });
-    expect(w.status).toBe('written');
-    await seedSidecar({ 'src/a.ts': ['doThing'] });
-
-    expect((await mechanicalSymbolRepair(root, cacheDir)).fixed).toHaveLength(1);
-    expect(planAliasRepair(root).entries.map((e) => e.note)).toEqual([]);
   });
 
   it('caps at SYMBOL_BACKFILL_CAP — a file this size is probably hub-shaped even if mislabeled', async () => {

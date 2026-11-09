@@ -17,9 +17,8 @@
  * not a rank: only withdrawn notes (status) and notes whose subject is gone
  * from this branch (inactive) are hard-tiered below score.
  *
- * Every zero-hit query is appended to the miss-log — the alias bet's failure
- * mode is SILENT (the agent just falls through to `find`), so the miss-log is
- * the health metric and the future source of real aliases.
+ * Every zero-hit query is appended to the miss-log — a miss is SILENT (the
+ * agent just falls through to `find`), so the miss-log is the health metric.
  */
 import type { FoldedNote, StampedAnchor } from './types.js';
 import { stampCoversTerms, type KbNotesIndex } from './notes-index.js';
@@ -446,8 +445,6 @@ export function renderSearchPage(root: string, query: string, result: KbSearchRe
     parts.push(`## ${n.title}  [${n.type}${kind} · ${n.status}]`);
     parts.push(`id: ${n.id} · updated ${n.updated.slice(0, 10)}`);
     if (n.status === 'superseded' && n.supersededBy) parts.push(`superseded by: ${n.supersededBy}`);
-    const allAliases = [...n.identityAliases, ...n.incidentAliases];
-    if (allAliases.length) parts.push(`aka: ${allAliases.join(' · ')}`);
     for (const s of hit.stamped) parts.push(freshnessLine(s));
     if (hit.inactive) parts.push('[inactive — every anchored file is absent on this branch]');
     if (hit.absence) parts.push(hit.absence);

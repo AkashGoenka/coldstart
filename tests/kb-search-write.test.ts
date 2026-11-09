@@ -39,7 +39,6 @@ function seedLesson(over: Record<string, unknown> = {}): void {
     id: 'restore-drops-functions', type: 'lesson', op: 'put',
     kind: 'absence',
     title: 'Version restore silently drops function assignments',
-    identityAliases: ['functions disappear after graph restore'],
     body: 'restore_state never re-creates functions_x_graphs rows.',
     anchors: [{ path: 'app/models/graph.py', hash: 'sha256:000000000000' }],
     ...over,
@@ -47,7 +46,7 @@ function seedLesson(over: Record<string, unknown> = {}): void {
 }
 
 describe('kb search', () => {
-  it('lane 1: symptom words hit via aliases; zero hits append to the miss-log', async () => {
+  it('lane 1: title + body words hit; zero hits append to the miss-log', async () => {
     writeRepoFile('app/models/graph.py', 'class Graph: pass\n');
     seedLesson();
     const hit = await kbSearch(root, 'functions disappear after graph restore', {});

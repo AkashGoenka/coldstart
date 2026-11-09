@@ -645,15 +645,9 @@ export const CAPTURE_COMMAND = 'capture-notes';
  *  a clean notebook produces one line and no work. */
 export const REPAIR_COMMAND = 'repair-notes';
 
-/** The user-invoked alias-reconciliation command (`/repair-aliases`).
- *
- *  A different problem from REPAIR_COMMAND: that one finds notes with NO
- *  identityAliases at all (a missing-field gap, fixed at ordinary write time).
- *  This one is for aliases that EXIST but no longer describe the file/flow —
- *  a note rewritten several times can carry identity-shaped words that were
- *  really symptom words for an earlier write. Needs the same code-reading
- *  judgement `kb repair` never automates, so it stays a worklist, never a
- *  write, same as REPAIR_COMMAND. Paginated — see `kb repair-aliases`. */
+/** RETIRED: `/repair-aliases` reconciled search aliases, which notes no longer
+ *  carry. No longer wired; kept so `init` and `unwire` delete the files an
+ *  older version wrote into a repo. */
 export const REPAIR_ALIASES_COMMAND = 'repair-aliases';
 
 /** Every user-invoked command is the same three files with different text.
@@ -676,11 +670,11 @@ export interface UserCommand {
    *  CAPTURE_SENTINEL in the submitted prompt and runs the invocation itself
    *  with the real session id (which the command body has no way to pass in) —
    *  see cursor-kb-recall.mjs / codex-kb-recall.mjs. Commands that need no
-   *  session (repair, repairAliases) leave this unset. */
+   *  session (repair) leave this unset. */
   hookInjected?: boolean;
 }
 
-export const USER_COMMANDS: Record<'capture' | 'repair' | 'repairAliases', UserCommand> = {
+export const USER_COMMANDS: Record<'capture' | 'repair', UserCommand> = {
   capture: {
     name: CAPTURE_COMMAND,
     // `--session` points capture at the invoking session's worklist. It is
@@ -708,7 +702,7 @@ export const USER_COMMANDS: Record<'capture' | 'repair' | 'repairAliases', UserC
     description: 'Repair notebook notes that are written but unfindable',
     skillDescription:
       'Repair coldstart notebook notes that are missing the fields which make them findable '
-      + '(identityAliases, anchor symbols, a flow\'s verified paths). Use when the user asks to repair, '
+      + '(anchor symbols, a flow\'s verified paths). Use when the user asks to repair, '
       + 'fix, or clean up the notebook, or when notes are not turning up in search.',
     // Deliberately thin: the worklist carries its own instructions, so that the
     // CLI, the MCP tool and all three hosts say the same thing. Repeating them
@@ -718,26 +712,19 @@ export const USER_COMMANDS: Record<'capture' | 'repair' | 'repairAliases', UserC
       + 'through every note it lists. If it prints "Nothing to repair here.", stop — there is '
       + 'no work.',
   },
-  repairAliases: {
-    name: REPAIR_ALIASES_COMMAND,
-    invocation: () => `${nodeCommand(path.join(installRoot(), 'dist', 'index.js'))} kb repair-aliases --root .`,
-    description: 'Reconcile identityAliases that no longer describe the file/flow',
-    skillDescription:
-      'Reconcile coldstart notebook identityAliases against the current code — catches aliases that '
-      + 'were accurate when written but are now stale or were really symptom words for an earlier '
-      + 'write. Use when the user asks to clean up, audit, or reconcile notebook aliases; not for '
-      + 'notes missing aliases entirely (that\'s /repair-notes).',
-    // Deliberately thin, same reasoning as `repair` above: the worklist carries
-    // its own instructions and pagination pointer, so CLI/MCP/all three hosts
-    // say the same thing.
-    instructions:
-      'It prints a PAGINATED worklist (10 notes at a time) — each note you review must end with a '
-      + '`kb write` carrying `aliasesVerified:true` on it, even when you kept every alias unchanged, '
-      + 'or it reappears next run. Once a batch is marked, re-run the exact same command again (no '
-      + '`--offset`) — reviewed notes drop out on their own, so it keeps surfacing whatever is still '
-      + 'outstanding. Stop when it prints "No file/flow notes to reconcile."',
-  },
 };
+
+/** Delete a command file a retired USER_COMMANDS row once wrote, and its skill
+ *  dir when that leaves it empty. Re-running init is how an upgraded repo sheds
+ *  it; `unwire` removes the same paths. */
+export function removeRetiredCommand(file: string): void {
+  if (!fs.existsSync(file)) return;
+  fs.unlinkSync(file);
+  if (path.basename(file) === 'SKILL.md') {
+    const dir = path.dirname(file);
+    if (!fs.readdirSync(dir).length) fs.rmdirSync(dir);
+  }
+}
 
 /** Claude Code: `.claude/commands/<name>.md` → `/<name>`.
  *  Claude expands a leading `!` at submit time, so the output is injected
@@ -995,7 +982,7 @@ function setupClaude(cwd: string, exp: Experience): void {
     : `  settings.json — ${kb} notebook recall + capture hooks (UserPromptSubmit + Stop/SubagentStop)`);
   out(`  commands/     — ${wireClaudeCommand(cwd, USER_COMMANDS.capture)} /${CAPTURE_COMMAND} (capture notes on demand)`);
   out(`  commands/     — ${wireClaudeCommand(cwd, USER_COMMANDS.repair)} /${REPAIR_COMMAND} (fix notes that can't be found)`);
-  out(`  commands/     — ${wireClaudeCommand(cwd, USER_COMMANDS.repairAliases)} /${REPAIR_ALIASES_COMMAND} (reconcile stale aliases)`);
+  removeRetiredCommand(path.join(cwd, '.claude', 'commands', `${REPAIR_ALIASES_COMMAND}.md`));
 }
 
 function setupCodex(cwd: string, exp: Experience): void {
@@ -1010,7 +997,7 @@ function setupCodex(cwd: string, exp: Experience): void {
     : `  hooks.json    — ${hooks} Codex navigation + notebook hooks`);
   out(`  .agents/skills — ${wireCodexSkill(cwd, USER_COMMANDS.capture)} $${CAPTURE_COMMAND} skill (capture notes on demand)`);
   out(`  .agents/skills — ${wireCodexSkill(cwd, USER_COMMANDS.repair)} $${REPAIR_COMMAND} skill (fix notes that can't be found)`);
-  out(`  .agents/skills — ${wireCodexSkill(cwd, USER_COMMANDS.repairAliases)} $${REPAIR_ALIASES_COMMAND} skill (reconcile stale aliases)`);
+  removeRetiredCommand(path.join(cwd, '.agents', 'skills', REPAIR_ALIASES_COMMAND, 'SKILL.md'));
   if (typeof hooks !== 'object') {
     out('');
     out('  ⚠ Codex won\'t run these hooks until you trust them — untrusted hooks');
@@ -1038,7 +1025,7 @@ function setupCursor(cwd: string, exp: Experience): void {
     : `  hooks.json    — ${hooks} Cursor navigation + notebook hooks`);
   out(`  commands/     — ${wireCursorCommand(cwd, USER_COMMANDS.capture)} /${CAPTURE_COMMAND} (capture notes on demand)`);
   out(`  commands/     — ${wireCursorCommand(cwd, USER_COMMANDS.repair)} /${REPAIR_COMMAND} (fix notes that can't be found)`);
-  out(`  commands/     — ${wireCursorCommand(cwd, USER_COMMANDS.repairAliases)} /${REPAIR_ALIASES_COMMAND} (reconcile stale aliases)`);
+  removeRetiredCommand(path.join(cwd, '.cursor', 'commands', `${REPAIR_ALIASES_COMMAND}.md`));
 }
 
 function setupOther(cwd: string, exp: Experience): void {

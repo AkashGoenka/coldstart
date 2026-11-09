@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { findNudgeStatePath } from "../hooks/nudge-state-path.mjs";
 // @ts-expect-error plain-JS hook module, no types
 import nudge from '../hooks/codex-nudge-handler.mjs';
 // @ts-expect-error plain-JS hook module, no types
@@ -18,7 +19,7 @@ const FIXTURES = fileURLToPath(new URL('./fixtures/codex-hooks/', import.meta.ur
 let root: string;
 let sid: string;
 let seq = 0;
-const stateFile = () => `/tmp/find_nudge_${sid}.json`;
+const stateFile = () => findNudgeStatePath(sid);
 
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'coldstart-codex-hooks-'));
