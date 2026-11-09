@@ -21,8 +21,14 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '24.x'
           registry-url: 'https://registry.npmjs.org'
+
+      # Trusted publishing (OIDC, no token) needs npm >= 11.5.1; npm 10 never
+      # tries it and falls back to a token, which is how 2.3.5 and the first
+      # 2.4.0 attempt failed (E404 = npm's answer to a rejected token).
+      - name: Update npm
+        run: npm install -g npm@latest && npm -v
 
       - name: Install dependencies
         run: npm ci
@@ -34,6 +40,6 @@ jobs:
         # --access public is REQUIRED alongside --provenance for a new package:
         # npm refuses to generate provenance for a package it would otherwise
         # create as private/restricted.
+        # No NODE_AUTH_TOKEN: auth is the trusted publisher configured on
+        # npmjs.com for this repo + this workflow file (npm-publish.yml).
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
