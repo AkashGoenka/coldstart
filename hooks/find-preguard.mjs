@@ -6,6 +6,8 @@
  * Top-level imports stay node:-builtin-only (via run-hook); the real handler is
  * dynamic-imported inside the thunk so its parse-time errors are caught + fail-open.
  */
+// MUST stay the first import: it only covers regexes created after it.
+import "./regex-engine.mjs";
 import { runHook } from "./run-hook.mjs";
 
 await runHook(async (input) => {

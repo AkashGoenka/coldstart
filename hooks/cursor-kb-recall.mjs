@@ -30,6 +30,8 @@
  * Self-contained + fail-open: ANY error → exit 0, no stdout → nothing injected.
  */
 
+// MUST stay the first import: it only covers regexes created after it.
+import "./regex-engine.mjs";
 import { execFileSync } from "node:child_process";
 import { existsSync, appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

@@ -55,7 +55,9 @@ export interface RepairEvent {
   // 'died-in-progress': a previous indexer process vanished mid-work and left
   // its in-flight record behind (see inflight.ts). Recorded at the next
   // keeper start, because that is the last moment the evidence still exists.
-  event: 'patch-failed' | 'rebuild-failed' | 'invariant-violation' | 'reconcile-failed' | 'died-in-progress';
+  // 'parse-timeout': one file's parse ran past the time limit (parse-guard.ts)
+  // and was indexed by path only; the build carried on.
+  event: 'patch-failed' | 'rebuild-failed' | 'invariant-violation' | 'reconcile-failed' | 'died-in-progress' | 'parse-timeout';
   detail: string;
 }
 

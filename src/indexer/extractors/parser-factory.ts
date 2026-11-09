@@ -50,6 +50,8 @@ interface Pending {
   spec: WasmSpec;
   setReady: (p: AnyParser) => void;
   loaded: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  lang?: any;
 }
 const pendingWasm: Pending[] = [];
 
@@ -61,12 +63,15 @@ function resolveWasm(spec: WasmSpec): string | null {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let runtime: Promise<any> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let runtimeSync: { Parser: any; Language: any } | null = null;
 function getRuntime(): Promise<{ Parser: unknown; Language: unknown }> {
   if (!runtime) {
     runtime = (async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { Parser, Language } = require('web-tree-sitter') as any;
       await Parser.init();
+      runtimeSync = { Parser, Language };
       return { Parser, Language };
     })();
   }
@@ -101,10 +106,31 @@ export function ensureParsersReady(): Promise<void> {
       const real = new Parser();
       real.setLanguage(lang);
       entry.setReady(wrapWasmParser(real));
+      entry.lang = lang;
       entry.loaded = true;
     }
   });
   return draining;
+}
+
+/**
+ * Replace every loaded parser with a fresh one over the same grammar.
+ *
+ * Called after parse-guard stopped a parse mid-flight: that parser (and the
+ * tree it was building) may be half-updated, so it is dropped rather than
+ * reused. The old objects are NOT deleted — freeing a structure that was
+ * interrupted mid-write is riskier than leaking it once, and this only runs
+ * when a file hit the time limit. Synchronous: the runtime and grammars are
+ * already loaded, so building a Parser needs no await.
+ */
+export function resetParsers(): void {
+  if (!runtimeSync) return;
+  for (const entry of pendingWasm) {
+    if (!entry.loaded || !entry.lang) continue;
+    const real = new runtimeSync.Parser();
+    real.setLanguage(entry.lang);
+    entry.setReady(wrapWasmParser(real));
+  }
 }
 
 /**
