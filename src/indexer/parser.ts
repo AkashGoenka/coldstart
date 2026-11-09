@@ -21,7 +21,7 @@ import { parseEnvContent } from './extractors/env.js';
 import { parseXmlContent } from './extractors/xml.js';
 import { parseGroovyContent } from './extractors/groovy.js';
 import { extractContentTokens } from './content-tokens.js';
-import { ensureParsersReady, resetParsers } from './extractors/parser-factory.js';
+import { ensureParsersReady, markParsersBroken, parsersBroken } from './extractors/parser-factory.js';
 import { appendRepairLog } from '../keeper-state.js';
 import { runWithTimeout, parseTimeoutMs, ParseTimeoutError } from './parse-guard.js';
 
@@ -109,7 +109,6 @@ export async function parseFile(
   fileId = '',
   onWork?: () => void,
 ): Promise<ParsedFile | null> {
-  await ensureParsersReady(); // one-time (idempotent) load of the web-tree-sitter grammars
   let content: string;
   try {
     const buf = await readFile(filePath);
@@ -124,6 +123,10 @@ export async function parseFile(
   // The one lookup that needs I/O, the Rust workspace, is done first so that no
   // await sits inside the guarded section.
   const rustWs = language === 'rust' ? await findRustWorkspace(dirname(filePath)) : null;
+  // The LAST await before the guarded section, and re-checked: another file in
+  // the same batch may have timed out (and marked the runtime broken) while this
+  // one was waiting, so loop until the check and the parse run in one tick.
+  do { await ensureParsersReady(); } while (parsersBroken());
   onWork?.();
   const ms = parseTimeoutMs();
   try {
@@ -136,8 +139,9 @@ export async function parseFile(
     }, ms);
   } catch (err) {
     if (!(err instanceof ParseTimeoutError)) throw err;
-    // The parser that was stopped may be half-updated: swap in fresh ones.
-    resetParsers();
+    // The stopped wasm module can't be trusted any more: the next parse loads
+    // a fresh one (see markParsersBroken).
+    markParsersBroken();
     // Indexed by path only (same shape as an unsupported language), and
     // flagged so the build logs it. Its fingerprint is still stamped, so it is
     // retried only when the file changes, not on every start.

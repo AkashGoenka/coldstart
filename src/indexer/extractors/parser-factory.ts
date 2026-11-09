@@ -50,8 +50,6 @@ interface Pending {
   spec: WasmSpec;
   setReady: (p: AnyParser) => void;
   loaded: boolean;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  lang?: any;
 }
 const pendingWasm: Pending[] = [];
 
@@ -63,15 +61,12 @@ function resolveWasm(spec: WasmSpec): string | null {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let runtime: Promise<any> | null = null;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let runtimeSync: { Parser: any; Language: any } | null = null;
 function getRuntime(): Promise<{ Parser: unknown; Language: unknown }> {
   if (!runtime) {
     runtime = (async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { Parser, Language } = require('web-tree-sitter') as any;
       await Parser.init();
-      runtimeSync = { Parser, Language };
       return { Parser, Language };
     })();
   }
@@ -81,16 +76,29 @@ function getRuntime(): Promise<{ Parser: unknown; Language: unknown }> {
 // Serialise draining so concurrent callers never double-load a grammar.
 let draining: Promise<void> = Promise.resolve();
 
+/** Set when a parse was stopped mid-flight; see markParsersBroken. */
+let broken = false;
+
 /**
  * Must be awaited before any parsing — loads the web-tree-sitter runtime and
- * every grammar registered so far whose .wasm isn't loaded yet. Idempotent and
+ * every grammar registered so far whose .wasm isn't loaded yet, and replaces
+ * the whole runtime first if a stopped parse left it broken. Idempotent and
  * concurrency-safe: calls are serialised, each `Pending` is loaded exactly once
- * (guarded by `loaded`), and a call made after new grammars register picks them
- * up. Awaited inside `parseFile`, so every parse path is covered. There is no
- * native fallback — a missing vendored .wasm throws.
+ * per runtime (guarded by `loaded`), and a call made after new grammars register
+ * picks them up. Awaited inside `parseFile`, so every parse path is covered.
+ * There is no native fallback — a missing vendored .wasm throws.
  */
 export function ensureParsersReady(): Promise<void> {
   draining = draining.then(async () => {
+    if (broken) {
+      // A FRESH copy of web-tree-sitter: its wasm module (heap, allocator,
+      // memory views) lives in module scope and has no reset, so the only way
+      // to a clean one is to evaluate the package again.
+      delete require.cache[require.resolve('web-tree-sitter')];
+      runtime = null;
+      for (const entry of pendingWasm) entry.loaded = false;
+      broken = false;
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { Parser, Language } = (await getRuntime()) as any;
     for (const entry of pendingWasm) {
@@ -106,7 +114,6 @@ export function ensureParsersReady(): Promise<void> {
       const real = new Parser();
       real.setLanguage(lang);
       entry.setReady(wrapWasmParser(real));
-      entry.lang = lang;
       entry.loaded = true;
     }
   });
@@ -114,23 +121,22 @@ export function ensureParsersReady(): Promise<void> {
 }
 
 /**
- * Replace every loaded parser with a fresh one over the same grammar.
- *
- * Called after parse-guard stopped a parse mid-flight: that parser (and the
- * tree it was building) may be half-updated, so it is dropped rather than
- * reused. The old objects are NOT deleted — freeing a structure that was
- * interrupted mid-write is riskier than leaking it once, and this only runs
- * when a file hit the time limit. Synchronous: the runtime and grammars are
- * already loaded, so building a Parser needs no await.
+ * Called after parse-guard stopped a parse mid-flight. Nothing in that wasm
+ * module can be trusted afterwards: the stop can land inside malloc (the
+ * allocator is corrupt — even `new Parser()` aborts) or between
+ * `wasmMemory.grow()` and `updateMemoryViews()` (every later call writes
+ * through a detached DataView). Both were reproduced. New parsers on the same
+ * module are therefore NOT enough; the next ensureParsersReady() loads a fresh
+ * runtime and every grammar again (~tens of ms, only after a timeout). The old
+ * module is dropped unfreed and left to GC.
  */
-export function resetParsers(): void {
-  if (!runtimeSync) return;
-  for (const entry of pendingWasm) {
-    if (!entry.loaded || !entry.lang) continue;
-    const real = new runtimeSync.Parser();
-    real.setLanguage(entry.lang);
-    entry.setReady(wrapWasmParser(real));
-  }
+export function markParsersBroken(): void {
+  broken = true;
+}
+
+/** True until ensureParsersReady() has replaced a broken runtime. */
+export function parsersBroken(): boolean {
+  return broken;
 }
 
 /**

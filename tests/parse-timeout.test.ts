@@ -116,6 +116,26 @@ describe('parseFile under the time limit', () => {
     }
     expect(stopped).toBeGreaterThan(10);
 
+    // Stops while the wasm heap is GROWING, again and again: files of rising
+    // size force a memory.grow per attempt, and a small file must parse fully
+    // after every stop. On the old new-parsers-same-module reset this either
+    // aborted inside the allocator (`new Parser()` itself threw) or wrote
+    // through a detached DataView forever after — first seen on Windows CI.
+    const small = write('small.ts', 'export const a = 1;\n');
+    let growStops = 0;
+    for (let n = 1; n <= 12; n++) {
+      const f = write(`grow${n}.ts`, Array.from({ length: 1500 * n }, (_, i) =>
+        `export function g${i}(a: number): number { return a + ${i}; }`).join('\n'));
+      for (let ms = 1; ms <= 13; ms += 3) {
+        process.env.COLDSTART_PARSE_TIMEOUT_MS = String(ms);
+        if ((await parseFile(f, 'typescript', 'grow.ts'))?.timedOut) growStops++;
+        process.env.COLDSTART_PARSE_TIMEOUT_MS = '30000';
+        const s = await parseFile(small, 'typescript', 'small.ts');
+        expect(s?.exports, `after grow${n} @${ms}ms`).toEqual(['a']);
+      }
+    }
+    expect(growStops).toBeGreaterThan(20);
+
     process.env.COLDSTART_PARSE_TIMEOUT_MS = '30000';
     const after = [];
     for (const [abs, lang] of all) after.push(await parseFile(abs, lang, abs));
