@@ -146,6 +146,7 @@ export interface ParsedFile {
   djangoConventionRefs?: Array<{ kind: string; value: string }>;  // Python only: Django convention string refs
   submoduleImportCandidates?: string[];  // Python only: `from pkg import sub` bonus specifiers (see IndexedFile)
   contentTokens?: Record<string, number>;  // shaped full-body tokens → provenance bits (see IndexedFile)
+  timedOut?: boolean;  // the parse hit the time limit (parse-guard.ts) → indexed by path only
 }
 
 export interface CacheMeta {

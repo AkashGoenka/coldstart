@@ -22,7 +22,7 @@ import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { statSync } from 'node:fs';
 import { walkDirectory } from './indexer/walker.js';
-import { parseFile, buildFileId } from './indexer/parser.js';
+import { parseFile, buildFileId, reportParseTimeout } from './indexer/parser.js';
 import { resolveImports } from './indexer/resolvers/index.js';
 import { addRailsSyntheticEdges } from './indexer/rails-synthetic.js';
 import { addLaravelSyntheticEdges } from './indexer/laravel-synthetic.js';
@@ -171,6 +171,7 @@ export async function buildIndex(
             () => markInflight(rootDir, 'parse', wf.relativePath,
               { done: parsed_count, total: walkedFiles.length }));
           if (!parsed) return;
+          if (parsed.timedOut) await reportParseTimeout(rootDir, wf.relativePath);
 
           const file: IndexedFile = {
             ...baseIndexedFile(id, wf.absolutePath, wf.relativePath, wf.language, parsed),

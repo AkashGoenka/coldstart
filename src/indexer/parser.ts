@@ -8,7 +8,7 @@ import { parseRubyContent } from './extractors/ruby.js';
 import { parsePythonContent } from './extractors/python.js';
 import { parseGoContent } from './extractors/go.js';
 import { parseRustContent } from './extractors/rust.js';
-import { findRustWorkspace } from './rust-workspace.js';
+import { findRustWorkspace, type RustWorkspaceInfo } from './rust-workspace.js';
 import { parseCSharpContent } from './extractors/csharp.js';
 import { parsePhpContent } from './extractors/php.js';
 import { parseKotlinContent } from './extractors/kotlin.js';
@@ -21,7 +21,9 @@ import { parseEnvContent } from './extractors/env.js';
 import { parseXmlContent } from './extractors/xml.js';
 import { parseGroovyContent } from './extractors/groovy.js';
 import { extractContentTokens } from './content-tokens.js';
-import { ensureParsersReady } from './extractors/parser-factory.js';
+import { ensureParsersReady, resetParsers } from './extractors/parser-factory.js';
+import { appendRepairLog } from '../keeper-state.js';
+import { runWithTimeout, parseTimeoutMs, ParseTimeoutError } from './parse-guard.js';
 
 const MAX_FILE_SIZE = 1_000_000; // 1 MB
 
@@ -117,22 +119,60 @@ export async function parseFile(
     return null;
   }
 
+  // Everything below is synchronous and runs under ONE time limit (see
+  // parse-guard.ts): tree-sitter, our extractors and the content-token scan.
+  // The one lookup that needs I/O, the Rust workspace, is done first so that no
+  // await sits inside the guarded section.
+  const rustWs = language === 'rust' ? await findRustWorkspace(dirname(filePath)) : null;
   onWork?.();
-  const parsed = await parseByLanguage(filePath, language, fileId, content);
-  if (!parsed) return null;
-  // Content-token channel is language-agnostic: shaped full-body identifiers
-  // with provenance bits, extracted once here for every indexed language.
-  onWork?.();
-  parsed.contentTokens = extractContentTokens(content, fileId || filePath);
-  return parsed;
+  const ms = parseTimeoutMs();
+  try {
+    return runWithTimeout(() => {
+      const parsed = parseByLanguage(filePath, language, fileId, content, rustWs);
+      // Content-token channel is language-agnostic: shaped full-body identifiers
+      // with provenance bits, extracted once here for every indexed language.
+      parsed.contentTokens = extractContentTokens(content, fileId || filePath);
+      return parsed;
+    }, ms);
+  } catch (err) {
+    if (!(err instanceof ParseTimeoutError)) throw err;
+    // The parser that was stopped may be half-updated: swap in fresh ones.
+    resetParsers();
+    // Indexed by path only (same shape as an unsupported language), and
+    // flagged so the build logs it. Its fingerprint is still stamped, so it is
+    // retried only when the file changes, not on every start.
+    return { ...pathOnlyParse(content), timedOut: true };
+  }
 }
 
-async function parseByLanguage(
+/** Say, in the log and in repair.jsonl (which `status` shows), that a file
+ *  hit the parse time limit and was indexed by path only. */
+export async function reportParseTimeout(rootDir: string, relPath: string): Promise<void> {
+  const detail = `${relPath} took over ${parseTimeoutMs()}ms to parse — skipped, indexed by path only (retried when the file changes)`;
+  console.error(`[coldstart] WARNING: ${detail}`);
+  await appendRepairLog(rootDir, 'parse-timeout', detail);
+}
+
+/** A file indexed by its path alone: no imports, exports or symbols. */
+function pathOnlyParse(content: string): ParsedFile {
+  return {
+    imports: [],
+    exports: [],
+    hasDefaultExport: false,
+    hash: createHash('md5').update(content).digest('hex'),
+    lineCount: content.split('\n').length,
+    tokenEstimate: Math.ceil(content.length / 4),
+    symbols: [],
+  };
+}
+
+function parseByLanguage(
   filePath: string,
   language: Language,
   fileId: string,
   content: string,
-): Promise<ParsedFile | null> {
+  rustWs: RustWorkspaceInfo | null,
+): ParsedFile {
   const hash = createHash('md5').update(content).digest('hex');
   const lineCount = content.split('\n').length;
   const tokenEstimate = Math.ceil(content.length / 4);
@@ -283,8 +323,7 @@ async function parseByLanguage(
     // segment matches a workspace member crate. External crates (third-party
     // deps like `bytes`, `criterion`) are out of scope — including them in
     // imports[] would just inflate unresolved counts without yielding edges.
-    const ws = await findRustWorkspace(dirname(filePath));
-    const workspaceCrates = ws?.crates;
+    const workspaceCrates = rustWs?.crates;
     const filteredImports = workspaceCrates
       ? rustResult.imports.filter(spec => {
           if (!spec.includes('::')) return true; // mod / extern crate / bare use

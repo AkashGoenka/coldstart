@@ -2,7 +2,7 @@ import { stat } from 'node:fs/promises';
 import { relative, extname } from 'node:path';
 import type { CodebaseIndex, IndexedFile, ParsedFile, Language } from '../types.js';
 import { EXTENSION_TO_LANGUAGE, isUnderExcludedDir } from '../constants.js';
-import { parseFile, buildFileId } from './parser.js';
+import { parseFile, buildFileId, reportParseTimeout } from './parser.js';
 import { buildFileDomains, isTestPath } from './tokenize.js';
 import { resolveImportsForFiles, buildPackageIndex } from './resolvers/index.js';
 import { buildSymbolEdges } from './symbol-edges.js';
@@ -79,6 +79,7 @@ export async function patchIndex(
     }
 
     const parsed = await parseFile(absPath, lang, fileId);
+    if (parsed?.timedOut) await reportParseTimeout(rootDir, relPath);
     if (!parsed) {
       // Parse failed — skip this file entirely. Index state is preserved.
       plans.set(fileId, { absPath, fileId, plan: { action: 'skip' } });
