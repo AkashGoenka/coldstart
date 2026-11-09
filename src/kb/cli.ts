@@ -18,7 +18,7 @@ import { join, resolve } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { ensureKeeper } from '../keeper.js';
 import { setupNotebook, wireClaudeKbHooks } from '../init.js';
-import { kbSearch, renderSearchPage, renderResultsPage, renderCompactPage, shouldImplantTop } from './search.js';
+import { kbSearch, renderSearchPage, renderResultsPage, renderCompactPage } from './search.js';
 import { loadKbNotesIndex } from './notes-index.js';
 import type { WriteSpec } from './write.js';
 import { writeGuideCli } from './write-guide.js';
@@ -209,11 +209,10 @@ async function cmdSearch(words: string[], flags: KbFlags): Promise<number> {
     return 0;
   }
 
-  // The keeper maintains the notes index (lane 2 + absence stamps); the reader
-  // only picks it up from disk — the code index is NEVER loaded here (C1).
-  // Hook mode skips the keeper spawn (latency budget) but still reads the
-  // sidecar: the convergence implant gate lives there. Absent → null → the
-  // gate degrades to dominance-only.
+  // The keeper maintains the notes index (lane 2, absence stamps, rename
+  // overlay); the reader only picks it up from disk — the code index is NEVER
+  // loaded here (C1). Hook mode skips the keeper spawn (latency budget) but
+  // still reads the sidecar for absence verdicts and renamed anchors.
   let notesIndex = null;
   if (!flags.noIndex) {
     if (!flags.hook) await ensureKeeper(flags.root);
@@ -232,16 +231,13 @@ async function cmdSearch(words: string[], flags: KbFlags): Promise<number> {
   });
   for (const w of result.warnings) err(`[coldstart kb] ${w}`);
 
-  // Every injection decision grows the calibration corpus (implant thresholds
-  // are re-derived from real runs, never hand-maintained).
+  // Every injection decision grows the calibration corpus (the hook margin is
+  // re-derived from real runs, never hand-maintained).
   if (flags.hook && result.hits.length) {
     logMetric(flags.root, 'inject-log', {
       query: query.slice(0, 200),
       top: result.hits[0].note.id,
-      implant: shouldImplantTop(result),
-      convergence: result.hits[0].convergence,
-      strongTerms: result.hits[0].strongTerms,
-      // Which words carried the hit, and in which channel — not recoverable
+      // Which query tokens matched the top note — not recoverable
       // from the query string after the fact, and the input any later analysis
       // of injection quality needs.
       carriers: result.hits[0].carriers,

@@ -62,54 +62,6 @@ describe('hook injection floor', () => {
     expect(strong.hits[0].note.id).toBe('area-7-note');
   });
 
-  it('convergence override: 4 common minority words landing on ONE note inject; 1–3 stay suppressed', async () => {
-    // The q15/d03 false-suppression mode: a real task named entirely in common
-    // words. No single term is rare (df > N/10 for all), but 4 independent
-    // minority words converge on the right note's name channel.
-    seedCorpus(15);
-    touch('src/jobs/export_queue.py');
-    appendRecord(root, {
-      id: 'export-queue-flow', type: 'flow', op: 'put',
-      title: 'how the export queue retry batch works',
-      summary: 'Exports drain through a retry queue in batches.',
-      anchors: [{ path: 'src/jobs/export_queue.py', symbols: ['drain'] }],
-    } as never);
-    // 4 decoys per word so each word's df = 5 — above rareMax (ceil(32/10)=4,
-    // so NOT rare) but a minority (10 ≤ 32), i.e. still gate-eligible.
-    const words = ['export', 'queue', 'retry', 'batch'];
-    for (const w of words) {
-      for (let i = 0; i < 4; i++) {
-        touch(`src/decoys/${w}_${i}.py`);
-        appendRecord(root, {
-          id: `${w}-decoy-${i}`, type: 'flow', op: 'put',
-          title: `unrelated ${w} corner ${i} pipeline`,
-          summary: `Decoy note ${i} for ${w}.`,
-          anchors: [{ path: `src/decoys/${w}_${i}.py` }],
-        } as never);
-      }
-    }
-
-    // 4 converging words → the override fires despite zero rare terms.
-    const converged = await kbSearch(root, 'export queue retry batch is dropping records', {
-      strongOnly: true, noMissLog: true, source: 'hook',
-    });
-    expect(converged.hits.length).toBeGreaterThan(0);
-    expect(converged.hits[0].note.id).toBe('export-queue-flow');
-    expect(converged.hits[0].strongTerms).toBe(4);
-
-    // 3 words on the same note is still a graze band (measured: q09) → silent.
-    const graze = await kbSearch(root, 'the export queue is broken, fix the retry', {
-      strongOnly: true, noMissLog: true, source: 'hook',
-    });
-    expect(graze.hits).toHaveLength(0);
-
-    // 1 shared word is boilerplate → silent.
-    const boiler = await kbSearch(root, 'please fix the export', {
-      strongOnly: true, noMissLog: true, source: 'hook',
-    });
-    expect(boiler.hits).toHaveLength(0);
-  });
-
   it('young notebooks (< 30 notes) are exempt — the floor must not silence a seed corpus', async () => {
     seedCorpus(4);
     const res = await kbSearch(root, 'Widget2Loader breaks on persist', {
@@ -153,6 +105,40 @@ describe('hook injection floor', () => {
       strongOnly: true, noMissLog: true, source: 'hook',
     });
     expect(nopath.hits).toHaveLength(0);
+  });
+});
+
+describe('hook margin gate', () => {
+  function pair(): void {
+    for (const [id, p, title] of [
+      ['alpha-note', 'src/pay/alpha.ts', 'how the alpha ledger reconciles'],
+      ['beta-note', 'src/pay/beta.ts', 'how the beta ledger reconciles'],
+    ] as const) {
+      touch(p);
+      appendRecord(root, { id, type: 'file', op: 'put', title, summary: `${title}.`, anchors: [{ path: p }] } as never);
+    }
+  }
+  it('an exact tie at the top is silent once the notebook is ≥ 30 notes', async () => {
+    seedCorpus(35); pair();
+    const res = await kbSearch(root, 'the ledger reconciles', { strongOnly: true, noMissLog: true, source: 'hook' });
+    expect(res.hits).toHaveLength(0);
+  });
+  it('a clear leader shows a page of up to 3, runner-ups included, for the agent to pick from', async () => {
+    seedCorpus(35); pair();
+    const res = await kbSearch(root, 'the alpha ledger reconciles', { strongOnly: true, noMissLog: true, source: 'hook' });
+    expect(res.hits.map((h) => h.note.id)).toEqual(['alpha-note', 'beta-note']);
+  });
+  it('a young notebook (< 30 notes) is exempt: a tie still shows', async () => {
+    pair();
+    const res = await kbSearch(root, 'the ledger reconciles', { strongOnly: true, noMissLog: true, source: 'hook' });
+    expect(res.hits).toHaveLength(2);
+  });
+  it('search aliases are not read: a word only in an alias finds nothing', async () => {
+    seedCorpus(35);
+    touch('src/pay/gamma.ts');
+    appendRecord(root, { id: 'gamma-note', type: 'file', op: 'put', title: 'gamma settlement', summary: 'settles.', identityAliases: ['zanzibar quirk'], anchors: [{ path: 'src/pay/gamma.ts' }] } as never);
+    const res = await kbSearch(root, 'zanzibar', { noMissLog: true });
+    expect(res.hits.find((h) => h.note.id === 'gamma-note')).toBeUndefined();
   });
 });
 
@@ -398,8 +384,11 @@ describe('kb commit — deliberate publish', () => {
 });
 
 /**
- * Matcher repairs (2026-07-29). Three defects found by replaying 238 logged
- * hook injections against the real notebook:
+ * Matcher repairs (2026-07-29). Search has no stemming; the two stemming tests
+ * below still hold because each query carries a second matching word
+ * ("capture", "pipeline"), and the "chart" case pins that no false merge
+ * appears. Original defects, found by replaying 238 logged hook injections
+ * against the real notebook:
  *   - wordHit was a strict \b regex, so "fires" never reached a note titled
  *     "…capture fire";
  *   - the convergence signal was computed and used for the implant tier but
@@ -452,27 +441,6 @@ describe('matcher repairs', () => {
     expect(no.hits.find((h) => h.note.id === 'charge-note')).toBeUndefined();
   });
 
-  it('one ordinary word is a graze; two carriers inject (HOOK_MIN_CARRIERS)', async () => {
-    seedCorpus(35);
-    touch('src/billing/refund.ts');
-    appendRecord(root, {
-      id: 'refund-note', type: 'file', op: 'put',
-      title: 'how refunds settle overnight',
-      summary: 'Refunds settle in the nightly batch.',
-      anchors: [{ path: 'src/billing/refund.ts' }],
-    } as never);
-    // ONE plain-English carrier ("refunds" → the title) is a homonym far more
-    // often than a topic match — measured 5% precise on 140 labeled injections.
-    const one = await kbSearch(root, 'can you look at refunds today', { strongOnly: true, noMissLog: true, source: 'hook' });
-    expect(one.hits.find((h) => h.note.id === 'refund-note')).toBeUndefined();
-    // TWO independent carriers ("refunds" + "settle") clear the bar.
-    const two = await kbSearch(root, 'how do refunds settle', { strongOnly: true, noMissLog: true, source: 'hook' });
-    expect(two.hits[0]?.note.id).toBe('refund-note');
-    // Tool mode is unaffected — the agent chose its own terms.
-    const tool = await kbSearch(root, 'refunds', { noMissLog: true, source: 'tool' });
-    expect(tool.hits.find((h) => h.note.id === 'refund-note')).toBeDefined();
-  });
-
   it('excludeIds suppresses a repeat without promoting anything into its slot', async () => {
     seedCorpus(35);
     for (const [id, p, title] of [
@@ -482,7 +450,9 @@ describe('matcher repairs', () => {
       touch(p);
       appendRecord(root, { id, type: 'file', op: 'put', title, summary: `${title}.`, anchors: [{ path: p }] } as never);
     }
-    const q = 'how does the ledger reconciles';
+    // Names "alpha" so one note clearly leads: the hook's margin gate stays
+    // silent on an exact tie, which would hide the dedup behavior under test.
+    const q = 'how does the alpha ledger reconciles';
     const base = await kbSearch(root, q, { strongOnly: true, noMissLog: true, source: 'hook' });
     expect(base.hits.length).toBeGreaterThan(1);
 
@@ -502,102 +472,12 @@ describe('matcher repairs', () => {
     expect(all.hits).toHaveLength(0);
   });
 
-  // CONTRACT CHANGED 2026-07-31. This asserted that convergence ALONE lifts a
-  // single common word over the graze gate — the setup below deliberately
-  // pushes "status" out of the rare band with 6 body-only decoys so that
-  // convergence is the only thing left that could admit it.
-  //
-  // That is now the junk case, not the feature: `status`, `write`, `name`,
-  // `command` are declared symbols in most codebases, so an ordinary word
-  // hitting one is not evidence. In this repo's own logged corpus, 68 of 83
-  // single-carrier injections arrived this way, and hand-labelling split them
-  // perfectly on rarity — good ones rode rare terms (`descent`, `kbView`),
-  // junk rode common ones ("server returned status 403" → src/status.ts, which
-  // is this exact shape). Convergence still stands alone; it must now also be
-  // rare. Both halves are asserted below so neither can regress silently.
-  it('convergence stands alone only when the term is also rare', async () => {
-    seedCorpus(35);
-    touch('src/status.ts');
-    appendRecord(root, {
-      id: 'status-note', type: 'file', op: 'put',
-      title: 'keeper status',
-      summary: 'Renders keeper liveness and freshness.',
-      anchors: [{ path: 'src/status.ts', symbols: ['renderStatus'] }],
-    } as never);
-    // Decoys mention "status" in their BODY only: enough to push df out of the
-    // rare band, not enough to make them scorable hits (a plain word must
-    // whole-word-match the name channel), so rank 0 stays the real note.
-    for (let i = 0; i < 6; i++) {
-      touch(`src/decoy/other_${i}.ts`);
-      appendRecord(root, {
-        id: `decoy-${i}`, type: 'file', op: 'put',
-        title: `unrelated corner ${i}`,
-        summary: `Decoy ${i} incidentally mentions status in prose.`,
-        anchors: [{ path: `src/decoy/other_${i}.ts` }],
-      } as never);
-    }
-    // Only "status" may carry — any other rare word would inject via the
-    // rarity bypass and the test would prove nothing.
-    const q = 'can you check status';
-    const opts = { strongOnly: true, noMissLog: true, source: 'hook' as const };
-
-    // Without the index there is no convergence signal → the gate suppresses.
-    expect((await kbSearch(root, q, opts)).hits).toHaveLength(0);
-
-    // WITH the index, "status" does converge — but it is common (df above
-    // rareMax, by construction above), so convergence no longer carries it
-    // alone. This is the "server returned status 403" injection, suppressed.
-    const withIdx = await kbSearch(root, q, {
-      ...opts, notesIndex: symbolIndex({ 'src/status.ts': ['renderStatus'] }),
-    });
-    expect(withIdx.hits).toHaveLength(0);
-
-    // The other half of the contract: a RARE term that converges still stands
-    // alone on one carrier, which is what keeps "export function kbView" and
-    // "if we kept descent at 2" working.
-    touch('src/reconcile.ts');
-    appendRecord(root, {
-      id: 'descent-note', type: 'file', op: 'put',
-      title: 'descent detector',
-      summary: 'Fires capture on a quiet stop.',
-      anchors: [{ path: 'src/reconcile.ts', symbols: ['detectDescent'] }],
-    } as never);
-    const rareHit = await kbSearch(root, 'can you check descent', {
-      ...opts, notesIndex: symbolIndex({ 'src/reconcile.ts': ['detectDescent'] }),
-    });
-    expect(rareHit.hits.length).toBeGreaterThan(0);
-    expect(rareHit.hits[0].note.id).toBe('descent-note');
-    expect(rareHit.hits[0].convergence).toBe(true);
-  });
-
-  it('convergence lookup: English words match whole tokens, not fragments', async () => {
-    seedCorpus(35);
-    touch('src/init.ts');
-    appendRecord(root, {
-      id: 'gitattributes-note', type: 'file', op: 'put',
-      title: 'init writes the gitattributes entry',
-      summary: 'Ensures the notebook diff driver is registered.',
-      anchors: [{ path: 'src/init.ts', symbols: ['ensureGitattributes'] }],
-    } as never);
-    const notesIndex = symbolIndex({ 'src/init.ts': ['ensureGitattributes'] });
-    const opts = { strongOnly: true, noMissLog: true, source: 'hook' as const, notesIndex };
-
-    // "but" is a substring of ensureGitattri(but)es — the measured luck class.
-    const luck = await kbSearch(root, 'gitattributes but not the driver', opts);
-    const hit = luck.hits.find((h) => h.note.id === 'gitattributes-note');
-    expect(hit?.carriers.some((c) => c.startsWith('but:'))).not.toBe(true);
-
-    // A whole token still converges.
-    const real = await kbSearch(root, 'where does init handle gitattributes', opts);
-    expect(real.hits[0]?.note.id).toBe('gitattributes-note');
-    expect(real.hits[0]?.convergence).toBe(true);
-  });
-
-  it('carriers record which term carried the hit and in which channel', async () => {
+  it('carriers record which query tokens matched the hit (identifiers split into words)', async () => {
     seedCorpus(35);
     const res = await kbSearch(root, 'Widget7Loader fails to persist', {
       strongOnly: true, noMissLog: true, source: 'hook',
     });
-    expect(res.hits[0].carriers.some((c) => c.toLowerCase().startsWith('widget7loader:'))).toBe(true);
+    expect(res.hits[0].note.id).toBe('area-7-note');
+    expect(res.hits[0].carriers).toEqual(expect.arrayContaining(['widget7', 'loader']));
   });
 });

@@ -101,7 +101,7 @@ coldstart kb status / lint / render / init / migrate
 **Where notes reach the agent.** Three surfaces, no new habits required:
 
 1. **`Summary:` lines on `find` results** — a past agent's verified overview of a file, right where the file ranks. `[fresh]` means the file is byte-identical to when the summary was verified — the agent can rely on it without re-reading the file.
-2. **Recall at prompt time** (optional hook) — notes whose titles, aliases, or anchors match the incoming prompt are surfaced as a compact title + gist + path block, hard-capped, framed as reference data. Nothing matches → nothing injected.
+2. **Recall at prompt time** (optional hook) — the incoming prompt is ranked against every note's title and text; when one note clearly leads, the top three are surfaced as a compact title + gist + path block for the agent to pick from, framed as reference data. No clear leader → nothing injected.
 3. **`kb search` / `kb lookup`** — a search engine over the notebook for mid-task vocabulary changes, and an exact-address lookup (`path [symbol]`) before editing a file.
 
 **Why it can be trusted.** This is the part that took the design work:
