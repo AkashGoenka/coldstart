@@ -47,7 +47,7 @@ import { takePendingCapture } from "./elicit-core.mjs";
 import { recallQuery } from "./recall-query.mjs";
 import { CAPTURE_SENTINEL } from "./capture-sentinel.mjs";
 // Per-session dedup shared with the other recall hooks — see recall-seen.mjs.
-// Hosts with no transcript path never reset; dedup still holds for the session.
+// Reset on compaction comes from recall-compact.mjs (the host's compaction hook).
 import { readSeen, writeSeen, idsInPage, seenArgs } from "./recall-seen.mjs";
 import { resetEditTrack } from "./cochange-nudge.mjs";
 
@@ -131,8 +131,7 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
 
     const prompt = recallQuery(input.prompt, MAX_QUERY_CHARS);
 
-    const tPath = String(input.transcript_path || "");
-    const seen = readSeen(sid, tPath, log);
+    const seen = readSeen(sid, root, log);
 
     let page = "";
     // No notebook / no prompt → no recall search, not even a child process.
@@ -164,7 +163,7 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     // instructions.)
     // Record what this page hands over before the size guards can trim it — a
     // note the agent was shown is seen, whichever way it ends up rendered.
-    if (page) writeSeen(sid, [...seen.ids, ...idsInPage(page)], tPath);
+    if (page) writeSeen(sid, [...seen.ids, ...idsInPage(page)], seen.since);
 
     let block = "";
     if (page) block =
