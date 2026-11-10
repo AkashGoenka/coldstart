@@ -1,0 +1,6 @@
+name = "coldstart-markdown-negotiation"
+main = "index.js"
+compatibility_date = "2026-11-01"
+
+# Zone is already on Cloudflare; the route attaches the Worker without DNS changes.
+routes = [{ pattern = "coldstartmcp.dev/*", zone_name = "coldstartmcp.dev" }]

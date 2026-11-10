@@ -14,6 +14,8 @@ coldstart ships as an npm package (`@cstart/coldstart`) providing the `coldstart
 
 ## Docs
 
+Every prose page has a markdown twin: append `index.md` to its URL (e.g. https://coldstartmcp.dev/docs/index.md), or send `Accept: text/markdown`.
+
 - [Home](https://coldstartmcp.dev/): pitch, the two-layer model (index + notebook), how the notebook works, install.
 - [Docs](https://coldstartmcp.dev/docs/): full command reference for `find`, `gs`, and the `kb` family; sharing a notebook with a team; how the index stays fresh.
 - [Blog](https://coldstartmcp.dev/blog/): engineering notes on token cost, codebase graphs, tool adoption, and the notebook's design.
