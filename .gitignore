@@ -2,7 +2,8 @@
 **/node_modules
 **/dist
 *.mcp.json
-.claude
+.claude/*
+!.claude/rules/
 scripts/probe-output/
 
 # Internal design/research docs — kept locally, not tracked
