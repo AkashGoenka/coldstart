@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * recall-seen.mjs — per-session dedup state for the recall hooks.
  *
