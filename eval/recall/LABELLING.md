@@ -110,4 +110,5 @@ compare until only disagreements you have consciously kept remain.
 ## 5. Hand off
 
 When every prompt in `items.json` has a label and the compare is settled, follow README.md ("Run the models"). Report
-the `results.md` tables back — numbers only, no prompts or note text, if they leave the machine.
+the `results.md` tables back (numbers only). Then run `npx tsx score.ts --clean`: it deletes the eval set, labels,
+vectors and model downloads, leaving only `work/results.md`. Nothing else is kept.

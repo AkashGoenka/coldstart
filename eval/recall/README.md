@@ -38,6 +38,9 @@ npx tsx compare-review.ts                     # lists the disagreements to settl
 # 3. ONLY after every prompt is labelled and settled: run the models
 npx tsx embed.ts                              # all three; or e.g. `npx tsx embed.ts gemma2`
 npx tsx score.ts                              # writes work/results.md
+
+# 4. once the numbers look right: keep ONLY results.md, delete everything else (eval set, labels, vectors, models)
+npx tsx score.ts --clean
 ```
 
 Requirements: Node ≥ 20, Claude Code transcripts in `~/.claude/projects/` for the repo, a coldstart notebook in the

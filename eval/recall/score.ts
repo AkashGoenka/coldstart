@@ -4,8 +4,8 @@
 // (missing models are skipped; BM25 needs no vectors).
 // Nothing here is fitted to the set except the "fitted cutoff" column, which picks its line on half the prompts
 // and is scored on the OTHER half (even/odd, both ways), so it is never scored on what it learned from.
-import { existsSync, writeFileSync } from "node:fs";
-import { loadItems, loadNotes, readJsonl, rightNotes, makeBm25, loadVectors, dot, sigmoid, historyText, p, type Label } from "./lib.ts";
+import { existsSync, writeFileSync, readdirSync, rmSync } from "node:fs";
+import { loadItems, loadNotes, readJsonl, rightNotes, makeBm25, loadVectors, dot, sigmoid, historyText, p, WORK, type Label } from "./lib.ts";
 
 const items = loadItems(), labels = new Map(readJsonl<Label>(p("labels.jsonl")).map((l) => [l.id, l]));
 const missing = items.filter((q) => !labels.has(q.id)).map((q) => q.id);
@@ -80,3 +80,9 @@ for (const S of systems) { const good = at(S.RP, 3).map((g, i) => g || false);
 out += `\nNever show: **${N - NEED}**. Perfect gate: ${ceiling}.\n`;
 writeFileSync(p("results.md"), out);
 console.log(out);
+// --clean: keep ONLY results.md (numbers, no prompts or note text); delete the eval set, labels, vectors and the model downloads.
+if (process.argv.includes("--clean")) {
+  for (const f of readdirSync(WORK)) if (f !== "results.md") rmSync(p(f), { recursive: true, force: true });
+  rmSync(new URL("./model-cache/", import.meta.url), { recursive: true, force: true });
+  console.log(`cleaned: only ${p("results.md")} is left`);
+}
