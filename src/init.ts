@@ -146,6 +146,9 @@ function nodeCommand(scriptPath: string): string {
 // they merge into settings.json independently.
 const KB_HOOK_RECALL = 'kb-recall.mjs';
 const KB_HOOK_ELICIT = 'kb-elicit.mjs';
+// The compaction hook (all three hosts): clears the session's recall-dedup
+// state so notes shown before a compact become re-injectable.
+const KB_HOOK_COMPACT = 'recall-compact.mjs';
 
 /** True if a hook-array entry is one of OUR kb hooks (by filename) — so re-init
  *  strips + refreshes instead of duplicating. */
@@ -154,7 +157,7 @@ export function isKbHookEntry(entry: unknown): boolean {
   if (!Array.isArray(hooks)) return false;
   return hooks.some((h) => {
     const cmd = (h as { command?: unknown })?.command;
-    return typeof cmd === 'string' && (cmd.includes(KB_HOOK_RECALL) || cmd.includes(KB_HOOK_ELICIT));
+    return typeof cmd === 'string' && (cmd.includes(KB_HOOK_RECALL) || cmd.includes(KB_HOOK_ELICIT) || cmd.includes(KB_HOOK_COMPACT));
   });
 }
 
@@ -190,6 +193,7 @@ export function wireClaudeKbHooks(cwd: string): 'created' | 'updated' | { error:
   hooksCfg.UserPromptSubmit = [...stripOurs(hooksCfg.UserPromptSubmit), entry(KB_HOOK_RECALL)];
   hooksCfg.Stop = [...stripOurs(hooksCfg.Stop), entry(KB_HOOK_ELICIT)];
   hooksCfg.SubagentStop = [...stripOurs(hooksCfg.SubagentStop), entry(KB_HOOK_ELICIT)];
+  hooksCfg.PreCompact = [...stripOurs(hooksCfg.PreCompact), entry(KB_HOOK_COMPACT)];
   settings.hooks = hooksCfg;
 
   fs.mkdirSync(dir, { recursive: true });
@@ -394,7 +398,7 @@ export function isColdstartHookEntry(entry: unknown): boolean {
 export function isCodexHookEntry(entry: unknown): boolean {
   const hooks = (entry as { hooks?: unknown })?.hooks;
   if (!Array.isArray(hooks)) return false;
-  const owned = [HOOK_PRE, HOOK_POST, KB_HOOK_RECALL, KB_HOOK_ELICIT,
+  const owned = [HOOK_PRE, HOOK_POST, KB_HOOK_RECALL, KB_HOOK_ELICIT, KB_HOOK_COMPACT,
     CODEX_HOOK_PRE, CODEX_HOOK_POST, CODEX_KB_HOOK_RECALL, CODEX_KB_HOOK_ELICIT];
   return hooks.some((h) => {
     const cmd = (h as { command?: unknown })?.command;
@@ -522,6 +526,12 @@ export function wireCodexHooks(cwd: string): 'created' | 'updated' | { error: st
     ...stripOurs(hooksCfg.SubagentStop),
     { matcher: '.*', hooks: [command(CODEX_KB_HOOK_ELICIT)] },
   ];
+  // PostCompact, not PreCompact: Codex's PreCompact defers compaction on a
+  // non-zero exit, and this hook must never be able to block one.
+  hooksCfg.PostCompact = [
+    ...stripOurs(hooksCfg.PostCompact),
+    { hooks: [command(KB_HOOK_COMPACT)] },
+  ];
   config.hooks = hooksCfg;
 
   fs.mkdirSync(dir, { recursive: true });
@@ -534,7 +544,7 @@ export function wireCodexHooks(cwd: string): 'created' | 'updated' | { error: st
  *  gets its own detector. */
 export function isCursorHookEntry(entry: unknown): boolean {
   const cmd = (entry as { command?: unknown })?.command;
-  const owned = [CURSOR_HOOK_PRE, CURSOR_HOOK_POST, CURSOR_KB_HOOK_RECALL, CURSOR_KB_HOOK_ELICIT];
+  const owned = [CURSOR_HOOK_PRE, CURSOR_HOOK_POST, CURSOR_KB_HOOK_RECALL, CURSOR_KB_HOOK_ELICIT, KB_HOOK_COMPACT];
   return typeof cmd === 'string' && owned.some((file) => cmd.includes(file));
 }
 
@@ -587,6 +597,9 @@ export function wireCursorHooks(cwd: string): 'created' | 'updated' | { error: s
   hooksCfg.beforeSubmitPrompt = [...stripOurs(hooksCfg.beforeSubmitPrompt), command(CURSOR_KB_HOOK_RECALL)];
   hooksCfg.stop = [...stripOurs(hooksCfg.stop), command(CURSOR_KB_HOOK_ELICIT)];
   hooksCfg.subagentStop = [...stripOurs(hooksCfg.subagentStop), command(CURSOR_KB_HOOK_ELICIT)];
+  // Cursor has no post-compaction hook; preCompact is observational and the
+  // next prompt always lands after the compaction, so clearing early is safe.
+  hooksCfg.preCompact = [...stripOurs(hooksCfg.preCompact), command(KB_HOOK_COMPACT)];
   config.hooks = hooksCfg;
   if (config.version === undefined) config.version = 1;
 
@@ -979,7 +992,7 @@ function setupClaude(cwd: string, exp: Experience): void {
   const kb = wireClaudeKbHooks(cwd);
   out(typeof kb === 'object'
     ? `  settings.json — notebook hooks NOT wired: ${kb.error}`
-    : `  settings.json — ${kb} notebook recall + capture hooks (UserPromptSubmit + Stop/SubagentStop)`);
+    : `  settings.json — ${kb} notebook recall + capture hooks (UserPromptSubmit + Stop/SubagentStop + PreCompact)`);
   out(`  commands/     — ${wireClaudeCommand(cwd, USER_COMMANDS.capture)} /${CAPTURE_COMMAND} (capture notes on demand)`);
   out(`  commands/     — ${wireClaudeCommand(cwd, USER_COMMANDS.repair)} /${REPAIR_COMMAND} (fix notes that can't be found)`);
   removeRetiredCommand(path.join(cwd, '.claude', 'commands', `${REPAIR_ALIASES_COMMAND}.md`));

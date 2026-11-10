@@ -42,7 +42,7 @@ import { takePendingCapture } from "./elicit-core.mjs";
 // truncating, or a long <ide_selection> eats the whole query budget.
 import { recallQuery } from "./recall-query.mjs";
 // Per-session dedup: don't re-show a note this session already got, and forget
-// what was shown once the transcript shrinks (a compact). See recall-seen.mjs.
+// what was shown once the context is compacted (recall-compact.mjs). See recall-seen.mjs.
 import { readSeen, writeSeen, idsInPage, seenArgs } from "./recall-seen.mjs";
 import { resetEditTrack } from "./cochange-nudge.mjs";
 
@@ -105,8 +105,7 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
 
     const prompt = recallQuery(input.prompt, MAX_QUERY_CHARS);
 
-    const tPath = String(input.transcript_path || "");
-    const seen = readSeen(sid, tPath, log);
+    const seen = readSeen(sid, root, log);
 
     let page = "";
     // No notebook / no prompt → no recall search, not even a child process.
@@ -142,7 +141,7 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     // finding, not necessarily your whole file set), not about content.
     // Record what this page hands over BEFORE the size guards below can trim
     // it — a note the agent was shown is seen, whichever way it was rendered.
-    if (page) writeSeen(sid, [...seen.ids, ...idsInPage(page)], tPath);
+    if (page) writeSeen(sid, [...seen.ids, ...idsInPage(page)], seen.since);
 
     let block = "";
     if (page) block =

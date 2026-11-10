@@ -249,8 +249,8 @@ function removeNotebookGitattributes(cwd: string): Result {
 // Entry point
 // ---------------------------------------------------------------------------
 
-const CLAUDE_HOOK_EVENTS = ['PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'Stop', 'SubagentStop'];
-const CURSOR_HOOK_EVENTS = ['preToolUse', 'postToolUse', 'beforeSubmitPrompt', 'stop', 'subagentStop'];
+const CLAUDE_HOOK_EVENTS = ['PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'Stop', 'SubagentStop', 'PreCompact', 'PostCompact'];
+const CURSOR_HOOK_EVENTS = ['preToolUse', 'postToolUse', 'beforeSubmitPrompt', 'stop', 'subagentStop', 'preCompact'];
 
 export async function runUnwire(): Promise<void> {
   const cwd = process.cwd();

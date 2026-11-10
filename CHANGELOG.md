@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Notebook recall never re-showed a note after the conversation was compacted.** Recall skips
+  notes a session has already been shown, and was meant to forget them on compaction, but it
+  detected compaction by the transcript file shrinking. Claude Code transcripts only ever grow,
+  so the reset never fired and shown notes stayed hidden for 24 hours. Each host's own
+  compaction hook now clears it: Claude Code `PreCompact`, Codex `PostCompact`, Cursor
+  `preCompact`. **Re-run `coldstart init` to wire the new hook.** On Codex, trust the new hook
+  in a terminal `codex` session, or Codex skips it silently.
+- **Recall injected notes the agent had just written itself.** Notes written this session
+  (`kb write --session`) now count as already shown until the next compaction.
+
 ## [2.4.0] - 2026-11-09
 
 2.3.5 was tagged on GitHub but never reached npm (the publish failed on an expired token), so

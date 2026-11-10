@@ -279,6 +279,7 @@ describe('Cursor hooks', () => {
     expect(c.hooks.beforeSubmitPrompt[0].command).toContain('cursor-kb-recall.mjs');
     expect(c.hooks.stop[0].command).toContain('cursor-kb-elicit.mjs');
     expect(c.hooks.subagentStop[0].command).toContain('cursor-kb-elicit.mjs');
+    expect(c.hooks.preCompact[0].command).toContain('recall-compact.mjs');
   });
 
   it('wireCursorHooks merges + is idempotent, preserving foreign hooks', () => {
@@ -333,6 +334,8 @@ describe('Codex hooks + MCP writers', () => {
     expect(c.hooks.UserPromptSubmit[0].hooks[0].command).toContain('codex-kb-recall.mjs');
     expect(c.hooks.Stop[0].hooks[0].command).toContain('codex-kb-elicit.mjs');
     expect(c.hooks.SubagentStop[0].hooks[0].command).toContain('codex-kb-elicit.mjs');
+    expect(c.hooks.PostCompact[0].hooks[0].command).toContain('recall-compact.mjs');
+    expect(c.hooks.PreCompact).toBeUndefined(); // PreCompact can defer a compaction
     expect(JSON.stringify(c)).not.toContain('node /other');
   });
 
@@ -352,6 +355,7 @@ describe('Codex hooks + MCP writers', () => {
     expect(c.hooks.UserPromptSubmit).toHaveLength(1);
     expect(c.hooks.Stop).toHaveLength(1);
     expect(c.hooks.SubagentStop).toHaveLength(1);
+    expect(c.hooks.PostCompact).toHaveLength(1);
   });
 
   it('replaces legacy shared hook entries while preserving foreign hooks', () => {

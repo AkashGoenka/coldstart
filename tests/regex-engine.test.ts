@@ -43,7 +43,7 @@ describe('linear regex fallback', () => {
     // Derived from init's own constants, so a newly wired hook is covered.
     const init = fs.readFileSync(path.join(REPO, 'src', 'init.ts'), 'utf8');
     const hooks = [...init.matchAll(/^const (?:CODEX_|CURSOR_)?(?:KB_)?HOOK_[A-Z]+ = '([a-z-]+\.mjs)'/gm)].map(m => m[1]);
-    expect(hooks.length).toBe(12);
+    expect(hooks.length).toBe(13);
     for (const h of hooks) {
       expect(firstImport(path.join(REPO, 'hooks', h)), h).toBe('import "./regex-engine.mjs"');
     }
