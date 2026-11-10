@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { defineConfig } from 'astro/config';
 import tailwind from '@astrojs/tailwind';
 import sitemap from '@astrojs/sitemap';
+import markdownTwins from './scripts/markdown-twins.mjs';
 
 const projectRoot = dirname(fileURLToPath(import.meta.url));
 
@@ -67,6 +68,7 @@ export default defineConfig({
   site: 'https://coldstartmcp.dev',
   integrations: [
     tailwind({ applyBaseStyles: false }),
+    markdownTwins(),
     sitemap({
       serialize(item) {
         if (!historyUsable) return item;
