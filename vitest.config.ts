@@ -15,6 +15,10 @@ export default defineConfig({
     // come close to 30s. If something does, that is a regression worth
     // chasing, not a number to raise again.
     testTimeout: 30_000,
+    // The recall hook's learned gate loads a ~200 MB model and spawns a
+    // detached note-embedding job. Suites that drive kb-recall.mjs test the
+    // BM25 path; tests/recall-gate.test.ts exercises the gate explicitly.
+    env: { COLDSTART_RECALL_GATE: '0' },
     hookTimeout: 30_000,
   },
 });

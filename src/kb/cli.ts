@@ -2,7 +2,7 @@
  * `coldstart kb <verb>` — the notebook's CLI surface. Same reader discipline
  * as find/gs: stdout carries only the answer, diagnostics go to stderr.
  *
- *   kb search <words...> [--max N] [--json] [--hook] [--no-index] [--seen a,b]
+ *   kb search <words...> [--max N] [--json] [--hook] [--no-index] [--seen a,b] [--ids a,b]
  *   kb lookup <path> [symbol] [--json]
  *   kb write <spec.json | ->  [--into ID] [--new] [--force] [--session S]
  *   kb status [--paths a,b,c] [--json]
@@ -59,6 +59,9 @@ interface KbFlags {
   why?: string;
   /** --seen a,b,c — note ids already injected this session (hook dedup). */
   seen?: string[];
+  /** --ids a,b,c — render exactly these notes, in order (the recall gate
+   *  picked them; hooks/recall-gate.mjs). Skips BM25 ranking + margin gate. */
+  ids?: string[];
 }
 
 function parseKbArgs(argv: string[]): { positional: string[]; flags: KbFlags } {
@@ -73,6 +76,7 @@ function parseKbArgs(argv: string[]): { positional: string[]; flags: KbFlags } {
       case '--no-index': flags.noIndex = true; break;
       case '--max': flags.max = Number(argv[++i]) || undefined; break;
       case '--seen': flags.seen = (argv[++i] ?? '').split(',').map((s) => s.trim()).filter(Boolean); break;
+      case '--ids': flags.ids = (argv[++i] ?? '').split(',').map((s) => s.trim()).filter(Boolean); break;
       case '--into': flags.into = argv[++i]; break;
       case '--new': flags.isNew = true; break;
       case '--force': flags.force = true; break;
@@ -213,6 +217,7 @@ async function cmdSearch(words: string[], flags: KbFlags): Promise<number> {
     source: flags.hook ? 'hook' : 'tool',
     strongOnly: flags.hook, // an arbitrary user sentence must not inject weak grazes
     excludeIds: flags.seen?.length ? new Set(flags.seen) : undefined,
+    pickIds: flags.ids?.length ? flags.ids : undefined,
   });
   for (const w of result.warnings) err(`[coldstart kb] ${w}`);
 
@@ -221,6 +226,7 @@ async function cmdSearch(words: string[], flags: KbFlags): Promise<number> {
   if (flags.hook && result.hits.length) {
     logMetric(flags.root, 'inject-log', {
       query: query.slice(0, 200),
+      ...(flags.ids?.length ? { picked: 'gate' } : {}),
       top: result.hits[0].note.id,
       // Which query tokens matched the top note — not recoverable
       // from the query string after the fact, and the input any later analysis
