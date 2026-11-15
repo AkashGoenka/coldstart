@@ -1,0 +1,43 @@
+{
+ "model": "onnx-community/embeddinggemma-2-ONNX q4 (model_q4.onnx), mean pool, prefixes 'task: search result | query: ' / 'title: none | text: '",
+ "query": "prompt + 1 prior exchange (H1 text format of data/texts-v2-depth.json)",
+ "features": [
+  "top",
+  "shown",
+  "opened",
+  "written",
+  "since",
+  "justComp",
+  "files"
+ ],
+ "mean": [
+  0.7353158348380732,
+  0.305019305019305,
+  0.011583011583011582,
+  0.07335907335907337,
+  1.896701123733341,
+  0.10810810810810811,
+  0.2084942084942085
+ ],
+ "sd": [
+  0.04472050829643164,
+  0.4604156041934777,
+  0.10699927768765255,
+  0.26072498866616456,
+  0.9060165226304931,
+  0.310516899812866,
+  0.40623192085135534
+ ],
+ "weights": [
+  1.0056393554515235,
+  0.35724051680554003,
+  0.28260872474565846,
+  -0.3495222263406615,
+  -0.4950868906140585,
+  0.18608475447413472,
+  0.5197722251961899
+ ],
+ "bias": -1.402185968626911,
+ "cutoffP": 0.3962396613547665,
+ "note": "p = sigmoid(bias + Σ w_j (x_j − mean_j)/sd_j); inject top 3 (active, existing notes, ranked by score CENTERED on the mean of the active note vectors) when p ≥ cutoffP. top = RAW cosine of the top-1 note. Fitted on v2 300; v1 43/80, v3 145/200 (q4, centering = mean of notes)."
+}

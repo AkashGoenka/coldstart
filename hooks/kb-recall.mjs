@@ -45,12 +45,24 @@ import { recallQuery } from "./recall-query.mjs";
 // what was shown once the context is compacted (recall-compact.mjs). See recall-seen.mjs.
 import { readSeen, writeSeen, idsInPage, seenArgs } from "./recall-seen.mjs";
 import { resetEditTrack } from "./cochange-nudge.mjs";
+// Learned recall gate (embedding top score + session facts). Decides WHETHER
+// to show notes and WHICH; BM25 below is the fallback whenever it can't answer.
+import { runGate } from "./recall-gate.mjs";
 
 // hooks/ sits beside dist/ in both the repo and the published package.
 const CLI = fileURLToPath(new URL("../dist/index.js", import.meta.url));
 
 const MAX_QUERY_CHARS = 2000; // pasted-code prompts: the head carries the ask
 const SEARCH_TIMEOUT_MS = 4000;
+// Model load (~1.1 s on an M-series Mac) + embed + transcript scan. Past this
+// the prompt gets BM25 recall instead of waiting longer.
+const GATE_TIMEOUT_MS = 5000;
+// COLDSTART_RECALL_GATE=0 → BM25 only (A/B runs, kill switch).
+const GATE_ON = process.env.COLDSTART_RECALL_GATE !== "0";
+
+function logGate(root, rec) {
+  try { appendFileSync(join(root, ".coldstart", "notebook", ".metrics", "gate-log.jsonl"), JSON.stringify(rec) + "\n"); } catch { /* best-effort */ }
+}
 
 
 let LOG_FILE = join(tmpdir(), "coldstart-kb-hook.log");
@@ -108,8 +120,35 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     const seen = readSeen(sid, root, log);
 
     let page = "";
-    // No notebook / no prompt → no recall search, not even a child process.
-    if (prompt && existsSync(join(root, ".coldstart", "notebook", ".raw"))) {
+    const hasNotebook = existsSync(join(root, ".coldstart", "notebook", ".raw"));
+
+    // The gate answers first. "ok" is a decision either way: inject its top 3
+    // (still deduped against `seen`, no backfill) or stay silent. Only an
+    // "unavailable" gate (no vectors yet, no model, timeout, error) falls
+    // through to BM25.
+    let gate = null;
+    if (GATE_ON && prompt && hasNotebook) {
+      const t0 = Date.now();
+      gate = await Promise.race([
+        runGate({ root, prompt: input.prompt, transcriptPath: input.transcript_path, log }),
+        new Promise((res) => setTimeout(() => res({ status: "unavailable", reason: "timeout" }), GATE_TIMEOUT_MS).unref?.()),
+      ]);
+      logGate(root, { ts: new Date().toISOString(), session: sid, prompt: prompt.slice(0, 200), ms: Date.now() - t0, seen: seen.ids.length, ...gate });
+      log(`gate ${gate.status}${gate.status === "ok" ? ` p=${gate.p.toFixed(3)} inject=${gate.inject}` : ` (${gate.reason})`}`);
+    }
+
+    if (gate?.status === "ok") {
+      if (gate.inject) {
+        const args = [CLI, "kb", "search", "--hook", "--max", "3", "--root", root, "--ids", gate.ids.join(","), ...seenArgs(seen.ids)];
+        try {
+          page = execFileSync("node", [...args, prompt], { encoding: "utf8", timeout: SEARCH_TIMEOUT_MS, stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
+        } catch (e) {
+          log(`gate render failed: ${String(e).split("\n")[0]}`);
+          page = "";
+        }
+      }
+    } else if (prompt && hasNotebook) {
+      // No notebook / no prompt → no recall search, not even a child process.
       const args = [CLI, "kb", "search", "--hook", "--max", "3", "--root", root, ...seenArgs(seen.ids)];
       try {
         page = execFileSync("node", [...args, prompt], {
