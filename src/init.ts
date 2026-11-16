@@ -36,6 +36,7 @@ import { fileURLToPath } from 'node:url';
 import { ensureKeeper, waitForKeeperCache } from './keeper.js';
 import { initSkeleton, logMetric } from './kb/store.js';
 import { CAPTURE_SENTINEL } from '../hooks/capture-sentinel.mjs';
+import { disabledFlagPath, enabledFlagPath } from '../hooks/embed-recipe.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 
@@ -1100,6 +1101,15 @@ export async function runInit(): Promise<void> {
   // Storage default is private (notebook gitignored); --commit-notebook opts in
   // to committing .raw so the notebook can be shared with the team.
   const commitNotebook = argv.includes('--commit-notebook');
+  // Embedder daemon opt-out is per MACHINE (one daemon serves every repo): --no-embedder writes the flag,
+  // --embedder removes it, plain init leaves it alone. (docs/embedder-daemon-design.md Decision 3)
+  if (argv.includes('--no-embedder') || argv.includes('--embedder')) {
+    const flag = disabledFlagPath();
+    const on = enabledFlagPath();
+    fs.mkdirSync(path.dirname(flag), { recursive: true });
+    if (argv.includes('--no-embedder')) { fs.writeFileSync(flag, 'disabled by `coldstart init --no-embedder`\n'); fs.rmSync(on, { force: true }); }
+    else { fs.rmSync(flag, { force: true }); fs.writeFileSync(on, 'enabled by `coldstart init --embedder`\n'); } // opt-in while unverified
+  }
 
   out('');
   out('coldstart init');

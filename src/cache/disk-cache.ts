@@ -30,7 +30,7 @@
  * No TTL: cache validity = format version + git HEAD (checked by callers) +
  * the keeper's live watcher. Time never invalidates a correct index.
  */
-import { readFile, writeFile, mkdir, readdir, rm, rename } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, readdir, rm, rename, access } from 'node:fs/promises';
 import { join, resolve, basename, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 
@@ -41,6 +41,7 @@ import type {
   Language, SymbolKind, EdgeType, SymbolEdgeType, CallSite, DomainEvidence,
 } from '../types.js';
 import { CACHE_VERSION, coldstartHome } from '../constants.js';
+import { sketchesJsonl } from '../embedder/sketch.js';
 
 const gzip = promisify(gzipCb);
 const gunzip = promisify(gunzipCb);
@@ -139,6 +140,24 @@ export async function updateCachedGitHead(
   meta.gitHead = gitHead;
   meta.timestamp = Date.now();
   await writeMetaAtomic(dir, meta);
+}
+
+/**
+ * A cache saved before sketches existed (or by an older CLI) has no `g<N>-sketches.jsonl`, and a keeper that
+ * loads it fresh never re-saves — so the embedder would never get sketches. Write them into the CURRENT
+ * generation (tmp + rename; they are derived data, so this needs no new generation). Returns true if written.
+ */
+export async function ensureSketches(index: CodebaseIndex, baseCacheDir?: string): Promise<boolean> {
+  const dir = getCacheDir(index.rootDir, baseCacheDir);
+  let gen: number;
+  try { gen = (JSON.parse(await readFile(join(dir, 'meta.json'), 'utf-8')) as { gen?: number }).gen ?? NaN; } catch { return false; }
+  if (!Number.isFinite(gen)) return false;
+  const path = join(dir, `g${gen}-sketches.jsonl`);
+  try { await access(path); return false; } catch { /* missing → write */ }
+  const tmp = `${path}.${process.pid}.tmp`;
+  await writeFile(tmp, sketchesJsonl(index));
+  await rename(tmp, path);
+  return true;
 }
 
 export async function saveCachedIndex(
@@ -269,6 +288,8 @@ export async function saveCachedIndex(
   }));
   writes.push(writeGz(seg('table.json.gz'), { paths }));
   writes.push(writeFile(seg('fingerprints.json'), JSON.stringify(fps)));
+  // embedder daemon input (docs/embedder-daemon-design.md §2): same generation, so the sweep below owns it
+  writes.push(writeFile(seg('sketches.jsonl'), sketchesJsonl(index)));
 
   await Promise.all(writes);
 

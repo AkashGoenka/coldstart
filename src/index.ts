@@ -43,7 +43,8 @@ import { lintIndexInvariants } from './indexer/invariants.js';
 import { updateKeeperState, appendRepairLog } from './keeper-state.js';
 import { markInflight, clearInflight, readStaleInflight, describeInflight } from './inflight.js';
 import { patchThreshold } from './constants.js';
-import { loadCachedIndex, saveCachedIndex, getCacheDir, updateCachedGitHead } from './cache/disk-cache.js';
+import { loadCachedIndex, saveCachedIndex, getCacheDir, updateCachedGitHead, ensureSketches } from './cache/disk-cache.js';
+import { notifySketchesSaved } from './embedder/notify.js';
 import { startMCPServer } from './server/mcp.js';
 import { IndexManager } from './index-manager.js';
 import type { IndexContext } from './index-manager.js';
@@ -488,6 +489,7 @@ async function buildManager(
           index.gitHead = head;
           try { await updateCachedGitHead(finalRoot, head, cacheDir); } catch { /* next full save fixes it */ }
         }
+        try { await ensureSketches(index, cacheDir); } catch { /* embedder input only; next save writes it */ }
       } else if (rec.changed.size <= threshold) {
         log(quiet, `[coldstart] Loaded from cache — patching ${rec.changed.size} drifted file(s) (${rec.reason})`);
         if (!noCache) {
@@ -554,6 +556,9 @@ async function buildManager(
       if (!noCache) await updateKeeperState(finalRoot, { inProgress: null }, cacheDir);
     }
   }
+
+  // The index on disk is current now (fresh / patched / rebuilt): let the embedder diff its vectors against it.
+  if (!noCache) notifySketchesSaved(finalRoot, cacheDir);
 
   const manager = new IndexManager(
     index,
@@ -803,6 +808,11 @@ async function main(): Promise<void> {
   // lock. The keeper respawns lazily on the next reader (a `coldstart find` or a
   // connected MCP client), so both are really "stop now, fresh keeper on next
   // use"; they share one implementation.
+  if (process.argv[2] === 'embed') {
+    const { runEmbed } = await import('./embed-cli.js');
+    process.exit(await runEmbed(process.argv.slice(3)));
+  }
+
   if (process.argv[2] === 'restart' || process.argv[2] === 'stop') {
     const { runRestart } = await import('./restart.js');
     await runRestart();

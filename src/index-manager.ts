@@ -13,6 +13,7 @@ import { getGitHead } from './indexer/git.js';
 import { deriveCoChange, saveCoChange } from './indexer/cochange.js';
 import { lintIndexInvariants } from './indexer/invariants.js';
 import { saveCachedIndex, getCacheDir } from './cache/disk-cache.js';
+import { notifySketchesSaved } from './embedder/notify.js';
 import { updateKeeperState, appendRepairLog } from './keeper-state.js';
 import { patchThreshold } from './constants.js';
 import { daemonDir } from './daemon-lock.js';
@@ -424,6 +425,7 @@ export class IndexManager {
           if (head) void this.refreshCoChange(head);
           return saveCachedIndex(this.activeIndex, this.cacheDir);
         })
+        .then(() => notifySketchesSaved(this.activeIndex.rootDir, this.cacheDir))
         .then(() => this.stamp({ lastSave: { at: Date.now(), detail: `${this.activeIndex.files.size} files` } }))
         .then(() => this.auditFingerprints())
         .catch(err => this.log(`[coldstart] Cache write failed: ${err}`))

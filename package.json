@@ -55,10 +55,14 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@huggingface/tokenizers": "0.2.0",
     "@huggingface/transformers": "^4.3.2",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@vscode/ripgrep": "^1.18.0",
     "web-tree-sitter": "^0.26.10"
+  },
+  "optionalDependencies": {
+    "onnxruntime-node": "1.30.0"
   },
   "devDependencies": {
     "@types/node": "^22",

@@ -18,7 +18,8 @@ export default defineConfig({
     // The recall hook's learned gate loads a ~200 MB model and spawns a
     // detached note-embedding job. Suites that drive kb-recall.mjs test the
     // BM25 path; tests/recall-gate.test.ts exercises the gate explicitly.
-    env: { COLDSTART_RECALL_GATE: '0' },
+    // The embedder daemon (hooks/embedder-daemon.mjs) is likewise off: a keeper save would spawn it.
+    env: { COLDSTART_RECALL_GATE: '0', COLDSTART_EMBEDDER: '0' },
     hookTimeout: 30_000,
   },
 });
