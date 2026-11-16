@@ -158,4 +158,9 @@ describe('gate notes + rendering', () => {
     expect(await runGate({ root, prompt: '<task-notification>x</task-notification>', transcriptPath: '' }))
       .toEqual({ status: 'unavailable', reason: 'not-human-prompt' });
   });
+
+  it('runGate is unavailable when the embedder is switched off (vitest sets COLDSTART_EMBEDDER=0)', async () => {
+    expect(process.env.COLDSTART_EMBEDDER).toBe('0');
+    expect(await runGate({ root, prompt: 'about a', transcriptPath: '' })).toEqual({ status: 'unavailable', reason: 'embedder-off' });
+  });
 });

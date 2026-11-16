@@ -13,13 +13,14 @@ import { cpus } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DIM, PROTOCOL, RECIPE, ROLES, embedKey, embedderHome, modelDir, socketPath, vectorsDir } from "./embed-recipe.mjs";
-import { encodeVec, request } from "./embed-client.mjs";
+import { embedderDisabled, encodeVec, request } from "./embed-client.mjs";
 import { openWriter } from "./vector-store.mjs";
 import { cleanBody } from "./recall-gate.mjs";
 
 const HOME = embedderHome();
 const IDLE_MS = +(process.env.COLDSTART_EMBEDDER_IDLE_MS || 90 * 60_000);
-// caps: texts are truncated to 512 tokens anyway; 16 × 512 tokens stays well inside the watchdog on 1 thread
+// caps: queries/sketches are cut at 512 tokens, notes at 2048 (TOKEN_CAPS) — a 2048-token note is ~4 s at 2 threads,
+// well inside the watchdog; 16 × 512-token queries likewise
 const FLUSH_ROWS = 32, WATCHDOG_MS = 60_000, MAX_TEXTS = 16, MAX_CHARS = 8_000;
 const WORKER = fileURLToPath(new URL("./embed-worker.mjs", import.meta.url));
 const THREADS = Math.min(4, Math.max(1, Math.floor(cpus().length / 2)));
@@ -56,7 +57,14 @@ function loadRegistrations() {
   let files = []; try { files = readdirSync(dir).filter((f) => f.endsWith(".json")); } catch { return; }
   for (const f of files) {
     const r = readJson(join(dir, f));
-    if (r?.root && r?.cacheDir && !repos.has(r.root)) repos.set(r.root, { root: r.root, cacheDir: r.cacheDir, queue: [], pending: [], total: 0, done: 0, status: "registered", reconcile: true });
+    if (!r?.root || !r?.cacheDir) continue;
+    const have = repos.get(r.root);
+    if (!have) repos.set(r.root, { root: r.root, cacheDir: r.cacheDir, queue: [], pending: [], total: 0, done: 0, status: "registered", reconcile: true });
+    else if (have.cacheDir !== r.cacheDir) { // re-registered elsewhere (keeper --cache-dir): follow it to the new store
+      flush(have);
+      Object.assign(have, { cacheDir: r.cacheDir, writer: null, queue: [], pending: [], reconcile: true });
+      log(`${r.root}: cache dir now ${r.cacheDir}`);
+    }
   }
 }
 
@@ -94,17 +102,22 @@ function readSketches(cacheDir) {
 
 function reconcile(repo) {
   repo.reconcile = false;
-  if (!existsSync(repo.cacheDir)) { repo.status = "no-cache"; return; } // never sweep a repo we can't see
-  const files = readSketches(repo.cacheDir);
-  if (!files) { repo.status = "no-sketches"; return; }
+  // File sketches only with the opt-in (COLDSTART_EMBEDDER=1 / `init --embedder`): a daemon the recall gate spawned
+  // (no opt-in needed) embeds NOTES only. No sketches either way (no keeper save yet, cache dir absent): still embed
+  // the notes, but never sweep, since a missing sketch set would make every stored file vector look dead.
+  const files = !embedderDisabled() && existsSync(repo.cacheDir) ? readSketches(repo.cacheDir) : null;
+  const notes = readNotes(repo.root);
+  if (!files && !notes.length) { repo.status = "no-sketches"; return; }
   // the store was wiped under us (cache cleared): drop the in-memory writer or it would claim everything is stored
   if (repo.writer && !existsSync(join(vectorsDir(repo.cacheDir), "manifest.json"))) { repo.writer = null; repo.pending = []; }
   repo.writer ??= openWriter(vectorsDir(repo.cacheDir), { recipe: RECIPE, dim: DIM });
-  const items = [...new Map([...readNotes(repo.root), ...files].map((it) => [it.key, it])).values()]; // notes first
+  const items = [...new Map([...notes, ...(files ?? [])].map((it) => [it.key, it])).values()]; // notes first
   const current = new Set(items.map((it) => it.key)), stored = repo.writer.storedKeys(), today = day();
   repo.writer.markSeen([...current].filter((k) => stored.has(k)), today);
-  const sweep = repo.writer.maybeSweep({ today, currentKeys: current });
-  if (sweep.compacted) log(`compacted ${repo.root}: ${sweep.rows} rows kept, ${sweep.dead} dead dropped`);
+  if (files) {
+    const sweep = repo.writer.maybeSweep({ today, currentKeys: current });
+    if (sweep.compacted) log(`compacted ${repo.root}: ${sweep.rows} rows kept, ${sweep.dead} dead dropped`);
+  }
   const pendingKeys = new Set(repo.pending.map((r) => r.key));
   repo.queue = items.filter((it) => !stored.has(it.key) && !pendingKeys.has(it.key));
   repo.total = items.length; repo.done = repo.total - repo.queue.length;

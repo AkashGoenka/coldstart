@@ -30,8 +30,7 @@ import { stampAnchors, freshnessLine } from './freshness.js';
 import { loadAll, renderIds, initSkeleton, notebookExists, notebookDir, logMetric } from './store.js';
 import { KB_RAW_VERSION } from './raw-log.js';
 import { kbView } from './view.js';
-import { getCacheDir } from '../cache/disk-cache.js';
-import { notifyEmbedder } from '../../hooks/embed-client.mjs';
+import { notifyEmbedder, repoCacheDir } from '../../hooks/embed-client.mjs';
 import { VIEW_TEMPLATE } from './view-template.js';
 
 function err(...args: unknown[]): void {
@@ -124,7 +123,7 @@ export async function runKb(argv: string[]): Promise<number> {
     case 'write': {
       const rc = await cmdWrite(positional, flags);
       // notes changed → the embedder daemon re-diffs this repo's note vectors (no-op when the embedder is off)
-      if (positional[0]) await notifyEmbedder('notes-changed', root, getCacheDir(root)).catch(() => {});
+      if (positional[0]) await notifyEmbedder('notes-changed', root, repoCacheDir(root)).catch(() => {});
       return rc;
     }
     case 'status': return cmdStatus(flags);

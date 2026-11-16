@@ -9,9 +9,16 @@ import { basename, join, resolve } from "node:path";
 
 export const MODEL_ID = "onnx-community/embeddinggemma-2-ONNX";
 export const DTYPE = "q4";
-export const MAX_TOKENS = 512;
 export const DIM = 768;
-export const RECIPE = "gemma2-q4-mean-l2-t512-v1";
+/** Token cap per role (hooks/embed-runtime.mjs). Within it: one run, as always. Past it: code queries + file
+ *  sketches are TRUNCATED; roles in WINDOWED_ROLES (notes, note queries) are instead split into windows of this size, each run alone, and
+ *  pooled token-weighted (≈ one mean over the whole text). Why not one whole-text run: attention is quadratic — the
+ *  6034-token note took 18 s at 4 threads and ~4 GB RSS, 8192 tokens 69.5 s at 2 threads (past the 60 s watchdog).
+ *  Why not truncate: the recall gate was fit on untruncated vectors. Measured on the 200 v3 gate prompts vs whole-
+ *  text vectors: truncate@2048 → 198/200 decisions, windows@2048 → 199/200 (the one long note: cos 0.986). */
+export const WINDOWED_ROLES = new Set(["note_query", "note_doc"]);
+export const TOKEN_CAPS = { note_query: 2048, note_doc: 2048, code_query: 512, file_doc: 512 };
+export const RECIPE = "gemma2-q4-mean-l2-win2048-v3";
 /** Bumped when the socket protocol changes incompatibly; a newer daemon replaces an older one, never the reverse. */
 export const PROTOCOL = 1;
 

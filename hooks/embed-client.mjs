@@ -9,7 +9,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, s
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
-import { PROTOCOL, disabledFlagPath, enabledFlagPath, embedderHome, socketPath } from "./embed-recipe.mjs";
+import { PROTOCOL, defaultRepoCacheDir, disabledFlagPath, enabledFlagPath, embedderHome, socketPath } from "./embed-recipe.mjs";
 
 export const encodeVec = (v) => Buffer.from(v.buffer, v.byteOffset, v.byteLength).toString("base64");
 export const decodeVec = (s) => { const b = Buffer.from(s, "base64"); return new Float32Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)); };
@@ -17,8 +17,12 @@ export const decodeVec = (s) => { const b = Buffer.from(s, "base64"); return new
 // OPT-IN while the build is being verified (2026-11-16): runs only with COLDSTART_EMBEDDER=1 or after
 // `init --embedder` (writes enabledFlagPath). COLDSTART_EMBEDDER=0 / `init --no-embedder` always win.
 // Flip to opt-out (installed by default, design Decision 3) once its surfaces pass their evals.
-export const embedderDisabled = () => process.env.COLDSTART_EMBEDDER === "0" || existsSync(disabledFlagPath()) ||
+/** Turned off on purpose (kill switch / `init --no-embedder`). Always wins, for every caller. */
+export const embedderOff = () => process.env.COLDSTART_EMBEDDER === "0" || existsSync(disabledFlagPath());
+export const embedderDisabled = () => embedderOff() ||
   !(process.env.COLDSTART_EMBEDDER === "1" || existsSync(enabledFlagPath()));
+// The recall gate is the one caller that does NOT need the opt-in (`optIn: false` below): it is on by default and
+// used to load the model in-process on every prompt, so asking a daemon is strictly less work than before.
 
 /** One request → one reply, or null on any failure / timeout. */
 export function request(msg, { connectMs = 200, budgetMs = 300 } = {}) {
@@ -49,10 +53,18 @@ export async function embedTexts(texts, role, opts) {
 
 // ---------------------------------------------------------------- registration + spawn
 
+const registrationPath = (abs) => join(embedderHome(), "repos", createHash("sha256").update(abs).digest("hex").slice(0, 16) + ".json");
+
+/** The repo's index cache dir: what the keeper registered (it knows any override), else the default path. */
+export function repoCacheDir(root) {
+  try { const c = JSON.parse(readFileSync(registrationPath(resolve(root)), "utf8")).cacheDir; if (typeof c === "string" && c) return c; } catch { /* unregistered */ }
+  return defaultRepoCacheDir(root);
+}
+
 /** Persist this repo for the daemon (one file per repo → no shared-file contention; survives daemon restarts). */
 export function registerRepo(root, cacheDir) {
   const abs = resolve(root), dir = join(embedderHome(), "repos");
-  const p = join(dir, createHash("sha256").update(abs).digest("hex").slice(0, 16) + ".json");
+  const p = registrationPath(abs);
   const body = JSON.stringify({ root: abs, cacheDir: resolve(cacheDir) });
   try { if (readFileSync(p, "utf8") === body) return; } catch { /* new */ }
   try { mkdirSync(dir, { recursive: true, mode: 0o700 }); const tmp = `${p}.${process.pid}.tmp`; writeFileSync(tmp, body); renameSync(tmp, p); } catch { /* best effort */ }
@@ -62,8 +74,8 @@ const DAEMON_ENTRY = fileURLToPath(new URL("./embedder-daemon.mjs", import.meta.
 const SPAWN_STALE_MS = 60_000, MODEL_RETRY_MS = 10 * 60_000;
 
 /** Spawn the daemon detached unless one answers or another process is already spawning it. Never waits. */
-export async function ensureEmbedder({ connectMs = 200 } = {}) {
-  if (embedderDisabled()) return "disabled";
+export async function ensureEmbedder({ connectMs = 200, optIn = true } = {}) {
+  if (optIn ? embedderDisabled() : embedderOff()) return "disabled";
   const live = await request({ op: "ping" }, { connectMs, budgetMs: 200 });
   if (live && (live.protocol ?? 0) >= PROTOCOL) return "running"; // same or NEWER protocol: never kill a newer daemon
   if (live) { // older protocol: ask it to go, then spawn ours (its exit frees the socket)
@@ -89,9 +101,21 @@ export async function ensureEmbedder({ connectMs = 200 } = {}) {
 }
 
 /** Fire-and-forget: tell the daemon something changed for a repo, spawning it if needed. */
-export async function notifyEmbedder(op, root, cacheDir, extra = {}) {
-  if (embedderDisabled()) return;
+export async function notifyEmbedder(op, root, cacheDir, extra = {}, { optIn = true } = {}) {
+  if (optIn ? embedderDisabled() : embedderOff()) return null;
   registerRepo(root, cacheDir);
   const r = await request({ op, root: resolve(root), ...extra }, { connectMs: 200, budgetMs: 500 });
-  if (!r) await ensureEmbedder(); // a fresh daemon reconciles every registered repo on start
+  if (!r) return ensureEmbedder({ optIn }); // a fresh daemon reconciles every registered repo on start
+  return "running";
+}
+
+/** Poll until the daemon answers with its model ready, or `ms` runs out. → true when ready. */
+export async function waitForEmbedder(ms) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    const p = await request({ op: "ping" }, { connectMs: 100, budgetMs: 150 });
+    if (p?.model === "ready") return true;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return false;
 }

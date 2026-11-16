@@ -21,35 +21,28 @@
  *   facts  = about that #1 note, from the transcript, events since compaction
  *   p      = sigmoid(bias + Σ w·(x−mean)/sd);  inject top 3 when p ≥ cutoffP
  *
- * Note vectors are never computed here (161 notes ≈ 65 s): they are cached in
- * .coldstart/notebook/.gate/vectors.json by the DETACHED refresh job
- * (recall-gate-refresh.mjs). A stale or missing cache, a missing model, or any
- * error → status "unavailable" and the hook falls back to today's BM25 recall.
+ * Vectors come from the embedder daemon (hooks/embedder-daemon.mjs): note vectors are read straight from the
+ * repo's vector store (the daemon embeds every note in the background, notified by `kb write`), and the query is
+ * one `embed` request (~25 ms warm). A note without a stored vector yet, a daemon that is off or not ready within
+ * the cold-start wait, or any error → status "unavailable" and the hook falls back to today's BM25 recall.
+ * The gate needs no embedder opt-in (it is on by default and used to load the model in-process per prompt);
+ * COLDSTART_EMBEDDER=0 / `init --no-embedder` still turn it off.
  *
  * Claude-only: the facts are read off Claude Code's transcript format. Codex
  * and Cursor keep BM25 recall.
  */
 
-import { readFileSync, readdirSync, existsSync, statSync, openSync, readSync, closeSync, unlinkSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { readFileSync, readdirSync, existsSync, openSync, readSync, closeSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
-import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { DIM, RECIPE, embedKey, vectorsDir } from "./embed-recipe.mjs";
+import { embedTexts, embedderOff, ensureEmbedder, notifyEmbedder, repoCacheDir, waitForEmbedder } from "./embed-client.mjs";
+import { openReader } from "./vector-store.mjs";
 
-export const MODEL_ID = "onnx-community/embeddinggemma-2-ONNX";
-export const DTYPE = "q4";
-export const QUERY_PREFIX = "task: search result | query: ";
-export const DOC_PREFIX = "title: none | text: ";
 export const PARAMS = JSON.parse(readFileSync(new URL("./recall-gate-params.json", import.meta.url), "utf8"));
-/** Bumped when the note TEXT fed to the model changes, so cached vectors die. */
-const DOC_VERSION = "clean-v1";
-
-export const modelCacheDir = () => process.env.COLDSTART_MODEL_DIR || join(homedir(), ".cache", "coldstart", "models");
-export const gateDir = (root) => join(root, ".coldstart", "notebook", ".gate");
-export const vectorsPath = (root) => join(gateDir(root), "vectors.json");
-const lockPath = (root) => join(gateDir(root), "refresh.lock");
-const LOCK_STALE_MS = 15 * 60 * 1000;
+/** Daemon not running (first prompt after its idle exit): spawn it and wait this long for the model (design §4). */
+const COLD_WAIT_MS = 2500;
+/** A warm query is ~25 ms, but it queues behind one in-flight background embed (a long note: up to ~2 s). */
+const QUERY_BUDGET_MS = 3000;
 
 // ---------------------------------------------------------------- notes
 
@@ -77,93 +70,38 @@ export function readActiveNotes(root) {
     const anchors = [];
     for (const m of fm[1].matchAll(/^\s*- (\{"path".*\})\s*$/gm)) { try { anchors.push(JSON.parse(m[1]).path); } catch { /* skip */ } }
     const text = cleanBody(md.slice(fm[0].length).trim());
-    const hash = createHash("sha256").update(`${MODEL_ID}|${DTYPE}|${DOC_VERSION}\n${text}`).digest("hex").slice(0, 16);
-    out.push({ id, file: f.slice(0, -3), anchors, text, hash });
+    out.push({ id, file: f.slice(0, -3), anchors, text });
   }
   return out;
 }
 
-const toB64 = (vec) => Buffer.from(Float32Array.from(vec).buffer).toString("base64");
-const fromB64 = (s) => { const b = Buffer.from(s, "base64"); return new Float32Array(b.buffer, b.byteOffset, b.byteLength / 4); };
-export const encodeVec = toB64;
-
-export function readVectorCache(root) {
-  try {
-    const c = JSON.parse(readFileSync(vectorsPath(root), "utf8"));
-    return c && c.model === MODEL_ID && c.dtype === DTYPE && c.notes ? c : null;
-  } catch { return null; }
-}
-
-/** Notes with a vector matching their current text. `missing` = notes the
- *  refresh job still has to embed (new or edited). */
-export function notesWithVectors(root) {
-  const notes = readActiveNotes(root), cache = readVectorCache(root);
+/** Active notes with their stored vector. `missing` = notes the daemon has not embedded yet (new or edited). */
+export function notesWithVectors(root, cacheDir = repoCacheDir(root)) {
+  const notes = readActiveNotes(root);
+  const keys = notes.map((n) => embedKey("note_doc", n.text));
+  const got = openReader(vectorsDir(cacheDir), { recipe: RECIPE, dim: DIM }).get(keys);
   const ready = [], missing = [];
-  for (const n of notes) {
-    const hit = cache?.notes?.[n.id];
-    if (hit && hit.h === n.hash) ready.push({ ...n, vec: fromB64(hit.v) }); else missing.push(n);
-  }
+  notes.forEach((n, i) => { const vec = got.get(keys[i]); if (vec) ready.push({ ...n, vec }); else missing.push(n); });
   return { ready, missing };
 }
 
-// ---------------------------------------------------------------- refresh job
-
-/** Start the detached note-embedding job unless one is already running. */
-export function spawnRefresh(root, log) {
-  try {
-    const lp = lockPath(root);
-    if (existsSync(lp) && Date.now() - statSync(lp).mtimeMs < LOCK_STALE_MS) return false;
-    const script = fileURLToPath(new URL("./recall-gate-refresh.mjs", import.meta.url));
-    spawn(process.execPath, [script, root], { detached: true, stdio: "ignore", windowsHide: true }).unref();
-    log?.("gate: spawned vector refresh");
-    return true;
-  } catch (e) { log?.(`gate: refresh spawn failed ${e}`); return false; }
-}
-
-/** Exclusive lock for the refresh job; a lock older than LOCK_STALE_MS is a
- *  crashed job and is taken over. Returns a release function or null. */
-export function takeRefreshLock(root) {
-  const lp = lockPath(root);
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      closeSync(openSync(lp, "wx"));
-      return () => { try { unlinkSync(lp); } catch { /* gone */ } };
-    } catch {
-      try { if (Date.now() - statSync(lp).mtimeMs >= LOCK_STALE_MS) { unlinkSync(lp); continue; } } catch { continue; }
-      return null;
-    }
-  }
-  return null;
-}
-
-// ---------------------------------------------------------------- embedder
-
-/** EmbeddingGemma 2, q4 text model only (vision/audio encoders never load).
- *  allowRemote=false in the hook: a missing model must never stall a prompt
- *  on a 174 MB download — the refresh job (allowRemote=true) fetches it. */
-export async function loadEmbedder({ allowRemote = false } = {}) {
-  const { pipeline, env, AutoConfig } = await import("@huggingface/transformers");
-  env.cacheDir = modelCacheDir();
-  env.allowRemoteModels = allowRemote;
-  // transformers.js loads (and downloads) a session for every modality the
-  // config declares. Dropping vision/audio makes it text-only: identical
-  // vectors, ~0.7 s instead of ~1.2 s, ~630 MB RSS instead of ~970 MB, and
-  // ~330 MB of encoder weights never downloaded.
-  const config = await AutoConfig.from_pretrained(MODEL_ID);
-  delete config.vision_config;
-  delete config.audio_config;
-  const fe = await pipeline("feature-extraction", MODEL_ID, { dtype: DTYPE, config });
-  return async (texts, role) => {
-    const pre = role === "query" ? QUERY_PREFIX : DOC_PREFIX;
-    const out = await fe(texts.map((t) => pre + t), { pooling: "mean", normalize: true });
-    return out.tolist().map((v) => Float32Array.from(v));
-  };
-}
-
-/** Cheap pre-check so the hook does not pay an import just to learn the
- *  model was never downloaded. */
-export function modelPresent() {
-  return existsSync(join(modelCacheDir(), MODEL_ID, "onnx", "model_q4.onnx_data"));
+/** The query vector from the daemon; a daemon that is down gets spawned and up to COLD_WAIT_MS to load. */
+async function embedQuery(query, log) {
+  // everything (incl. a retry) must finish inside kb-recall's 5 s race, or the BM25 fallback never gets its turn
+  const deadline = Date.now() + 4500;
+  const ask = (ms) => embedTexts([query], "note_query", { connectMs: 200, budgetMs: ms });
+  const t0 = Date.now();
+  let v = await ask(QUERY_BUDGET_MS);
+  if (v) return { vec: v[0] };
+  if (Date.now() - t0 > 1000) return { why: "embedder-busy" }; // it was up but slow: a retry would only lose the race
+  const st = await ensureEmbedder({ optIn: false });
+  log?.(`gate: embedder ${st}`);
+  if (st === "disabled" || st === "cooldown" || st === "error") return { why: `embedder-${st}` };
+  if (!(await waitForEmbedder(Math.min(COLD_WAIT_MS, deadline - Date.now() - 500)))) return { why: "embedder-cold" };
+  const left = deadline - Date.now() - 200;
+  if (left < 300) return { why: "embedder-cold" };
+  v = await ask(left);
+  return v ? { vec: v[0] } : { why: "embedder-no-answer" };
 }
 
 // ---------------------------------------------------------------- transcript
@@ -318,10 +256,13 @@ export async function runGate({ root, prompt, transcriptPath, nowTs = new Date()
   try {
     const clean = cleanPrompt(prompt);
     if (notHuman(clean)) return { status: "unavailable", reason: "not-human-prompt" };
-    const { ready, missing } = notesWithVectors(root);
-    if (missing.length || !modelPresent()) {
-      spawnRefresh(root, log);
-      return { status: "unavailable", reason: !modelPresent() ? "model-missing" : `vectors-stale(${missing.length})` };
+    if (embedderOff()) return { status: "unavailable", reason: "embedder-off" };
+    const cacheDir = repoCacheDir(root);
+    const { ready, missing } = notesWithVectors(root, cacheDir);
+    if (missing.length) {
+      // the daemon embeds them in the background; this prompt falls back, later ones get the gate
+      await notifyEmbedder("notes-changed", root, cacheDir, {}, { optIn: false });
+      return { status: "unavailable", reason: `vectors-stale(${missing.length})` };
     }
     if (!ready.length) return { status: "unavailable", reason: "no-notes" };
     // On a session's FIRST prompt Claude Code has not created the transcript
@@ -336,8 +277,9 @@ export async function runGate({ root, prompt, transcriptPath, nowTs = new Date()
     const last = tx.turns.at(-1);
     if (last && !last.reply && last.prompt.trim() === clean.trim()) tx.turns.pop();
     const query = buildQuery(clean, tx.turns);
-    const embed = await loadEmbedder({ allowRemote: false });
-    const [qv] = await embed([query], "query");
+    const q = await embedQuery(query, log);
+    if (!q.vec) return { status: "unavailable", reason: q.why };
+    const qv = q.vec;
     const ranked = rankNotes(qv, ready);
     const top = ranked[0];
     const features = { top: top.r, ...sessionFacts(tx, top.n, root, nowTs) };

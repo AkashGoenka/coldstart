@@ -5,7 +5,7 @@
  * daemon's writes (.verified.json, lock) land in the temp dir and the real model cache is only ever read.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync, existsSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
+import { cpSync, mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync, existsSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
 import { createServer, type Server } from 'node:net';
 import { spawn } from 'node:child_process';
 import { tmpdir, homedir } from 'node:os';
@@ -14,9 +14,13 @@ import { fileURLToPath } from 'node:url';
 // @ts-ignore — plain ESM hook modules
 import { request, ensureEmbedder, embedTexts, registerRepo, notifyEmbedder } from '../hooks/embed-client.mjs';
 // @ts-ignore
-import { MODEL_ID, RECIPE, DIM, embedKey, socketPath, vectorsDir } from '../hooks/embed-recipe.mjs';
+import { MODEL_ID, RECIPE, DIM, embedKey, socketPath, vectorsDir, defaultRepoCacheDir } from '../hooks/embed-recipe.mjs';
 // @ts-ignore
 import { openReader } from '../hooks/vector-store.mjs';
+// @ts-ignore
+import { runGate } from '../hooks/recall-gate.mjs';
+import { appendRecord } from '../src/kb/raw-log.js';
+import { renderIds } from '../src/kb/store.js';
 
 const SRC_MODEL = process.env.COLDSTART_TEST_MODEL_DIR ?? join(homedir(), '.cache', 'coldstart', 'models', MODEL_ID);
 const FILES = ['config.json', 'tokenizer_config.json', 'tokenizer.json', 'onnx/model_q4.onnx', 'onnx/model_q4.onnx_data'];
@@ -136,6 +140,47 @@ describe.skipIf(!HAVE_MODEL)('embedder daemon lifecycle (real model)', () => {
     await until(() => { try { return JSON.parse(readFileSync(join(home, 'embedder', 'state.json'), 'utf8')).model?.status === 'unavailable'; } catch { return false; } }, 60_000);
     await until(async () => !(await request({ op: 'ping' }, { connectMs: 100, budgetMs: 200 })), 10_000);
     expect(await ensureEmbedder()).toBe('cooldown');
+  }, 120_000);
+
+  it('recall gate: notes-only repo (no keeper cache) → first prompt falls back, daemon embeds the notes, then ok', async () => {
+    linkModel(models);
+    process.env.COLDSTART_EMBEDDER = ''; // the gate needs no opt-in — only an explicit off stops it
+    for (const n of ['keeper', 'watcher']) {
+      appendRecord(root, { id: `note-${n}`, type: 'lesson', op: 'put', kind: 'gotcha', title: `About the ${n}`, body: `The ${n} debounces saves and patches the index.`, anchors: [] });
+    }
+    renderIds(root);
+    const prompt = 'how does the keeper debounce saves?';
+    expect(await runGate({ root, prompt, transcriptPath: '' })).toMatchObject({ status: 'unavailable', reason: 'vectors-stale(2)' });
+    await until(async () => (await repoStatus())?.status === 'done');
+    expect(existsSync(join(vectorsDir(defaultRepoCacheDir(root)), 'manifest.json'))).toBe(true); // unregistered repo → the default cache path
+    const g = await runGate({ root, prompt, transcriptPath: '' });
+    expect(g).toMatchObject({ status: 'ok', ids: expect.arrayContaining(['note-keeper', 'note-watcher']) });
+    expect(g.ms).toBeLessThan(3000);
+    process.env.COLDSTART_EMBEDDER = '0';
+    expect(await runGate({ root, prompt, transcriptPath: '' })).toEqual({ status: 'unavailable', reason: 'embedder-off' });
+  }, 120_000);
+
+  it('a daemon the gate started (no opt-in) embeds notes only — file sketches wait for the opt-in', async () => {
+    linkModel(models); makeCache(['alpha beta', 'gamma delta']);
+    process.env.COLDSTART_EMBEDDER = '';
+    registerRepo(root, cacheDir); // as a keeper save would, before the gate's prompt
+    appendRecord(root, { id: 'note-k', type: 'lesson', op: 'put', kind: 'gotcha', title: 'About k', body: 'k body.', anchors: [] });
+    renderIds(root);
+    expect(await runGate({ root, prompt: 'about k', transcriptPath: '' })).toMatchObject({ reason: 'vectors-stale(1)' });
+    const s = await until(async () => { const r = await repoStatus(); return r?.status === 'done' && r; });
+    expect(s).toMatchObject({ total: 1, done: 1 }); // the 2 sketches were not queued
+    expect((await runGate({ root, prompt: 'about k', transcriptPath: '' })).status).toBe('ok'); // found via the registration
+  }, 120_000);
+
+  it('a repo re-registered with a new cache dir moves the daemon to the new store', async () => {
+    linkModel(models); makeCache(['one']);
+    await notifyEmbedder('sketches-saved', root, cacheDir);
+    await until(async () => (await repoStatus())?.status === 'done');
+    const moved = join(cacheDir, '..', 'cache2');
+    rmSync(moved, { recursive: true, force: true });
+    cpSync(cacheDir, moved, { recursive: true, filter: (p: string) => !p.includes('vectors') });
+    await notifyEmbedder('sketches-saved', root, moved);
+    await until(() => openReader(vectorsDir(moved), { recipe: RECIPE, dim: DIM }).get([embedKey('file_doc', 'title: f0.ts | text: one')]).size === 1, 30_000);
   }, 120_000);
 
   it('B4: a store wiped under a running daemon is rebuilt on the next reconcile', async () => {

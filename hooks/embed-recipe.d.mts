@@ -1,6 +1,7 @@
 export const MODEL_ID: string;
 export const DTYPE: string;
-export const MAX_TOKENS: number;
+export const TOKEN_CAPS: Record<string, number>;
+export const WINDOWED_ROLES: Set<string>;
 export const DIM: number;
 export const RECIPE: string;
 export const PROTOCOL: number;
