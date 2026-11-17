@@ -1,0 +1,499 @@
+[
+ {
+  "id": "app-controllers-admins-omniauth-callbacks-controller-rb-4e978d56",
+  "type": "file",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "CSRF skip applies only to saml action",
+  "why": "mostly restates the controller"
+ },
+ {
+  "id": "app-controllers-api-v1-assignment-events-controller-rb-7fd3feaa",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "POST /api/v1/assignment_event has no credential check and creates assignments for any visitor/split",
+  "why": "security-relevant fact not guessable"
+ },
+ {
+  "id": "app-controllers-api-v4-split-registries-controller-rb-5fb75b1a",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "invalid build_timestamp returns 422 and v2 ignores it",
+  "why": "non-obvious status/version behavior"
+ },
+ {
+  "id": "app-controllers-authenticated-api-controller-rb-bd946287",
+  "type": "file",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Basic username is the App name, password compared to auth_secret; both failures 401",
+  "why": "mostly guessable from the code"
+ },
+ {
+  "id": "app-controllers-concerns-cors-support-rb-b3a41238",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "origin.end_with? suffix match admits evilmyapp.example.org; raises when env unset",
+  "why": "gotcha"
+ },
+ {
+  "id": "app-controllers-shared-secret-authenticated-api-controller-r-48882c0a",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "unset secret raises RuntimeError instead of 401; username ignored",
+  "why": "gotcha"
+ },
+ {
+  "id": "app-models-admin-rb-dfae316f",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "from_saml persists any SAML uid as Admin (no allow-list); SAML_ISSUER read at class load",
+  "why": "wiring/invariant"
+ },
+ {
+  "id": "app-models-app-feature-completion-migration-rb-9b559e69",
+  "type": "file",
+  "value": "W",
+  "wrong": [
+   {
+    "claim": "an unknown gate name is rejected on delete but not on create",
+    "evidence": "spec/models/app_feature_completion_migration_spec.rb:52-56 \u2014 'is invalid with no feature gate' creates with version 1.0 and nonexistent gate and expects 1 error on feature_gate and save false (belongs_to required under load_defaults 7.2)"
+   }
+  ],
+  "unverifiable": [],
+  "best_fact": "blank version means delete, matched on (app, feature_gate)",
+  "why": "contains a wrong claim about create-path gate validation"
+ },
+ {
+  "id": "app-models-app-feature-completion-rb-1c0b04aa",
+  "type": "file",
+  "value": "W",
+  "wrong": [
+   {
+    "claim": "this model's own validation does not reject a missing gate; the migration class checks gate existence only on its destroy path",
+    "evidence": "app/models/app_feature_completion.rb:3 belongs_to :feature_gate is required by default (config/application.rb:27 load_defaults 7.2); spec app_feature_completion_migration_spec.rb:52-56 shows a missing gate on create is invalid with an error on feature_gate"
+   }
+  ],
+  "unverifiable": [],
+  "best_fact": "satisfied_by is version <= build version so one completion covers later builds",
+  "why": "wrong claim that missing gate is not rejected by the model"
+ },
+ {
+  "id": "app-models-app-identifier-claim-rb-706bff97",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "visitor returned is the identifier owner after merge, not the visitor_id sent",
+  "why": "non-obvious return semantics"
+ },
+ {
+  "id": "app-models-app-rb-b9767b41",
+  "type": "file",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "auth_secret must be >=43 chars",
+  "why": "mostly trivia/restating"
+ },
+ {
+  "id": "app-models-app-remote-kill-migration-rb-f78f20fc",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "blank first_bad_version deletes, keyed on (app, split, reason); must resend same reason",
+  "why": "API behavior gotcha"
+ },
+ {
+  "id": "app-models-app-remote-kill-rb-db49ee53",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "window first_bad <= build < fixed (NULL open-ended); overlap check excludes self",
+  "why": "semantics"
+ },
+ {
+  "id": "app-models-app-version-build-path-rb-e569cef4",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "valid? does not check app exists; app_build raises RecordNotFound; built_at is client timestamp",
+  "why": "gotcha"
+ },
+ {
+  "id": "app-models-app-version-rb-f2b1cfcf",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "version rules may only be relaxed, never tightened (comment)",
+  "why": "invariant"
+ },
+ {
+  "id": "app-models-arbitrary-assignment-creation-rb-284775b4",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "supersede only when row exists and variant differs; same-variant bumps updated_at with no history",
+  "why": "core write semantics"
+ },
+ {
+  "id": "app-models-assignment-rb-aea791e3",
+  "type": "file",
+  "value": "W",
+  "wrong": [
+   {
+    "claim": "for_app_build removes incomplete feature gates and remote kills unless the row has force set",
+    "evidence": "app/models/assignment.rb:39-52 \u2014 force only exempts excluding_incomplete_features_for; excluding_remote_kills_for has no force condition"
+   }
+  ],
+  "unverifiable": [],
+  "best_fact": "decision hides rows by updated_at <= decided_at comparison at read time",
+  "why": "facet misstates force exemption"
+ },
+ {
+  "id": "app-models-bulk-assignment-creation-rb-151de5f4",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "more than 2% new identifiers blocks the bulk unless force_identifier_creation; create never raises",
+  "why": "gotcha"
+ },
+ {
+  "id": "app-models-bulk-reassignment-rb-81623507",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "save! raises plain string not RecordInvalid; snapshot keeps old bulk_assignment_id",
+  "why": "gotcha"
+ },
+ {
+  "id": "app-models-deterministic-assignment-creation-rb-b18784bc",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "never supersedes; only refreshes unsynced mixpanel_result with touch: false; feature gates skipped",
+  "why": "behavior"
+ },
+ {
+  "id": "app-models-identifier-claim-rb-163aeb3f",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "claiming a second value of same type creates a fresh Visitor and copies assignments",
+  "why": "non-obvious merge behavior"
+ },
+ {
+  "id": "app-models-split-decision-migration-rb-8cdb19d3",
+  "type": "file",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "scoped to calling app; does not touch assignment rows",
+  "why": "mostly restates"
+ },
+ {
+  "id": "app-models-split-rb-ba157a17",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "remote-kill override beats feature_incomplete; missing target variant leaves weights unchanged with log only",
+  "why": "non-obvious knockout behavior"
+ },
+ {
+  "id": "app-models-split-registry-rb-ef7a24e9",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "as_of regex is shape-only (month 00-19, -0400 fails)",
+  "why": "gotcha"
+ },
+ {
+  "id": "app-models-split-upsert-rb-c04fe2ee",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "any SplitUpsert save omitting finished_at/decided_at clears both (undecides, reactivates)",
+  "why": "side effect"
+ },
+ {
+  "id": "app-models-variant-calculator-rb-40367afb",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "MD5(name+visitor) first 8 hex mod 100 over alphabetically sorted keys",
+  "why": "algorithm detail"
+ },
+ {
+  "id": "app-models-variant-retirement-rb-7b219332",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "retirement never writes registry; random weighted draw per row; hidden rows untouched",
+  "why": "side effect"
+ },
+ {
+  "id": "app-models-visitor-lookup-rb-839b1d02",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "lookup creates Identifier+Visitor for unknown value and never a supersession",
+  "why": "side effect"
+ },
+ {
+  "id": "app-models-visitor-supersession-rb-20cb2e58",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "after_create copies only missing-split assignments, skips feature gates, swallows unique violations",
+  "why": "behavior"
+ },
+ {
+  "id": "app-types-app-version-type-rb-c187ea06",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "cast swallows errors to nil while serialize raises",
+  "why": "gotcha"
+ },
+ {
+  "id": "how-a-bulk-assignment-supersedes-existing-assignments",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "snapshot copies old bulk_assignment_id; identical variant+force rows excluded",
+  "why": "verified cross-file wiring/ordering a cold agent would not guess"
+ },
+ {
+  "id": "how-a-chrome-extension-assignment-override-is-authenticated",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "shared secret only, force: true, CORS suffix match",
+  "why": "verified cross-file wiring/ordering a cold agent would not guess"
+ },
+ {
+  "id": "how-a-decision-hides-earlier-assignments",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "decision hides rows by updated_at<=decided_at at read time; no rows rewritten",
+  "why": "verified cross-file wiring/ordering a cold agent would not guess"
+ },
+ {
+  "id": "how-a-new-api-version-is-wired-adding-v5",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "routes.rb is the only version list; CORS preflight stubs only v1/v2; CorsSupport needs env var",
+  "why": "verified cross-file wiring/ordering a cold agent would not guess"
+ },
+ {
+  "id": "how-a-second-visitor-claiming-an-identifier-merges-into-the",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "merge only copies assignments via VisitorSupersession; Identifier rows not re-pointed",
+  "why": "verified cross-file wiring/ordering a cold agent would not guess"
+ },
+ {
+  "id": "how-a-split-decision-takes-effect-on-existing-assignments-an",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "decision does not migrate rows; winner served at 100 with no cache headers",
+  "why": "verified cross-file wiring/ordering a cold agent would not guess"
+ },
+ {
+  "id": "how-a-split-weight-change-reaches-running-assignments",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "weight change affects only visitors without rows; SplitUpsert clears decided_at/finished_at",
+  "why": "verified cross-file wiring/ordering a cold agent would not guess"
+ },
+ {
+  "id": "how-a-variant-retirement-moves-existing-assignments-to-the-r",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "registry not changed by retirement; hidden rows not moved",
+  "why": "verified cross-file wiring/ordering a cold agent would not guess"
+ },
+ {
+  "id": "how-a-visitor-gets-assigned-a-variant-of-a-split",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "hash only when no row exists; existing row only refreshes mixpanel_result",
+  "why": "verified cross-file wiring/ordering a cold agent would not guess"
+ },
+ {
+  "id": "how-an-app-build-decides-which-splits-a-client-receives",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "knockouts are SQL virtual columns; remote kill beats feature knockout",
+  "why": "verified cross-file wiring/ordering a cold agent would not guess"
+ },
+ {
+  "id": "how-api-requests-are-authenticated-per-endpoint",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "auth is per base controller; assignment_event is unauthenticated",
+  "why": "verified cross-file wiring/ordering a cold agent would not guess"
+ },
+ {
+  "id": "how-assignment-event-assigns-a-visitor-deterministically",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "never supersedes; finished splits still create rows",
+  "why": "verified cross-file wiring/ordering a cold agent would not guess"
+ },
+ {
+  "id": "how-experience-sampling-weight-reaches-clients",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "boot-time config only echoed to clients; negative raises",
+  "why": "verified cross-file wiring/ordering a cold agent would not guess"
+ },
+ {
+  "id": "how-explicit-variant-overrides-are-recorded",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "force true, batch forces mixpanel_result success, same-variant bumps updated_at",
+  "why": "verified cross-file wiring/ordering a cold agent would not guess"
+ },
+ {
+  "id": "how-saml-admin-login-is-switched-on-and-what-gates-admin-acc",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "SAML_ISSUER toggles routes and Admin modules; omniauth strategy registered unconditionally",
+  "why": "verified cross-file wiring/ordering a cold agent would not guess"
+ },
+ {
+  "id": "how-the-split-registry-timestamp-is-validated-and-used-as-th",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "shape-only regex; as_of compared only to finished_at",
+  "why": "verified cross-file wiring/ordering a cold agent would not guess"
+ },
+ {
+  "id": "how-the-v2-migrations-api-writes-app-feature-completions-and",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "blank version/first_bad_version turns POST into delete; keys (app,gate) and (app,split,reason)",
+  "why": "verified cross-file wiring/ordering a cold agent would not guess"
+ },
+ {
+  "id": "no-admin-allow-list-or-domain-check-on-saml-login",
+  "type": "lesson",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "any IdP-authenticated email becomes an admin",
+  "why": "confirmed absence with security consequence"
+ },
+ {
+  "id": "no-api-v5-in-this-repo",
+  "type": "lesson",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "versioned API stops at v4",
+  "why": "absence of trivial value"
+ },
+ {
+  "id": "no-app-build-knockouts-in-the-v3-or-v4-split-registries",
+  "type": "lesson",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "v3/v4 registry endpoints apply no feature/remote-kill knockouts",
+  "why": "useful confirmed absence"
+ },
+ {
+  "id": "no-experience-sampling-applied-to-assignments-in-this-repo",
+  "type": "lesson",
+  "value": "W",
+  "wrong": [
+   {
+    "claim": "POST assignment_event always creates a row for a visitor who has none",
+    "evidence": "app/models/deterministic_assignment_creation.rb:17 \u2014 `return if split.feature_gate?` returns before any write for feature-gate splits"
+   }
+  ],
+  "unverifiable": [],
+  "best_fact": "experience_sampling_weight is only echoed, never applied to assignment creation",
+  "why": "contains an overbroad wrong claim"
+ },
+ {
+  "id": "no-http-caching-on-split-registry-responses-in-this-repo",
+  "type": "lesson",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "no cache headers on registry responses",
+  "why": "absence confirmed but low-action"
+ },
+ {
+  "id": "no-user-or-admin-session-check-on-assignment-overrides",
+  "type": "lesson",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "override writes record no actor; shared secret only",
+  "why": "useful confirmed absence"
+ }
+]

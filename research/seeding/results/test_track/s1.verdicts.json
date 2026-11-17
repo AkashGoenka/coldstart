@@ -1,0 +1,565 @@
+[
+ {
+  "id": "app-controllers-admin-bulk-assignments-controller-rb-822a694e",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "BulkAssignmentJob is only enqueued after valid?; flash says Enqueued so redirect does not mean visitors moved",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-controllers-admins-omniauth-callbacks-controller-rb-4e978d56",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "saml callback does not itself refuse inactive/locked admins; active_for_authentication? only gates the flash",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-controllers-api-v1-app-visitor-configs-controller-rb-f0666a07",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "unknown visitor_id is find_or_initialize_by so nothing is written; v1 vs v4 differ only in view and sampling weight",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-controllers-api-v1-assignment-events-controller-rb-7fd3feaa",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "unset WHITELIST_CORS_HOSTS makes the endpoint raise on every request; unknown split_name/invalid mixpanel_result not rescued",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-controllers-api-v1-assignment-overrides-controller-rb-c470431d",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "v1 passes client mixpanel_result through; v2 forces 'success'",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-controllers-api-v1-cors-controller-rb-2c96fc9f",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "allow returns 204 even for disallowed origins, just without Allow-Origin",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-controllers-api-v1-identifier-visitors-controller-rb-9421a5dc",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "IdentifierVisitorsController has no CorsSupport and no OPTIONS route so browsers get no Allow-Origin",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-controllers-api-v1-split-configs-controller-rb-f16ad3c9",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "destroy only sets finished_at (idempotent); POST with same name revives finished split",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-controllers-api-v1-split-registries-controller-rb-2e40b56c",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "v1 registry uses Split.for_presentation with no build: no knockouts, no feature_gate key",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-controllers-api-v2-assignment-overrides-controller-rb-0b972d2c",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "batch override merges force: true; mixpanel_result forced to 'success' in BatchArbitraryAssignmentCreation",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-controllers-api-v2-migrations-splits-controller-rb-4a929dc9",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "only API route that permits owner; prefix rule skipped for existing unchanged names so unprefixed splits can be reweighted",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-controllers-api-v2-split-registries-controller-rb-8a1b0e30",
+  "type": "file",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "v2 registry cut is the server clock at request time",
+  "why": "verified but mostly restates names"
+ },
+ {
+  "id": "app-controllers-api-v4-app-identifiers-controller-rb-0c979d87",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "response visitor id is the identifier owner after supersession, may differ from request visitor_id",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-controllers-api-v4-app-visitor-configs-controller-rb-3c54b45d",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "knockouts happen in Split.for_presentation, not the controller; missing visitor_id raises",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-controllers-api-v4-split-registries-controller-rb-5fb75b1a",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "v4 registry applies no knockouts, so remote-killed split shows stored weights while config shows knocked out",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-controllers-authenticated-admin-controller-rb-14538fef",
+  "type": "file",
+  "value": "M",
+  "wrong": [
+   {
+    "claim": "before_action :authenticate_admin! is inherited by the nine Admin:: controllers",
+    "evidence": "app/controllers/admin/: 8 controllers inherit AuthenticatedAdminController (bulk_assignments, decisions, split_assignments, split_configs, split_details, splits, variant_details, variant_retirements); the note itself lists 8; sessions_controller does not inherit. Count error only, not misleading"
+   }
+  ],
+  "unverifiable": [],
+  "best_fact": "only place admin UI auth is enforced (before_action authenticate_admin!)",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-controllers-authenticated-api-controller-rb-bd946287",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "basic auth by App name + secure_compare of auth_secret; subclasses send no CORS headers",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-controllers-concerns-cors-support-rb-b3a41238",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "suffix end_with? origin match with no dot boundary; unset WHITELIST_CORS_HOSTS raises on every request",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-controllers-shared-secret-authenticated-api-controller-r-48882c0a",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "unset/blank BROWSER_EXTENSION_SHARED_SECRET raises (500) before credentials read; username ignored",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-jobs-bulk-assignment-job-rb-46cd7158",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "save! re-runs the 2% guard so the job can raise RecordInvalid after admin saw Enqueued",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-admin-rb-dfae316f",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "from_saml creates the Admin on first SAML login; uid never written; devise modules chosen at class load by SAML_ISSUER",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-app-feature-completion-migration-rb-9b559e69",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "blank version deletes (idempotent); gate looked up unscoped across apps",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-app-feature-completion-rb-1c0b04aa",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "satisfied_by compares version number not built_at",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-app-identifier-claim-rb-706bff97",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "visitor returned is the identifier owner, not the request visitor_id",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-app-remote-kill-migration-rb-f78f20fc",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "blank first_bad_version means delete; split lookup unscoped by owner unlike SplitDecisionMigration",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-app-remote-kill-rb-db49ee53",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "window is [first_bad_version, fixed_version); overlap enforced only in validation, not DB",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-app-version-build-path-rb-e569cef4",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "app_build raises if invalid; unknown app_name raises RecordNotFound inside app_build, not a 422",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-app-version-rb-f2b1cfcf",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "versions compared as integer arrays so 1.10 > 1.9; relaxations must keep legal versions collating the same",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-arbitrary-assignment-creation-rb-284775b4",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "bulk flow only reaches insert branch; supersede only after RecordNotUnique race; API overrides use supersede",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-assignment-rb-aea791e3",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "remote kills drop assignments regardless of force; incomplete gates only unless force; create_previous_assignment! must run before update",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-batch-arbitrary-assignment-creation-rb-194e40ab",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "whole v2 batch in one transaction; per-item mixpanel_result/force cannot be set by client",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-bulk-assignment-creation-rb-151de5f4",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "2% guard only counts, creates nothing, and force vs force_identifier_creation are different flags; identifiers created inside the transaction",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-bulk-reassignment-rb-81623507",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "raw SQL: no callbacks/validations; archives to previous_assignments, writes force from bulk_assignment.force",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-decision-rb-33818547",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "save! skips validations; decision is a 100/0 reweight through SplitUpsert",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-deterministic-assignment-creation-rb-b18784bc",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "existing assignment variant never changed; only unsynced mixpanel_result updated with touch: false",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-identifier-claim-rb-163aeb3f",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "supersede_visitor! also runs on fork; create! returns claim even if invalid",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-split-decision-migration-rb-8cdb19d3",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "app-scoped lookup; deciding retired split clears finished_at",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-split-rb-ba157a17",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "registry knockouts only for rows loaded via for_app_build; reconfigure! clears decided_at/finished_at",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-split-registry-rb-ef7a24e9",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "splits is Split.active only, so no knockouts in registry responses",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-split-retirement-migration-rb-43fa95ae",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "retirement stamps decided_at == finished_at; only endpoint that sets finished_at",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-split-upsert-rb-c04fe2ee",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "every save overwrites finished_at/decided_at with nil if not passed; unspecified variants zeroed",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-variant-calculator-rb-40367afb",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "bucket = MD5(split.name + visitor_id)[0,8] mod 100, no separator, variants walked in sorted order",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-variant-retirement-rb-7b219332",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "retiring variant can be drawn back if its weight is still positive; no 2% guard; force false",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-visitor-lookup-rb-839b1d02",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "read path that creates Identifier+Visitor on miss; unknown type raises RecordNotFound",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-visitor-rb-ad52e812",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "from_id creates visitor silently; assignments association is for_presentation-scoped",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-models-visitor-supersession-rb-20cb2e58",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "copies only, never moves; feature-gate assignments never copied; copies are unsynced",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "app-views-api-v4-app-visitor-configs-show-json-jbuilder-28bf1c48",
+  "type": "file",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "v4 config partial shape shared with identifier claim",
+  "why": "verified but mostly restates names"
+ },
+ {
+  "id": "config-application-rb-7ff7049c",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "EXPERIENCE_SAMPLING_WEIGHT read once at boot via Integer(), negative raises",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "config-initializers-devise-rb-fc4baf98",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "saml provider registered unconditionally; test env sets IDP_SSO_SERVICE_URL not IDP_SSO_TARGET_URL",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "config-routes-rb-e801163e",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "version differences determined by which controller a path resolves to",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "how-a-build-s-version-and-built-at-decide-which-splits-and-a",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "knockouts: registry rewritten vs assignment rows dropped; remote kill ignores force",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "how-a-split-is-created-reweighted-decided-or-finished-throug",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "every split write goes through SplitUpsert#save which clears finished_at/decided_at; v1 DELETE only sets finished_at",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "how-a-visitor-s-variant-is-computed-and-persisted-from-an-as",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "server computes variant only for first assignment on assignment_event; existing variant never changed",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "how-admin-sign-in-works-saml-or-database-chosen-at-boot",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [
+   "devise.rb 'must agree' with routes/Admin: devise.rb only reads SAML_ISSUER as an issuer value, no branch"
+  ],
+  "best_fact": "SAML vs database chosen at boot via SAML_ISSUER read in routes.rb and Admin.devise_args; first SAML login creates admin",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "how-an-identifier-claim-resolves-a-visitor-and-merges-assign",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "claim lands on identifier owner; VisitorSupersession copies assignments additively, including fork case",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "how-api-requests-are-authenticated-and-get-cors-headers",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "CORS opt-in per controller via include CorsSupport plus OPTIONS route; bases give no CORS",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "how-bulk-assignment-and-variant-retirement-reassign-visitors",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "admin validation is a preview; job re-runs it and does the work; BulkReassignment raw SQL; retirement skips the guard",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "how-chrome-extension-assignment-overrides-work",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "bulk reassignment overwrites variant of individually overridden rows while keeping the flag",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "how-test-track-is-put-together",
+  "type": "flow",
+  "value": "W",
+  "wrong": [
+   {
+    "claim": "TestTrack's server never decides a visitor's variant for client traffic: clients compute it locally",
+    "evidence": "app/models/deterministic_assignment_creation.rb save!: ArbitraryAssignmentCreation.create!(... variant: variant_calculator.variant ...) via POST /api/v1/assignment_event when no row exists (contradicts sibling note how-a-visitor-s-variant...)"
+   }
+  ],
+  "unverifiable": [
+   "clients compute variant locally with MD5 (client code not in repo)"
+  ],
+  "best_fact": "four request surfaces by base controller; SplitUpsert and ArbitraryAssignmentCreation are the single write paths",
+  "why": "wrong claim contradicts code"
+ },
+ {
+  "id": "how-the-client-config-and-registry-endpoints-evolve-across-v",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "registries never apply knockouts but config endpoints do; time source differs per version",
+  "why": "verified non-obvious behavior/gotcha"
+ },
+ {
+  "id": "how-the-v2-migrations-api-applies-decisions-retirements-remo",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "remote-kill/feature-completion lookups unscoped by app while decision/retirement scoped",
+  "why": "verified non-obvious behavior/gotcha"
+ }
+]
