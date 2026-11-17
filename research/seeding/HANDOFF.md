@@ -33,6 +33,28 @@ BY PATH and the summary is last-writer-wins, so parallel workers must `kb lookup
 merge text. Copies live outside the repo (the container is ephemeral; the notes worth
 keeping get exported into `results/`).
 
+## Findings so far (round 1, from reading notes against code)
+- The contract works: even Haiku writes dense, verified gotchas (CORS `end_with?` suffix
+  match lets evilexample.org in; SAML `find_or_initialize_by`+`update!` auto-creates admins;
+  `AppVersionType#cast` swallows errors while `serialize` raises).
+- Topic workers told to "verify the hint, never copy it" caught 5+ wrong mapper hints,
+  usually by reading the specs. Keep that instruction and tell workers to use specs.
+- FAILURES to fix in the prompt:
+  1. Duplicate flows from parallel workers (S3 has two flows for deterministic assignment).
+     → need a consolidation stage, or one owner per topic/file.
+  2. File-note summaries are last-writer-wins: parallel workers overwrite each other's text.
+  3. Question-shaped artifacts: "no api v5 in this repo" (my question said "e.g. v5").
+  4. Generic framework knowledge ("Rails maps Api::V5::Foo to …") and trivia (.rubocop_todo).
+  5. WRONG "bug" claims: S4 c3 wrote that v3/v4 routes pass nil because routes say
+     `param: :timestamp` and controllers read `params[:build_timestamp]`. False: Rails names
+     a nested resource's parent param `build_timestamp`. A note claiming a bug is the most
+     dangerous kind → rule: never assert a bug/inconsistency unless you ran it or a spec shows it.
+  6. Haiku makes stray session-tool calls (list_sessions, send_message) → restrict tools.
+- Idea for S6 (round 2): workers write FACTS to scratch JSON, not to the notebook; one
+  Sonnet consolidator merges per-file facts into one note per file and dedups flows.
+- 2026-11-16 the user's 5-hour limit was hit mid-run (work bills plan usage, not credits).
+  Interrupted agents were resumed with SendMessage on 2026-11-17.
+
 ## Status log
 - Round 1 (test_track, all 5 strategies): workers launched. S5 done (26 notes). S1 mapper
   done (10 topics + overview flow). S3 questions done (15). S1×10, S2×5 and S3×5 workers running;
