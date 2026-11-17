@@ -1,0 +1,561 @@
+[
+ {
+  "id": "how-a-channel-message-is-created-saved-and-delivered",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "createMessageV2 returns the saved message before handleMessageSideEffects (started without await, .then logger only) runs; addMention exception skips emit and push on the server path (MessageCreate.ts:~380 handleMessageSideEffects, createMessageV2)",
+  "why": "verified ordering/failure invariants a cold agent would not guess"
+ },
+ {
+  "id": "how-a-channel-route-decides-whether-the-caller-may-act",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "channelVerification ends by calling channelPermissions(PUBLIC_CHANNEL) itself; owner and role-ADMIN bypass channel overrides; DM/ticket have no server so both layers next()",
+  "why": "verified layered check order and bypass semantics"
+ },
+ {
+  "id": "how-a-moderation-endpoint-is-authorized-and-what-a-suspensio",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "ModerationRouter adds no middleware; each route declares authenticate() then isModMiddleware(); suspension enforced only on user-cache rebuild so suspendUsersBatch clears cache",
+  "why": "verified per-route auth and cache-clear coupling"
+ },
+ {
+  "id": "how-a-request-gets-rate-limited",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Fixed window: PEXPIRE only at counter creation, HINCRBY doesn't refresh; DEV_MODE bypass unless body.test_enable_rate_limit; global_limit mounted after OpenGraphRouter",
+  "why": "verified Lua semantics and mount order"
+ },
+ {
+  "id": "how-a-restart-decides-which-redis-keys-survive",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "customRedisFlush on api deletes every key not under WS_KEYS (plus POST_VIEWS and mq: kept); new ws-side keys must be added to WS_KEYS",
+  "why": "verified gotcha with consequences for new keys"
+ },
+ {
+  "id": "how-a-self-service-account-deletion-reaches-the-content-purg",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "deleteAccount only renames/detaches and upserts ScheduleAccountContentDelete; the 60s job in index.ts purges in batches of 300; suspended-account path discards the error tuple",
+  "why": "verified async purge design and swallowed errors"
+ },
+ {
+  "id": "how-a-server-scheduled-for-deletion-is-locked-and-then-remov",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Lock is a 403 from middleware reading cached scheduledForDeletion; actual hard delete is an api-primary timer for rows older than 5 days; every schedule write must be followed by deleteServerCache",
+  "why": "verified wiring and cache invariant"
+ },
+ {
+  "id": "how-an-authorization-token-becomes-a-cached-user-and-what-lo",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Suspension checked only when user cache entry is rebuilt, IP ban only when IP not in ALLOWED_IP set or differs from cached ip; passwordVersion decoded but never compared",
+  "why": "verified auth enforcement gaps"
+ },
+ {
+  "id": "how-an-http-request-reaches-a-route-handler-and-how-to-add-a",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "A route file is live only if the area Router.ts imports and calls it; express-validator chains only collect errors, handler must call customExpressValidatorResult; no express error middleware",
+  "why": "verified how-to-extend and gotchas"
+ },
+ {
+  "id": "how-nerimity-server-is-put-together",
+  "type": "flow",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "One bundle runs as api or ws process selected by --ws; api-only work gated on env.TYPE === 'api'",
+  "why": "mostly overview restating structure, partly guessable from entry files"
+ },
+ {
+  "id": "how-sockets-get-into-rooms-and-how-emits-reach-them-across-p",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Room joins happen only in handleAuthenticate and emitServerJoined/Left; auth PQueue is module-level (per process); 30s timeout flag is set on AUTHENTICATE receipt, not success",
+  "why": "verified room/queue semantics"
+ },
+ {
+  "id": "how-the-api-and-ws-processes-boot-from-one-bundle",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "ws bundle is built from the same entry; tsdown plugin strips app.use('/api' ...) statements; any worker exit makes primary process.exit so the whole cluster restarts and reflushes redis",
+  "why": "verified build/boot wiring"
+ },
+ {
+  "id": "no-code-removes-scheduleaccountcontentdelete-rows",
+  "type": "lesson",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Only writer is the upsert in deleteAccountFromDatabase, only reader is scheduleDeleteAccountContent; rows never deleted so the job keeps querying them",
+  "why": "verified absence via grep"
+ },
+ {
+  "id": "no-dm-channel-cache-write-in-this-repo",
+  "type": "lesson",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "DM_CHANNEL_KEY_STRING is read in getDMChannelCache but never written anywhere in src",
+  "why": "verified absence via grep"
+ },
+ {
+  "id": "no-endpoint-or-code-that-removes-an-active-ip-ban",
+  "type": "lesson",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "bannedIp rows are deleted only on expired read (User.ts) and by removeExpiredBannedIps; unsuspend route does not touch them",
+  "why": "verified absence via grep"
+ },
+ {
+  "id": "no-express-error-handling-middleware-async-error-wrapper-or",
+  "type": "lesson",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "No 4-arg error handler, no express-async-errors, no unhandledRejection handler; client IP read directly from cf-connecting-ip / x-forwarded-for",
+  "why": "verified absence via grep"
+ },
+ {
+  "id": "no-leader-election-or-lock-for-scheduled-jobs-in-this-repo",
+  "type": "lesson",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Scheduled jobs in index.ts run in every api primary with no lock",
+  "why": "verified absence via grep"
+ },
+ {
+  "id": "no-live-message-queue-on-the-create-route-and-no-silent-hand",
+  "type": "lesson",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "queueRoute calls route() directly; mimiqueue call is commented out; silent read only in fcm/pushNotification.ts",
+  "why": "verified via code read"
+ },
+ {
+  "id": "no-login-time-suspension-or-ip-ban-check",
+  "type": "lesson",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Login functions never call getSuspensionDetails/isIpBanned; checks run on token use in UserCache.authenticateUser",
+  "why": "verified security-relevant absence"
+ },
+ {
+  "id": "no-tests-for-permissions-auth-moderation-sockets-rate-limit",
+  "type": "lesson",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Only tests/users and tests/servers exist; createServerMessage test exercises create_message 429 via test_enable_rate_limit",
+  "why": "verified test inventory"
+ },
+ {
+  "id": "src-cache-cachekeys-ts-e5fe24f1",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "WS_KEYS is the only list of ws-owned prefixes; new ws-side key must be added or api boot deletes it",
+  "why": "verified how-to-extend invariant"
+ },
+ {
+  "id": "src-cache-channelcache-ts-fbde1b49",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Per-channel override hash has 24h EXPIRE reset on every write; getDMChannelCache reads a never-written key so DM channels hit DB each time; inbox cache invalidated only by deleteAllInboxCache*",
+  "why": "verified cache behavior details"
+ },
+ {
+  "id": "src-cache-ratelimitcache-ts-1a1004c4",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Fixed window; iteration counter increments only on transition to REACHED, expires 3min, 3rd transition returns -2 -> onThreeIterations then separate PTTL",
+  "why": "verified Lua semantics"
+ },
+ {
+  "id": "src-cache-servercache-ts-5242d5ee",
+  "type": "file",
+  "value": "M",
+  "wrong": [
+   {
+    "claim": "scheduledForDeletion is a string after the JSON round trip",
+    "evidence": "src/worker.ts:34 overrides Date.prototype.toJSON to return getTime(), so it round-trips as a number (only truthiness is used, so low impact)"
+   }
+  ],
+  "unverifiable": [],
+  "best_fact": "ServerCache has no expiry and updateServer does not refresh it; only Explore and transferServerOwnership call updateServerCache",
+  "why": "verified staleness gotcha"
+ },
+ {
+  "id": "src-cache-servermembercache-ts-d0195397",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Member permission hash never expires; role create/update/delete/reorder and updateServerMember clear whole hash but not ChannelCache override hashes; deleteServer doesn't clear it",
+  "why": "verified invalidation matrix"
+ },
+ {
+  "id": "src-cache-usercache-ts-c1dba15e",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Banned IP still gets a device row (addDeviceWithSession runs before ban return); storeUserCache omits ip so first request after rebuild always takes slow path; removeSessions doesn't clear user cache",
+  "why": "verified non-obvious auth details"
+ },
+ {
+  "id": "src-common-bitwise-ts-722186d0",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [
+   "'FOUNDER and MOD (64)' is ambiguous: code has FOUNDER bit 1, ADMIN 2, MOD 64 (Bitwise.ts:116-132); read as 'MOD (64)' it is fine"
+  ],
+  "best_fact": "Role ADMIN and USER_BADGES ADMIN are different namespaces; channel permission bypass is in channelPermissions not the bit table",
+  "why": "verified gotcha"
+ },
+ {
+  "id": "src-common-env-ts-2b79bc4d",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "TYPE is 'ws' only when argv includes --ws; any other invocation incl --api is 'api'; no env validation",
+  "why": "verified"
+ },
+ {
+  "id": "src-common-errorhandler-ts-ad7b7797",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "errorHandler.ts is not Express middleware; customExpressValidatorResult returns first error only and null when clean, caller must respond",
+  "why": "verified"
+ },
+ {
+  "id": "src-common-jwt-ts-163642c6",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Tokens are HS256 JWTs with fixed header stripped; payload '<id>-<version>'; no expiry; passwordVersion read nowhere",
+  "why": "verified"
+ },
+ {
+  "id": "src-common-redis-ts-c42046fc",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "customRedisFlush runs once from primary; ws deletes only WS_KEYS, api deletes everything else except POST_VIEWS and mq: keys",
+  "why": "verified"
+ },
+ {
+  "id": "src-common-servermembehaspermission-ts-44735437",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [
+   "Caller list omits routes/servers/serverSearchMessages.ts (also a caller; it handles creator separately) - an omission, not a contradiction"
+  ],
+  "best_fact": "Misspelled filename must be imported as-is; serverMemberHasPermission has no owner check so callers test createdById first",
+  "why": "verified"
+ },
+ {
+  "id": "src-common-webhookauthenticate-ts-361f82ab",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Webhook token is deterministic, never expires, valid while the webhook exists; decoded id must equal URL webhook id; false -> 401 in both execute routes",
+  "why": "verified"
+ },
+ {
+  "id": "src-emits-server-ts-3f64d59c",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "emitServerMessageCreated emits to the channel room not server room; emitServerLeft serverDeleted branch only leaves the server room, not channel rooms",
+  "why": "verified"
+ },
+ {
+  "id": "src-fcm-pushnotification-ts-c083edeb",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "silent suppresses only push; MENTIONS_ONLY matches only direct [@:id] mentions; DM push ignores notification settings",
+  "why": "verified"
+ },
+ {
+  "id": "src-index-ts-c5fb8502",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Scheduled jobs registered only for TYPE api with no lock; scheduleServerDeletion/SuspendedAccountDeletion run findFirst outside try so a throw ends the chain; suspended deletion discards deleteAccount result",
+  "why": "verified"
+ },
+ {
+  "id": "src-middleware-authenticate-ts-ff581129",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Bot rejection happens after authenticateUser so rejected bots already caused device write/IP-ban side effects; allowNoToken leaves req.userCache unset",
+  "why": "verified"
+ },
+ {
+  "id": "src-middleware-channelpermissions-ts-9a06f636",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Check order: no server -> owner -> role ADMIN -> channel bit; owner/ADMIN ignore channel overrides; invert unused",
+  "why": "verified"
+ },
+ {
+  "id": "src-middleware-channelverification-ts-b8a53e02",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Always ends by running channelPermissions(PUBLIC_CHANNEL) itself; ticket access via site USER_BADGES ADMIN/FOUNDER, not role ADMIN",
+  "why": "verified"
+ },
+ {
+  "id": "src-middleware-memberhasrolepermission-ts-f7a60ce6",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Passes without checking when req.serverCache unset (so serverMemberVerification must precede it); continueOnError only on pin add/remove and message delete",
+  "why": "verified"
+ },
+ {
+  "id": "src-middleware-oauth2authenticate-ts-98e7bbc3",
+  "type": "file",
+  "value": "M",
+  "wrong": [
+   {
+    "claim": "the only route found using scopes is oauth2CurrentUser with USER_INFO",
+    "evidence": "src/routes/oauth2/oauth2CurrentUserServers.ts:12 also passes scopes: APPLICATION_SCOPES.USER_SERVERS.bit"
+   }
+  ],
+  "unverifiable": [],
+  "best_fact": "OAuth2 requests do a direct Prisma grant lookup with no user cache, suspension, IP-ban or bot check; unknown token 404, expired 401",
+  "why": "verified main wiring"
+ },
+ {
+  "id": "src-middleware-ratelimit-ts-fb1bdf10",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "test_enable_rate_limit_restrict_ms mutates the shared opts so the change persists on that route; globalLimit uses bare name; DEV_MODE bypass",
+  "why": "verified"
+ },
+ {
+  "id": "src-middleware-servermemberverification-ts-48a786b6",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Member lookup precedes server snapshot, so non-members get membership 403 before existence/scheduled-deletion check; allowBot option declared but unread",
+  "why": "verified"
+ },
+ {
+  "id": "src-routes-channels-channelmessagecreate-ts-a9b07fdc",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Validators only collect errors; route returns 400 after mute and slow-mode checks so invalid bodies spend quota; 3 rate-limit hits in 3 min bans the sender via banServerMember; shadow-banned senders get fabricated 200",
+  "why": "verified"
+ },
+ {
+  "id": "src-routes-moderation-ismodmiddleware-ts-6583e4b3",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Sets req.hasAdminOrCreatorBadge before MOD branch so mods get false, used by getUser to hide email/IP and refuse FOUNDER/ADMIN targets; needs authenticate() first",
+  "why": "verified"
+ },
+ {
+  "id": "src-routes-servers-router-ts-7e21d080",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Route live only if imported and called in Router.ts; serverExternalEmbedRawGet import has a trailing space matching the on-disk filename 'serverExternalEmbedRawGet .ts'",
+  "why": "verified odd gotcha"
+ },
+ {
+  "id": "src-services-message-message-ts-eec3047e",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "addMention returns immediately without requesterId/webhookId; private-channel filtering rules, block/bot/MUTE drops; never reads silent",
+  "why": "verified"
+ },
+ {
+  "id": "src-services-message-messagecreate-ts-9f7c9022",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Webhooks force isServerChannel true and skip member lookup; opts.serverId unused; DM upsert failure returns before emit/push; @everyone replaces mention list with all members except sender",
+  "why": "verified"
+ },
+ {
+  "id": "src-services-message-preparemessagefordatabase-ts-cabb947c",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "processQuotes applies channel/membership filter only when creatorId is absent (webhooks); user mentions have no membership filter; role lookup has no serverId filter",
+  "why": "verified"
+ },
+ {
+  "id": "src-services-moderation-ts-1b4a6cb5",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "warnCount read before increment: 2-4 -> 7-day suspend + IP ban, >=5 -> 30 days; IP bans always expire in 7 days; suspension is upsert with days 0 = permanent; route caps days at 31",
+  "why": "verified"
+ },
+ {
+  "id": "src-services-server-ts-aa16e10a",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "deleteServer leaves SERVER_MEMBERS hash; joinServer reads scheduledForDeletion from DB not cache; leaveServer no-membership ban path returns early without clearing channel permission caches",
+  "why": "verified"
+ },
+ {
+  "id": "src-services-serverrole-ts-a5aace8d",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "createServerRole does no permission check; new role order 2 and others renumbered i+3; only deleteServerRole clears channel permission hashes",
+  "why": "verified"
+ },
+ {
+  "id": "src-services-user-user-ts-a774df5b",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "isIpBanned/getSuspensionDetails delete expired rows on read; isEmailSuspended matches only expireAt null suspensions",
+  "why": "verified"
+ },
+ {
+  "id": "src-services-user-usermanagement-ts-882cd6bc",
+  "type": "file",
+  "value": "M",
+  "wrong": [
+   {
+    "claim": "deleteAccount refuses non-bot users who still own servers",
+    "evidence": "UserManagement.ts:~215 uses _count.servers (membership relation) with message 'You must leave all servers before deleting your account.'; any joined server blocks, not just owned ones (deleteOrLeaveAllServers confirms servers includes non-owned)"
+   }
+  ],
+  "unverifiable": [],
+  "best_fact": "deleteAccount clears user cache and disconnects sockets but not session keys; webhooks marked deleting only if avatar null; shadow-banned deleted user gets userDeleted Suspension holding email sha256",
+  "why": "verified"
+ },
+ {
+  "id": "src-services-userauthentication-ts-aec8e706",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "registerUser hashes password.trim() but login compares raw input; username login is exact match while registration duplicate check is case-insensitive; no suspension/IP-ban check in login",
+  "why": "verified"
+ },
+ {
+  "id": "src-socket-events-onauthenticate-ts-ce3a7a31",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "handleAuthenticate joins 'ses:'+sessionId before checking the auth error; no bot check on socket auth; creator joins every channel",
+  "why": "verified"
+ },
+ {
+  "id": "src-socket-events-onconnection-ts-a7ed098e",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "30s timeout flag is set on receipt of AUTHENTICATE, not on success",
+  "why": "verified"
+ },
+ {
+  "id": "src-socket-socket-ts-952ac262",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "createIO in primary has no http server (emit-only) with redis-streams adapter; emitToAll always appends userId so empty-array broadcast guard comment is unreachable",
+  "why": "verified"
+ },
+ {
+  "id": "src-worker-ts-bfdaca71",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Routers imported in both process types but mounted only when env.TYPE === 'api'; mount order and OpenGraphRouter before global limit; no error middleware",
+  "why": "verified"
+ },
+ {
+  "id": "tsdown-ws-config-ts-417e9786",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "ws build plugin regex removes app.use('/api' ...) statements but not app.use('/api/status') because it requires the quote right after /api",
+  "why": "verified"
+ }
+]
