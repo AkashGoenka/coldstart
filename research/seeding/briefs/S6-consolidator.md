@@ -3,7 +3,13 @@ Read SEED_RULES.md (path in your prompt) and follow it. Investigators traced one
 and saved facts to <SCRATCH>/facts-*.json. Several of them describe the same files. You
 turn all of it into the notebook.
 1. Read every facts file. Group facts by file path, and flows by mechanism.
-2. FILE NOTES: one per path. Merge facts from all investigators into one summary of 2–5
+2. BUDGET: a seed is the top-level picture plus the files that matter, not a note per file.
+   Write AT MOST 40 file notes. Rank paths by how much a cold agent working there would
+   act differently for knowing the facts: entry points, routers/middleware, auth/permission
+   enforcers, the core domain write paths and the files several topics touched come first;
+   leaf helpers with one minor fact come last. Drop the rest (their facts can still feed a
+   flow). Flows: at most one per topic plus the overview.
+   FILE NOTES: one per chosen path. Merge facts from all investigators into one summary of 2–5
    dense sentences. Keep the strongest facts, drop duplicates, trivia and generic framework
    knowledge. Use file-hub (one facet per symbol) only for grab-bag files with no single
    purpose. Union the symbols the summary is about.
