@@ -59,5 +59,10 @@ keeping get exported into `results/`).
 - Round 1 (test_track, all 5 strategies): workers launched. S5 done (26 notes). S1 mapper
   done (10 topics + overview flow). S3 questions done (15). S1×10, S2×5 and S3×5 workers running;
   S4 (10 commits, 5 workers) waiting for free subagent slots (cap: 20 concurrent).
-- NEXT: when all are done, export each notebook to results/test_track/<s>/, judge every note
-  against the code, and write results/test_track/JUDGMENT.md.
+- Round 1 DONE: results/test_track/JUDGMENT.md (S1 best 95% M / 2% W; S5 cleanest; S4 worst
+  20% W, dropped). Notebooks exported to results/test_track/sN/.
+- SEED_RULES.md is now v2 (evidence rules); v1 kept as SEED_RULES.v1.md.
+- Round 2 (2026-11-17): S1 (v2 rules) vs S6 (map → investigators write facts → Sonnet
+  consolidator → hub-fill) on nerimity-server (TS) and faynoSync (Go). Copies:
+  /home/user/repos/<repo>__s1, __s6; scratch /home/user/scratch/<repo>-s1|s6. Mappers launched.
+  Go note: imports are per package, so hubs.sh importedBy is ~0 for central Go files.

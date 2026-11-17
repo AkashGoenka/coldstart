@@ -1,0 +1,417 @@
+[
+ {
+  "id": "app-components-flash-component-rb-1ab8814a",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Only flash keys in flash_types (error, success, warning) render; a new flash key must be added there or disappears silently",
+  "why": "template loops flash_types; non-obvious gotcha"
+ },
+ {
+  "id": "app-controllers-admin-split-assignments-controller-rb-226676e7",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "index limits split.assignments to VIEW_LIMIT with no order and warns by comparing count; auth is Devise admin not app key",
+  "why": "verified behavior incl. unordered limit"
+ },
+ {
+  "id": "app-controllers-api-v2-assignment-overrides-controller-rb-0b972d2c",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Blank BROWSER_EXTENSION_SHARED_SECRET raises instead of 401; force: true merged into every item; missing assignments key raises ArgumentError",
+  "why": "auth/failure-mode details not guessable"
+ },
+ {
+  "id": "app-controllers-api-v2-migrations-splits-controller-rb-4a929dc9",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Any new permitted key must also be an attr_accessor on SplitUpsert since params go straight to SplitUpsert.new; app and require_app_name_prefix are server-supplied",
+  "why": "how-to-extend invariant verified"
+ },
+ {
+  "id": "app-controllers-api-v3-split-registries-controller-rb-4010cb72",
+  "type": "file",
+  "value": "W",
+  "wrong": [
+   {
+    "claim": "routes name the segment :timestamp so params[:build_timestamp] is nil in a real request and the endpoint returns 422",
+    "evidence": "config/routes.rb:67-70 `resources :builds, param: :timestamp do resource :split_registry` \u2014 Rails names the nested param \"#{singular}_#{param}\" = :build_timestamp (same pattern in v1 routes whose controllers read :build_timestamp, :app_name, :version_number). No bug."
+   }
+  ],
+  "unverifiable": [],
+  "best_fact": null,
+  "why": "claims a nonexistent route/param bug based on a misunderstanding of Rails nested resource param naming"
+ },
+ {
+  "id": "app-controllers-api-v4-app-identifiers-controller-rb-0c979d87",
+  "type": "file",
+  "value": "W",
+  "wrong": [
+   {
+    "claim": "The URL does not select the build; create_params never reads the path segments, so the request must carry the build as parameters",
+    "evidence": "config/routes.rb:79-86 nests identifier under apps(param: :name)/versions(param: :number)/builds(param: :timestamp); Rails exposes these as :app_name, :version_number, :build_timestamp, exactly the keys create_params permits (app_identifiers_controller.rb:21-28). The path supplies them."
+   }
+  ],
+  "unverifiable": [],
+  "best_fact": "No OPTIONS preflight is declared for the v4 identifier route though CorsSupport is included; response visitor comes from the claim, not posted visitor_id",
+  "why": "contains wrong claim about path segments not being read"
+ },
+ {
+  "id": "app-controllers-api-v4-split-registries-controller-rb-5fb75b1a",
+  "type": "file",
+  "value": "W",
+  "wrong": [
+   {
+    "claim": "it reads params[:build_timestamp] while routes name the segment :timestamp, so live requests get nil and 422",
+    "evidence": "config/routes.rb:72-75 nested `resources :builds, param: :timestamp` -> path param :build_timestamp in Rails; no bug"
+   }
+  ],
+  "unverifiable": [],
+  "best_fact": null,
+  "why": "false route/param bug claim"
+ },
+ {
+  "id": "app-controllers-concerns-cors-support-rb-b3a41238",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "set_cors_headers calls cors_allowed? first which raises when WHITELIST_CORS_HOSTS is unset, so every response from including controllers breaks; suffix match via end_with?",
+  "why": "verified env-dependency gotcha and matching semantics"
+ },
+ {
+  "id": "app-controllers-shared-secret-authenticated-api-controller-r-48882c0a",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Unset BROWSER_EXTENSION_SHARED_SECRET raises RuntimeError before any credential check; only the basic-auth password is compared",
+  "why": "verified failure mode"
+ },
+ {
+  "id": "app-controllers-unauthenticated-api-controller-rb-82ba33fb",
+  "type": "file",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "return_json forces JSON format and CSRF is skipped for all subclasses; render_errors gives 422 {errors:}",
+  "why": "largely guessable from names and Rails conventions"
+ },
+ {
+  "id": "app-models-app-identifier-claim-rb-706bff97",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "save persists the identifier claim before App.find_by! runs, so an unknown app_name leaves the claim saved then raises RecordNotFound",
+  "why": "ordering/side-effect not guessable"
+ },
+ {
+  "id": "app-models-app-remote-kill-rb-db49ee53",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "affecting is the sole predicate for a kill (app, first_bad_version, fixed_version), no force/override term; ADR-002 says kills are absolute",
+  "why": "verified invariant with ADR backing"
+ },
+ {
+  "id": "app-models-app-version-build-path-rb-e569cef4",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Validation never checks app existence; App.find_by! inside app_build is the first point an unknown app fails",
+  "why": "verified ordering gotcha"
+ },
+ {
+  "id": "app-models-arbitrary-assignment-creation-rb-284775b4",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "superseding? ignores force; supersession copies old row to PreviousAssignment under lock, non-bulk sets individually_overridden and clears bulk_assignment_id; RecordNotUnique retries save!",
+  "why": "verified semantics of override logic"
+ },
+ {
+  "id": "app-models-assignment-rb-aea791e3",
+  "type": "file",
+  "value": "W",
+  "wrong": [
+   {
+    "claim": "for_presentation ignores kills and decision overrides unless an app_build is passed",
+    "evidence": "app/models/assignment.rb:18-21 `q = excluding_decision_overrides; app_build.present? ? q.for_app_build(app_build) : q.for_active_splits` \u2014 decision overrides are always applied; only kills need app_build (the note's own facet says so)"
+   }
+  ],
+  "unverifiable": [],
+  "best_fact": "force bypasses only the feature-gate filter, not excluding_remote_kills_for",
+  "why": "top-level summary contradicts code on decision overrides"
+ },
+ {
+  "id": "app-models-batch-arbitrary-assignment-creation-rb-194e40ab",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "save! wraps all items in one transaction so an unknown split_name rolls back earlier items; mixpanel_result hard-coded 'success'; empty array never touches Visitor.from_id",
+  "why": "verified atomicity and defaults"
+ },
+ {
+  "id": "app-models-bulk-reassignment-rb-81623507",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [
+   "with_transactional_lock gem semantics (gem not installed)"
+  ],
+  "best_fact": "Reassignment is two set-based SQL statements (INSERT previous_assignments, UPDATE assignments) so Assignment callbacks/validations do not run",
+  "why": "verified side effect"
+ },
+ {
+  "id": "app-models-identifier-claim-rb-163aeb3f",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "If claimant already holds a different value of the same type, a new Visitor is created for the identifier; a VisitorSupersession is recorded with claimant as superseded whenever owner differs",
+  "why": "verified non-obvious branching"
+ },
+ {
+  "id": "app-models-split-rb-ba157a17",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Remote-kill knockouts exist only on relations built with for_app_build (virtual remote_kill_override_to); a missing override variant logs an error and returns original registry",
+  "why": "verified gating and no-op behavior with ADR-001"
+ },
+ {
+  "id": "app-models-split-registry-rb-ef7a24e9",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Only v3/v4 call valid? on SplitRegistry (v2 passes Time.zone.now unvalidated); weight comes from Rails.configuration not ENV",
+  "why": "verified who validates as_of"
+ },
+ {
+  "id": "app-models-split-upsert-rb-c04fe2ee",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "owner assigned only when non-nil (empty string is assigned); omitted variants are zeroed not removed; weights reassigned before valid? so a failed validation leaves in-memory change",
+  "why": "verified merge semantics"
+ },
+ {
+  "id": "app-models-visitor-rb-ad52e812",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [
+   "a malformed (non-UUID) id raises RecordInvalid: the uuid column type likely casts an invalid string to nil, and validates :id allow_nil would then pass, creating a random visitor; could not run Rails here"
+  ],
+  "best_fact": "from_id uses find_or_create_by!, so an unknown well-formed UUID creates the visitor on first use; RecordNotUnique race re-reads",
+  "why": "verified create-on-first-use behavior"
+ },
+ {
+  "id": "app-models-visitor-supersession-rb-20cb2e58",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Copy skips feature gates; both sides use for_presentation so a hidden target row is not counted and the (split_id,visitor_id) unique index ends up keeping it",
+  "why": "verified subtle invariant"
+ },
+ {
+  "id": "app-views-admin-split-assignments-index-html-erb-34a303e0",
+  "type": "file",
+  "value": "W",
+  "wrong": [
+   {
+    "claim": "no template under app/ defines the AdminSplitAssignments--index class, so the page object's selector matches nothing",
+    "evidence": "app/helpers/application_layout_helper.rb:36-46 and layouts/application.html.erb:14 put `controller_action_css_class` (\"AdminSplitAssignments--index\" from controller_path admin/split_assignments + action) on <body>, so the selector matches"
+   }
+  ],
+  "unverifiable": [],
+  "best_fact": "Rows are one per identifier of shown visitors, not per assignment; visitors without identifiers add no row",
+  "why": "contains a false claim about a broken page object"
+ },
+ {
+  "id": "app-views-api-v4-split-registries-show-json-jbuilder-19e7212d",
+  "type": "file",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "v4 emits splits as an array with variants as name/weight pairs vs v2/v3 keyed object",
+  "why": "mostly restates view contents"
+ },
+ {
+  "id": "config-application-rb-7ff7049c",
+  "type": "file",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "EXPERIENCE_SAMPLING_WEIGHT parsed once at boot, negative raises",
+  "why": "visible directly in the config lines"
+ },
+ {
+  "id": "config-routes-rb-e801163e",
+  "type": "file",
+  "value": "W",
+  "wrong": [
+   {
+    "claim": "The path segment is :name, while the controller reads app_name from params, so the path never supplies it",
+    "evidence": "config/routes.rb:79-85 `resources :apps, param: :name` nested -> Rails path param :app_name (nested_param = singular_param); controller permits :app_name/:version_number/:build_timestamp, which the path supplies"
+   }
+  ],
+  "unverifiable": [],
+  "best_fact": "v2 nested override route takes visitor_id from path and needs its own OPTIONS match to Api::V1::CorsController#allow",
+  "why": "one facet is false"
+ },
+ {
+  "id": "how-a-browser-extension-assignment-override-gets-written",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [
+   "malformed visitor_id fails lookup because Visitor validates UUID on create (likely not true: invalid uuid casts to nil and allow_nil passes; not runnable here)"
+  ],
+  "best_fact": "Override supersede decision never reads force; force only stored for the read-side feature-gate bypass; batch is one transaction",
+  "why": "verified end-to-end wiring"
+ },
+ {
+  "id": "how-a-build-timestamp-selects-the-split-registry-a-client-re",
+  "type": "flow",
+  "value": "W",
+  "wrong": [
+   {
+    "claim": "routes name the segment :timestamp but controllers read params[:build_timestamp], so a live request passes nil and returns 422",
+    "evidence": "config/routes.rb:67-75 `resources :builds, param: :timestamp` with nested resource: Rails yields :build_timestamp for nested resources; v1 routes/controllers use the same pattern successfully"
+   }
+  ],
+  "unverifiable": [],
+  "best_fact": "Split.active(as_of:) keeps splits retired after the build timestamp",
+  "why": "headline claim is a false bug"
+ },
+ {
+  "id": "how-a-bulk-variant-change-rewrites-existing-assignments",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Admin POST only enqueues BulkAssignmentJob; existing_assignments skips only same variant AND same force; reassignment nulls mixpanel_result and uses bulk_assignment.created_at",
+  "why": "verified async and set-based details"
+ },
+ {
+  "id": "how-a-cors-enabled-api-response-gets-its-headers-and-preflig",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "OPTIONS preflights are hand-declared in routes.rb to Api::V1::CorsController#allow; v4 identifier/config routes have none; unset WHITELIST_CORS_HOSTS raises on every response",
+  "why": "verified wiring and gotchas"
+ },
+ {
+  "id": "how-a-forced-override-reaches-a-visitor-s-config-despite-an",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Force bypasses the gate filter on assignments but the v4 registry knockout ignores force, and never bypasses remote kills",
+  "why": "verified cross-file interaction"
+ },
+ {
+  "id": "how-a-remote-kill-removes-assignments-and-knocks-out-a-split",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "One AppRemoteKill drives both assignment removal and registry knockout, both only when app_build is given, all via AppRemoteKill.affecting",
+  "why": "verified single-predicate wiring"
+ },
+ {
+  "id": "how-a-split-migration-request-becomes-a-split-row-and-what-i",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Migration create never clears owner or deletes variants; new permitted key must be a SplitUpsert attr_accessor",
+  "why": "verified semantics and extension rule"
+ },
+ {
+  "id": "how-a-visitor-s-assignments-are-copied-when-an-identifier-is",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Feature-gate rows never copy; copy relies on the unique index plus rescue in create_or_ignore_duplicate; for_presentation rows only",
+  "why": "verified invariants"
+ },
+ {
+  "id": "how-an-identifier-claim-decides-which-visitor-the-response-i",
+  "type": "flow",
+  "value": "W",
+  "wrong": [
+   {
+    "claim": "the v4 route's path segments (apps/:name/versions/:number/builds/:timestamp) are never read",
+    "evidence": "Rails exposes them as :app_name, :version_number, :build_timestamp, which AppIdentifiersController#create_params permits (app_identifiers_controller.rb:21-28); the path supplies them"
+   }
+  ],
+  "unverifiable": [],
+  "best_fact": "No transaction wraps claim and app lookup: unknown app_name leaves identifier/supersession persisted then raises RecordNotFound",
+  "why": "contains false claim about unread path segments"
+ },
+ {
+  "id": "how-experience-sampling-weight-reaches-clients",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Weight is read once at boot in config/application.rb; split registry views use SplitRegistry#experience_sampling_weight, v4 assignment endpoints copy from Rails.configuration; v1 has none",
+  "why": "verified paths; tests stub Rails.configuration"
+ },
+ {
+  "id": "how-the-admin-split-population-count-reaches-the-assignments",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Cap applies to assignments but rows are per identifier so rendered rows are not capped; count and warning total share Split#assignments (for_presentation)",
+  "why": "verified non-obvious behavior"
+ },
+ {
+  "id": "no-overridden-at-or-force-check-on-remote-kills-in-this-repo",
+  "type": "lesson",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "overridden_at and override: do not appear in app/ or lib/; remote kills filtered only by AppRemoteKill.affecting",
+  "why": "true absence, narrow"
+ },
+ {
+  "id": "no-request-specs-for-the-split-registry-endpoints",
+  "type": "lesson",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Split registry v2/v3/v4 are covered only by controller specs",
+  "why": "true absence; literal claims hold (no request spec checks route/param match, though none is needed)"
+ },
+ {
+  "id": "no-request-throttling-in-this-repo",
+  "type": "lesson",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "No Rack::Attack/throttle/rate-limit in Gemfile, app, config, lib",
+  "why": "true absence, low action value"
+ }
+]

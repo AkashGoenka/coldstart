@@ -41,8 +41,36 @@ GOOD (things you only learn by reading it):
   parts are not discoverable from one another.
 - **Why:** a non-obvious design choice, ONLY if the code or a comment shows the reason.
 
+## Evidence rules (most wrong notes break one of these)
+
+1. **State what the code DOES, not what it implies.** "`has_many :splits, dependent:
+   :nullify`" is a fact. "So destroying an app leaves splits with NULL owners" is an
+   inference, and it was wrong (the column is `null: false`, so it raises). Write a
+   consequence only if you traced it to the end or a spec/test shows it.
+2. **Never claim a bug, a mismatch or dead wiring** ("this route passes nil", "the path
+   never supplies X", "this selector matches nothing") unless a spec/test or a run shows it.
+   Mismatches you see between two files are almost always a framework convention you don't
+   know. Example: in Rails, `resources :builds, param: :timestamp` gives nested routes
+   `params[:build_timestamp]`, so a controller reading that key is correct. A false bug
+   note is the most damaging note there is: the next agent will "fix" working code.
+3. **Know the framework's defaults before you contradict them.** Required `belongs_to`,
+   default scopes on associations, nested-param naming, middleware order, decorator
+   registration, init/`init()` order, and so on. If you are not sure what the framework
+   does, describe only what the code says.
+4. **No universal words without checking every path.** "always", "never", "every",
+   "only", "unless X" need you to have looked at every caller or branch. One unchecked
+   path makes the claim wrong. Say "on the X path" instead.
+5. **Specs and tests are evidence.** When a spec asserts the behavior, cite it.
+
 ## Never write
 
+- Generic framework knowledge any developer of that stack already has ("Rails maps
+  `Api::V5::Foo` to `app/controllers/api/v5/foo_controller.rb`").
+- Trivia nobody acts on: lint-config entries, memoization details, display fallbacks,
+  typo-level observations.
+- Absence lessons for things nobody would expect to exist ("no api v5"). An absence is
+  worth a lesson only when a developer would plausibly assume it IS there (caching,
+  retries, rate limiting, authorization, a scheduled job, a test suite for X).
 - "This file contains / defines / is responsible for / handles …" followed by its name.
 - A list of the file's functions, classes, imports or importers. The graph has them.
 - Generic quality words: "robust", "clean", "well-structured", "core", "central".
@@ -111,6 +139,9 @@ Confirmed absence (you looked and it is NOT there, a useful fact for planning):
    id, fields merge).
 
 ## Tools
+
+Use ONLY Bash, Read, Grep and Glob. Never call session, messaging, scheduling or agent
+tools. Never run code that changes the repository.
 
 - `coldstart find <terms...> --root <ROOT>`: ranked files for a concept. Pass several identifiers.
 - `coldstart gs <file> --root <ROOT>`: a file's symbols, importers, callers and related files.
