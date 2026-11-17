@@ -1,0 +1,669 @@
+[
+ {
+  "id": "how-a-channel-route-decides-whether-a-member-may-act-in-a-ch",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Channel mask (Redis hash per channel) and server role mask (ServerMemberCache) are separate caches; channelVerification always appends a PUBLIC_CHANNEL test, and a cached channel-mask hit is served as-is so role/member changes must call removeServerMemberPermissionsCache.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "how-a-message-create-request-reaches-the-database-sockets-an",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "createMessageV2 returns after the DB transaction; handleMessageSideEffects (mentions, emits, push, embed) is fired un-awaited, and a failed DM messageMention upsert skips both the DM emit and push; silent suppresses push only.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "how-a-rest-authorization-header-becomes-req-usercache",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "The token payload is a session id (not user id) resolved via SESSION_USER_ID/USER keys with userDevice fallback; clearing only the USER key does not revoke a session, and suspension is checked only on a user-cache miss.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "how-a-scheduled-server-deletion-suspended-account-deletion-o",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Moderator server delete only writes schedule_server_delete; deleteServer runs ~5 days later from an api-only 1-minute timer, and messages are purged 300 rows per tick per channel by scheduleDeleteMessages.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "how-a-voice-call-is-joined-signalled-and-left",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Voice membership is pinned to the socketId supplied at join; signal relay and disconnect cleanup act only when socket.id equals it, and join leaves any current call before validating the target channel.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "how-a-webhook-execute-request-becomes-a-channel-message",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Webhook tokens are header-less HS256 with JWT_WEBHOOK_SECRET and no exp; revocation only via deleting flag on cache fill or removeWebhookCache (cache TTL 1800s), and rate limit key <channelId>-wh-exec is shared with the GitHub route.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "how-a-websocket-authenticates-and-gets-its-authenticated-pay",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "All socket logins run through one module-level PQueue(concurrency 1) per process; rooms are decided once at login; the ses: room is joined before the auth-error return.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "how-an-uploaded-file-becomes-a-chat-message-attachment",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [
+   "CDN-side checks of the upload token (CDN not in repo)"
+  ],
+  "best_fact": "The server never sees file bytes or the upload token: it only confirms nerimityCdnFileId via CDN /internal/verify-file (groupId = channel id), and the mod/public/supporter gates are duplicated at token mint and at send.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "how-nerimity-server-is-put-together-api-and-ws-processes-2",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "env.TYPE is ws only with --ws (anything else is api); the primary flushes Redis before forking, so every api boot deletes all non-WS_KEYS keys; schedulers run only in the api primary.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "how-rate-limiting-and-the-auto-ban-on-repeated-limit-hits-wo",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Auto-ban lives only in the create_message onThreeIterations callback: strikes counted per user per channel (3-minute fixed window), fire-and-forget banServerMember.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "no-automated-test-for-socket-authentication",
+  "type": "lesson",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": null,
+  "why": "true but thin: mostly restates what a test/dir listing shows"
+ },
+ {
+  "id": "no-deny-bits-for-channel-permissions-in-this-repo",
+  "type": "lesson",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Channel permissions are allow-only (OR merge of per-role rows); no role can remove a bit another role grants.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "no-file-bytes-upload-endpoint-in-this-repo",
+  "type": "lesson",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "No route here accepts file bytes; uploads go to the external CDN and this repo only calls verify-file/generate-token (connectBusboyWrapper is dead code).",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "no-test-covers-channel-or-role-permission-refusals",
+  "type": "lesson",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": null,
+  "why": "true but thin: mostly restates what a test/dir listing shows"
+ },
+ {
+  "id": "no-test-covers-rest-token-auth-bot-tokens-or-the-ip-ban-gate",
+  "type": "lesson",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": null,
+  "why": "true but thin: mostly restates what a test/dir listing shows"
+ },
+ {
+  "id": "no-tests-for-voice-join-leave-signalling-or-turn-credentials",
+  "type": "lesson",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": null,
+  "why": "true but thin: mostly restates what a test/dir listing shows"
+ },
+ {
+  "id": "no-tests-for-webhooks-or-oauth2-in-this-repo",
+  "type": "lesson",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": null,
+  "why": "true but thin: mostly restates what a test/dir listing shows"
+ },
+ {
+  "id": "src-cache-channelcache-ts-fbde1b49",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "setServerChannelMemberPermissions writes the Redis hash without awaiting the multi, and the 24h expire is refreshed on the whole channel hash by any member write.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-cache-ratelimitcache-ts-1a1004c4",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Three-strike counter is a separate key (3-min fixed expiry, only when a callback is passed); calls while the window is REACHED return PTTL without counting.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-cache-servermembercache-ts-d0195397",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Member role mask is the OR of all roles plus default role, so ADMIN on any one role grants admin in every check reading this field.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-cache-usercache-ts-c1dba15e",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": null,
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-cache-voicecache-ts-68976d0a",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": null,
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-cache-webhookcache-ts-ca6e98d8",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": null,
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-common-bitwise-ts-722186d0",
+  "type": "file",
+  "value": "W",
+  "wrong": [
+   {
+    "claim": "USER_BADGES.ADMIN is a site-wide badge that only the ticket branch of channelVerification and isUserAdmin read.",
+    "evidence": "src/routes/moderation/isModMiddleware.ts:9 hasBit(badges, USER_BADGES.ADMIN.bit); also moderation/getUser.ts:77, getUsersWithSameIPAddress.ts:64, channelMessageCreate.ts:356, ChannelCdnGenerateToken.ts:56 read it"
+   }
+  ],
+  "unverifiable": [],
+  "best_fact": "ROLE_PERMISSIONS.ADMIN (bit 1) is the role-layer bypass and differs from USER_BADGES.ADMIN (bit 2); channel bits are allow-only.",
+  "why": "contains a verified wrong claim that could mislead"
+ },
+ {
+  "id": "src-common-env-ts-2b79bc4d",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "TYPE is ws only if argv includes --ws; --api changes nothing; flakeId machine id = 42 + CLUSTER_INDEX so api and ws workers share ids.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-common-jwt-ts-163642c6",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Tokens have no exp and passwordVersion is parsed but never compared anywhere in src.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-common-nerimitycdn-ts-af9344b4",
+  "type": "file",
+  "value": "W",
+  "wrong": [
+   {
+    "claim": "deleteFile: DELETE to the CDN root with body {path}.",
+    "evidence": "src/common/nerimityCDN.ts:21 fetch(env.LOCAL_NERIMITY_CDN + 'internal', {method:'DELETE'...}) - the endpoint is <base>internal, not the root (minor imprecision)"
+   }
+  ],
+  "unverifiable": [
+   "deleteChannelAttachmentBatch deleting 1000 files per call (CDN side not in repo; only the inline comment says so)"
+  ],
+  "best_fact": "deleteImageBatch swallows errors and callers do not await it, so purge loops never retry failed CDN deletes; verifyUpload does not send the upload token.",
+  "why": "contains a verified wrong claim that could mislead"
+ },
+ {
+  "id": "src-common-redis-ts-c42046fc",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "customRedisFlush runs once in the primary before forking; api boot wipes every non-WS_KEYS key (except post views and mq), ws boot wipes only WS_KEYS.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-common-servermembehaspermission-ts-44735437",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Despite its generic name every caller passes ROLE_PERMISSIONS.ADMIN, so it is only an admin test used for socket room joins, push and search, not a request gate.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-common-webhookauthenticate-ts-361f82ab",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Only the webhook id half of the token is compared; version half ignored; deleting takes effect only after the Redis entry is gone.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-emits-channel-ts-cda3e080",
+  "type": "file",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "With a socketId the DM sender is excluded from the broadcast and gets its own copy.",
+  "why": "true but mostly names/symbols a cold agent could infer"
+ },
+ {
+  "id": "src-emits-server-ts-3f64d59c",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "MESSAGE_CREATED emit ignores message.silent and, with a socketId, excludes the sender from the room broadcast and sends it a copy with socketId.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-emits-voice-ts-5f346178",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Server voice events go to the channel room, which non-admin members of private channels never join, so they do not receive them.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-fcm-pushnotification-ts-c083edeb",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "MENTIONS_ONLY push matches only message.mentions (role mentions do not count); push is silently disabled if fcm-credentials.json is absent.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-index-ts-c5fb8502",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": null,
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-middleware-authenticate-ts-ff581129",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Raw Authorization header is used (no Bearer handling) and only error.message is returned, dropping ip-ban data on REST.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-middleware-channelpermissions-ts-9a06f636",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Returns next() before reading any channel bit for DM/ticket, server creator, or role ADMIN; invert option is unused.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-middleware-channelverification-ts-b8a53e02",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Always ends with a PUBLIC_CHANNEL channelPermissions check, so even routes passing no bit return \"This channel is private.\" to non-admin members lacking it; allowBot option is never read.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-middleware-connectbusboywrapper-ts-1d352aab",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Dead code: nothing imports this multipart middleware.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-middleware-memberhasrolepermission-ts-f7a60ce6",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Passes with no check when req.serverCache is unset (DM/ticket); continueOnError defers refusal to the route (used by message delete/pin).",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-middleware-oauth2authenticate-ts-98e7bbc3",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Authorization header is the raw accessToken lookup key (Bearer would miss); unknown token gives 404 while expired gives 401.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-middleware-ratelimit-ts-fb1bdf10",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "In DEV_MODE the limiter is a no-op unless body has test_enable_rate_limit, and the restrict_ms test flag permanently mutates the shared opts of that route.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-middleware-userip-ts-7ce6317d",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Stores x-forwarded-for raw (comma list unsplit) and the IP-ban gate sees exactly that string.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-routes-cdn-cdngeneratetoken-ts-0d03ad0d",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "User-level CDN token has no channel scoping and none of the supporter/public gates (those live in the channel route).",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-routes-channels-channelcdngeneratetoken-ts-59fa0cce",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Supporter/public-server gates apply at token mint and are repeated at send in channelMessageCreate.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-routes-channels-channelmessagecreate-ts-a9b07fdc",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "verifyUpload runs before the shadowban early return, which makes no deleteFile call; createMessage errors delete the Local upload unawaited.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-routes-channels-channelvoicegeneratecredentials-ts-adb90e44",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "TURN credential route requires no call membership or channel permission, only auth and a 3/20s limit.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-routes-channels-channelvoicejoin-ts-bc2d5456",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Gate order and that socketId only has to map to the caller, not be the request socket; shadowbanned callers get fake success.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-routes-channels-channelvoiceleave-ts-76d6938c",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Leave ignores the URL channel: leaveVoiceChannel is called without channelId so it ends whichever call the caller is in.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-routes-moderation-serverdelete-ts-a33172a2",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Scheduling a server delete also warns the owner, and warnCount>=2 (before increment) suspends them 7 days, >=5 30 days.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-routes-oauth2-oauth2authorizeroute-ts-e335bf0f",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "redirectUri validator caps length at 20 chars so longer URIs fail before the exact-match check.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-routes-oauth2-oauth2tokenroute-ts-4d6b8d93",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "All grant inputs come from the query string, redirectUri/code are unvalidated, service errors are HTTP 500.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-routes-posts-postcreate-ts-18588a9d",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Post uploads verify with groupId = user id and imageOnly true; attachment object has only width/height/path.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-routes-webhooks-webhookexecute-ts-ddccaacb",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Validation, content and bad-word checks return 400 to unauthenticated callers before the token check; rate limit is skipped in DEV_MODE.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-services-application-ts-9800c0c5",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "getApplication writes a clientSecret on read when null; updateBot has an unreachable !user branch; deleteApplication aborts if the bot account delete fails.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-services-channel-ts-d9995ba4",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Channel delete is only a mark; rows are purged later by scheduleDeleteMessages, and the default channel cannot be deleted.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-services-message-message-ts-eec3047e",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "createMessage is an alias of createMessageV2; addMention filters by private-channel perms, membership, bot, block and MUTE and emits nothing.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-services-message-messagecreate-ts-9f7c9022",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Creator overrides are shared rows keyed by (username, avatarUrl); side effects are unawaited; webhook sends force bad-word replacement.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-services-message-preparemessagefordatabase-ts-cabb947c",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Mention/role/quote lookups have almost no scoping: quote membership filter applies only when creatorId is absent (webhook path), role lookup ignores serverId.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-services-moderation-ts-1b4a6cb5",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Re-suspending an existing row keeps the original suspendedAt so the 15-day permanent-suspension deletion clock does not restart.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-services-oauth2-ts-94b2acfa",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Re-authorizing nulls existing tokens; code lives 3 min, access 1 day, refresh 30 days rotated on every refresh; 50-grant cap per user.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-services-server-ts-aa16e10a",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "deleteServer only marks channels/webhooks deleting and queues scheduleMessageDelete rows; getServers partial mode uses presence-based member lookup.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-services-user-usermanagement-ts-882cd6bc",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "deleteAccount keeps the user row (renamed Deleted User) and the schedule_account_content_delete upsert is the only trigger of the content purge.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-services-voice-ts-40bc40cd",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "joinVoiceChannel leaves the current call before validating the target; leaveVoiceChannel leaves the Redis entry if the channel cache lookup fails.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-services-webhook-ts-d8f96f5f",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Webhook tokens are re-signed on every fetch (no rotation, no exp); deleteWebhook update also requires avatar: null and has no .catch.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-socket-events-onauthenticate-ts-ce3a7a31",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Login runs through a concurrency-1 PQueue; ses: room joined before the error return; queue position emitted every 5s starting after 5s.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-socket-events-onchangeactivity-ts-0dfd56d7",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Activity throttle drops updates silently, has no DEV_MODE gate and no ban callback.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-socket-events-onconnection-ts-a7ed098e",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "The 30s auth timer only checks that an AUTHENTICATE event arrived; the listener has no once-guard so repeated events re-run authentication.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-socket-events-ondisconnect-ts-e3fa1145",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Closing the voice socket ends the call even if the user has other sockets (isLastDisconnect not consulted); skipped if the user row is missing.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-socket-events-onvoicesignal-ts-73337c93",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Signals relay only when sender socket is the stored voice socket and both are in the same channel; payload.channelId/signal are forwarded unchecked.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ },
+ {
+  "id": "src-socket-socket-ts-952ac262",
+  "type": "file",
+  "value": "W",
+  "wrong": [
+   {
+    "claim": "markMembersFetched is called only on the partial login path in onAuthenticate.",
+    "evidence": "src/socket/events/onRequestServerMembers.ts:23 markMembersFetched(socket.id, payload.serverId) also calls it"
+   }
+  ],
+  "unverifiable": [],
+  "best_fact": "createIO uses websocket-only transport with the redis-streams adapter; the primary calls it without an http server.",
+  "why": "contains a verified wrong claim that could mislead"
+ },
+ {
+  "id": "src-worker-ts-bfdaca71",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "API middleware order (json, userIP, OpenGraph, global rate limit, routers) only under TYPE api; listen happens only after prisma connects; ws bundle strips only app.use(\"/api\"...) mounts.",
+  "why": "verified non-obvious wiring/ordering/gotcha a cold agent would not guess"
+ }
+]
