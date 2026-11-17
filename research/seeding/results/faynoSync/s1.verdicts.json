@@ -1,0 +1,669 @@
+[
+ {
+  "id": "how-a-client-update-check-or-telemetry-beacon-becomes-per-de",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Beacon is gated by the Mongo-built allow-list (nil until first load -> 204) while /checkVersion writes the same Redis sets through logStatsToRedis with only an ENABLE_TELEMETRY check",
+  "why": "all wiring claims verified in latest.go, telemetry_beacon.go, allowlist, handler.go, server.go"
+ },
+ {
+  "id": "how-a-private-app-download-is-authorized",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "authorizeDownload order: session, then unlisted mode, then X-Download-Token; every denial is the same 404 as an unknown key",
+  "why": "order and reuse by version reads verified"
+ },
+ {
+  "id": "how-a-published-artifact-becomes-a-signed-tuf-target",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Publish returns 202 before signing; AddArtifacts takes LOCK_SNAPSHOT_<admin>_<app> shared with the online bumper, and only checks BOOTSTRAP_ is non-empty (a pre- value passes)",
+  "why": "async/lock/bootstrap quirks verified"
+ },
+ {
+  "id": "how-a-request-becomes-an-admin-or-team-principal",
+  "type": "flow",
+  "value": "W",
+  "wrong": [
+   {
+    "claim": "ValidateAPITokenAppScope is called by handlers that are not behind CheckPermission (catalog/get.go, create/request.go, create/presigned.go)",
+    "evidence": "server/server.go:128-130 \u2014 /upload, /upload/init, /upload/complete are all registered with utils.CheckPermission(PermissionUpload, ResourceApps); only catalog/get.go (/search) is outside it"
+   }
+  ],
+  "unverifiable": [],
+  "best_fact": "fns_ API tokens become an admin principal with no document check; JWTs re-verified against principal doc (token_version+username) each request",
+  "why": "one wrong claim about ValidateAPITokenAppScope callers"
+ },
+ {
+  "id": "how-a-sparkle-or-velopack-feed-is-regenerated-after-an-uploa",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Feeds are rebuilt only for touched (channel,platform,arch) tuples, full-app fallback when the tuple list is nil/empty; Materialize* swallow errors; private apps skipped",
+  "why": "dispatch, dedupe, ETag skip and private skip verified"
+ },
+ {
+  "id": "how-a-team-user-request-is-authorized-and-scoped-to-its-admi",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "CheckPermission only tests boolean flags; allowed lists are enforced in handlers via EnsureTeamUser* or listItems, and owner is teamUser.Owner",
+  "why": "all verified in permissions.go, owner.go, mongod/list.go, create.go"
+ },
+ {
+  "id": "how-a-velopack-client-s-velopack-feed-request-is-answered",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "/velopack is registered before router.Use(authMiddleware), answered live from DB (never reads the static releases json), localVersion cap applies only on this path",
+  "why": "verified in server.go and velopack_feed.go"
+ },
+ {
+  "id": "how-an-event-report-is-ingested-rate-limited-and-counted",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Rate-limit INCRs run sequentially so a later-window 429 still consumed earlier windows; details failures never un-count; Redis errors fail open",
+  "why": "verified in ingest.go, ratelimit.go, reports.go"
+ },
+ {
+  "id": "how-an-upload-or-delete-invalidates-cached-update-responses",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "CDN epoch counter is bumped before the prefix sweep and re-checked after upload so racing publishes are dropped; Redis sweep needs PERFORMANCE_MODE but CDN sweep only needs S3_BUCKET_NAME_CDN",
+  "why": "verified in upload.go and latest_edge.go"
+ },
+ {
+  "id": "how-an-upload-reaches-storage-multipart-upload-vs-presigned",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Presigned Complete claims the pending record via FindOneAndUpdate pending->completing; hashes stay hashes_verified=false until TUF publish",
+  "why": "verified in presigned.go"
+ },
+ {
+  "id": "how-checkversion-shapes-the-response-per-updater-type-2",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "The updater BuildResponse switches on is the DB-resolved type from CheckPlatformsLatest, not the raw query; private apps never touch the cache; rollout added after BuildResponse",
+  "why": "verified in updaters.go, check.go, latest.go"
+ },
+ {
+  "id": "how-faynosync-is-put-together",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Registration order in StartServer is the access policy: routes declared before router.Use(authMiddleware) (/checkVersion, /download, /login, /telemetry/beacon...) are unauthenticated at middleware level",
+  "why": "verified in server.go; env-conditional routes verified"
+ },
+ {
+  "id": "how-migrate-up-runs-duplicate-version-pre-check-embedded-jso",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "migrate up runs checkDuplicateAppVersions before every up and two backfills after; migrate down runs neither",
+  "why": "verified in migration.go"
+ },
+ {
+  "id": "no-dynamic-sparkle-appcast-route-in-this-repo",
+  "type": "lesson",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "No sparkle route exists; appcasts exist only as storage objects written by MaterializeSparkle*",
+  "why": "server.go registrations contain no sparkle/appcast route"
+ },
+ {
+  "id": "no-per-request-telemetry-rate-limit-or-auth-on-the-beacon",
+  "type": "lesson",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Beacon is registered before authMiddleware and gated only by telemetryMiddleware, param validation and allow-list",
+  "why": "verified in server.go and telemetry_beacon.go (no limiter)"
+ },
+ {
+  "id": "mongod-adapter-go-640f1ff6",
+  "type": "file",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "ConnectToDatabase panics on unparseable URL and logrus.Fatal on connect/ping failure",
+  "why": "mostly restates short function behavior"
+ },
+ {
+  "id": "mongod-app-access-go-3dbc841b",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Unknown channel leaves ChannelID zero, which equals the channel_id of app-level download tokens, contradicting the in-code comment",
+  "why": "verified gotcha in app_access.go vs download_tokens.go"
+ },
+ {
+  "id": "mongod-check-go-9591be63",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Equal version: Found=false no changelog; above: PossibleRollback; required-intermediate return has no LatestVersion so tauri version is empty",
+  "why": "verified in CheckLatestVersion"
+ },
+ {
+  "id": "mongod-create-go-6e71740c",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Upload insert retries once on unique_app_version_owner duplicate and appends; team-user grant is a single $addToSet logged-not-returned on failure",
+  "why": "verified in create.go"
+ },
+ {
+  "id": "mongod-download-tokens-go-10f26019",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "One token per (app_id,channel_id) via upsert; app-level token refused once any channel exists",
+  "why": "verified in download_tokens.go"
+ },
+ {
+  "id": "mongod-list-go-9079ecad",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "listItems is the only gate on the four list routes; API-token principal is admin so goes through the owner branch",
+  "why": "verified in list.go and server.go"
+ },
+ {
+  "id": "mongod-migration-go-4415a1c0",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Duplicate pre-check and backfills wrap m.Up; ErrNoChange is success; real migration error skips backfills",
+  "why": "verified in migration.go"
+ },
+ {
+  "id": "mongod-report-keys-go-4242cb81",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Regenerate overwrites key_value in place so the old key stops working at once; unique index report_keys_unique_app_id",
+  "why": "verified in report_keys.go and migration json"
+ },
+ {
+  "id": "mongod-reports-go-2a2dc8aa",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "IncrementReportGroup counts for every status and reopens only resolved groups",
+  "why": "verified in reports.go"
+ },
+ {
+  "id": "mongod-structs-go-7a227432",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "getBasePipeline overwrites artifacts.platform/arch with names, so aggregate results differ from stored ObjectIds",
+  "why": "verified in structs.go"
+ },
+ {
+  "id": "mongod-update-go-a1403bb8",
+  "type": "file",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": null,
+  "why": "partial read, only restates permission branches"
+ },
+ {
+  "id": "mongod-velopack-go-06976610",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "CheckRequiredMigrationStep uses version.Must on stored step versions so an unparseable one panics",
+  "why": "verified in velopack.go and check.go"
+ },
+ {
+  "id": "server-handler-create-finalize-go-7d5f6aec",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "FinalizeUpload: invalidate caches, then regenerate only the uploaded tuple; velopack also copies installers to default key",
+  "why": "verified in finalize.go/upload.go"
+ },
+ {
+  "id": "server-handler-create-presigned-go-f4c9ca30",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Once repository.Upload stored one version the record is not released and stays completing, so later completes 404",
+  "why": "verified in presigned.go"
+ },
+ {
+  "id": "server-handler-create-request-go-9eb79ac1",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Complete does not call ResolveUploadRequest; it re-checks only token scope and team access, ValidateParams not re-run",
+  "why": "verified in request.go/presigned.go"
+ },
+ {
+  "id": "server-handler-create-upload-go-7fde38fa",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "InvalidatePublishCaches does nothing unless publish is exactly true/false; CDN epoch bump precedes storage client creation",
+  "why": "verified in upload.go"
+ },
+ {
+  "id": "server-handler-delete-delete-go-b380ecac",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Artifact delete invalidates caches only when repo result is true and with no publish gate",
+  "why": "verified in delete.go"
+ },
+ {
+  "id": "server-handler-download-download-go-e01b3b06",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Session errors are swallowed as anonymous while token/permission errors give 500; denials identical 404",
+  "why": "verified in download.go"
+ },
+ {
+  "id": "server-handler-handler-go-4e84ae0a",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Allow-list reload only on 2xx/3xx handler status, uses Background context with 30s timeout",
+  "why": "verified in handler.go"
+ },
+ {
+  "id": "server-handler-info-access-go-be8377ee",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Denial status chosen by caller (400 checkVersion, 500 apps/latest); velopack feed uses 200 empty Assets",
+  "why": "verified in access.go/latest.go"
+ },
+ {
+  "id": "server-handler-info-feed-tuples-go-b9075e54",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "nil tuple list means regenerate whole app; versionTuples drops unresolved names so empty result also triggers full fallback",
+  "why": "verified in feed_tuples.go"
+ },
+ {
+  "id": "server-handler-info-latest-edge-go-c29c52d4",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "32-slot semaphore skips (not queues) publishes; epoch compared before and after upload and object deleted if changed",
+  "why": "verified in latest_edge.go"
+ },
+ {
+  "id": "server-handler-info-latest-go-64564a19",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Cache used only with performanceMode, non-nil redis and non-private; epoch captured only if access.CdnEdge though publish gated on checkResult.CdnEdge",
+  "why": "verified in latest.go"
+ },
+ {
+  "id": "server-handler-info-sparkle-materialize-go-f990e348",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Appcasts are built from DB rows; Materialize* log and swallow errors; ETag-skip only if client implements cdnObjectStatClient",
+  "why": "verified"
+ },
+ {
+  "id": "server-handler-info-telemetry-allowlist-go-f76f02e0",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Valid never checks version though Add collects versions; failed rebuild keeps previous list",
+  "why": "verified in telemetry_allowlist.go"
+ },
+ {
+  "id": "server-handler-info-telemetry-beacon-go-2dbf39e4",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Every rejection is 204; device ID not trimmed; is_latest unparseable skips only latest/outdated sets",
+  "why": "verified in telemetry_beacon.go"
+ },
+ {
+  "id": "server-handler-info-telemetry-go-0c941808",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "apps-filtered path sums per-app results so unique_clients double counts, and total_active_apps is assigned from the last app",
+  "why": "verified in telemetry.go"
+ },
+ {
+  "id": "server-handler-info-telemetry-lua-d8e42768",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Aggregates are set unions across range and apps; app discovery via KEYS pattern; filters AND across dimensions OR within",
+  "why": "verified in telemetry.lua"
+ },
+ {
+  "id": "server-handler-info-velopack-feed-go-37f5f593",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Feed served from DB, denied feed is 200 empty Assets vs denied .nupkg 404; intermediate lookup failure serves uncapped feed",
+  "why": "verified in velopack_feed.go"
+ },
+ {
+  "id": "server-handler-info-velopack-materialize-go-626edd04",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "velopackNotesForVersion is also the changelog source for Sparkle; static object never read by the route and lacks the localVersion cap",
+  "why": "verified in sparkle_load.go/velopack_load.go"
+ },
+ {
+  "id": "server-handler-report-group-hash-go-619c0cf9",
+  "type": "file",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Group hash is sha256 over name|version|channel|platform|arch|type|reason",
+  "why": "small function, mostly restates it"
+ },
+ {
+  "id": "server-handler-report-ingest-go-0aa6b63c",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Check order is the contract; details rejection and storeDetailsBlob failure happen after count; name-vs-key 403 after format checks",
+  "why": "verified in ingest.go/blob.go"
+ },
+ {
+  "id": "server-handler-report-ratelimit-go-de7c7889",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Sequential INCRs: later-window 429 leaves earlier windows counted; device+group limit is 1 per hour; fails open",
+  "why": "verified in ratelimit.go"
+ },
+ {
+  "id": "server-handler-sign-login-go-f21e73f8",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Admins checked first so a same-named team user can never log in; dummy bcrypt for unknown users",
+  "why": "verified in login.go"
+ },
+ {
+  "id": "server-handler-token-create-go-75049a9e",
+  "type": "file",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "allowed_apps must be apps_meta docs owned by caller; only hash and prefix stored",
+  "why": "verified but largely follows from names"
+ },
+ {
+  "id": "server-server-go-2bfd4afc",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Telemetry gated per route not router.Use; /checkVersion telemetry gated only inside logStatsToRedis",
+  "why": "verified in server.go"
+ },
+ {
+  "id": "server-tuf-artifacts-add-go-3e589650",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "AddArtifacts only requires BOOTSTRAP_ non-empty (pre- passes) and targets expiry from Redis TARGETS_EXPIRATION_ default 365",
+  "why": "verified in add.go"
+ },
+ {
+  "id": "server-tuf-artifacts-handlers-go-a7fbb7f6",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Publish never reads the app's tuf flag; delete is index-based and only for tuf_signed artifacts",
+  "why": "verified in handlers.go and online_bump.go comment"
+ },
+ {
+  "id": "server-tuf-bootstrap-bootstrap-go-716f28d8",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Bootstrap done is decided by root.json in S3, not Redis; POST timeout uncapped while recovery caps at 5 min",
+  "why": "verified in bootstrap.go/recovery.go"
+ },
+ {
+  "id": "server-tuf-metadata-locking-go-1591e54b",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "300s TTL lock renewed every 100s with token-guarded Lua, 500s acquisition wait; shared by add, remove, online bump",
+  "why": "verified in locking.go and grep of callers"
+ },
+ {
+  "id": "server-tuf-metadata-online-bump-go-b60a3556",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Bumper considers all apps with app_name, not only tuf:true, and skips apps with missing/pre-/signing- bootstrap value",
+  "why": "verified in online_bump.go"
+ },
+ {
+  "id": "server-tuf-tasks-task-go-c9fa038c",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Missing task key reads as PENDING; SUCCESS with result.status false is reported ERRORED; 24h active / 7d terminal TTL",
+  "why": "verified in task.go"
+ },
+ {
+  "id": "server-tuf-tuf-go-7d7ec143",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Task polling needs the same app-edit permission as publish; metadata GETs are admin-only",
+  "why": "verified in tuf.go"
+ },
+ {
+  "id": "server-utils-auth-go-867b07c4",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "AuthMiddleware returns early if principal already on context so explicit authMiddleware plus router.Use verifies once",
+  "why": "verified in auth.go"
+ },
+ {
+  "id": "server-utils-check-go-499fff44",
+  "type": "file",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "empty updater -> default:true entry; named matches exactly or by prefix",
+  "why": "partial read; prefix match is a modest gotcha"
+ },
+ {
+  "id": "server-utils-download-access-go-70643761",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "ENABLE_PRIVATE_APP_DOWNLOADING is only a default at create/backfill, not consulted at request time",
+  "why": "verified via grep of callers"
+ },
+ {
+  "id": "server-utils-owner-go-338fabe4",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "ResolveOwnerMiddleware used only on three TUF routes and maps any error (incl. revoked session) to 500",
+  "why": "verified in owner.go/tuf.go"
+ },
+ {
+  "id": "server-utils-permissions-go-e0ada5dc",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "No download/upload case for channels/platforms/archs so team users get 403; API-token branch runs before principal check",
+  "why": "verified in permissions.go"
+ },
+ {
+  "id": "server-utils-s3-go-c844ae2b",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "GeneratePresignedURL always signs against S3_BUCKET_NAME_PRIVATE regardless of visibility",
+  "why": "verified in s3.go"
+ },
+ {
+  "id": "server-utils-session-go-b764450b",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Sessions bind to principal _id; missing team doc becomes errSessionRevoked not ErrNoDocuments",
+  "why": "verified in session.go"
+ },
+ {
+  "id": "server-utils-token-go-7b88ba8c",
+  "type": "file",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "fns_ + 64 hex, SHA-256 stored, fnd_ shares generator",
+  "why": "verified but mostly derivable from names"
+ },
+ {
+  "id": "server-utils-token-scope-go-e5fd5f4c",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Two distinct refusal messages and exact caller list (request.go, presigned.go, catalog/get.go)",
+  "why": "verified in token_scope.go"
+ },
+ {
+  "id": "server-utils-updaters-sparkle-appcast-go-836597a1",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "BuildAppcast re-emits stored RawItem and overlays only faynoSync-owned fields; items without Full skipped",
+  "why": "verified in appcast.go"
+ },
+ {
+  "id": "server-utils-updaters-squirrel-go-d889a3bb",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Rewrite only touches lines with >=3 fields whose second has no ://; strips CR and collapses spacing",
+  "why": "verified in squirrel.go"
+ },
+ {
+  "id": "server-utils-updaters-tauri-go-eabb9d05",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Fixed payload priority list, fallback alphabetical, ok=false gives 204",
+  "why": "verified in tauri.go"
+ },
+ {
+  "id": "server-utils-updaters-updaters-go-3733dfc1",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "squirrel_windows returns 302 regardless of found; tauri body rebuilt from only version/notes/signature/url",
+  "why": "verified in updaters.go"
+ },
+ {
+  "id": "server-utils-updaters-validator-go-0e443f4d",
+  "type": "file",
+  "value": "W",
+  "wrong": [
+   {
+    "claim": "ValidatePrivate is called only from the version-upload path in server/handler/update/update.go",
+    "evidence": "server/handler/create/request.go:85 \u2014 ResolveAppVisibility (used by UploadApp and InitPresignedUpload) also calls updaters.ValidatePrivate; update.go:325 is the second site"
+   }
+  ],
+  "unverifiable": [],
+  "best_fact": "ValidatePrivate rejects squirrel_windows/sparkle/electron-builder/velopack updaters for private apps",
+  "why": "one wrong claim about call sites"
+ },
+ {
+  "id": "server-utils-updaters-velopack-feed-go-c1e46849",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Delta emitted only if next lower version is published with a Full; CompareVersions treats non-integer components as 0",
+  "why": "verified in feed.go"
+ }
+]
