@@ -24,5 +24,8 @@ turn all of it into the notebook.
    points/processes, and which subsystem owns what, built ONLY from the verified flows you
    just consolidated, as steps that point at their entry files.
 6. Keep the usable absences (things a developer would expect to exist). Drop artifacts.
-7. Write everything in ONE `coldstart kb write <json> --root ROOT --force` (flows first).
+7. WRITE ONCE. Re-running `kb write --force` with flows or lessons that carry no "id"
+   coins a second copy (`<id>-2`); file notes merge by path, flows/lessons do not. To fix
+   anything after the first write, re-put ONLY the affected note WITH its "id".
+   Write everything in ONE `coldstart kb write <json> --root ROOT --force` (flows first).
    Fix warnings. Final message: counts by type, plus every fact you dropped as wrong (one line each).

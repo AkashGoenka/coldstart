@@ -79,3 +79,8 @@ keeping get exported into `results/`).
   classifier; nothing happened. A shipped seeding command must launch workers with an
   explicit tool allowlist (e.g. `claude -p --allowedTools "Bash Read Grep Glob"`), never
   rely on prompt wording.
+- 2026-11-17 later: all S1 workers done (both repos). S6 consolidators done: faynoSync 61
+  notes, nerimity 60. TOOLING TRAP found: re-running `kb write --force` without ids on
+  flows/lessons coins `<id>-2` copies (41 byte-identical dups, retracted). Rule added to
+  S6-consolidator.md ("WRITE ONCE"). faynoSync S6 hub-fill running (8 uncovered hubs).
+  Verifiers running: nerimity s1+s6, faynoSync s1 (s6 after hub-fill) → results/<repo>/.
