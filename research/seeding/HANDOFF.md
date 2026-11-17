@@ -84,3 +84,7 @@ keeping get exported into `results/`).
   flows/lessons coins `<id>-2` copies (41 byte-identical dups, retracted). Rule added to
   S6-consolidator.md ("WRITE ONCE"). faynoSync S6 hub-fill running (8 uncovered hubs).
   Verifiers running: nerimity s1+s6, faynoSync s1 (s6 after hub-fill) → results/<repo>/.
+- ROUND 2 DONE (2026-11-17): results/ROUND2.md. S6 93% M / 4–5% W; S1 88–89% M / 3–4% W.
+  Residual errors = universal words + default/key meanings → Stage 5 claim audit added to
+  SEED_PROMPT.md; being validated on faynoSync S6 (known 3 W) → results/faynoSync/s6.audit.json.
+  REPORT.md written. Medium repos (round 3) NOT run; offered to the user.

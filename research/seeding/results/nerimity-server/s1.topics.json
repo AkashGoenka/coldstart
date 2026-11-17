@@ -1,0 +1,114 @@
+[
+ {
+  "topic": "process split and boot: api vs ws processes, cluster workers, scheduled jobs",
+  "seeds": [
+   "src/index.ts",
+   "src/worker.ts",
+   "src/common/env.ts",
+   "src/common/redis.ts",
+   "src/socket/socket.ts"
+  ],
+  "hint": "TYPE comes from argv --api/--ws; schedulers only start in the api primary; customRedisFlush differs by TYPE using WS_KEYS."
+ },
+ {
+  "topic": "REST authentication: token to session to cached user, IP ban checks, bots vs users",
+  "seeds": [
+   "src/middleware/authenticate.ts",
+   "src/cache/UserCache.ts",
+   "src/common/JWT.ts",
+   "src/middleware/userIP.ts",
+   "src/services/Application.ts"
+  ],
+  "hint": "token is a header-stripped JWT of sessionId-passwordVersion looked up via SESSION_ID_TO_USER_ID with a Lua script; bot tokens are minted by getBotToken."
+ },
+ {
+  "topic": "socket authentication and initial AUTHENTICATED payload, room joining and auth queue",
+  "seeds": [
+   "src/socket/events/onAuthenticate.ts",
+   "src/socket/events/onConnection.ts",
+   "src/socket/socket.ts",
+   "src/cache/UserCache.ts",
+   "src/services/Server.ts"
+  ],
+  "hint": "auth handled through a concurrency-1 PQueue with position events; channel rooms joined by PUBLIC_CHANNEL bit or ADMIN."
+ },
+ {
+  "topic": "message creation pipeline: route validation, createMessage, mentions, emits, push notifications",
+  "seeds": [
+   "src/routes/channels/channelMessageCreate.ts",
+   "src/services/Message/MessageCreate.ts",
+   "src/services/Message/prepareMessageForDatabase.ts",
+   "src/emits/Server.ts",
+   "src/emits/Channel.ts",
+   "src/fcm/pushNotification.ts"
+  ],
+  "hint": "createMessage is an alias of createMessageV2 in Message.ts; side effects run after the response without awaiting; shadowBanned users get a fake response."
+ },
+ {
+  "topic": "permissions: role bits, channel permission bits, middleware chain",
+  "seeds": [
+   "src/common/Bitwise.ts",
+   "src/middleware/channelVerification.ts",
+   "src/middleware/channelPermissions.ts",
+   "src/middleware/memberHasRolePermission.ts",
+   "src/common/serverMembeHasPermission.ts",
+   "src/cache/ChannelCache.ts"
+  ],
+  "hint": "channel permissions are per-member cached in a redis hash (24h) and merged from role channel permissions; owner and ADMIN role bypass."
+ },
+ {
+  "topic": "rate limiting and auto-ban on repeated limit hits",
+  "seeds": [
+   "src/middleware/rateLimit.ts",
+   "src/cache/RateLimitCache.ts",
+   "src/routes/channels/channelMessageCreate.ts",
+   "src/worker.ts"
+  ],
+  "hint": "Lua script in RateLimitCache; DEV_MODE disables rate limit unless body.test_enable_rate_limit; onThreeIterations bans server members spamming messages."
+ },
+ {
+  "topic": "voice channels and calls: join/leave, signalling, TURN credentials",
+  "seeds": [
+   "src/services/Voice.ts",
+   "src/cache/VoiceCache.ts",
+   "src/socket/events/onVoiceSignal.ts",
+   "src/socket/events/onDisconnect.ts",
+   "src/routes/channels/channelVoiceJoin.ts",
+   "src/emits/Voice.ts"
+  ],
+  "hint": "join requires the socketId to map to the user in redis; onDisconnect leaves voice only when the voice socket is the one disconnecting."
+ },
+ {
+  "topic": "webhooks and bot applications: webhook tokens, execute endpoints, message creator overrides, OAuth2 grants",
+  "seeds": [
+   "src/routes/webhooks/webhookExecute.ts",
+   "src/common/webhookAuthenticate.ts",
+   "src/services/Webhook.ts",
+   "src/services/Application.ts",
+   "src/middleware/oAuth2Authenticate.ts",
+   "src/services/Oauth2.ts"
+  ],
+  "hint": "webhook token uses JWT_WEBHOOK_SECRET; webhook delete only marks deleting=true and index.ts purges messages in batches."
+ },
+ {
+  "topic": "deferred deletion and cleanup jobs: servers, accounts, channels, attachments, suspensions",
+  "seeds": [
+   "src/index.ts",
+   "src/services/Server.ts",
+   "src/services/User/UserManagement.ts",
+   "src/common/nerimityCDN.ts",
+   "src/services/Moderation.ts"
+  ],
+  "hint": "server deletion waits 5 days via scheduleServerDelete; perm-suspended accounts deleted after 15 days; message deletes in batches of 300 per minute."
+ },
+ {
+  "topic": "file uploads and attachments through the external Nerimity CDN",
+  "seeds": [
+   "src/common/nerimityCDN.ts",
+   "src/routes/cdn/cdnGenerateToken.ts",
+   "src/routes/channels/channelMessageCreate.ts",
+   "src/routes/channels/ChannelCdnGenerateToken.ts"
+  ],
+  "hint": "API never receives file bytes for messages: client uploads to CDN with a token, then sends nerimityCdnFileId which verifyUpload checks."
+ }
+]

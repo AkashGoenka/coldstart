@@ -1,0 +1,633 @@
+[
+ {
+  "id": "dashboard-src-hooks-usebackdropclose-ts-ecd34d69",
+  "type": "file",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "onMouseDown always records press target; enabled only gates onClick",
+  "why": "small hook; behavior mostly readable from the 15-line file"
+ },
+ {
+  "id": "how-a-crash-report-is-accepted-grouped-and-stored",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "IncrementReportGroup runs before details are validated/stored, so rejected details still leave the group counted; /reports/ingest sits above authMiddleware, key-only auth",
+  "why": "verified ordering (server.go:118, ingest.go) and Redis fail-open rate limits"
+ },
+ {
+  "id": "how-a-private-artifact-download-is-authorized",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "GET /download is registered before authMiddleware (server.go:122); JWT -> unlisted -> X-Download-Token checks all happen inside DownloadArtifact, denial == 404",
+  "why": "verified wiring and order in download.go authorizeDownload"
+ },
+ {
+  "id": "how-an-api-request-becomes-an-authorized-principal-a-tenant",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "CheckPermission does not check team allow-lists; those are enforced at call sites (Ensure*, listItems); fns_ callers are admin-type principals so allow-lists do not apply, list filters by owner only",
+  "why": "verified across auth.go, permissions.go, owner.go, list.go; session tests exist"
+ },
+ {
+  "id": "how-an-http-request-reaches-its-handler-and-which-middleware",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Route order in StartServer is the middleware contract: router.Use(authMiddleware) at server.go:123; routes above it are public; cors 204s OPTIONS before auth",
+  "why": "verified against gin Use semantics and the route table"
+ },
+ {
+  "id": "how-an-upload-is-stored-and-published-multipart-and-presigne",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Multipart UploadApp stores all files then calls repository.Upload per file with no cleanup on failure; presigned complete claims record atomically and CopyObjects before DB write",
+  "why": "verified in upload.go/presigned.go/interfaces.go"
+ },
+ {
+  "id": "how-checkversion-resolves-the-latest-version-and-builds-the",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Lookup ignores rollout; updater shaping applied after lookup in updaters.BuildResponse; CDN epoch read before lookup so concurrent upload drops the publish; private apps skip Redis cache",
+  "why": "verified in latest.go, latest_edge.go, check.go, updaters.go"
+ },
+ {
+  "id": "how-faynosync-boots-subcommand-dispatch-secrets-check-mongo",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "validateSecrets then Mongo then Redis (Redis required unconditionally, ping failure os.Exit(1)); healthcheck/migrate skip validateSecrets; --loglevel must precede the subcommand",
+  "why": "verified in faynoSync.go, server.go, redis.go"
+ },
+ {
+  "id": "how-faynosync-is-put-together",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Route registration order in server/server.go decides what is public; migrations never run on server start; Redis required for caching/stats/rate limits/TUF locks",
+  "why": "verified overview with pointers; orientation value for cold agent"
+ },
+ {
+  "id": "how-migrate-up-down-runs-and-why-server-boot-never-migrates",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "migrate up re-runs two Go backfills even on ErrNoChange; migrate down does not undo them; duplicate (app_id,version,owner) pre-check aborts before any migration",
+  "why": "verified in migration.go and backfill files"
+ },
+ {
+  "id": "how-the-dashboard-is-built-into-the-go-binary-and-served-at",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "go build without prior yarn build still compiles but /dashboard/ answers 503; CSP string in dashboard.go must match vite.config.ts; BasePath hardcoded in both",
+  "why": "verified in dashboard.go, vite.config.ts, Dockerfile"
+ },
+ {
+  "id": "how-the-tuf-online-roles-bumper-re-signs-expiring-metadata",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Bumper started by StartServer when TUF_ENABLED with context.Background(); SETNX TUF_ONLINE_BUMP_TICK never released; apps with empty/pre-/signing- BOOTSTRAP skipped; failed targets re-sign retries with snapshot+timestamp only",
+  "why": "verified in online_bump.go, locking.go, server.go"
+ },
+ {
+  "id": "how-to-add-a-new-api-endpoint",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "AppRepository is in mongod/structs.go; a new ResourceType needs a case in CheckPermission's switch or team users are denied while admins pass; wrapper must be added to AppHandler interface and appHandler; mutating wrappers must call the telemetry reload",
+  "why": "verified how-to-extend wiring in server.go, permissions.go, handler.go, mongod/create.go"
+ },
+ {
+  "id": "how-velopack-and-sparkle-feeds-are-parsed-at-upload-material",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Same velopack.BuildFeed output is both the materialized releases.<channel>.json and the GET /velopack body; sparkle has no serving route; private apps never materialize (keyed on apps_meta.private)",
+  "why": "verified in velopack_feed.go, feed_tuples.go, materialize files; delete-app re-materializes the whole app, minor looseness in 'each re-materialize only affected tuples'"
+ },
+ {
+  "id": "mongod-adapter-go-640f1ff6",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "ConnectToDatabase returns no error: bad URL panics, connect/ping failure is logrus.Fatal; context.TODO with no deadline",
+  "why": "verified; non-obvious failure semantics callers depend on"
+ },
+ {
+  "id": "mongod-check-go-9591be63",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [
+   "imprecise: FetchLatestVersionOfApp uses {$not:{$lt:100}} so docs lacking rollout_percent also pass, not strictly >=100",
+   "required_intermediate selection (CheckRequiredMigrationStep) not traced"
+  ],
+  "best_fact": "CheckLatestVersion has no rollout_percent filter (returns rollout fields); no matching doc returns an error that FindLatestVersion turns into 400 not the 200 Not found body",
+  "why": "verified in check.go and latest.go"
+ },
+ {
+  "id": "mongod-create-go-6e71740c",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Upload on an existing version only $pushes an artifact (never changes publish/critical/changelog), with a $not $elemMatch duplicate predicate; unique_app_version_owner insert conflict retried once as append",
+  "why": "verified in create.go"
+ },
+ {
+  "id": "mongod-download-tokens-go-10f26019",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "RegenerateDownloadToken with no channel returns ErrDownloadTokenChannelRequired whenever ANY channel_name doc exists in apps_meta (no owner filter); FindPrivateArtifact $limit 1 before the private filter",
+  "why": "verified in download_tokens.go"
+ },
+ {
+  "id": "mongod-list-go-9079ecad",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "listItems caps at 100, empty/malformed team allowed list returns empty not whole tenant; fns_/non-team path filters by owner only and empty owner adds no restriction",
+  "why": "verified in list.go"
+ },
+ {
+  "id": "mongod-migration-go-4415a1c0",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [
+   "imprecise: migration JSON files also contain 'update' commands, not only createIndexes/dropIndexes"
+  ],
+  "best_fact": "RunMigrationsUp: checkDuplicateAppVersions first, then golang-migrate, then backfills even on ErrNoChange; Down runs no backfill; only faynoSync.go calls these outside tests",
+  "why": "verified in migration.go"
+ },
+ {
+  "id": "mongod-structs-go-7a227432",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [
+   "rationale for per-call meta structs (concurrency) is not checkable"
+  ],
+  "best_fact": "AppRepository interface lives here not adapter.go; version sort done in Mongo via $split/$toInt on first four parts, extra parts ignored",
+  "why": "verified in structs.go"
+ },
+ {
+  "id": "no-automatic-migration-on-server-start",
+  "type": "lesson",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Only faynoSync.go migrate subcommand calls RunMigrationsUp/Down",
+  "why": "true but narrow; duplicated by migrate flow note"
+ },
+ {
+  "id": "no-cleanup-of-stored-objects-when-a-multipart-upload-fails-p",
+  "type": "lesson",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "UploadApp has no delete on failure paths; only deletes in create handlers are presigned staged cleanup and the CDN sweep",
+  "why": "verified by grep of Delete* in handler/create"
+ },
+ {
+  "id": "no-expiry-on-download-tokens-or-report-keys",
+  "type": "lesson",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Download tokens stored only as hash, report keys raw (key_value); no expiry field or TTL index on either",
+  "why": "verified in model.go and migrations (TTL only on report_blobs and pending_uploads)"
+ },
+ {
+  "id": "no-read-only-or-per-action-scope-on-fns-api-tokens",
+  "type": "lesson",
+  "value": "M",
+  "wrong": [
+   {
+    "claim": "A token stores only name, token_hash, owner, allowed_apps and expires_at (CreateToken)",
+    "evidence": "server/model/model.go:163-173 APIToken also has token_prefix, created_at, last_used_at (harmless over-enumeration; substance 'no scope fields' holds)"
+   }
+  ],
+  "unverifiable": [],
+  "best_fact": "fns_ tokens pass CheckPermission only for (upload, apps) with non-empty allowed_apps; no read-only token exists",
+  "why": "verified in permissions.go, model.APIToken"
+ },
+ {
+  "id": "no-s3-lifecycle-cleanup-for-report-blobs",
+  "type": "lesson",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "report_blobs_ttl index drops only Mongo metadata; code only deletes S3 blobs in trimGroupBlobs and group delete, otherwise 'relying on lifecycle/TTL' comments",
+  "why": "verified in migration, blob.go, manage.go"
+ },
+ {
+  "id": "no-server-side-rollout-filter-in-the-checkversion-lookup",
+  "type": "lesson",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "CheckLatestVersion selects newest published without rollout condition and returns rollout percent/seed for client to apply",
+  "why": "verified in check.go and latest.go:357"
+ },
+ {
+  "id": "no-sparkle-appcast-serving-route",
+  "type": "lesson",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "server.go registers only /velopack feed route; sparkle appcasts exist only as bucket objects written by materialization",
+  "why": "verified in server.go and sparkle_materialize.go"
+ },
+ {
+  "id": "no-test-builds-the-real-route-table-or-global-middleware",
+  "type": "lesson",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "No _test.go references StartServer/corsMiddleware/telemetryMiddleware; faynoSync_test.go builds its own gin routers",
+  "why": "verified by grep"
+ },
+ {
+  "id": "server-dashboard-dashboard-go-01159569",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "config.json intercepted before file lookup; missing assets/ paths 404 (no SPA fallback); HEAD registered explicitly because gin does not route HEAD to GET; root redirect sets no security headers",
+  "why": "verified in dashboard.go"
+ },
+ {
+  "id": "server-handler-create-finalize-go-7d5f6aec",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "FinalizeUpload is shared tail: InvalidatePublishCaches first, then velopack copy+materialize or sparkle materialize; Slack notify re-reads version in a 10s goroutine",
+  "why": "verified in finalize.go"
+ },
+ {
+  "id": "server-handler-create-presigned-go-f4c9ca30",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Complete claims pending record via FindOneAndUpdate to 'completing'; a failure on a later file leaves it completing so retries 404 until TTL reaps (created_at+PUT TTL+90min); presigned artifacts stored hashes_verified=false",
+  "why": "verified in presigned.go and pending_uploads TTL migration"
+ },
+ {
+  "id": "server-handler-create-request-go-9eb79ac1",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "ResolveUploadRequest fixes check order (owner, ValidateParams, app scope 403, team upload access) before any storage call; shared by /upload and /upload/init",
+  "why": "verified in request.go"
+ },
+ {
+  "id": "server-handler-create-upload-go-7fde38fa",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Cache invalidation gated on form field publish being exactly true/false but feed materialization still runs; Redis invalidation scoped to one channel and needs performanceMode, CDN sweep bumps epoch first and runs whenever S3_BUCKET_NAME_CDN set",
+  "why": "verified in upload.go and finalize.go"
+ },
+ {
+  "id": "server-handler-download-download-go-e01b3b06",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "authorizeDownload order: bearer session JWT (bad JWT falls through), unlisted mode, X-Download-Token; only exact 'unlisted' grants key-only access; DB error is a distinguishable 500",
+  "why": "verified in download.go"
+ },
+ {
+  "id": "server-handler-handler-go-4e84ae0a",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "17 mutating methods call reloadTelemetryAllowListAfterSuccess (sync, 30s timeout, only on 2xx/3xx); user/token/report/download-token writes do not reload",
+  "why": "verified count and logic in handler.go"
+ },
+ {
+  "id": "server-handler-info-access-go-be8377ee",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Denial returns same body as unknown app but status is caller's notFoundStatus (400 /checkVersion, 500 /apps/latest); unlisted private app is anonymous-readable yet bypasses Redis cache",
+  "why": "verified in access.go and latest.go"
+ },
+ {
+  "id": "server-handler-info-feed-tuples-go-b9075e54",
+  "type": "file",
+  "value": "W",
+  "wrong": [
+   {
+    "claim": "skipPrivateMaterialization is a silent no-op keyed on the upload link containing /download?key=",
+    "evidence": "server/handler/info/feed_tuples.go:19 skipPrivateMaterialization(kind, owner, appName string, private bool) returns the private bool; callers pass checkAppVisibility from utils.CheckPrivate (apps_meta.private), e.g. create/finalize.go:53, delete/delete.go:255"
+   }
+  ],
+  "unverifiable": [],
+  "best_fact": "whole-app discovery paths do not drop empty channel/platform/arch names, unlike the per-tuple path",
+  "why": "contains a wrong claim about what skipPrivateMaterialization keys on"
+ },
+ {
+  "id": "server-handler-info-latest-edge-go-c29c52d4",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "CDN publish is async, 5s timeout, 32-slot semaphore silently skipped when full; epoch must match before and after upload else object deleted, unreadable epoch never deletes; upload skipped when ETag equals MD5",
+  "why": "verified in latest_edge.go"
+ },
+ {
+  "id": "server-handler-info-latest-go-64564a19",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Redis cache only when performanceMode && rdb && !Private, key built after ValidateParamsLatest (resolved values), 24h; cache hit on /checkVersion logs stats but /apps/latest hit does not; rollout added after BuildResponse only when <100",
+  "why": "verified in latest.go"
+ },
+ {
+  "id": "server-handler-info-telemetry-allowlist-go-f76f02e0",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Allow-list is a process-global atomic pointer from published apps only, reloaded only after successful mutating handlers (no timer)",
+  "why": "verified in telemetry_allowlist.go/handler.go"
+ },
+ {
+  "id": "server-handler-info-telemetry-beacon-go-2dbf39e4",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Every beacon outcome is 204 no body; allow-list checks owner/app/channel/platform/arch only, version syntax-checked but not gated; missing is_latest skips latest/outdated sets",
+  "why": "verified in telemetry_beacon.go"
+ },
+ {
+  "id": "server-handler-info-telemetry-go-0c941808",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [
+   "device active in two selected apps counted once per app (not traced through mergeResults)"
+  ],
+  "best_fact": "fns_ requests get 403; apps= filter runs Lua per app and a Lua error skips that app but returns 200 (all-apps path 500); telemetry.lua uses KEYS scans",
+  "why": "verified in telemetry.go/telemetry.lua"
+ },
+ {
+  "id": "server-handler-info-velopack-feed-go-37f5f593",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Denied/unknown app on feed path returns 200 {\"Assets\":[]} and 404 on .nupkg; id query mismatch is 404 before access check; localVersion caps feed at RequiredIntermediateStep",
+  "why": "verified in velopack_feed.go"
+ },
+ {
+  "id": "server-handler-report-ingest-go-0aa6b63c",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Group incremented before details checked; failed storeDetailsBlob returns 202 stored_details=false; rate limiting after field validation; X-Device-ID not length-capped here unlike telemetry (128)",
+  "why": "verified in ingest.go and latest.go:524"
+ },
+ {
+  "id": "server-handler-update-update-go-0e4d4b1c",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [
+   "cited line info/velopack_materialize.go:68 is actually :69 (cosmetic)"
+  ],
+  "best_fact": "UpdateItem and UpdateSpecificApp use different success keys; velopack/sparkle empty or failed tuple lookup falls back to whole-app materialization; Slack notified only if files uploaded",
+  "why": "verified in update.go:226,451-469"
+ },
+ {
+  "id": "server-model-model-go-7025a5e9",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "HashesVerified false artifacts are checked against stored bytes at TUF publish; one failure rejects the whole publish; verified ones marked afterwards",
+  "why": "verified in hashes_verify.go, handlers.go and upload paths"
+ },
+ {
+  "id": "server-server-go-2bfd4afc",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "/health and dashboard precede corsMiddleware; router.Use(authMiddleware) at line 123; validateSecrets JWT_SECRET>=32, insecure-dev- fatal only in release; CORS OPTIONS 204 before c.Next; report-keys not behind REPORTS_ENABLED",
+  "why": "verified in server.go"
+ },
+ {
+  "id": "server-tuf-artifacts-add-go-3e589650",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "AddArtifacts gate only requires BOOTSTRAP non-empty (pre- passes); unmatched artifacts skipped with details.invalid_paths, fails only if none match; delegation expiry default 90d here vs 365 on bump",
+  "why": "verified in add.go and metadata_online.go"
+ },
+ {
+  "id": "server-tuf-bootstrap-bootstrap-go-716f28d8",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "BOOTSTRAP_<admin>_<app> is SETNX pre-<taskID> (no TTL), replaced by bare taskID on finalize; stale pre- lock cleared only for FAILURE/ERRORED/REVOKED/PENDING with pre-lock and settings keys gone; 300s timeout uncapped on this path",
+  "why": "verified in bootstrap.go"
+ },
+ {
+  "id": "server-tuf-metadata-metadata-online-go-f1a59f72",
+  "type": "file",
+  "value": "W",
+  "wrong": [
+   {
+    "claim": "Default roles are snapshot+timestamp, plus targets only if TARGETS_ONLINE_KEY_<admin>_<app> is true",
+    "evidence": "server/tuf/metadata/online_bump.go isTargetsOnline: redis.Nil (key absent) returns true, so targets is online by default; metadata_online.go:100-104 appends targets whenever targetsOnline"
+   }
+  ],
+  "unverifiable": [],
+  "best_fact": "POST /tuf/v1/metadata/online returns 202 task_id before work; bumpDelegatedRoles skips unloadable delegation (warn) but fails whole update on non-verifying one; expiry defaults targets/delegated 365, snapshot 7, timestamp 1",
+  "why": "contains a misleading claim about when targets is a default role"
+ },
+ {
+  "id": "server-tuf-metadata-online-bump-go-b60a3556",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Tick claim SETNX TUF_ONLINE_BUMP_TICK with TTL interval-30s never released; walks every apps_meta doc with app_name (not only tuf:true); offline targets skipped while delegated roles still selected",
+  "why": "verified in online_bump.go"
+ },
+ {
+  "id": "server-tuf-metadata-resign-verify-go-73721244",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "VerifyForResign accepts earlier-root signatures only if canonical digest equals the one recorded at rotation; expiry deliberately unchecked; recordRotatedRoleDigests runs before new root persisted",
+  "why": "verified in resign_verify.go and metadata_utils.go:984"
+ },
+ {
+  "id": "server-tuf-signing-signing-go-126dbbca",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Online keys read from ONLINE_KEY_DIR with symlinks refused (Lstat+O_NOFOLLOW); strength enforced RSA>=2048/ECDSA>=256, Ed25519 unchecked; computed key ID must equal root's",
+  "why": "verified in signing.go"
+ },
+ {
+  "id": "server-tuf-storage-storage-go-ad9d57ec",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Only timestamp.json gets Cache-Control and only if client implements publicUploaderWithCacheControl (else silently dropped); FindLatestMetadataVersion treats unversioned role.json as v1 and skips non-numeric prefixes",
+  "why": "verified in storage.go"
+ },
+ {
+  "id": "server-tuf-tasks-task-go-c9fa038c",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "GET /tuf/v1/task returns 200 PENDING for unknown task_id, does not compare owner, reports SUCCESS with status=false as ERRORED; TTL 24h active, 7d terminal",
+  "why": "verified in task.go"
+ },
+ {
+  "id": "server-tuf-utils-utils-go-a3214276",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Expiry maxima checked only in bootstrap payload and PUT /tuf/v1/config, not on bump/add defaults; ValidateAppName forbids underscore because it is the Redis key separator",
+  "why": "verified in utils.go and callers"
+ },
+ {
+  "id": "server-utils-auth-go-867b07c4",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "AuthMiddleware is a no-op if principal already set, so extra authMiddleware args on /user, /token, TUF routes do nothing; fns_ tokens become admin-type principals with is_api_token; fnd_ Bearer gets 401",
+  "why": "verified in auth.go"
+ },
+ {
+  "id": "server-utils-owner-go-338fabe4",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "ResolveOwnerMiddleware maps every error (incl. revoked team user) to 500 while RespondTeamAccessError maps revoked to 401; EnsureTeamUserUploadAccess skips empty channel/platform/arch and matches arch against arch_id",
+  "why": "verified in owner.go"
+ },
+ {
+  "id": "server-utils-permissions-go-e0ada5dc",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "allowed_channels/platforms/archs are set in gin context here but read nowhere else (non-test); no default case so a new ResourceType is denied for team users; AdminOnlyMiddleware rejects fns_ first",
+  "why": "verified in permissions.go plus grep"
+ },
+ {
+  "id": "server-utils-session-go-b764450b",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Session JWT HS256 with sub/typ/ver/username and 24h exp; every request re-reads principal doc and revokes on token_version/username mismatch; CallerTeamUser maps ErrNoDocuments to errSessionRevoked because nil means admin",
+  "why": "verified in session.go and session_test.go"
+ },
+ {
+  "id": "server-utils-storage-interfaces-go-1f8fe1f0",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "PresignedUploader is optional: aws, digitalocean, gcp implement it, minio does not (test asserts), so init returns 501; ObjectStat MD5 empty for multipart objects; driver name is gcp not gcs; factory caches per viper pointer+driver",
+  "why": "verified in interfaces.go, factory.go, presigned_upload_test.go"
+ },
+ {
+  "id": "server-utils-token-scope-go-e5fd5f4c",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "ValidateAPITokenAppScope called only from GetAppByName, ResolveUploadRequest, CompletePresignedUpload; list handlers do not call it so an fns_ token lists all its owner's apps",
+  "why": "verified by grep of callers and list.go"
+ },
+ {
+  "id": "server-utils-updaters-sparkle-appcast-go-836597a1",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "BuildAppcast emits only Published releases with Full asset and non-empty RawItem (delta-only disappears); sorted by sparkle:version when present; edSignature/length untouched on enclosure rewrite",
+  "why": "verified in appcast.go"
+ },
+ {
+  "id": "server-utils-updaters-updaters-go-3733dfc1",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [
+   "imprecise: tauri/electron also return 204 when url/yml missing, not mentioned"
+  ],
+  "best_fact": "squirrel_windows always 302s even up to date; squirrel_darwin 204 without update_url_zip; tauri body rebuilt from scratch and rollback returns 200 with older version",
+  "why": "verified in updaters.go"
+ },
+ {
+  "id": "server-utils-updaters-velopack-feed-go-c1e46849",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Delta emitted only when the next-lower sorted version is published with Full (unpublished version between removes delta); CompareVersions Atoi's parts, unparsable as 0 so 1.0.0-beta == 1.0.0; NotesHTML unescaped",
+  "why": "verified in feed.go"
+ },
+ {
+  "id": "server-utils-utils-go-5245440f",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "ExtractS3Key uses TrimPrefix with no match check and QueryUnescape decodes + as space; version dashes become dots on upload and get/delete params; ExtractChangelog indexes results[0] unchecked and is uncalled",
+  "why": "verified in utils.go and grep"
+ }
+]

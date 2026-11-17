@@ -160,7 +160,18 @@ Prompt it with the contract plus:
    copies (`<id>` and `<id>-2`), retract the `-2` one
    (`{"op":"retract","id":"<id>-2","target":{"kind":"note"}}`).
 4. `coldstart kb repair --root ROOT`: fix anything it surfaces by re-putting with the id.
-5. Optional but recommended: one Sonnet subagent audits a sample of 15 notes against the
-   code (claim by claim) and retracts or corrects any wrong claim.
+## Stage 5: claim audit (ONE Sonnet subagent; do not skip)
+In testing, 3–5% of seeded notes still carried a wrong claim, and nearly all were of two
+kinds. Have one Sonnet subagent (contract + this) audit them:
+> Open every active note in ROOT/.coldstart/notebook/notes/. Select each sentence that
+> (a) uses a universal word: only, every, all, never, always, none, sole, "not behind",
+> "no other"; or (b) states a default or what a key/flag/missing value means ("defaults
+> to", "when unset", "keyed on", "is a string/number", "means off/on"). For each one,
+> grep the code for every caller/branch/definition involved and check it. Any claim that
+> does not hold: correct the note (re-put with its "id", same shape, the fixed sentence)
+> or narrow it ("on the X path"). Never leave a wrong claim in place because it looks
+> harmless. Final message: each corrected claim, before → after.
+
+## Stage 6: report
 6. Report: note counts by type, files covered, facts dropped as wrong, and the overview's id.
    `coldstart kb commit` when the human wants the seed shared with the team.
