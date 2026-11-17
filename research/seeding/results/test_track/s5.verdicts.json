@@ -1,0 +1,246 @@
+[
+ {
+  "id": "app-controllers-api-system-statuses-controller-rb-8a6bd8d1",
+  "type": "file",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Health check runs select 1 and returns 200/503; only DB checked",
+  "why": "guessable from path and name"
+ },
+ {
+  "id": "app-controllers-api-v1-visitors-controller-rb-a51c8657",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "GET visitors/:id never 404s or persists; builds unsaved Visitor for unknown id",
+  "why": "non-obvious behavior verified in find_or_initialize_by"
+ },
+ {
+  "id": "app-models-app-rb-b9767b41",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "auth_secret min 43 chars; App::Build value object used for per-build filtering",
+  "why": "validation and wiring verified"
+ },
+ {
+  "id": "app-models-app-remote-kill-rb-db49ee53",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "reason is unique snake_case per app+split and is the migration upsert key; overlap validation",
+  "why": "verified in model and AppRemoteKillMigration find_or_initialize_by"
+ },
+ {
+  "id": "app-models-app-version-rb-f2b1cfcf",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Versions stored as pg int[] via AppVersionType; format may only be relaxed; cast swallows errors to nil",
+  "why": "verified incl. types.rb registration"
+ },
+ {
+  "id": "app-models-assignment-rb-aea791e3",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "for_presentation hides assignments older than split.decided_at; unsynced? semantics",
+  "why": "verified in scopes"
+ },
+ {
+  "id": "app-models-bulk-reassignment-rb-81623507",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Raw SQL bypasses callbacks/validations, clears mixpanel_result, locks rows, empty list becomes IS NULL",
+  "why": "all verified"
+ },
+ {
+  "id": "app-models-split-rb-ba157a17",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Split#registry is overridden on read by knockout; records from for_app_build are readonly",
+  "why": "verified"
+ },
+ {
+  "id": "app-models-split-registry-rb-ef7a24e9",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "v2 passes Time.zone.now, v3/v4 pass raw client string validated by ISO8601 regex",
+  "why": "verified in controllers"
+ },
+ {
+  "id": "app-models-visitor-rb-ad52e812",
+  "type": "file",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [
+   "'used by every write path': IdentifierClaim, Deterministic and Arbitrary creation use it, but BulkAssignmentCreation and VisitorLookup create visitors directly (overstated, minor)"
+  ],
+  "best_fact": "Visitor.from_id get-or-create from client-supplied UUID with RecordNotUnique rescue",
+  "why": "verified"
+ },
+ {
+  "id": "db-seeds-rb-816631ba",
+  "type": "file",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "seed_apps.yml loaded only in development; rake seed_app prints TEST_TRACK_API_URL",
+  "why": "verified but mostly setup trivia"
+ },
+ {
+  "id": "how-a-split-is-created-or-reweighted-splitupsert-registry-hi",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "All split writes go through SplitUpsert; omitted variants are zero-filled; feature_gate set only at creation",
+  "why": "verified across controllers and models"
+ },
+ {
+  "id": "how-a-visitor-s-variant-is-assigned-deterministic-hash-bucke",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [
+   "'varying variant order changes everyone's bucket': variants are always sorted, so only renames matter"
+  ],
+  "best_fact": "Variant = md5(split.name+visitor_id) first 8 hex mod 100 over sorted variant names; feature gates skipped",
+  "why": "verified in VariantCalculator and DeterministicAssignmentCreation"
+ },
+ {
+  "id": "how-admin-login-works-devise-database-vs-saml-switched-by-en-2",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [
+   "Invariant 'Every Admin::* controller must inherit AuthenticatedAdminController': Admin::SessionsController inherits Devise::SessionsController (login exception)"
+  ],
+  "best_fact": "SAML_ISSUER at boot switches Devise modules and routes; from_saml persists unknown emails so IdP controls access",
+  "why": "verified: lookup_admin calls update! on a new record"
+ },
+ {
+  "id": "how-an-api-request-is-authenticated-three-controller-base-cl",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Auth chosen by controller base class; shared-secret controller raises if env unset",
+  "why": "verified"
+ },
+ {
+  "id": "how-api-versions-v1-v4-relate-and-which-one-clients-use",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [
+   "'old controllers kept because shipped clients pin them' is rationale, no evidence either way"
+  ],
+  "best_fact": "v3/v4 take build_timestamp; v4 adds combined identifier+config endpoint; JSON shape in jbuilder",
+  "why": "verified in routes and views"
+ },
+ {
+  "id": "how-assignment-overrides-supersession-and-history-previous-a",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "supersede! snapshots to previous_assignments; context values; force bypasses feature-incomplete knockout",
+  "why": "verified"
+ },
+ {
+  "id": "how-bulk-assignment-from-the-admin-ui-runs-job-transaction-l",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Bulk assignment is async via delayed_job; success flash means only enqueued; >2% new identifier guard",
+  "why": "verified"
+ },
+ {
+  "id": "how-cors-works-for-the-js-client-corssupport-and-options-rou",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [
+   "Step 3 cites Api::CorsController, but routes point to /api/v1/cors#allow (Api::V1::CorsController); the non-v1 one appears unused by routes"
+  ],
+  "best_fact": "Suffix-match origin check against required WHITELIST_CORS_HOSTS; each endpoint needs explicit OPTIONS route",
+  "why": "verified"
+ },
+ {
+  "id": "how-identifiers-link-devices-to-one-visitor-identifierclaim",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Identifier claim creates VisitorSupersession that copies assignments; clients must adopt returned visitor id",
+  "why": "verified"
+ },
+ {
+  "id": "how-per-build-configs-hide-or-kill-splits-feature-gates-remo",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "for_app_build adds virtual columns and registry rewrites weights without touching DB; force bypasses only feature-incomplete",
+  "why": "verified"
+ },
+ {
+  "id": "how-the-app-boots-processes-run-and-which-env-vars-matter",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "No worker in Procfile.dev so bulk jobs sit unprocessed; env var list with defaults",
+  "why": "verified in Procfile, puma, database.yml, rack_timeout"
+ },
+ {
+  "id": "how-to-add-a-new-api-endpoint-or-form-object-write-path",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Migration POROs: blank version means delete; PORO convention with render_errors",
+  "why": "verified in AppRemoteKillMigration and AppFeatureCompletionMigration"
+ },
+ {
+  "id": "how-variant-screenshots-and-split-details-are-stored-papercl",
+  "type": "flow",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "S3 only if strategy s3 and all three vars set; test env always local",
+  "why": "verified in AttachmentSettings"
+ },
+ {
+  "id": "no-per-admin-permissions-or-roles-and-no-admin-sign-up-2",
+  "type": "lesson",
+  "value": "M",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Any signed-in admin can change anything; admins auto-created on first SAML login",
+  "why": "absence confirmed and SAML claim matches code"
+ },
+ {
+  "id": "no-scheduled-jobs-or-recurring-tasks-only-the-bulkassignment",
+  "type": "lesson",
+  "value": "T",
+  "wrong": [],
+  "unverifiable": [],
+  "best_fact": "Only BulkAssignmentJob exists; rake tasks are seed_app and vendor_deps",
+  "why": "true confirmed absence, low actionability"
+ }
+]
