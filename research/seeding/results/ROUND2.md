@@ -46,6 +46,23 @@ strictly (any wrong claim, even when the verifier called it harmless).
    Numbers above re-apply the strict rule by hand. A shipped audit must make "any wrong claim →
    correct or retract" the instruction, not a judgment call.
 
+## Validating the claim audit (Stage 5) on faynoSync S6: an important caveat
+
+Run blind on faynoSync S6 (the verifier had found 3 wrong claims there), the audit selected
+~95 universal/default sentences in 38 notes and corrected **6**, all real when spot-checked
+(e.g. a second feed route, `/update/.../RELEASES`, that a note said did not exist). But it
+caught **none of the verifier's 3**, even one it had selected: "targets is online only if
+the key is true", when `isTargetsOnline` returns true for a MISSING key. The verifier, in
+turn, had missed all 6 of the audit's.
+
+So **one checking pass finds roughly half of the wrong claims, and different passes find
+different ones.** The W% figures in this file and in round 1 are lower bounds; the real
+rate on faynoSync S6 was at least 9 wrong claims across 67 notes before the audit, so plausibly
+~10–13% of notes. Two independent audits catch clearly more than one. The audit is worth
+keeping (6 fixes for one Sonnet run), and a second, differently-prompted pass (e.g. one
+that checks every flow step's `role` against the code, rather than selecting by keyword)
+is the next thing to test.
+
 ## Cost (subagents per repo)
 
 | Strategy | Sonnet | Haiku | Wall time |

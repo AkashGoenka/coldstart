@@ -88,3 +88,4 @@ keeping get exported into `results/`).
   Residual errors = universal words + default/key meanings → Stage 5 claim audit added to
   SEED_PROMPT.md; being validated on faynoSync S6 (known 3 W) → results/faynoSync/s6.audit.json.
   REPORT.md written. Medium repos (round 3) NOT run; offered to the user.
+- Stage 5 validated: 6 real fixes, but missed all 3 verifier-found errors (and vice versa) → single pass catches ~half; W% are lower bounds. Documented in ROUND2.md + REPORT.md.

@@ -1,0 +1,38 @@
+[
+ {
+  "note_id": "how-faynosync-boots-subcommand-dispatch-secrets-check-mongo",
+  "before": "The healthcheck and migrate subcommands skip all of that.",
+  "after": "The healthcheck subcommand skips all of that; migrate skips validateSecrets and Redis but does connect to Mongo (ConnectToDatabase).",
+  "evidence": "faynoSync.go:57-82"
+ },
+ {
+  "note_id": "no-sparkle-appcast-serving-route",
+  "before": "server/server.go registers only GET /velopack/... as a feed route.",
+  "after": "server/server.go registers GET /velopack/... and the Squirrel GET /update/:owner/:app/:channel/:platform/:arch/:version/RELEASES as feed routes; neither serves a Sparkle appcast.",
+  "evidence": "server/server.go:101-105"
+ },
+ {
+  "note_id": "server-tuf-utils-utils-go-a3214276",
+  "before": "ValidateAppName allows only [A-Za-z0-9-] because",
+  "after": "ValidateAppName requires ^[a-zA-Z0-9][a-zA-Z0-9-]*$ (letters, digits and hyphens, first character not a hyphen), which excludes underscore because",
+  "evidence": "server/tuf/utils/utils.go:25"
+ },
+ {
+  "note_id": "no-s3-lifecycle-cleanup-for-report-blobs",
+  "before": "(only trimGroupBlobs and group deletes do)",
+  "after": "(report blob objects are deleted only by trimGroupBlobs, group deletes, and the orphan cleanup when InsertReportBlob fails)",
+  "evidence": "server/handler/report/blob.go:100,139; server/handler/report/manage.go:129"
+ },
+ {
+  "note_id": "server-model-model-go-7025a5e9",
+  "before": "the upload paths set hashes_verified (update handler per uploaded file, create/upload.go, and mongod/create.go via lookupHashesVerified).",
+  "after": "the upload paths set hashes_verified (update handler per uploaded file, create/upload.go, and mongod/create.go via lookupHashesVerified); the presigned path sets it to file.Inline, so only inline feed files are verified and client-PUT files stay false until TUF publish.",
+  "evidence": "server/handler/create/presigned.go:766-767"
+ },
+ {
+  "note_id": "how-to-add-a-new-api-endpoint",
+  "before": "the route and its permission live only in server/server.go as inline middleware arguments",
+  "after": "the route and its permission live in server/server.go as inline middleware arguments (TUF routes are registered in server/tuf/tuf.go instead)",
+  "evidence": "server/server.go:192-194"
+ }
+]

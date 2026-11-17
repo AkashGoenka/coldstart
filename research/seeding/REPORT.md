@@ -5,10 +5,13 @@ a notebook good enough that recall, embeddings and `find` summaries help from th
 prompt? And which strategy writes the most *meaningful* notes, meaning notes that say
 something the path, the file name and `coldstart gs` don't already say?
 
-**Answer.** Yes. The recommended pipeline (`SEED_PROMPT.md`) produces about 60 notes per
-500-file repo, of which ~93% are meaningful, ~2% thin and 3–5% carry a wrong claim, using
-2 Sonnet and ~13 Haiku subagents in ~6 minutes. The final claim-audit stage targets the
-two kinds of error that remain.
+**Answer.** Yes, with one caveat. The recommended pipeline (`SEED_PROMPT.md`) produces
+about 60 notes per 500-file repo, using 2 Sonnet and ~13 Haiku subagents in ~6 minutes.
+~93% are meaningful and ~2% thin. A single verifier finds a wrong claim in 3–5% of notes,
+**but a second, independent check found a different set of errors of about the same
+size**, so the real rate before auditing is closer to ~10%. The final claim-audit stage
+fixed 6 of them on one repo. Expect a seed to be mostly right, not fully right: notes are
+cheap to correct, and real task work corrects them over time.
 
 ## What was tested
 
@@ -106,6 +109,9 @@ differently, plus one flow per mechanism. The rest is for real task work.
 - `HANDOFF.md`: running log for resuming the work.
 
 ## Not done (next steps)
+
+- A second, differently-prompted audit pass (per-flow-step role check) and measuring the
+  combined catch rate. One pass catches roughly half of the wrong claims.
 
 - Medium repos (1–3k files): the budget and topic count probably need to scale (2 mappers by
   area, or 15–20 topics). Untested.
