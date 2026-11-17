@@ -73,3 +73,9 @@ keeping get exported into `results/`).
   After investigators: S6 consolidator (briefs/S6-consolidator.md, Sonnet) per repo, then
   hub-fill for hubs with no note, then VERIFIER on all 4 notebooks.
   To check which investigators finished: ls /home/user/scratch/<repo>-s6/facts-*.json
+- SAFETY (must-fix for any real `seed` command): Haiku workers repeatedly call session tools
+  despite "use only Bash/Read/Grep/Glob" in the prompt: send_message ×3, list_sessions,
+  create_session, archive_session (placeholder id). All were denied by the permission
+  classifier; nothing happened. A shipped seeding command must launch workers with an
+  explicit tool allowlist (e.g. `claude -p --allowedTools "Bash Read Grep Glob"`), never
+  rely on prompt wording.
