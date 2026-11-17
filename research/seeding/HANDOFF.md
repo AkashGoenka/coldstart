@@ -66,3 +66,10 @@ keeping get exported into `results/`).
   consolidator → hub-fill) on nerimity-server (TS) and faynoSync (Go). Copies:
   /home/user/repos/<repo>__s1, __s6; scratch /home/user/scratch/<repo>-s1|s6. Mappers launched.
   Go note: imports are per package, so hubs.sh importedBy is ~0 for central Go files.
+- Round 2 progress (2026-11-17): all 4 mappers done (topics.json in each scratch dir).
+  Launched: faynoSync S6 investigators t1–t12, nerimity S6 t1–t8 (facts → SCRATCH/facts-tN.json).
+  QUEUED (not yet launched): nerimity S6 t9–t12; nerimity S1 t1–t10; faynoSync S1 t1–t11
+  (S1 workers use briefs/S1-topic-worker.md and write to the notebook directly).
+  After investigators: S6 consolidator (briefs/S6-consolidator.md, Sonnet) per repo, then
+  hub-fill for hubs with no note, then VERIFIER on all 4 notebooks.
+  To check which investigators finished: ls /home/user/scratch/<repo>-s6/facts-*.json
