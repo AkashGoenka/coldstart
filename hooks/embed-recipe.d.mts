@@ -15,3 +15,4 @@ export function modelDir(): string;
 export function socketPath(): string;
 export function disabledFlagPath(): string;
 export function enabledFlagPath(): string;
+export function threadPlan(perf: number): { main: number; lane: number };

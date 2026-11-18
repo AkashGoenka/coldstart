@@ -31,7 +31,7 @@ describe.skipIf(!HAVE)('embed runtime past the token cap', () => {
   }, 60_000);
 
   it('note_doc: a tail past the window still moves the vector, and the result is unit length', async () => {
-    const base = head.repeat(30); // > 2048 tokens → windowed
+    const base = head.repeat(30); // past the note_doc cap → windowed
     expect(e.tokens(base)).toBeGreaterThan(TOKEN_CAPS.note_doc);
     const [a] = await e.embed([base], 'note_doc');
     const [b] = await e.embed([base + tail], 'note_doc');

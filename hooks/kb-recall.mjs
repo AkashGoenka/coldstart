@@ -48,6 +48,8 @@ import { resetEditTrack } from "./cochange-nudge.mjs";
 // Learned recall gate (embedding top score + session facts). Decides WHETHER
 // to show notes and WHICH; BM25 below is the fallback whenever it can't answer.
 import { runGate } from "./recall-gate.mjs";
+// Prompt-time FILE pointers (embedder step 4, opt-in): runs in parallel with the notes gate, appended after notes.
+import { fileInjection } from "./file-inject.mjs";
 
 // hooks/ sits beside dist/ in both the repo and the published package.
 const CLI = fileURLToPath(new URL("../dist/index.js", import.meta.url));
@@ -116,6 +118,9 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     const pending = takePendingCapture(sid);
 
     const prompt = recallQuery(input.prompt, MAX_QUERY_CHARS);
+    // started now, awaited after the notes path; never throws (fail-open), bounded by find's own timeout
+    const filesP = fileInjection({ cli: CLI, root, prompt: recallQuery(input.prompt, 20000), log })
+      .catch((e) => ({ status: "error", reason: String(e), ms: 0 }));
 
     const seen = readSeen(sid, root, log);
 
@@ -163,8 +168,15 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
       }
     }
 
+    const files = await filesP;
+    if (files.status !== "skip" || files.reason !== "embedder-off") {
+      log(`file-inject ${files.status}${files.reason ? ` (${files.reason})` : ""} ${files.ms}ms${files.files ? ` ${files.files.join(" ")}` : ""}`);
+      try { appendFileSync(join(root, ".coldstart", "file-inject-log.jsonl"), JSON.stringify({ ts: new Date().toISOString(), session: sid, prompt: prompt.slice(0, 200), ...files, block: undefined }) + "\n"); } catch { /* best-effort */ }
+    }
+    const filesBlock = files.status === "ok" ? files.block : "";
+
     if (!page.trim() || page.startsWith("No notebook notes match") || page.startsWith("No notebook in")) {
-      if (!pending) {
+      if (!pending && !filesBlock) {
         log(`no hits (promptChars=${prompt.length})`);
         process.exit(0);
       }
@@ -203,7 +215,10 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     // Safety net: >10KB hook payloads get spilled to a pointer file by the
     // host (and mostly ignored). Gist pages are ~1KB, implant pages ~3-5KB;
     // never exceed 8.5KB.
-    if (block.length > 8500) block = block.slice(0, 8500) + "\n…(truncated)";
+    // the files block (≤ 1.5 KB) shares the cap: notes shrink to make room, so the total stays ≤ ~8.5 KB + marker
+    const notesCap = 8500 - (filesBlock ? filesBlock.length + 2 : 0);
+    if (block.length > notesCap) block = block.slice(0, notesCap) + "\n…(truncated)";
+    if (filesBlock) block = block ? `${block}\n\n${filesBlock}` : filesBlock;
 
     // Pending capture rides FIRST (capture, then the user's request). If the
     // combination would spill past the host's 10KB hook cap, recall yields —

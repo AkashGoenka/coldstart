@@ -17,7 +17,7 @@ export function formatStatus(st: any, live: boolean): string {
     const m = st.model ?? {};
     const model = m.status === 'downloading' && m.total ? `downloading ${mb(m.have ?? 0)} / ${mb(m.total)}` : m.status;
     const idle = st.idleExitAt ? (st.idleExitAt > Date.now() ? `idle exit in ${ago(2 * Date.now() - st.idleExitAt)}` : 'idle exit due') : '';
-    lines.push(`embedder: running · pid ${st.pid} · ${st.rssMB} MB · model ${model}${st.selfBenchMs != null ? ` · query ${st.selfBenchMs} ms` : ''} · ${st.threads} thread(s)${idle ? ` · ${idle}` : ''}`);
+    lines.push(`embedder: running · pid ${st.pid} · ${st.rssMB} MB · model ${model}${st.selfBenchMs != null ? ` · query ${st.selfBenchMs} ms` : ''} · ${st.threads} thread(s)${st.lane ? ` · query lane ${st.lane.state} ${st.lane.rssMB} MB` : ''}${idle ? ` · ${idle}` : ''}`);
   } else {
     lines.push(`embedder: not running${st ? ` (last seen ${ago(st.lastActivityAt ?? st.startedAt)} ago)` : ''} — starts on the next index save or prompt`);
   }
