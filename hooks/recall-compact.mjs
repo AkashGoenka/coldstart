@@ -19,6 +19,7 @@ import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { resetSeen } from "./recall-seen.mjs";
 import { cursorRoot } from "./cursor-input.mjs";
+import { hookRepoRoot } from "./elicit-core.mjs";
 
 function readStdin() {
   return new Promise((res) => {
@@ -48,7 +49,7 @@ process.on("unhandledRejection", () => process.exit(0));
     const sid = String(input.session_id || input.conversation_id || "").replace(/[^\w-]/g, "");
     if (!sid) process.exit(0);
     const cleared = resetSeen(sid);
-    const root = cursorRoot(input);
+    const root = hookRepoRoot(cursorRoot(input));
     if (root) {
       try {
         appendFileSync(join(root, ".coldstart", "kb-hook.log"),

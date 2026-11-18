@@ -15,6 +15,10 @@ import { fileURLToPath } from 'node:url';
  */
 const HOOK = fileURLToPath(new URL('../hooks/kb-elicit.mjs', import.meta.url));
 
+// Run under Claude Code, the test process inherits CLAUDE_PROJECT_DIR = the REAL
+// repo, and the hook would capture into its notebook. Tests opt in per call.
+delete process.env.CLAUDE_PROJECT_DIR;
+
 let root: string;
 let transcript: string;
 let sid = '';
@@ -22,6 +26,9 @@ let n = 0;
 
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'coldstart-elicit-'));
+  // A real coldstart repo: hooks only capture where init (or kb write) has been.
+  fs.mkdirSync(path.join(root, '.coldstart'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.coldstart', '.coldstartignore'), '');
   transcript = path.join(root, 'transcript.jsonl');
   sid = `elicit-test-${process.pid}-${++n}`;
 });
@@ -67,7 +74,7 @@ function recordFire(ts: string): void {
 }
 
 /** Append lines to the session transcript and invoke one Stop. */
-function stop(lines: string[], opts: { event?: string; aid?: string; transcriptPath?: string; cwd?: string } = {}): string {
+function stop(lines: string[], opts: { event?: string; aid?: string; transcriptPath?: string; cwd?: string; projectDir?: string } = {}): string {
   const tp = opts.transcriptPath ?? transcript;
   fs.appendFileSync(tp, lines.length ? lines.join('\n') + '\n' : '');
   const payload = JSON.stringify({
@@ -78,7 +85,8 @@ function stop(lines: string[], opts: { event?: string; aid?: string; transcriptP
     ...(opts.aid ? { agent_transcript_path: tp } : {}),
     hook_event_name: opts.event ?? 'Stop',
   });
-  return execFileSync('node', [HOOK], { input: payload, encoding: 'utf8', timeout: 30000 });
+  const env = opts.projectDir ? { ...process.env, CLAUDE_PROJECT_DIR: opts.projectDir } : process.env;
+  return execFileSync('node', [HOOK], { input: payload, encoding: 'utf8', timeout: 30000, env });
 }
 
 function pendingFile(): string {
@@ -120,6 +128,56 @@ describe('kb-elicit v5 trigger', () => {
     expect(m2.root).toBe(root); // frozen root held against the drifted cwd
     expect(m2.files['MEMORY.md']).toBeUndefined();
     expect(Object.keys(m2.files)).toEqual(['src/app.py']);
+  });
+
+  it('CLAUDE_PROJECT_DIR wins over a drifted cwd on the FIRST stop — a fake repo dir is never adopted', () => {
+    // Session 9dde39a0 (2026-11-11): the first stop ran with cwd = the auto-memory dir,
+    // which already carried a stray .coldstart/notebook/ (made by the hook's own log
+    // mkdir in an earlier session), so root froze there and only memory files reached
+    // the worklist. With the launch dir known, the cwd must not matter.
+    seed(['src/app.py']);
+    fs.mkdirSync(path.join(root, '.coldstart', 'notebook'), { recursive: true });
+    const fake = fs.mkdtempSync(path.join(os.tmpdir(), `fake-memory-${sid}-`));
+    // Make the drifted cwd a REAL-looking repo, so only the env precedence can save us.
+    fs.mkdirSync(path.join(fake, '.coldstart', 'notebook'), { recursive: true });
+    fs.writeFileSync(path.join(fake, '.coldstart', 'notebook', 'okf.yaml'), 'coldstart_kb: 1\n');
+    const memo = path.join(fake, 'MEMORY.md');
+    fs.writeFileSync(memo, '# memo\n');
+    try {
+      stop(turn([
+        { name: 'Edit', input: { file_path: memo } },
+        { name: 'Read', input: { file_path: path.join(root, 'src/app.py') } },
+      ]), { cwd: fake, projectDir: path.join(root, 'src') });
+      const m = JSON.parse(fs.readFileSync(path.join(os.tmpdir(), `coldstart-kb-${sid}-main.json`), 'utf8'));
+      expect(m.root).toBe(root); // walked up from the launch subdir, not the cwd
+      expect(Object.keys(m.files)).toEqual(['src/app.py']);
+      expect(fs.existsSync(path.join(fake, '.coldstart', 'kb-hook.log'))).toBe(false);
+      expect(fs.existsSync(path.join(fake, '.coldstart', 'notebook', '.metrics'))).toBe(false);
+    } finally {
+      fs.rmSync(fake, { recursive: true, force: true });
+    }
+  });
+
+  it('a dir with only a bare .coldstart/notebook is NOT a repo: the stop skips and creates nothing', () => {
+    // The 2026-08-09 origin: no repo found → the hook adopted the raw cwd and its own
+    // log mkdir made <memory>/.coldstart/notebook/, which later passed as a repo.
+    const fake = fs.mkdtempSync(path.join(os.tmpdir(), `fake-memory-${sid}-`));
+    fs.mkdirSync(path.join(fake, '.coldstart', 'notebook'), { recursive: true });
+    const plain = fs.mkdtempSync(path.join(os.tmpdir(), `plain-dir-${sid}-`));
+    const memo = path.join(fake, 'MEMORY.md');
+    fs.writeFileSync(memo, '# memo\n');
+    try {
+      for (const cwd of [fake, plain]) {
+        const out = stop(turn([{ name: 'Edit', input: { file_path: memo } }]), { cwd });
+        expect(out.trim()).toBe('');
+      }
+      expect(fs.existsSync(path.join(os.tmpdir(), `coldstart-kb-${sid}-main.json`))).toBe(false);
+      expect(fs.existsSync(path.join(fake, '.coldstart', 'notebook', '.metrics'))).toBe(false);
+      expect(fs.existsSync(path.join(plain, '.coldstart'))).toBe(false);
+    } finally {
+      fs.rmSync(fake, { recursive: true, force: true });
+      fs.rmSync(plain, { recursive: true, force: true });
+    }
   });
 
   it('arm on volume, fire on descent → pending file for next-prompt delivery, stop never blocked', () => {

@@ -5,6 +5,10 @@ import * as os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
+// Hooks prefer CLAUDE_PROJECT_DIR; under Claude Code it is inherited and points at
+// the REAL repo. Clear it so spawned hooks only see the fixture root.
+delete process.env.CLAUDE_PROJECT_DIR;
+
 // @ts-expect-error plain .mjs module
 import { extractCursorEvidence, extractCodexEvidence, segmentStatsCursor } from '../hooks/evidence.mjs';
 
@@ -30,6 +34,9 @@ let n = 0;
 
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'coldstart-hosts-'));
+  // A real coldstart repo: hooks only capture where init (or kb write) has been.
+  fs.mkdirSync(path.join(root, '.coldstart'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.coldstart', '.coldstartignore'), '');
   sid = `hosts-test-${process.pid}-${++n}`;
 });
 afterEach(() => {

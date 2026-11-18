@@ -17,6 +17,10 @@ import { appendRecord } from '../src/kb/raw-log.js';
 import { logMetric } from '../src/kb/store.js';
 import { seenPath } from '../hooks/recall-seen.mjs';
 
+// Hooks prefer CLAUDE_PROJECT_DIR; under Claude Code it is inherited and points at
+// the REAL repo. Clear it so spawned hooks only see the fixture root.
+delete process.env.CLAUDE_PROJECT_DIR;
+
 const hook = (f: string) => fileURLToPath(new URL(`../hooks/${f}`, import.meta.url));
 const COMPACT = hook('recall-compact.mjs');
 const NOTE = 'restore-drops-functions';
@@ -27,6 +31,9 @@ let sid: string;
 
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'coldstart-recall-seen-'));
+  // A real coldstart repo: hooks only act where init (or kb write) has been.
+  fs.mkdirSync(path.join(root, '.coldstart'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.coldstart', '.coldstartignore'), '');
   sid = `test-${process.pid}-${Math.random().toString(36).slice(2)}`;
   fs.mkdirSync(path.join(root, 'app/models'), { recursive: true });
   fs.writeFileSync(path.join(root, 'app/models/graph.py'), 'class Graph: pass\n');
@@ -78,6 +85,40 @@ describe.each(HOSTS)('recall dedup across a compaction ($name)', ({ recall, comp
     logMetric(root, 'capture', { event: 'write', id: NOTE, type: 'lesson', op: 'put', session: 'someone-else' });
     expect(prompt()).toContain(NOTE);
   });
+});
+
+describe.each(HOSTS)('recall resolves the REAL repo, not the raw cwd ($name)', ({ name, recall }) => {
+  it('a cwd inside a subdir of the repo still recalls the repo notebook', () => {
+    expect(run(recall, { session_id: sid, cwd: path.join(root, 'app', 'models'), prompt: PROMPT })).toContain(NOTE);
+  });
+
+  it('a non-repo cwd (incl. a bare .coldstart/notebook, the memory-dir bug) recalls nothing and creates nothing', () => {
+    const fake = fs.mkdtempSync(path.join(os.tmpdir(), 'fake-memory-'));
+    fs.mkdirSync(path.join(fake, '.coldstart', 'notebook'), { recursive: true });
+    try {
+      expect(run(recall, { session_id: sid, cwd: fake, prompt: PROMPT })).not.toContain(NOTE);
+      expect(fs.readdirSync(path.join(fake, '.coldstart'))).toEqual(['notebook']);
+      expect(fs.readdirSync(path.join(fake, '.coldstart', 'notebook'))).toEqual([]);
+    } finally {
+      fs.rmSync(fake, { recursive: true, force: true });
+    }
+  });
+
+  if (name === 'claude') {
+    it('CLAUDE_PROJECT_DIR wins over a cwd that drifted out of the repo', () => {
+      const away = fs.mkdtempSync(path.join(os.tmpdir(), 'drifted-'));
+      try {
+        const r = spawnSync('node', [recall], {
+          input: JSON.stringify({ session_id: sid, cwd: away, prompt: PROMPT }),
+          encoding: 'utf8', timeout: 15000, env: { ...process.env, CLAUDE_PROJECT_DIR: root },
+        });
+        expect(r.status).toBe(0);
+        expect(r.stdout).toContain(NOTE);
+      } finally {
+        fs.rmSync(away, { recursive: true, force: true });
+      }
+    });
+  }
 });
 
 describe('recall-compact.mjs is fail-open', () => {

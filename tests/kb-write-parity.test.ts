@@ -5,6 +5,10 @@ import * as os from 'node:os';
 import { writeGuideCli, writeGuideMcp, WRITE_GUIDE_SHAPES, flowEvidenceWarning } from '../src/kb/write-guide.js';
 import type { WriteSpec } from '../src/kb/write.js';
 
+// Hooks prefer CLAUDE_PROJECT_DIR; under Claude Code it is inherited and points at
+// the REAL repo. Clear it so spawned hooks only see the fixture root.
+delete process.env.CLAUDE_PROJECT_DIR;
+
 /**
  * MCP ↔ CLI parity for the kb write surface (2026-07-17): both no-spec guides
  * are the SAME shapes text (only the howto differs), and the flow-evidence

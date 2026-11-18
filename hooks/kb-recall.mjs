@@ -36,7 +36,7 @@ import { findNudgeStatePath } from "./nudge-state-path.mjs";
 // stop. It rides the SAME next-prompt channel as recall — capture first, then
 // the user's request. Consumed (deleted) on delivery; stale pendings (>24h,
 // e.g. a session resumed days later) are dropped.
-import { takePendingCapture } from "./elicit-core.mjs";
+import { takePendingCapture, hookRepoRoot } from "./elicit-core.mjs";
 // The host wraps the user's words in editor/subagent telemetry; that text is
 // file-rich and hijacks the path-name override in kb search. Strip it BEFORE
 // truncating, or a long <ide_selection> eats the whole query budget.
@@ -100,8 +100,9 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
   } catch (e) { log(`bad stdin ${e}`); }
 
   try {
-    const root = String(input.cwd || process.cwd() || "");
-    if (!root) process.exit(0);
+    // Only a real coldstart repo (hookRepoRoot, elicit-core.mjs): a cwd that drifted
+    // into e.g. ~/.claude/…/memory must neither miss the repo nor be treated as one.
+    const root = hookRepoRoot(String(input.cwd || process.cwd() || ""));
     setLogRoot(root);
 
     const sid = String(input.session_id || "").replace(/[^\w-]/g, "");
@@ -110,6 +111,7 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     // outlives its task and surfaces suggestions during an unrelated question.
     // Fires before any early return below — recall hits must not gate it.
     resetEditTrack(sid);
+    if (!root) process.exit(0); // not in a repo: nothing to recall (a pending capture waits, keyed by sid)
 
 
     // A pending capture (non-blocking fire at the previous Stop) is delivered

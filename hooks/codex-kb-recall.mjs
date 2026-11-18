@@ -48,6 +48,7 @@ import { CAPTURE_SENTINEL } from "./capture-sentinel.mjs";
 // Reset on compaction comes from recall-compact.mjs (the host's compaction hook).
 import { readSeen, writeSeen, idsInPage, seenArgs } from "./recall-seen.mjs";
 import { resetEditTrack } from "./cochange-nudge.mjs";
+import { hookRepoRoot } from "./elicit-core.mjs";
 
 // hooks/ sits beside dist/ in both the repo and the published package.
 const CLI = fileURLToPath(new URL("../dist/index.js", import.meta.url));
@@ -88,8 +89,9 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
   } catch (e) { log(`bad stdin ${e}`); }
 
   try {
-    const root = String(input.cwd || process.cwd() || "");
-    if (!root) process.exit(0);
+    // Only a real coldstart repo (hookRepoRoot, elicit-core.mjs): a cwd that drifted
+    // into e.g. ~/.claude/…/memory must neither miss the repo nor be treated as one.
+    const root = hookRepoRoot(String(input.cwd || process.cwd() || ""));
     setLogRoot(root);
 
     const sid = String(input.session_id || "").replace(/[^\w-]/g, "");
@@ -98,6 +100,7 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     // outlives its task and surfaces suggestions during an unrelated question.
     // Fires before any early return below — recall hits must not gate it.
     resetEditTrack(sid);
+    if (!root) process.exit(0); // not in a repo: nothing to recall (a pending capture waits, keyed by sid)
 
 
     // The submitted prompt IS /capture-notes (its skill body carries this

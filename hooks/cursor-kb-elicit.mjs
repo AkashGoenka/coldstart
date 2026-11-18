@@ -43,7 +43,7 @@ import { initialState, step } from "./trigger.mjs";
 import { loadIgnore } from "./ignore.mjs";
 import { buildCapturePayload } from "./capture-payload.mjs";
 import {
-  worklistEntries, freshNotedSet, gitHead, logCaptureEvent, writePendingCapture,
+  worklistEntries, freshNotedSet, gitHead, logCaptureEvent, writePendingCapture, findRepoRoot,
 } from "./elicit-core.mjs";
 import { cursorRoot } from "./cursor-input.mjs";
 
@@ -85,9 +85,11 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
   } catch (e) { log(`bad stdin ${e}`); }
 
   try {
-    const root = String(cursorRoot(input) || "");
+    // Walk up to a real coldstart repo; none → skip (never adopt the raw dir —
+    // see isColdstartRepo in elicit-core.mjs for the memory-dir incident).
+    const root = findRepoRoot(String(cursorRoot(input) || ""));
     setLogRoot(root);
-    if (!root) { log("SKIP no-root"); process.exit(0); }
+    if (!root) { log("SKIP not-a-coldstart-repo"); process.exit(0); }
 
     // Hook-continued turn (followup_message re-fires stop on a new generation):
     // never process — the capture turn's own stop must not advance the trigger.

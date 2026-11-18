@@ -5,6 +5,10 @@ import * as os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { findNudgeStatePath } from "../hooks/nudge-state-path.mjs";
+
+// Hooks prefer CLAUDE_PROJECT_DIR; under Claude Code it is inherited and points at
+// the REAL repo. Clear it so spawned hooks only see the fixture root.
+delete process.env.CLAUDE_PROJECT_DIR;
 // @ts-expect-error plain-JS hook module, no types
 import handle from '../hooks/nudge-handler.mjs';
 import { appendRecord } from '../src/kb/raw-log.js';
@@ -84,6 +88,9 @@ describe('kb-recall pre-seeds the nudge state on injection', () => {
 
   beforeEach(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'coldstart-recallarm-'));
+    // A real coldstart repo: hooks only act where init (or kb write) has been.
+    fs.mkdirSync(path.join(root, '.coldstart'), { recursive: true });
+    fs.writeFileSync(path.join(root, '.coldstart', '.coldstartignore'), '');
   });
   afterEach(() => {
     fs.rmSync(root, { recursive: true, force: true });

@@ -41,7 +41,7 @@ import { loadIgnore } from "./ignore.mjs";
 import { buildCapturePayload, worklistJsonPath } from "./capture-payload.mjs";
 import {
   worklistEntries, freshNotedSet, gitHead, logCaptureEvent, writePendingCapture, MAX_WORKLIST,
-  lastFireAt, lineIndexAfter,
+  lastFireAt, lineIndexAfter, findRepoRoot, isColdstartRepo,
 } from "./elicit-core.mjs";
 
 // hooks/ sits beside dist/ in both the repo and the published package.
@@ -56,27 +56,27 @@ function log(msg) {
 
 // --- Repo-root resolution ----------------------------------------------------
 /**
- * The Stop payload's `cwd` tracks the session's shell, which a `cd` inside a
- * Bash call moves — sometimes clean OUT of the repo (e.g. into ~/.claude/…/memory
- * to edit private files). Root was taken raw from that cwd, so normRel would then
- * strip the WRONG prefix and admit a foreign absolute path into the worklist as if
- * it were repo-local (observed 2026-07-25: MEMORY.md / drive.mjs entered a marker).
- * A notebook-inited repo carries a `.coldstart/notebook/` dir, so walk up from cwd
- * to the nearest ancestor that has one — that is the true root regardless of shell
- * drift. `.coldstart/notebook` (not bare `.coldstart`) is the marker on purpose: the
- * GLOBAL `~/.coldstart` dir holds daemon/searcher state and no notebook, so a drift
- * into ~ must not resolve to the home directory.
- * Returns "" when cwd is not inside any notebook-inited repo.
+ * The Stop payload's `cwd` tracks the session's shell, which a `cd` inside a Bash
+ * call moves, sometimes clean OUT of the repo (e.g. into ~/.claude/…/memory to edit
+ * private files). Two incidents shaped the rule:
+ *  - 2026-07-25: root was taken raw from cwd, so a foreign absolute path entered the
+ *    worklist as if it were repo-local (fixed by #102: freeze root in the marker).
+ *  - 2026-08-09 → 2026-11-11: the marker is swept from tmp, so a resumed session's
+ *    "first" stop can land mid-session with cwd = the memory dir. findRepoRoot found
+ *    nothing, the old `|| cwd` fallback made the memory dir the root, and
+ *    logCaptureEvent's mkdir created `<memory>/.coldstart/notebook/`, which the old
+ *    marker check (a bare notebook dir) then accepted as a repo in every later session.
+ * So: the repo test is isColdstartRepo (files only init / kb write create, see
+ * elicit-core.mjs), there is NO raw-dir fallback (no repo found means skip capture),
+ * and Claude's `CLAUDE_PROJECT_DIR` (the launch dir, which a `cd` never moves) is
+ * preferred when present, so a drifted session still captures into its own repo.
  */
-function findRepoRoot(startDir) {
-  let dir = resolve(startDir || ".");
-  for (let i = 0; i < 40; i++) {
-    if (existsSync(join(dir, ".coldstart", "notebook"))) return dir;
-    const parent = dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return "";
+function sessionRoot(state, cwd) {
+  const projectDir = String(process.env.CLAUDE_PROJECT_DIR || "");
+  const fromProject = projectDir ? findRepoRoot(projectDir) : "";
+  if (fromProject) return fromProject;
+  if (typeof state.root === "string" && state.root && isColdstartRepo(state.root)) return state.root;
+  return findRepoRoot(cwd);
 }
 
 // --- Subagent transcript resolution ------------------------------------------
@@ -185,7 +185,13 @@ function soleMarkerUnderRoot(root) {
 if (process.argv.includes("--manual")) {
   try {
     const rootArg = argValue("--root");
-    const root = rootArg ? resolve(rootArg) : process.cwd();
+    // Walk up to a real coldstart repo; none → refuse, since the worklist write below
+    // would otherwise create .coldstart/notebook/ in a non-repo (the memory-dir bug).
+    const root = findRepoRoot(rootArg ? resolve(rootArg) : process.cwd());
+    if (!root) {
+      process.stdout.write("Not inside a coldstart repo (no .coldstart/.coldstartignore or .coldstart/notebook/okf.yaml) — run `coldstart init` in the repo first.\n");
+      process.exit(0);
+    }
     setLogRoot(root);
     const sidArg = String(argValue("--session") || "").replace(/[^A-Za-z0-9_-]/g, "");
     let found = sidArg ? markerForSession(root, sidArg) : null;
@@ -287,7 +293,7 @@ if (process.argv.includes("--manual")) {
 
   try {
     const cwd = String(input.cwd || "");
-    setLogRoot(cwd);
+    setLogRoot(process.env.CLAUDE_PROJECT_DIR || cwd);
 
     // Guard 1: already inside a hook-induced continuation → let it stop.
     if (input.stop_hook_active === true) { log("SKIP stop_hook_active"); process.exit(0); }
@@ -334,8 +340,10 @@ if (process.argv.includes("--manual")) {
     // Freeze the repo root in the marker: derive it once (walk-up from cwd), then
     // reuse the stored value on every later stop so a mid-session `cd` out of the
     // repo can never re-point root at a foreign tree. Fall back to the raw cwd only
-    // when neither a stored root nor a `.coldstart` ancestor exists.
-    const root = (typeof state.root === "string" && state.root) ? state.root : (findRepoRoot(cwd) || cwd);
+    // when neither a stored root nor a `.coldstart` ancestor exists. CLAUDE_PROJECT_DIR
+    // overrides all of this when present (sessionRoot).
+    const root = sessionRoot(state, cwd);
+    if (!root) { log(`SKIP not-a-coldstart-repo cwd=${cwd}`); process.exit(0); }
     state.root = root;
     setLogRoot(root);
     const ignore = loadIgnore(root);
