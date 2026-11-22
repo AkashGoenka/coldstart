@@ -38,6 +38,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # The real-model embedder tests skip here (no 175 MB model in CI), so this is the only CI check of the
+      # embedder's NATIVE optional deps (onnxruntime-node, tokenizers): installed, loadable on this OS/Node, and the
+      # Rust tokenizer's ids match the golden ids. Downloads only the tokenizer files (~32 MB, sha-checked, cached).
+      - name: Cache embedder tokenizer files
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/coldstart-models
+          key: embed-tokenizer-${{ runner.os }}-daa72c51243991dfcaf9f9137d2c573d8f7790c0
+
+      - name: Embedder native smoke
+        env:
+          COLDSTART_MODEL_DIR: ${{ runner.temp }}/coldstart-models
+        run: node scripts/embedder-native-smoke.mjs
+
       # `npm run build` (tsc --noEmit false) both type-checks AND emits dist/,
       # which some tests need at runtime (e.g. the kb recall hook spawns
       # `node dist/index.js kb search`). It exits non-zero on type errors, so

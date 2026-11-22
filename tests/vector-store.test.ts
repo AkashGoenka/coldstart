@@ -9,12 +9,14 @@ import { mkdtempSync, rmSync, readdirSync, writeFileSync, readFileSync, existsSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 // @ts-ignore — plain ESM hook module
 import { openReader, openWriter, vectorKey } from "../hooks/vector-store.mjs";
 
 const DIM = 8, R = "r1";
 const STORE = fileURLToPath(new URL("../hooks/vector-store.mjs", import.meta.url));
+// what a child process imports: a file:// URL — Windows ESM rejects a bare "C:\\…" path (the child died with no output)
+const STORE_URL = pathToFileURL(STORE).href;
 const key = (i: number) => vectorKey({ recipeVersion: 1, modelId: "m", dtype: "q4", role: "doc", text: `t${i}` });
 const vecFor = (k: string) => { const s = parseInt(k.slice(0, 8), 16); return Float32Array.from({ length: DIM }, (_, j) => ((s + j * 7919) % 100003) / 100003); };
 const row = (i: number, day = 1) => { const k = key(i); return { key: k, vec: vecFor(k), kind: "file", id: `f${i}`, day }; };
@@ -207,14 +209,14 @@ const keyFn = `const vectorKey=s.vectorKey, key=(i)=>vectorKey({recipeVersion:1,
 describe("cross-process", () => {
   it("a reader in another process never throws and never gets a wrong vector while the writer appends and compacts", async () => {
     const w = W(); w.append(range(0, 200).map((i) => row(i, 1)));
-    const c = child(`const s=await import(${JSON.stringify(STORE)}); ${keyFn}
+    const c = child(`const s=await import(${JSON.stringify(STORE_URL)}); ${keyFn}
       const r=s.openReader(${JSON.stringify(dir)},{recipe:"${R}",dim:${DIM}}); let gets=0,wrong=0,err=0,missingLive=0; const end=Date.now()+1500;
       const live=Array.from({length:50},(_,i)=>key(i));
       while(Date.now()<end){ try{ const ks=[...Array.from({length:20},()=>key(Math.floor(Math.random()*400))),...live.slice(0,10)]; const m=r.get(ks);
         for(const k of live.slice(0,10)) if(!m.has(k)) missingLive++;
         for(const [k,v] of m){ const e=vecFor(k); if(!v.every((x,j)=>x===e[j])) wrong++; } gets++; }catch(e){err++; console.error(String(e))} }
       console.log(JSON.stringify({gets,wrong,err,missingLive}));`);
-    let out = ""; c.stdout.on("data", (d) => (out += d));
+    let out = "", err = ""; c.stdout.on("data", (d) => (out += d)); c.stderr.on("data", (d) => (err += d));
     const done = new Promise((res) => c.on("exit", res));
     for (let d = 2; d < 40; d++) { // appends + markSeen + daily sweeps with rows dying → several compactions
       w.append(range(200 + (d - 2) * 5, 200 + (d - 1) * 5).map((i) => row(i, d)));
@@ -224,6 +226,7 @@ describe("cross-process", () => {
       await new Promise((r) => setTimeout(r, 20));
     }
     await done;
+    if (!out.trim()) throw new Error(`reader child printed nothing; stderr: ${err.slice(0, 500)}`);
     const res = JSON.parse(out.trim().split("\n").pop()!);
     expect(res.gets).toBeGreaterThan(50);
     expect(res).toMatchObject({ wrong: 0, err: 0, missingLive: 0 });
@@ -231,12 +234,13 @@ describe("cross-process", () => {
 
   it("SIGKILL of the writer mid-work leaves a consistent store with every listed row intact", async () => {
     for (let round = 0; round < 4; round++) {
-      const c = child(`const s=await import(${JSON.stringify(STORE)}); ${keyFn}
+      const c = child(`const s=await import(${JSON.stringify(STORE_URL)}); ${keyFn}
         const w=s.openWriter(${JSON.stringify(dir)},{recipe:"${R}",dim:${DIM}}); let i=${round * 100000}, d=1; const all=new Set();
         console.log("go");
         for(;;){ const rows=[]; for(let j=0;j<20;j++){const k=key(i++); all.add(k); rows.push({key:k,vec:vecFor(k),kind:"file",id:"x",day:d});}
           w.append(rows); d++; w.maybeSweep({today:d,currentKeys:all,maxSegments:2}); }`);
-      await new Promise((res) => c.stdout.once("data", res));
+      let err = ""; c.stderr.on("data", (d) => (err += d));
+      await new Promise((res, rej) => { c.stdout.once("data", res); c.once("exit", () => rej(new Error(`writer child exited before starting; stderr: ${err.slice(0, 500)}`))); });
       await new Promise((r) => setTimeout(r, 150 + round * 70));
       c.kill("SIGKILL");
       await new Promise((res) => c.on("exit", res));
