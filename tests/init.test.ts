@@ -27,6 +27,10 @@ import {
 } from '../src/init.js';
 import { repairWorklist } from '../src/kb/repair.js';
 
+// Hooks prefer CLAUDE_PROJECT_DIR; under Claude Code it is inherited and points at
+// the REAL repo. Clear it so spawned hooks only see the fixture root.
+delete process.env.CLAUDE_PROJECT_DIR;
+
 // We can't easily test runInit interactively, but we can test that the
 // MCP entry structure is correct when it's generated. This is a basic
 // smoke test that validates the new node-form entries are being written.

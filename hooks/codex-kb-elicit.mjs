@@ -38,7 +38,7 @@ import { existsSync, writeFileSync, appendFileSync, readFileSync } from "node:fs
 import { extractCodexEvidence } from "./evidence.mjs";
 import { loadIgnore } from "./ignore.mjs";
 import { buildCapturePayload } from "./capture-payload.mjs";
-import { worklistEntries, logCaptureEvent } from "./elicit-core.mjs";
+import { worklistEntries, logCaptureEvent, findRepoRoot } from "./elicit-core.mjs";
 
 // hooks/ sits beside dist/ in both the repo and the published package.
 const CLI = fileURLToPath(new URL("../dist/index.js", import.meta.url));
@@ -78,8 +78,11 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
   } catch (e) { log(`bad stdin ${e}`); }
 
   try {
-    const root = String(input.cwd || "");
+    // Walk up to a real coldstart repo; none → skip (never adopt the raw cwd —
+    // see isColdstartRepo in elicit-core.mjs for the memory-dir incident).
+    const root = findRepoRoot(String(input.cwd || ""));
     setLogRoot(root);
+    if (!root) { log("SKIP not-a-coldstart-repo"); process.exit(0); }
 
     // Guard 1: already inside a hook-induced continuation → let it stop.
     if (input.stop_hook_active === true) { log("SKIP stop_hook_active"); process.exit(0); }

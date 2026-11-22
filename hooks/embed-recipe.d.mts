@@ -1,0 +1,18 @@
+export const MODEL_ID: string;
+export const DTYPE: string;
+export const TOKEN_CAPS: Record<string, number>;
+export const WINDOWED_ROLES: Set<string>;
+export const DIM: number;
+export const RECIPE: string;
+export const PROTOCOL: number;
+export const ROLES: Record<string, string>;
+export function embedKey(role: string, text: string): string;
+export function coldstartHome(): string;
+export function defaultRepoCacheDir(root: string): string;
+export function embedderHome(): string;
+export function vectorsDir(repoCacheDir: string): string;
+export function modelDir(): string;
+export function socketPath(): string;
+export function disabledFlagPath(): string;
+export function enabledFlagPath(): string;
+export function threadPlan(perf: number): { main: number; lane: number };

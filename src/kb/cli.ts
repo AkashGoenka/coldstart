@@ -2,7 +2,7 @@
  * `coldstart kb <verb>` — the notebook's CLI surface. Same reader discipline
  * as find/gs: stdout carries only the answer, diagnostics go to stderr.
  *
- *   kb search <words...> [--max N] [--json] [--hook] [--no-index] [--seen a,b]
+ *   kb search <words...> [--max N] [--json] [--hook] [--no-index] [--seen a,b] [--ids a,b]
  *   kb lookup <path> [symbol] [--json]
  *   kb write <spec.json | ->  [--into ID] [--new] [--force] [--session S]
  *   kb status [--paths a,b,c] [--json]
@@ -30,6 +30,7 @@ import { stampAnchors, freshnessLine } from './freshness.js';
 import { loadAll, renderIds, initSkeleton, notebookExists, notebookDir, logMetric } from './store.js';
 import { KB_RAW_VERSION } from './raw-log.js';
 import { kbView } from './view.js';
+import { notifyEmbedder, repoCacheDir } from '../../hooks/embed-client.mjs';
 import { VIEW_TEMPLATE } from './view-template.js';
 
 function err(...args: unknown[]): void {
@@ -59,6 +60,9 @@ interface KbFlags {
   why?: string;
   /** --seen a,b,c — note ids already injected this session (hook dedup). */
   seen?: string[];
+  /** --ids a,b,c — render exactly these notes, in order (the recall gate
+   *  picked them; hooks/recall-gate.mjs). Skips BM25 ranking + margin gate. */
+  ids?: string[];
 }
 
 function parseKbArgs(argv: string[]): { positional: string[]; flags: KbFlags } {
@@ -73,6 +77,7 @@ function parseKbArgs(argv: string[]): { positional: string[]; flags: KbFlags } {
       case '--no-index': flags.noIndex = true; break;
       case '--max': flags.max = Number(argv[++i]) || undefined; break;
       case '--seen': flags.seen = (argv[++i] ?? '').split(',').map((s) => s.trim()).filter(Boolean); break;
+      case '--ids': flags.ids = (argv[++i] ?? '').split(',').map((s) => s.trim()).filter(Boolean); break;
       case '--into': flags.into = argv[++i]; break;
       case '--new': flags.isNew = true; break;
       case '--force': flags.force = true; break;
@@ -115,7 +120,12 @@ export async function runKb(argv: string[]): Promise<number> {
   switch (verb) {
     case 'search': return cmdSearch(positional, flags);
     case 'lookup': return cmdLookup(positional, flags);
-    case 'write': return cmdWrite(positional, flags);
+    case 'write': {
+      const rc = await cmdWrite(positional, flags);
+      // notes changed → the embedder daemon re-diffs this repo's note vectors (no-op when the embedder is off)
+      if (positional[0]) await notifyEmbedder('notes-changed', root, repoCacheDir(root)).catch(() => {});
+      return rc;
+    }
     case 'status': return cmdStatus(flags);
     case 'flow-decision': return cmdFlowDecision(flags);
     case 'lint': return cmdLint(flags);
@@ -213,6 +223,7 @@ async function cmdSearch(words: string[], flags: KbFlags): Promise<number> {
     source: flags.hook ? 'hook' : 'tool',
     strongOnly: flags.hook, // an arbitrary user sentence must not inject weak grazes
     excludeIds: flags.seen?.length ? new Set(flags.seen) : undefined,
+    pickIds: flags.ids?.length ? flags.ids : undefined,
   });
   for (const w of result.warnings) err(`[coldstart kb] ${w}`);
 
@@ -221,6 +232,7 @@ async function cmdSearch(words: string[], flags: KbFlags): Promise<number> {
   if (flags.hook && result.hits.length) {
     logMetric(flags.root, 'inject-log', {
       query: query.slice(0, 200),
+      ...(flags.ids?.length ? { picked: 'gate' } : {}),
       top: result.hits[0].note.id,
       // Which query tokens matched the top note — not recoverable
       // from the query string after the fact, and the input any later analysis

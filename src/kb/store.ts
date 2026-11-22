@@ -52,10 +52,12 @@ export function initSkeleton(root: string): void {
   // shipped-instructions file the worklist pair now points at instead of
   // duplicating — still generated/local, not committed. Append any missing line
   // so EXISTING installs pick up new entries, not just fresh notebooks.
+  // `.gate/` = the recall gate's OLD note-vector cache (retired: vectors now live
+  // in the embedder daemon's per-repo store); kept so a leftover dir stays ignored.
   const gi = join(notebookDir(root), '.gitignore');
   const wanted = [
     'notes/', '.metrics/', '.worklist.md', '.worklist.json', '.worklist-*.md', '.worklist-*.json',
-    '.capture-instructions.md',
+    '.capture-instructions.md', '.gate/',
   ];
   let current = '';
   try { current = readFileSync(gi, 'utf8'); } catch { /* absent — create below */ }

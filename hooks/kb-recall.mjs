@@ -36,7 +36,7 @@ import { findNudgeStatePath } from "./nudge-state-path.mjs";
 // stop. It rides the SAME next-prompt channel as recall — capture first, then
 // the user's request. Consumed (deleted) on delivery; stale pendings (>24h,
 // e.g. a session resumed days later) are dropped.
-import { takePendingCapture } from "./elicit-core.mjs";
+import { takePendingCapture, hookRepoRoot } from "./elicit-core.mjs";
 // The host wraps the user's words in editor/subagent telemetry; that text is
 // file-rich and hijacks the path-name override in kb search. Strip it BEFORE
 // truncating, or a long <ide_selection> eats the whole query budget.
@@ -45,12 +45,26 @@ import { recallQuery } from "./recall-query.mjs";
 // what was shown once the context is compacted (recall-compact.mjs). See recall-seen.mjs.
 import { readSeen, writeSeen, idsInPage, seenArgs } from "./recall-seen.mjs";
 import { resetEditTrack } from "./cochange-nudge.mjs";
+// Learned recall gate (embedding top score + session facts). Decides WHETHER
+// to show notes and WHICH; BM25 below is the fallback whenever it can't answer.
+import { runGate } from "./recall-gate.mjs";
+// Prompt-time FILE pointers (embedder step 4, opt-in): runs in parallel with the notes gate, appended after notes.
+import { fileInjection } from "./file-inject.mjs";
 
 // hooks/ sits beside dist/ in both the repo and the published package.
 const CLI = fileURLToPath(new URL("../dist/index.js", import.meta.url));
 
 const MAX_QUERY_CHARS = 2000; // pasted-code prompts: the head carries the ask
 const SEARCH_TIMEOUT_MS = 4000;
+// Model load (~1.1 s on an M-series Mac) + embed + transcript scan. Past this
+// the prompt gets BM25 recall instead of waiting longer.
+const GATE_TIMEOUT_MS = 5000;
+// COLDSTART_RECALL_GATE=0 → BM25 only (A/B runs, kill switch).
+const GATE_ON = process.env.COLDSTART_RECALL_GATE !== "0";
+
+function logGate(root, rec) {
+  try { appendFileSync(join(root, ".coldstart", "notebook", ".metrics", "gate-log.jsonl"), JSON.stringify(rec) + "\n"); } catch { /* best-effort */ }
+}
 
 
 let LOG_FILE = join(tmpdir(), "coldstart-kb-hook.log");
@@ -86,8 +100,9 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
   } catch (e) { log(`bad stdin ${e}`); }
 
   try {
-    const root = String(input.cwd || process.cwd() || "");
-    if (!root) process.exit(0);
+    // Only a real coldstart repo (hookRepoRoot, elicit-core.mjs): a cwd that drifted
+    // into e.g. ~/.claude/…/memory must neither miss the repo nor be treated as one.
+    const root = hookRepoRoot(String(input.cwd || process.cwd() || ""));
     setLogRoot(root);
 
     const sid = String(input.session_id || "").replace(/[^\w-]/g, "");
@@ -96,6 +111,7 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     // outlives its task and surfaces suggestions during an unrelated question.
     // Fires before any early return below — recall hits must not gate it.
     resetEditTrack(sid);
+    if (!root) process.exit(0); // not in a repo: nothing to recall (a pending capture waits, keyed by sid)
 
 
     // A pending capture (non-blocking fire at the previous Stop) is delivered
@@ -104,12 +120,42 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     const pending = takePendingCapture(sid);
 
     const prompt = recallQuery(input.prompt, MAX_QUERY_CHARS);
+    // started now, awaited after the notes path; never throws (fail-open), bounded by find's own timeout
+    const filesP = fileInjection({ cli: CLI, root, prompt: recallQuery(input.prompt, 20000), log })
+      .catch((e) => ({ status: "error", reason: String(e), ms: 0 }));
 
     const seen = readSeen(sid, root, log);
 
     let page = "";
-    // No notebook / no prompt → no recall search, not even a child process.
-    if (prompt && existsSync(join(root, ".coldstart", "notebook", ".raw"))) {
+    const hasNotebook = existsSync(join(root, ".coldstart", "notebook", ".raw"));
+
+    // The gate answers first. "ok" is a decision either way: inject its top 3
+    // (still deduped against `seen`, no backfill) or stay silent. Only an
+    // "unavailable" gate (no vectors yet, no model, timeout, error) falls
+    // through to BM25.
+    let gate = null;
+    if (GATE_ON && prompt && hasNotebook) {
+      const t0 = Date.now();
+      gate = await Promise.race([
+        runGate({ root, prompt: input.prompt, transcriptPath: input.transcript_path, log }),
+        new Promise((res) => setTimeout(() => res({ status: "unavailable", reason: "timeout" }), GATE_TIMEOUT_MS).unref?.()),
+      ]);
+      logGate(root, { ts: new Date().toISOString(), session: sid, prompt: prompt.slice(0, 200), ms: Date.now() - t0, seen: seen.ids.length, ...gate });
+      log(`gate ${gate.status}${gate.status === "ok" ? ` p=${gate.p.toFixed(3)} inject=${gate.inject}` : ` (${gate.reason})`}`);
+    }
+
+    if (gate?.status === "ok") {
+      if (gate.inject) {
+        const args = [CLI, "kb", "search", "--hook", "--max", "3", "--root", root, "--ids", gate.ids.join(","), ...seenArgs(seen.ids)];
+        try {
+          page = execFileSync("node", [...args, prompt], { encoding: "utf8", timeout: SEARCH_TIMEOUT_MS, stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
+        } catch (e) {
+          log(`gate render failed: ${String(e).split("\n")[0]}`);
+          page = "";
+        }
+      }
+    } else if (prompt && hasNotebook) {
+      // No notebook / no prompt → no recall search, not even a child process.
       const args = [CLI, "kb", "search", "--hook", "--max", "3", "--root", root, ...seenArgs(seen.ids)];
       try {
         page = execFileSync("node", [...args, prompt], {
@@ -124,8 +170,15 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
       }
     }
 
+    const files = await filesP;
+    if (files.status !== "skip" || files.reason !== "embedder-off") {
+      log(`file-inject ${files.status}${files.reason ? ` (${files.reason})` : ""} ${files.ms}ms${files.files ? ` ${files.files.join(" ")}` : ""}`);
+      try { appendFileSync(join(root, ".coldstart", "file-inject-log.jsonl"), JSON.stringify({ ts: new Date().toISOString(), session: sid, prompt: prompt.slice(0, 200), ...files, block: undefined }) + "\n"); } catch { /* best-effort */ }
+    }
+    const filesBlock = files.status === "ok" ? files.block : "";
+
     if (!page.trim() || page.startsWith("No notebook notes match") || page.startsWith("No notebook in")) {
-      if (!pending) {
+      if (!pending && !filesBlock) {
         log(`no hits (promptChars=${prompt.length})`);
         process.exit(0);
       }
@@ -164,7 +217,10 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     // Safety net: >10KB hook payloads get spilled to a pointer file by the
     // host (and mostly ignored). Gist pages are ~1KB, implant pages ~3-5KB;
     // never exceed 8.5KB.
-    if (block.length > 8500) block = block.slice(0, 8500) + "\n…(truncated)";
+    // the files block (≤ 1.5 KB) shares the cap: notes shrink to make room, so the total stays ≤ ~8.5 KB + marker
+    const notesCap = 8500 - (filesBlock ? filesBlock.length + 2 : 0);
+    if (block.length > notesCap) block = block.slice(0, notesCap) + "\n…(truncated)";
+    if (filesBlock) block = block ? `${block}\n\n${filesBlock}` : filesBlock;
 
     // Pending capture rides FIRST (capture, then the user's request). If the
     // combination would spill past the host's 10KB hook cap, recall yields —

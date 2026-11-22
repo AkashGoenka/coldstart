@@ -42,7 +42,7 @@ import { findNudgeStatePath } from "./nudge-state-path.mjs";
 // Pending-capture delivery (v5 trigger): a descent/cap fire at a previous
 // stop wrote its worklist payload to a pending file instead of blocking; it
 // rides this same next-prompt channel — capture first, then the user's request.
-import { takePendingCapture } from "./elicit-core.mjs";
+import { takePendingCapture, hookRepoRoot } from "./elicit-core.mjs";
 // Strip host telemetry wrappers before the query is built — see recall-query.mjs.
 import { recallQuery } from "./recall-query.mjs";
 import { CAPTURE_SENTINEL } from "./capture-sentinel.mjs";
@@ -90,8 +90,9 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
   } catch (e) { log(`bad stdin ${e}`); }
 
   try {
-    const root = String(cursorRoot(input) || process.cwd() || "");
-    if (!root) process.exit(0);
+    // Only a real coldstart repo (hookRepoRoot, elicit-core.mjs): a cwd that drifted
+    // into e.g. ~/.claude/…/memory must neither miss the repo nor be treated as one.
+    const root = hookRepoRoot(String(cursorRoot(input) || process.cwd() || ""));
     setLogRoot(root);
 
     const sid = String(input.session_id || "").replace(/[^\w-]/g, "");
@@ -100,6 +101,7 @@ process.on("unhandledRejection", (e) => { log(`unhandled ${e?.stack || e}`); pro
     // outlives its task and surfaces suggestions during an unrelated question.
     // Fires before any early return below — recall hits must not gate it.
     resetEditTrack(sid);
+    if (!root) process.exit(0); // not in a repo: nothing to recall (a pending capture waits, keyed by sid)
 
 
     // A pending capture (non-blocking fire at a previous stop) is delivered

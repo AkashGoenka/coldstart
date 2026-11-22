@@ -54,6 +54,13 @@ export interface KbSearchOptions {
    * `kb search` is unaffected.
    */
   excludeIds?: ReadonlySet<string>;
+  /**
+   * Recall-gate mode (hooks/recall-gate.mjs): the gate already chose WHICH
+   * notes and WHETHER to show them, so skip BM25 scoring and the margin gate
+   * and return exactly these ids, in this order. strongOnly's eligibility
+   * (active, subject exists on this branch) and excludeIds still apply.
+   */
+  pickIds?: readonly string[];
 }
 
 export interface KbSearchHit {
@@ -210,6 +217,7 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
   const terms = qTokens;
   // Path-name override (recall only): the raw prompt literally naming a note's
   // anchor path surfaces that note even when the words alone would not.
+  if (opts.pickIds) return pickedHits(root, notes, terms, warnings, max, opts);
   const querySquash = squash(query);
   const pathNamedIds = new Set<string>();
   if (opts.strongOnly) {
@@ -306,6 +314,22 @@ export async function kbSearch(root: string, query: string, opts: KbSearchOption
     : page;
 
   return { hits: deduped, terms, warnings, omitted, maxUsed: max };
+}
+
+/** --ids path: the gate's picks, stamped and filtered like hook-mode hits.
+ *  Score is the pick order (descending) so renderers that rank still agree. */
+function pickedHits(root: string, notes: FoldedNote[], terms: string[], warnings: string[], max: number, opts: KbSearchOptions): KbSearchResult {
+  const byId = new Map(notes.map((n) => [n.id, n]));
+  const picks = opts.pickIds!.map((id) => byId.get(id)).filter((n): n is FoldedNote => !!n);
+  const hits: KbSearchHit[] = picks.map((note, i) => {
+    const stamped = stampAnchors(root, note.anchors, opts.notesIndex?.renames);
+    const inactive = note.type !== 'lesson' && anchorsAllMissing(stamped);
+    const tier = inactive ? 2 : note.status !== 'active' ? 1 : 0;
+    return { note, score: picks.length - i, tier, inactive, stamped, absence: absenceVerdict(note, opts.notesIndex), carriers: [] };
+  });
+  const page = (opts.strongOnly ? hits.filter((h) => h.tier === 0) : hits).slice(0, max);
+  const deduped = opts.excludeIds?.size ? page.filter((h) => !opts.excludeIds!.has(h.note.id)) : page;
+  return { hits: deduped, terms, warnings, omitted: 0, maxUsed: max };
 }
 
 /** Body section of the rendered md (frontmatter stripped) for inlining. */

@@ -26,6 +26,17 @@ import { readInflight, describeInflight, slowFileMs } from './inflight.js';
 import type { Inflight } from './inflight.js';
 import { readKeeperState, readRepairTail, type KeeperEventStamp } from './keeper-state.js';
 import { loadCoChange } from './indexer/cochange.js';
+import { request as embedRequest, embedderDisabled } from '../hooks/embed-client.mjs';
+
+/** One line for the embedder daemon; `coldstart embed status` has the detail. */
+async function embedderSummary(): Promise<string> {
+  if (embedderDisabled()) return 'Embedder: off (opt-in: `coldstart init --embedder`)';
+  const st = await embedRequest({ op: 'status' }, { connectMs: 200, budgetMs: 500 });
+  if (!st) return 'Embedder: not running (starts on the next index save) — `coldstart embed status`';
+  const repos = Object.values<any>(st.repos ?? {});
+  const done = repos.reduce((a, r) => a + (r.done ?? 0), 0), total = repos.reduce((a, r) => a + (r.total ?? 0), 0);
+  return `Embedder: running (pid ${st.pid}, ${st.rssMB} MB, model ${st.model?.status}) · ${repos.length} repo(s) · ${done}/${total} vectors — \`coldstart embed status\``;
+}
 
 function fileSize(path: string): string {
   try {
@@ -286,6 +297,7 @@ export async function runStatus(): Promise<void> {
       }
     }
   }
+  healthLines.push(await embedderSummary());
   process.stdout.write(healthLines.join('\n') + '\n');
 
   if (rows.some(r => r.status !== 'alive')) {

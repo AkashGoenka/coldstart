@@ -27,6 +27,8 @@ import { resolveRg, invalidateRg, type RgBinary } from './searcher.js';
 import { loadAll, notebookExists } from '../kb/store.js';
 import { NOTES_REL } from '../kb/raw-log.js';
 import { stampAnchors } from '../kb/freshness.js';
+import { isVendorOrMinified } from '../indexer/vendor.js';
+import { applyOrder, queryShape, rerankTop, W_PROMPT, W_PROSE } from '../embedder/rerank.js';
 
 /**
  * Candidate search is portable by design — no hard dependency on any external
@@ -105,15 +107,7 @@ const MAX_STYLE_CANDIDATES = 4;
  * run 2700-43000 cpl, real source p99 ≈ 600), which catches un-suffixed bundles like nifty.js that the
  * path rule misses. Scoped to script/style languages so data/config files and golds are never touched.
  * Index-only (lineCount/tokenEstimate), NO file read. */
-const VENDOR_PATH = /(^|\/)(node_modules|vendor|bower_components)\//i;
-const MIN_SUFFIX = /\.min\.(js|css)$/i;
-const SCRIPT_STYLE_EXT = /\.(js|jsx|ts|tsx|mjs|cjs|css|scss|sass|less)$/i;
-const MINIFIED_CPL = 1000;
-const isVendorOrMinified = (rel: string, file: IndexedFile): boolean => {
-  if (VENDOR_PATH.test(rel) || MIN_SUFFIX.test(rel)) return true;
-  return SCRIPT_STYLE_EXT.test(rel) && file.lineCount > 0
-    && (file.tokenEstimate * 4) / file.lineCount > MINIFIED_CPL;
-};
+// isVendorOrMinified lives in src/indexer/vendor.ts (shared with the embedder's sketchFilter)
 
 /**
  * Pass 1 — import co-citation among the candidate set (precision relations).
@@ -569,7 +563,14 @@ export function noteLine(root: string, rel: string, entry: { note: FoldedNote; r
   return { line: `   Summary: ${gist}${fresh} · full note: ${NOTES_REL}/${note.id}.md`, summary };
 }
 
-export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery: string, asData = false, via = false): Promise<string> {
+export interface FindOpts {
+  /** prompt-time injection: the FULL user prompt to embed for the re-rank (terms are the reduced prompt) */
+  embedQuery?: string;
+  cacheDir?: string;
+  rerankBudgetMs?: number;
+}
+
+export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery: string, asData = false, via = false, opts: FindOpts = {}): Promise<string> {
   const terms = parseTerms(rawQuery);
   if (terms.length === 0) {
     return 'find: no usable terms. Pass the salient identifiers from the task, e.g. `coldstart find ResourceInstance principaluser editable`.';
@@ -622,10 +623,20 @@ export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery
   };
 
   // rank: relevance score desc, then path (stable). importedBy dropped — centrality was the hub trap.
-  const ranked = [...coverage.entries()].sort((a, b) => {
+  let ranked = [...coverage.entries()].sort((a, b) => {
     const d = score(b[0]) - score(a[0]);
     return d !== 0 ? d : a[0].localeCompare(b[0]);
   });
+
+  // Embedding re-rank of the top 25 (src/embedder/rerank.ts): prose-shaped agent queries, or prompt-time injection
+  // (embedQuery). Needs the embedder opt-in; anything missing → null → today's order, untouched.
+  const rerankW = opts.embedQuery !== undefined ? W_PROMPT : queryShape(rawQuery) === 'prose' ? W_PROSE : 0;
+  const rr = rerankW > 0
+    ? await rerankTop(index, root, ranked.map(([rel]) => rel), {
+        weight: rerankW, queryText: opts.embedQuery ?? rawQuery, cacheDir: opts.cacheDir, budgetMs: opts.rerankBudgetMs,
+      })
+    : null;
+  if (rr) ranked = applyOrder(ranked, ([rel]) => rel, rr.order);
 
   // Per-file MATCH EVIDENCE, as a short plain-English sentence — what the file actually does with the
   // query terms, strongest signal first: declares a symbol of that name > the term is in its path >
@@ -682,10 +693,13 @@ export async function buildRichPage(index: CodebaseIndex, root: string, rawQuery
       // does a DISCRIMINATING term bind to a declared symbol here? (Signal 1)
       const defsDisc = defines.filter((t) => discSet.has(t.toLowerCase()));
       return { path: rel, score: +score(rel).toFixed(4), coverage: coverage.get(rel)!.size,
-               defines, inPath, definesDiscriminating: defsDisc };
+               defines, inPath, definesDiscriminating: defsDisc,
+               // the page drops vendored/minified bundles outright; JSON consumers (file-inject) need the same verdict
+               vendor: isVendorOrMinified(rel, file) };
     });
     return JSON.stringify({
       terms, nFiles, rareTerms,
+      rerank: rr ? { weight: rerankW, pool: rr.pool, withVec: rr.withVec, ms: rr.ms } : null,
       discTerms: discTermIdx.map((k) => terms[k]),
       idf: Object.fromEntries(terms.map((t) => [t, +idf(t).toFixed(4)])),
       ranked: rows,

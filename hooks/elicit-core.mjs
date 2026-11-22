@@ -11,7 +11,7 @@
  * extractors), and the output envelope.
  */
 
-import { join } from "node:path";
+import { join, resolve, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync, unlinkSync, appendFileSync, mkdirSync } from "node:fs";
@@ -22,6 +22,43 @@ import { MAX_CAPTURE_FILES } from "./trigger.mjs";
 export const MAX_WORKLIST = MAX_CAPTURE_FILES;
 
 const noop = () => {};
+
+// --- Repo-root resolution (shared by all three hosts) ------------------------
+/**
+ * Is `dir` a coldstart repo? Only files the HOOKS never create count:
+ * `.coldstart/.coldstartignore` (written by `init` since v2.2.0) or
+ * `.coldstart/notebook/okf.yaml` (written by `init` and by the first `kb write`).
+ * A bare `.coldstart/notebook/` does NOT count: the hooks' own logging used to
+ * mkdir exactly that, which is how ~/.claude/…/memory became a fake repo on
+ * 2026-08-09 and drew capture prompts for memory files for three months.
+ */
+export function isColdstartRepo(dir) {
+  if (!dir) return false;
+  return existsSync(join(dir, ".coldstart", ".coldstartignore")) ||
+    existsSync(join(dir, ".coldstart", "notebook", "okf.yaml"));
+}
+
+/**
+ * The repo a hook should act on: Claude's launch dir (`CLAUDE_PROJECT_DIR`, which a
+ * `cd` never moves) when it is inside a repo, else a walk up from the host-reported
+ * dir (cwd / Cursor's workspace root). "" = not in a coldstart repo: do nothing there.
+ */
+export function hookRepoRoot(rawDir) {
+  return findRepoRoot(String(process.env.CLAUDE_PROJECT_DIR || "")) || findRepoRoot(rawDir);
+}
+
+/** Nearest ancestor of `startDir` (inclusive) that is a coldstart repo, else "". */
+export function findRepoRoot(startDir) {
+  if (!startDir) return "";
+  let dir = resolve(startDir);
+  for (let i = 0; i < 40; i++) {
+    if (isColdstartRepo(dir)) return dir;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return "";
+}
 
 // --- Annotation sources (fail-open: absence of data = absence of annotation) ---
 export function noteAnnotations(cli, root, files, log = noop) {
@@ -93,6 +130,8 @@ export function gitHead(root) {
 
 // --- Capture metrics -----------------------------------------------------------
 export function logCaptureEvent(root, event) {
+  // Never create .coldstart/ in a dir that is not already a coldstart repo.
+  if (!isColdstartRepo(root)) return;
   try {
     const dir = join(root, ".coldstart", "notebook", ".metrics");
     mkdirSync(dir, { recursive: true });

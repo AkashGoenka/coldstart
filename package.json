@@ -57,7 +57,13 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@vscode/ripgrep": "^1.18.0",
-    "web-tree-sitter": "^0.26.10"
+    "web-tree-sitter": "^0.26.10",
+    "wink-eng-lite-web-model": "^1.8.1",
+    "wink-nlp": "^2.4.0"
+  },
+  "optionalDependencies": {
+    "onnxruntime-node": "1.30.0",
+    "tokenizers": "0.23.2"
   },
   "devDependencies": {
     "@types/node": "^22",

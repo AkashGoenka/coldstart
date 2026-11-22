@@ -13,7 +13,7 @@
  * Diagnostics go to stderr; stdout carries only the answer.
  */
 import { resolve } from 'node:path';
-import { loadCachedIndex, saveCachedIndex, type LoadProfile } from './cache/disk-cache.js';
+import { getCacheDir, loadCachedIndex, saveCachedIndex, type LoadProfile } from './cache/disk-cache.js';
 import { getGitHead } from './indexer/git.js';
 import { handleGetStructure } from './server/tools.js';
 import { ensureKeeper, waitForKeeperCache, waitForCacheHead } from './keeper.js';
@@ -47,6 +47,8 @@ interface ParsedArgs {
     tests?: boolean;
     json?: boolean;
     via?: boolean;
+    embedStdin?: boolean;
+    rerankBudgetMs?: number;
     out?: string;
     noOpen?: boolean;
   };
@@ -70,6 +72,10 @@ function parseQueryArgs(argv: string[]): ParsedArgs {
       case '--tests': flags.tests = true; break;
       case '--json': flags.json = true; break;
       case '--via': flags.via = true; break;
+      // internal (prompt-time injection hook): the full prompt to embed for find's re-rank arrives on STDIN
+      // (Windows caps a command line at 32k chars); --rerank-budget-ms widens the query-embed budget.
+      case '--embed-stdin': flags.embedStdin = true; break;
+      case '--rerank-budget-ms': flags.rerankBudgetMs = Number(argv[++i]); break;
       case '--out': flags.out = argv[++i]; break;
       case '--no-open': flags.noOpen = true; break;
       default:
@@ -205,7 +211,19 @@ export async function runFind(argv: string[], buildIndex: BuildFn): Promise<numb
   if (!index) { err('[coldstart] no index available'); return 1; }
 
   const { buildRichPage } = await import('./server/find.js');
-  process.stdout.write((await buildRichPage(index, root, query, flags.json, flags.via === true)) + '\n');
+  let embedQuery: string | undefined;
+  if (flags.embedStdin && !process.stdin.isTTY) { // internal flag: a TTY stdin would block forever
+    const chunks: Buffer[] = [];
+    for await (const c of process.stdin) chunks.push(c as Buffer);
+    embedQuery = Buffer.concat(chunks).toString('utf8').trim() || undefined; // empty → plain agent-find weights
+  }
+  process.stdout.write((await buildRichPage(index, root, query, flags.json, flags.via === true, {
+    // the re-rank reads <repo cache dir>/vectors: --cache-dir is the BASE dir, so resolve it like the cache load does (B4)
+    embedQuery, cacheDir: flags.cacheDir ? getCacheDir(root, flags.cacheDir) : undefined,
+    rerankBudgetMs: Number.isFinite(flags.rerankBudgetMs) ? flags.rerankBudgetMs : undefined,
+  })) + '\n');
+  const { settleWarm } = await import('./embedder/rerank.js');
+  await settleWarm();
   return 0;
 }
 
