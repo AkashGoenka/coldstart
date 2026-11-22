@@ -12,6 +12,18 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 const HANG_MARKER = '__COLDSTART_TEST_HANG__';
+const GROW_HANG_MARKER = '__COLDSTART_TEST_GROW_THEN_HANG__';
+
+// Every wasm Memory web-tree-sitter creates (one per runtime load), so a test
+// can grow the live one the way an allocation inside a parse would.
+const wasmMemories = vi.hoisted(() => {
+  const mems: WebAssembly.Memory[] = [];
+  const Real = WebAssembly.Memory;
+  const Capturing = function (d: WebAssembly.MemoryDescriptor) { const m = new Real(d); mems.push(m); return m; } as unknown as typeof WebAssembly.Memory;
+  Capturing.prototype = Real.prototype;
+  WebAssembly.Memory = Capturing;
+  return mems;
+});
 
 vi.mock('../src/indexer/content-tokens.js', async (importOriginal) => {
   const real = await importOriginal<typeof import('../src/indexer/content-tokens.js')>();
@@ -19,6 +31,12 @@ vi.mock('../src/indexer/content-tokens.js', async (importOriginal) => {
     ...real,
     extractContentTokens: (content: string, id: string) => {
       if (content.includes(HANG_MARKER)) { for (;;) { /* spin: the event loop is dead */ } }
+      if (content.includes(GROW_HANG_MARKER)) {
+        // What a stop landing between web-tree-sitter's wasmMemory.grow() and
+        // its updateMemoryViews() leaves behind: memory grown, views detached.
+        wasmMemories.at(-1)!.grow(1);
+        for (;;) { /* spin */ }
+      }
       return real.extractContentTokens(content, id);
     },
   };
@@ -125,6 +143,23 @@ describe('parseFile under the time limit', () => {
     expect(full?.timedOut).toBeUndefined();
     expect(full?.exports.length).toBe(4000);
   }, 60_000);
+
+  it('a stop that leaves the wasm heap views detached does not poison later parses', async () => {
+    // Before the fix, resetParsers() built fresh parsers on the SAME runtime, so
+    // every later file (any grammar) failed with "detached ArrayBuffer" and was
+    // silently indexed with no symbols. Timing-dependent in the wild (the
+    // Windows CI flake); forced here.
+    const ok = write('ok.ts', 'export const fine = 1;\n');
+    const py = write('ok.py', 'def g():\n    return 1\n');
+    const before = [await parseFile(ok, 'typescript', 'ok.ts'), await parseFile(py, 'python', 'ok.py')];
+    expect(before[0]?.exports).toContain('fine');
+
+    const bad = write('grow.ts', `export const x = 1; // ${GROW_HANG_MARKER}\n`);
+    expect((await parseFile(bad, 'typescript', 'grow.ts'))?.timedOut).toBe(true);
+
+    process.env.COLDSTART_PARSE_TIMEOUT_MS = '30000';
+    expect([await parseFile(ok, 'typescript', 'ok.ts'), await parseFile(py, 'python', 'ok.py')]).toEqual(before);
+  });
 });
 
 describe('a build with one hanging file', () => {
