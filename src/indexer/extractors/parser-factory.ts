@@ -114,23 +114,42 @@ export function ensureParsersReady(): Promise<void> {
 }
 
 /**
- * Replace every loaded parser with a fresh one over the same grammar.
+ * Throw away the whole web-tree-sitter runtime; the next ensureParsersReady()
+ * loads a fresh one (runtime + every grammar, ~tens of ms).
  *
- * Called after parse-guard stopped a parse mid-flight: that parser (and the
- * tree it was building) may be half-updated, so it is dropped rather than
- * reused. The old objects are NOT deleted — freeing a structure that was
- * interrupted mid-write is riskier than leaking it once, and this only runs
- * when a file hit the time limit. Synchronous: the runtime and grammars are
- * already loaded, so building a Parser needs no await.
+ * Called after parse-guard stopped a parse mid-flight. A fresh Parser on the
+ * SAME runtime is not enough: web-tree-sitter keeps ONE emscripten module per
+ * process (`Module2 ??=`), and a stop that lands between `wasmMemory.grow()`
+ * and `updateMemoryViews()` leaves that module's heap views pointing at the
+ * detached old buffer — every later parse, of every grammar, then fails with
+ * "detached ArrayBuffer" and the file is silently indexed with no symbols
+ * (the Windows CI flake in tests/parse-timeout.test.ts; reproduced by growing
+ * the captured Memory by hand). Those views are closure-private, so they can't
+ * be repaired: the module is re-required instead. The old objects are not
+ * deleted (freeing a structure interrupted mid-write is riskier than letting
+ * GC drop it), and this only runs when a file hit the time limit.
+ *
+ * Synchronous: it only marks everything unloaded and drops the require-cache
+ * entry. Until the reload, getParser() throws instead of handing out a parser
+ * on the dead runtime; parseFile re-awaits ensureParsersReady() when
+ * parsersReady() is false, so a file whose await straddled the reset is safe.
  */
 export function resetParsers(): void {
-  if (!runtimeSync) return;
+  if (!runtime) return;
+  runtime = null;
+  runtimeSync = null;
+  delete require.cache[require.resolve('web-tree-sitter')];
   for (const entry of pendingWasm) {
-    if (!entry.loaded || !entry.lang) continue;
-    const real = new runtimeSync.Parser();
-    real.setLanguage(entry.lang);
-    entry.setReady(wrapWasmParser(real));
+    if (!entry.loaded) continue;
+    entry.loaded = false;
+    entry.lang = undefined;
+    entry.setReady(null);
   }
+}
+
+/** True when every registered grammar has a parser on the live runtime. */
+export function parsersReady(): boolean {
+  return runtimeSync !== null && pendingWasm.every(e => e.loaded);
 }
 
 /**

@@ -21,7 +21,7 @@ import { parseEnvContent } from './extractors/env.js';
 import { parseXmlContent } from './extractors/xml.js';
 import { parseGroovyContent } from './extractors/groovy.js';
 import { extractContentTokens } from './content-tokens.js';
-import { ensureParsersReady, resetParsers } from './extractors/parser-factory.js';
+import { ensureParsersReady, parsersReady, resetParsers } from './extractors/parser-factory.js';
 import { appendRepairLog } from '../keeper-state.js';
 import { runWithTimeout, parseTimeoutMs, ParseTimeoutError } from './parse-guard.js';
 
@@ -124,6 +124,10 @@ export async function parseFile(
   // The one lookup that needs I/O, the Rust workspace, is done first so that no
   // await sits inside the guarded section.
   const rustWs = language === 'rust' ? await findRustWorkspace(dirname(filePath)) : null;
+  // Another file may have hit the time limit (and thrown away the runtime)
+  // while this one awaited its read; reload before the guarded section. No
+  // await may follow this line before runWithTimeout.
+  if (!parsersReady()) await ensureParsersReady();
   onWork?.();
   const ms = parseTimeoutMs();
   try {
@@ -136,7 +140,8 @@ export async function parseFile(
     }, ms);
   } catch (err) {
     if (!(err instanceof ParseTimeoutError)) throw err;
-    // The parser that was stopped may be half-updated: swap in fresh ones.
+    // The stop may have left the wasm runtime itself broken (stale heap views
+    // after a memory grow), not just this parser: reload the whole runtime.
     resetParsers();
     // Indexed by path only (same shape as an unsupported language), and
     // flagged so the build logs it. Its fingerprint is still stamped, so it is
