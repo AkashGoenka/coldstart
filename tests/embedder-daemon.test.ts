@@ -7,7 +7,7 @@
  * MAIN reloads to shed its arena, per-window backfill vectors equal the one-call path, no orphan after kill -9.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
-import { cpSync, mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync, existsSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
+import { cpSync, linkSync, mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync, existsSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
 import { createServer, type Server } from 'node:net';
 import { spawn } from 'node:child_process';
 import { tmpdir, homedir } from 'node:os';
@@ -43,7 +43,8 @@ function linkModel(into: string, { corruptTokenizer = false } = {}) {
   mkdirSync(join(d, 'onnx'), { recursive: true });
   for (const f of FILES) {
     if (corruptTokenizer && f === 'tokenizer.json') continue;
-    symlinkSync(join(SRC_MODEL, f), join(d, f));
+    // Windows refuses symlinks without admin / Developer Mode: fall back to a hard link, then a copy
+    try { symlinkSync(join(SRC_MODEL, f), join(d, f)); } catch { try { linkSync(join(SRC_MODEL, f), join(d, f)); } catch { cpSync(join(SRC_MODEL, f), join(d, f)); } }
   }
   if (corruptTokenizer) writeFileSync(join(d, 'tokenizer.json'), '{ not json'); // wrong size → downloader must fetch → fails
 }
