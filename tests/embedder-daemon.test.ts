@@ -246,7 +246,7 @@ describe.skipIf(!HAVE_MODEL)('embedder daemon query lane (real model)', () => {
     const md = readFileSync(join(root, '.coldstart', 'notebook', 'notes', 'long-0.md'), 'utf8');
     const text = cleanBody(md.slice(md.indexOf('\n---\n') + 5).trim());
     const e = await loadEmbedder({ dir: join(models, MODEL_ID), threads: 4 });
-    expect(e.windows(text, 'note_doc').length).toBeGreaterThanOrEqual(3);
+    expect((await e.windows(text, 'note_doc')).length).toBeGreaterThanOrEqual(3);
     const [ref] = await e.embed([text], 'note_doc');
     await e.release();
     const stored = [...openReader(vectorsDir(cacheDir), { recipe: RECIPE, dim: DIM }).get([embedKey('note_doc', text)]).values()][0] as Float32Array;

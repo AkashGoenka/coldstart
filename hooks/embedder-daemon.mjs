@@ -7,6 +7,8 @@
 // never exits mid-backfill; idle exit after IDLE_MS with no queries and no work · a newer protocol replaces us.
 // The model never runs in this process: MAIN (backfill, + queries when alone) and a query-only LANE that lives
 // exactly while backfill has work are child processes (hooks/embed-worker.mjs) — see "model processes + scheduler".
+// The TOKENIZER lives here, once: every text is planned (ids, truncation, windows) in this process and the model
+// processes get ids only, so the second process no longer pays for a second tokenizer.
 // They die with us: the IPC channel closes even on kill -9. Step 4b, docs/embedder-daemon-design.md.
 import "./regex-engine.mjs";
 import { connect, createServer } from "node:net";
@@ -18,7 +20,7 @@ import { fileURLToPath } from "node:url";
 import { DIM, PROTOCOL, RECIPE, ROLES, TOKEN_CAPS, WINDOWED_ROLES, embedKey, threadPlan, embedderHome, modelDir, socketPath, vectorsDir } from "./embed-recipe.mjs";
 import { embedderDisabled, encodeVec, request } from "./embed-client.mjs";
 import { openWriter } from "./vector-store.mjs";
-import { poolSums } from "./embed-runtime.mjs"; // pure pooling only: the model loads in the model processes
+import { loadTokenizer, poolSums } from "./embed-runtime.mjs"; // the session loads in the model processes
 import { cleanBody } from "./recall-gate.mjs";
 
 const HOME = embedderHome();
@@ -177,9 +179,12 @@ function perfCores() {
 }
 const PERF_CORES = perfCores();
 const { main: BACKFILL_THREADS, lane: LANE_THREADS } = threadPlan(PERF_CORES); // table: threadPlan in embed-recipe.mjs
-// A model process "has grown" once its RSS is this far past its own fresh-load RSS (~470–530 MB on M1 Pro, ~120 MB of
-// it the tokenizer's JS heap). 200: a 384-token gate query adds ~90, 512 tokens ~105, 1024 tokens ~255, one 2048
-// window ~700 — so ordinary queries never trigger a reload, a long pasted prompt or note windows do.
+// A model process "has grown" once its RSS is this far past its own fresh-load RSS (session only since PROTOCOL 2 —
+// the tokenizer lives in this process). 200: a 384-token gate query adds ~90, 512 tokens ~105, 1024 tokens ~255, one
+// 2048 window ~700 — so ordinary queries never trigger a reload, a long pasted prompt or note windows do.
+// Measured M1 Pro 2026-11-22 (macOS footprint, daemon + children, 193 notes, a query every 400 ms) before → after the
+// tokenizer moved here (Rust `tokenizers`): idle 415 → 223 MB, backfill peak 1029 → 724, after drain + MAIN reload
+// 436 → 231; query lane's own peak 483 → 204; backfill time and query latency unchanged.
 const RSS_MARGIN_MB = +(process.env.COLDSTART_EMBEDDER_RSS_MARGIN_MB || 200);
 
 let nextId = 0;
@@ -188,7 +193,7 @@ function spawnModel(name, threads) {
   const m = { name, threads, inflight: new Map(), rssMB: 0, dead: false, isReady: false, pid: null, onExit: null };
   const t0 = performance.now();
   let die = null;
-  const child = fork(WORKER, [JSON.stringify({ dir: modelDir(), threads })], { serialization: "advanced", stdio: ["ignore", "inherit", "inherit", "ipc"], windowsHide: true });
+  const child = fork(WORKER, [JSON.stringify({ dir: modelDir(), threads, protocol: PROTOCOL })], { serialization: "advanced", stdio: ["ignore", "inherit", "inherit", "ipc"], windowsHide: true });
   m.pid = child.pid;
   m.ready = new Promise((ready, fail) => {
     child.on("message", (msg) => {
@@ -232,15 +237,16 @@ async function guarded(m, msg) {
 let main = null, nextMain = null, mainBusyWith = null; // null | "query" | "backfill"
 let mainItemTokens = 0; // token count of MAIN's in-flight backfill item (0 = not known yet)
 // Lane start rule (by TOKENS, not wall clock). MAIN at 4 threads: 128 tok 136 ms, 384 398, 512 545, 1024 1240, one
-// 2048 window 3170. A query that finds MAIN mid-item waits for (the rest of) that item, so a lane is worth its ~1.2 s
-// start + ~540 MB only when that wait is long or keeps recurring: the item in flight is > 1024 tokens (≥ 4x find's
+// 2048 window 3170. A query that finds MAIN mid-item waits for (the rest of) that item, so a lane is worth its ~1 s
+// start + ~200 MB only when that wait is long or keeps recurring: the item in flight is > 1024 tokens (≥ 4x find's
 // 300 ms budget; every windowed note), or more than LANE_BACKLOG items are still queued (sustained backfill: even
 // 512-token sketches make each query wait up to ~0.55 s, item after item). One small note from `kb write` → no lane.
 const LANE_ITEM_TOKENS = 1024, LANE_BACKLOG = 8;
 const HUNG_LANE_MS = 1000; // lane's oldest call older than this → a new query ALSO queues on MAIN (first answer wins)
 let lane = null, laneStarts = 0;
 let modelReady = false;
-const queries = []; // the MAIN queue: {role, texts, done, retried?}
+let tok = null; // loadTokenizer(): this daemon's one tokenizer (Rust `tokenizers`)
+const queries = []; // the MAIN queue: {plans, done, answered, retried?}
 let wake = null;
 const kick = () => { const w = wake; wake = null; w?.(); };
 const sleep = (ms) => new Promise((r) => { const t = setTimeout(() => { wake = null; r(); }, ms); wake = () => { clearTimeout(t); r(); }; });
@@ -287,7 +293,7 @@ function laneCheck() {
 function serveOnLane(q) {
   const m = lane;
   m.pending.add(q);
-  guarded(m, { op: "embed", texts: q.texts, role: q.role }).then(
+  guarded(m, { op: "embed", plans: q.plans }).then(
     (vecs) => { m.served++; q.done({ ok: true, vecs: vecs.map(encodeVec) }); },
     (e) => {
       if (q.answered) return; // MAIN answered it already (hung-lane double queue)
@@ -298,9 +304,9 @@ function serveOnLane(q) {
 }
 
 /** A new query: the lane if it's up, else the main queue — and if MAIN is mid-backfill-item, start the lane. */
-function embedNow(role, texts) {
+function embedNow(plans) {
   return new Promise((resolve) => {
-    const q = { role, texts, answered: false, done: (r) => { if (q.answered) return; q.answered = true; resolve(r); } };
+    const q = { plans, answered: false, done: (r) => { if (q.answered) return; q.answered = true; resolve(r); } };
     if (lane?.state === "ready") {
       serveOnLane(q);
       if (lane.oldestMs() <= HUNG_LANE_MS) return;
@@ -317,7 +323,7 @@ function embedNow(role, texts) {
 async function serveQueryOnMain(q) {
   if (q.answered) return; // the lane got there first
   mainBusyWith = "query";
-  try { q.done({ ok: true, vecs: (await callMain({ op: "embed", texts: q.texts, role: q.role })).map(encodeVec) }); }
+  try { q.done({ ok: true, vecs: (await callMain({ op: "embed", plans: q.plans })).map(encodeVec) }); }
   catch (e) { state.failures++; q.done({ ok: false, error: String(e.message || e) }); }
   finally { mainBusyWith = null; }
 }
@@ -327,15 +333,14 @@ async function embedItem(it) {
   mainBusyWith = "backfill";
   try {
     mainItemTokens = 0;
-    const plan = WINDOWED_ROLES.has(it.role) ? await callMain({ op: "plan", text: it.text, role: it.role }) : null;
-    mainItemTokens = plan ? plan.tokens : TOKEN_CAPS[it.role]; // non-windowed roles are cut at their cap
+    const plan = await tok.plan(it.text, it.role); // async (Rust tokenizer): queries can arrive meanwhile
+    mainItemTokens = WINDOWED_ROLES.has(it.role) ? plan.tokens : TOKEN_CAPS[it.role]; // non-windowed roles are cut at their cap
     if (queries.length && !lane && laneWorthIt()) startLane(); // a query that came in while we tokenized
-    const wins = plan?.windows;
-    if (!wins) return (await callMain({ op: "embed", texts: [it.text], role: it.role }))[0];
+    if (!plan.windowed) return (await callMain({ op: "embed", plans: [plan] }))[0];
     const parts = [];
-    for (const ids of wins) {
+    for (const row of plan.rows) {
       while (queries.length) { await serveQueryOnMain(queries.shift()); mainBusyWith = "backfill"; }
-      parts.push(await callMain({ op: "sums", ids }));
+      parts.push((await callMain({ op: "sums", rows: [row] }))[0]);
     }
     return poolSums(parts);
   } finally { mainBusyWith = null; mainItemTokens = 0; }
@@ -393,7 +398,7 @@ async function handle(msg) {
       if (!Object.hasOwn(ROLES, msg.role) || !Array.isArray(msg.texts) || !msg.texts.length || msg.texts.length > MAX_TEXTS || msg.texts.some((t) => typeof t !== "string" || t.length > MAX_CHARS)) return { ok: false, error: "bad embed request" };
       if (!modelReady) return { ok: false, error: `model ${state.model.status}` };
       state.queries++; state.lastQueryAt = Date.now(); touchActivity();
-      return embedNow(msg.role, msg.texts);
+      return embedNow(await Promise.all(msg.texts.map((t) => tok.plan(t, msg.role))));
     }
     case "register": case "sketches-saved": case "notes-changed": {
       loadRegistrations();
@@ -422,7 +427,7 @@ const server = createServer((sock) => {
     while ((nl = buf.indexOf("\n")) >= 0) {
       const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
       let reply; try { reply = await handle(JSON.parse(line)); } catch (e) { reply = { ok: false, error: String(e.message || e) }; }
-      if (!sock.destroyed) sock.write(JSON.stringify(reply) + "\n");
+      if (!sock.destroyed) sock.write(JSON.stringify({ ...reply, protocol: PROTOCOL }) + "\n"); // clients replace an older daemon by this
     }
   });
   sock.on("error", () => {});
@@ -506,10 +511,10 @@ async function start() {
     }
     const t0 = performance.now();
     main = spawnModel("main", BACKFILL_THREADS);
-    await main.ready;
+    [tok] = await Promise.all([loadTokenizer({ dir: modelDir() }), main.ready]); // the two loads overlap
     modelReady = true;
     state.model = { status: "ready", loadMs: Math.round(performance.now() - t0) };
-    const t1 = performance.now(); await callMain({ op: "embed", texts: ["where is the session cookie refreshed after login"], role: "code_query" });
+    const t1 = performance.now(); await callMain({ op: "embed", plans: [await tok.plan("where is the session cookie refreshed after login", "code_query")] });
     state.selfBenchMs = Math.round(performance.now() - t1); stateDirty = true;
     log(`model ready in ${state.model.loadMs} ms; self-bench query ${state.selfBenchMs} ms`);
   } catch (e) {

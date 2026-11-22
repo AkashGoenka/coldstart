@@ -32,8 +32,9 @@ export function threadPlan(perf) {
   const p = Math.max(1, Math.floor(perf) || 1);
   return p >= 4 ? { main: Math.min(4, p - 2), lane: 2 } : { main: 1, lane: 1 };
 }
-/** Bumped when the socket protocol changes incompatibly; a newer daemon replaces an older one, never the reverse. */
-export const PROTOCOL = 1;
+/** Bumped when the socket protocol or the daemon↔model-process IPC changes incompatibly (2: the daemon tokenizes, the
+ *  model processes get ids); a newer daemon replaces an older one, never the reverse. */
+export const PROTOCOL = 2;
 
 /** role → prefix the model sees. file_doc texts already carry `title: <path> | text:` (src/embedder/sketch.ts). */
 export const ROLES = {

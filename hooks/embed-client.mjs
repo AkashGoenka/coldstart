@@ -48,7 +48,19 @@ export function request(msg, { connectMs = 200, budgetMs = 300 } = {}) {
 /** Query vectors for `texts` under `role`, or null (daemon absent / busy / over budget). */
 export async function embedTexts(texts, role, opts) {
   const r = await request({ op: "embed", role, texts }, opts);
+  replaceIfOlder(r);
   return r?.ok && Array.isArray(r.vecs) ? r.vecs.map(decodeVec) : null;
+}
+
+/** Every daemon reply carries its PROTOCOL (protocol-1 daemons only on ping → a missing field = 0). A daemon that
+ *  answers fine is never asked again by ensureEmbedder, so without this an OLD daemon kept serving after an update
+ *  until its idle exit (~90 min): on an older reply, spawn ours detached (once per process; it survives this hook's
+ *  exit) — its listen() stops the old one and takes the socket. This answer is still used: same RECIPE, same vectors. */
+let replacing = false;
+function replaceIfOlder(r) {
+  if (!r || replacing || (r.protocol ?? 0) >= PROTOCOL || embedderOff()) return;
+  replacing = true;
+  spawnDaemon();
 }
 
 // ---------------------------------------------------------------- registration + spawn
@@ -82,6 +94,11 @@ export async function ensureEmbedder({ connectMs = 200, optIn = true } = {}) {
     await request({ op: "stop" }, { connectMs, budgetMs: 2000 });
     for (let i = 0; i < 20 && (await request({ op: "ping" }, { connectMs: 100, budgetMs: 100 })); i++) await new Promise((r) => setTimeout(r, 100));
   }
+  return spawnDaemon();
+}
+
+/** Spawn the daemon detached under the spawn lock (and the model-failure cooldown). Never waits. */
+function spawnDaemon() {
   const home = embedderHome(), lock = join(home, "spawn.lock");
   // the last daemon could not load the model (bad download, no network): don't respawn it on every save
   try { const m = JSON.parse(readFileSync(join(home, "state.json"), "utf8")).model; if (m?.status === "unavailable" && Date.now() - m.failedAt < MODEL_RETRY_MS) return "cooldown"; } catch { /* no state */ }
@@ -106,6 +123,7 @@ export async function notifyEmbedder(op, root, cacheDir, extra = {}, { optIn = t
   registerRepo(root, cacheDir);
   const r = await request({ op, root: resolve(root), ...extra }, { connectMs: 200, budgetMs: 500 });
   if (!r) return ensureEmbedder({ optIn }); // a fresh daemon reconciles every registered repo on start
+  replaceIfOlder(r);
   return "running";
 }
 

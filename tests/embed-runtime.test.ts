@@ -24,7 +24,7 @@ describe.skipIf(!HAVE)('embed runtime past the token cap', () => {
 
   it('code_query: a tail past 512 tokens is ignored (truncation)', async () => {
     const base = head + 'x '.repeat(600);
-    expect(e.tokens(base)).toBeGreaterThan(TOKEN_CAPS.code_query);
+    expect(await e.tokens(base)).toBeGreaterThan(TOKEN_CAPS.code_query);
     const [a] = await e.embed([base], 'code_query');
     const [b] = await e.embed([base + tail], 'code_query');
     expect(cos(a, b)).toBeGreaterThan(0.99999);
@@ -32,7 +32,7 @@ describe.skipIf(!HAVE)('embed runtime past the token cap', () => {
 
   it('note_doc: a tail past the window still moves the vector, and the result is unit length', async () => {
     const base = head.repeat(30); // past the note_doc cap → windowed
-    expect(e.tokens(base)).toBeGreaterThan(TOKEN_CAPS.note_doc);
+    expect(await e.tokens(base)).toBeGreaterThan(TOKEN_CAPS.note_doc);
     const [a] = await e.embed([base], 'note_doc');
     const [b] = await e.embed([base + tail], 'note_doc');
     expect(Math.abs(cos(b, b) - 1)).toBeLessThan(1e-5);
