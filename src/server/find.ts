@@ -253,6 +253,64 @@ function listFilesExternal(searcher: Exclude<Searcher, { kind: 'node' }>, root: 
   });
 }
 
+/**
+ * ripgrep body lane in ONE pass (replaces one repo-wide scan per term).
+ *
+ * Per-term scans running side by side contend badly on a big checkout: jmri (33k files rg sees, M1 Pro,
+ * 2026-11-25), 13 terms = 8.25 s at SCAN_CONCURRENCY 4 (one scan alone ≈ 0.4 s, four at once ≈ 2.7 s),
+ * vs 0.7 s for one `rg -l` carrying every term. That one pass lists the files containing ANY term — exactly
+ * the union of the per-term lists, same .gitignore/binary/hidden rules — and each INDEXED candidate is
+ * then read once and tested per term, so the per-term sets are the same as before.
+ * `rg -o` attribution is NOT a substitute: multi-pattern matches are non-overlapping, so a term sharing
+ * a character with its neighbour is hidden ("panelogix" reports `panel`, never `logix`).
+ * COLDSTART_FIND_SCAN=perterm restores the per-term scans (A/B + escape hatch).
+ */
+const COMBINED_SCAN_THREADS = 4;
+// ASCII only: the per-term test below is JS lowercase + substring, which matches rg -i's Unicode simple case
+// folding for ASCII needles once ſ (U+017F → s) and K (U+212A → k, handled by toLowerCase) are folded.
+const ASCII_TERM = /^[\x20-\x7e]+$/;
+function useCombinedScan(terms: readonly string[]): boolean {
+  return process.env['COLDSTART_FIND_SCAN'] !== 'perterm' && terms.length > 1 && terms.every((t) => ASCII_TERM.test(t));
+}
+const foldForMatch = (text: string): string => {
+  const low = text.toLowerCase();
+  return low.includes('ſ') ? low.replace(/ſ/g, 's') : low;
+};
+/** Decode the way rg searches: a UTF-16 BOM means UTF-16 (rg transcodes it), anything else is read as UTF-8. */
+function decodeLikeRg(buf: Buffer): string {
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) return buf.toString('utf16le', 2);
+  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) {
+    const body = Buffer.from(buf.subarray(2, buf.length - (buf.length % 2))); // copy, even length, then BE → LE
+    return body.swap16().toString('utf16le');
+  }
+  return buf.toString('utf8');
+}
+
+/** fileId → indices (into `lowers`) of the terms its body contains; null on rg SPAWN failure. */
+function scanCombinedRg(rg: RgBinary, root: string, index: CodebaseIndex, lowers: readonly string[]): Promise<Map<string, number[]> | null> {
+  const args = ['-l', '-i', '-F', '-j', String(COMBINED_SCAN_THREADS)];
+  for (const t of lowers) args.push('-e', t);
+  args.push('--', '.');
+  return new Promise((resolve) => {
+    execFile(rg.bin, args, { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, windowsHide: true, ...(rg.argv0 ? { argv0: rg.argv0 } : {}) },
+      (err, stdout) => {
+        if (err && typeof (err as { code?: unknown }).code === 'string') return resolve(null);
+        const out = new Map<string, number[]>();
+        for (const line of (stdout ?? '').split('\n')) {
+          const rel = normalizeScanPath(line);
+          const file = rel ? index.files.get(rel) : undefined;
+          if (!file) continue; // only indexed files count (same as add())
+          let text: string;
+          try { text = foldForMatch(decodeLikeRg(readFileSync(file.path))); } catch { continue; }
+          const idxs: number[] = [];
+          for (let k = 0; k < lowers.length; k++) if (text.includes(lowers[k])) idxs.push(k);
+          if (idxs.length) out.set(rel, idxs);
+        }
+        resolve(out);
+      });
+  });
+}
+
 /** Map with a concurrency cap; results stay index-aligned with `items`. */
 async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out = new Array<R>(items.length);
@@ -283,27 +341,32 @@ export async function collectCoverage(index: CodebaseIndex, root: string, terms:
 
   const lowers = terms.map((t) => t.toLowerCase());
 
-  // (A) body-content matches — what grep sees. Terms scan concurrently (capped).
+  // (A) body-content matches — what grep sees.
   let searcher = pickSearcher(root);
-  if (searcher.kind !== 'node') {
-    const s = searcher;
-    let results = await mapLimit(terms, SCAN_CONCURRENCY, (t) => listFilesExternal(s, root, t));
-    if (searcher.kind === 'rg' && results.some((r) => r === null)) {
-      // The persisted rg vanished (app uninstalled, binary moved). Drop the
-      // record, re-resolve the whole chain once, and rerun the scans.
-      invalidateRg();
-      _searcher = null;
-      searcher = pickSearcher(root);
-      if (searcher.kind !== 'node') {
-        const s2 = searcher;
-        results = await mapLimit(terms, SCAN_CONCURRENCY, (t) => listFilesExternal(s2, root, t));
-      } else {
-        results = terms.map(() => []);
-      }
+  // false = the persisted rg failed to SPAWN (vanished); nothing has been added yet in that case
+  const scanOnce = async (s: Exclude<Searcher, { kind: 'node' }>): Promise<boolean> => {
+    if (s.kind === 'rg' && useCombinedScan(terms)) {
+      const hit = await scanCombinedRg(s.rg, root, index, lowers);
+      if (!hit) return false;
+      for (const [rel, idxs] of hit) for (const k of idxs) add(rel, terms[k]);
+      return true;
     }
+    // per-term scans run concurrently (capped)
+    const results = await mapLimit(terms, SCAN_CONCURRENCY, (t) => listFilesExternal(s, root, t));
+    if (s.kind === 'rg' && results.some((r) => r === null)) return false;
     for (let i = 0; i < terms.length; i++) {
       for (const rel of results[i] ?? []) add(rel, terms[i]);
     }
+    return true;
+  };
+  if (searcher.kind !== 'node' && !(await scanOnce(searcher))) {
+    // The persisted rg vanished (app uninstalled, binary moved). Drop the
+    // record, re-resolve the whole chain once, and rerun the scan. A second
+    // failure leaves the body lane empty (name/path matches only), as before.
+    invalidateRg();
+    _searcher = null;
+    searcher = pickSearcher(root);
+    if (searcher.kind !== 'node') await scanOnce(searcher);
   }
   if (searcher.kind === 'node') {
     // Pure-Node fallback: one read per indexed file, all terms tested at once.

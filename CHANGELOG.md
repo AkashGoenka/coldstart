@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **`find` was slow on large repos, so prompt-time file injection timed out there.** The body
+  search ran one repo-wide ripgrep per query term, four at a time, and those parallel scans slowed
+  each other down badly on a big checkout: a 13-term query took about 10 s on a 16k-file Java repo,
+  past the injection hook's 4 s limit, so nothing was injected. `find` now runs one ripgrep pass
+  carrying every term, then checks each matching file once. Results are unchanged (verified by
+  comparing every file's matched terms before and after on 1,700+ real queries across four repos);
+  the same query now takes about 2 s. `COLDSTART_FIND_SCAN=perterm` restores the old behaviour.
 - **Notebook recall never re-showed a note after the conversation was compacted.** Recall skips
   notes a session has already been shown, and was meant to forget them on compaction, but it
   detected compaction by the transcript file shrinking. Claude Code transcripts only ever grow,
